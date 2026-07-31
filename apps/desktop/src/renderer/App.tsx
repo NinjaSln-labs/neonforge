@@ -76,6 +76,7 @@ export default function App() {
       <MainWorkspace
         rootPath={rootPath}
         onBackStart={() => { setRootPath(null); setScreen('start') }}
+        onKeyExpired={() => setScreen('config')}
       />
     )
   }
