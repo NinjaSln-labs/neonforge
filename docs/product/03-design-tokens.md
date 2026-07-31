@@ -141,7 +141,7 @@
 
 | 令牌 | 值 | 用途 |
 |------|-----|------|
-| `--nf-shadow-focus` | `0 0 0 2px #3B82F6` | 输入框聚焦 |
+| `--nf-shadow-focus` | `0 0 0 2px #6366F1` | 输入框聚焦 |
 | `--nf-shadow-focus-ring` | `0 0 0 3px rgba(59,130,246,0.15)` | 输入框聚焦外环 |
 | `--nf-shadow-modal` | `0 8px 24px rgba(0,0,0,0.4)` | （保留，系统级确认用） |
 | `--nf-shadow-notification` | `0 4px 12px rgba(0,0,0,0.3)` | 通知卡片 |
@@ -157,7 +157,7 @@
 | `--nf-duration-instant` | `100ms` | 即时反馈（hover、下拉菜单出现） |
 | `--nf-duration-fast` | `150ms` | 消息出现、弹窗、按钮 active |
 | `--nf-duration-normal` | `200ms` | 面板滑入、文件树折叠、切换视图指示器 |
-| `--nf-duration-slow` | `250ms` | 详情面板滑入、错误横幅 |
+| `--nf-duration-slow` | `250ms` | 交付包/提示条滑入、错误横幅 |
 | `--nf-duration-glacial` | `300ms` | 通知滑入、占位文字切换 |
 
 ### 缓动
@@ -177,8 +177,8 @@
 
 | 令牌 | 值 | 用途 |
 |------|-----|------|
-| `--nf-panel-partner` | `320px` | 搭档面板 |
-| `--nf-panel-detail` | `360px` | 详情面板 |
+| `--nf-panel-session` | `240px` | 会话区 |
+| `--nf-panel-output` | `380px` | 产物区 |
 | `--nf-panel-filetree` | `240px` | 文件树 |
 
 ### 窗口
@@ -228,12 +228,16 @@
 ### CSS 变量
 
 ```css
-/* 深色主题（V1 默认） */
+/* 深色主题（V1 默认 · 赛博朋克版） */
 :root {
-  --nf-bg-app: #1E1E1E;
-  --nf-bg-panel: #252526;
-  --nf-bg-input: #2D2D2D;
-  /* ... 全部令牌 ... */
+  --nf-bg: #120F1E;
+  --nf-bg-panel: #1A1530;
+  --nf-bg-elevated: #262044;
+  --nf-border: #2E2547;
+  --nf-accent: #6366F1;
+  --nf-violet: #A855F7;
+  --nf-amber: #FF8A00;
+  /* ... 全部令牌（以本文件 §1 色彩表为准）... */
 }
 ```
 
@@ -245,8 +249,9 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        'nf-bg-app': '#1E1E1E',
-        'nf-blue': '#3B82F6',
+        'nf-bg': '#120F1E',
+        'nf-accent': '#6366F1',
+        'nf-violet': '#A855F7',
         // ...
       },
       spacing: {
