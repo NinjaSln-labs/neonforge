@@ -21,8 +21,8 @@
 
 | 变体 | 背景 | 文字 | 边框 |
 |------|------|------|------|
-| Primary | `--nf-blue` (#3B82F6) | #FFFFFF | none |
-| Secondary | `--nf-bg-input` (#2D2D2D) | `--nf-text-primary` | `--nf-border` |
+| Primary | `--nf-blue` (#6366F1) | #FFFFFF | none |
+| Secondary | `--nf-bg-input` (#262044) | `--nf-text-primary` | `--nf-border` |
 | Ghost | transparent | `--nf-text-secondary` | none |
 | Icon | transparent | `--nf-text-secondary` | none |
 | Link | transparent | `--nf-blue` | none |

@@ -1,107 +1,116 @@
 # Product Marketing Context
 
-**Document version:** v1
-**Last updated:** 2026-07-31
+**Document version:** v2
+**Last updated:** 2026-08-02
+**Changelog:**
+- v2（2026-08-02）：定位重定义——从「AI 编程 IDE / 工程设计编排」→「AI 问题工作台：帮用户解决当前的问题」。依据 `.scratch/neonforge-v1/project-alignment.md`（用户裁决终版 + 多模型补充）。核心变化：品类词（非 IDE）、受众重心（非技术用户 V1）、交付闭环（问题关闭/分步授权/不装能）。
+- v1（2026-07-31）：初始（旧定位——已废弃，保留历史参考）
 
 ## Product Overview
-**One-liner:** 专为 DeepSeek 打造的开源桌面 AI 编程 IDE——工程设计编排 IDE，不是聊天工具。
-**What it does:** 用户打开项目，和"搭档"（AI）一起写代码：说想法 → 搭档分析方案 → 用户确认 → 搭档改 → 用户审核写入。
-**Product category:** 桌面 AI 编程 IDE（AI Coding Agent 桌面客户端）
+**One-liner:** NeonForge——为 DeepSeek 打造的 AI 问题工作台：「说出问题，拿到结果」——帮用户解决当前的问题（一切能被数字工具解决的）。
+**What it does:** 用户用自然对话说出"当前的问题" → NeonForge 分析 → 通过内在的工程/设计/编排自动推进 → 交付解决结果。数字能力内直接解决（整理文件/建网站源码/修系统/做小工具）；超出数字能力（域名/备案/线下履约）→ 交付数字产物 + 分步指导，不装能。全过程分步授权、结果可验证、失败可恢复。
+**Product category:** AI 问题工作台（问题驱动的 AI Agent 工作台——非 IDE、非 Chatbot）
 **Product type:** 开源 + 本地优先的桌面应用（Electron + React + Monaco + TypeScript + SQLite）
 **Business model:** 开源（V1 免费）；收入方向待定（V2+ 可考虑 Pro 能力/插件市场/云端同步——当前未决）
 
 ## Target Audience
-**Target companies:** 个体开发者 / 小团队（0–20 人）；开源项目维护者
-**Decision-makers:** 开发者本人（自下而上工具选择，无企业采购流程）
-**Primary use case:** 与 AI 搭档协作完成项目工程实现（分析→改代码→审核），尤其适合"不会写代码的人"做产品落地
+**Target companies:** 个体用户（含非技术用户）· 个体开发者 / 小团队（0–20 人）· 开源项目维护者
+**Decision-makers:** 用户本人（自下而上，无企业采购流程）
+**Primary use case:** 用户把"当前的问题"交给 NeonForge：非技术用户（整理文件/做小工具/建页面，拿到可用的数字产物+指导）；开发者（修系统/0-1 交付模块，分步授权闭环）
 **Jobs to be done:**
-- 让 AI 帮我改代码但每一步我可控（不直接写文件）
-- 用 DeepSeek 的便宜 + 1M 上下文做完整项目而不被上下文截断
-- 不用学 IDE 指令、不注册，打开就能用
-**Use cases:** 新项目从零搭建、存量项目改需求、非技术用户做产品原型落地
+- 说出问题就能被解决，不用学任何工具/指令/IDE
+- 每一步我可控：分步授权（分析/方案/写入/部署），可随时撤销
+- 交付的是"问题被解决"（可验证的结果），不是"我给你写好了代码"
+- 超出数字能力的事，给我产物和清晰下一步，不装能、不半吊子
+**Use cases:** 文件/资料整理 · 表格数据加工 · 个人展示页/小工具 · 网站源码+发布指导 · 系统异常修复（授权闭环）· 产品/工具/模块 0-1 交付（软件工程模型/敏捷）
 
 ## Personas
 | Persona | Cares about | Challenge | Value we promise |
 |---------|-------------|-----------|------------------|
-| 会写代码的开发者 | 效率、可控、上下文不丢 | 现有多模型客户端体验平庸、缓存无优化、prompt 臃肿 | DeepSeek 深度优化（预热+1M+推理可视化）、极简内核 |
-| 不会写代码的人 | 可理解、不学操作 | 不知道代码在干嘛、怕改坏 | 页面预览 + 改动说明 + 非技术审核视图 |
-| DeepSeek API 用户 | 便宜 + 效果 | 通用客户端没吃满 DeepSeek 红利 | PrefixCache 预热（首字 ~0.3s）、reasoning_content 可视化 |
+| 不会写代码的人（V1 主） | 可理解、不学操作、怕搞坏 | 不会写代码、不知道 AI 在干嘛、怕改坏找不到 | 说出问题→拿到结果（数字产物+指导）；分步授权+失败可恢复 |
+| 会写代码的开发者 | 可控、效率、结果可验证 | 系统异常/0-1 交付费时、不敢放手、上下文丢 | 授权闭环（定位→方案→修复→测试→部署→复核→反馈）；问题台账断点续做 |
+| DeepSeek API 用户 | 便宜 + 效果 | 通用客户端没吃满 DeepSeek 红利 | DeepSeek 深度优化（预热+1M+推理可见）+ 问题闭环 |
 
 ## Problems & Pain Points
-**Core problem:** 现有 AI 编程工具要么是通用多模型客户端（体验平庸、无深度优化），要么闭源付费（Cursor）、要么终端限定（Pi/DeepCode）
+**Core problem:** 工具要么要学（IDE/指令），要么只聊不做（Chatbot 不交付）；AI 改东西怕失控（乱改/找不回/烧钱）；超出能力的事被假装搞定
 **Why alternatives fall short:**
-- Cursor：闭源 + 付费 + 大 System prompt
-- Reasonix：非开源、无 Compaction、单 Agent
-- DeepCode：Python 7-Agent 固定流水线、无缓存优化
-**What it costs them:** 上下文被截断重写、缓存零命中延迟高、改完不敢写文件、学不完的 IDE 指令
-**Emotional tension:** 怕改坏代码、怕上下文丢失重来、怕工具绑死供应商
+- IDE/Cursor：以编辑器为中心，非技术用户劝退；"更好的编辑器"不是用户的问题
+- Chatbot（ChatGPT 等）：只给建议/代码，不交付结果、不管部署、用户自己收拾
+- 通用多模型客户端：无深度优化、上下文丢、无授权闭环
+**What it costs them:** 学不会的工具、交付不了的 AI、改坏找不回、账单惊吓、被"假装搞定"坑
+**Emotional tension:** 怕失控（乱动）、怕搞砸找不回、怕烧钱、怕被装能欺骗
 
 ## Competitive Landscape
-**Direct:** Cursor（闭源付费）、Reasonix（83K stars、DeepSeek 适配但不开源）、Windsurf
-**Secondary:** 终端 CLI Agent（Pi、DeepCode、OpenCode）、VS Code + 插件组合
-**Indirect:** 手动写代码 / 外包开发 / 让 AI 生成后手动粘贴
+**Direct:** Cursor/IDE（编辑器中心）、Chatbot（ChatGPT/DeepSeek 对话——不交付）、Codex CLI（终端限定）
+**Secondary:** 终端 Agent（Pi/OpenCode）、低代码工具（对非技术用户的部分场景）
+**Indirect:** 外包/找人做、自己硬学、放弃
 
 ## Differentiation
 **Key differentiators:**
-- DeepSeek 深度优化：PrefixCache 预热（首字 ~0.3s）、1M 上下文预算、reasoning_content 全流程可视化
-- LSP 先行上下文（确定性 70%）+ CodeRAG 兜底，零 token 成本精准注入
-- 极简内核：核心 <5000 行、System prompt <300 tokens、4+6 工具
-- 开源 + 本地优先 + 非技术用户可理解视图
-**How we do it differently:** 只为一个模型做极致优化（不做多模型抽象妥协）
-**Why that's better:** 选对模型的极致体验 > 所有模型都凑合
-**Why customers choose us:** 便宜（DeepSeek）+ 快（预热）+ 可控（Diff 审核写入）+ 开源（不锁死）
+- **问题闭环（非工具/非聊天）**：「说出问题，拿到结果」——以问题为一等公民，交付可验证结果 + 超出部分给指导（不装能）
+- **分步授权 + 信任阶梯**：只读/草稿自动，写入/执行/部署逐级授权，失败可恢复（沙盒/备份/回滚/半成品可带走）
+- **DeepSeek 深度优化**：PrefixCache 预热、1M 上下文、reasoning 可见——单模型极致（不做多模型妥协）
+- **非技术用户可理解**：人话交付（做了什么/怎么验/不对点哪里）+ 场景货架（零学习成本）
+- 开源 + 本地优先（数据出域清单、敏感文件默认排除）
+**How we do it differently:** 对标不是"更好的 IDE"，而是"更敢托付的问题解决闭环"
+**Why that's better:** 用户要的不是工具，是"问题被解决"；IDE 优化你写代码的过程，NeonForge 拿走你整个问题
+**Why customers choose us:** 说出问题就被解决 · 每一步可控 · 结果可验证 · 不装能 · 开源本地优先
 
 ## Objections
 | Objection | Response |
 |-----------|----------|
 | 锁死 DeepSeek 供应商 | V1 深度适配换取极致体验；网关参数收敛一处，V2+ 可扩展 |
-| 开源项目会不会烂尾 | 极简内核 + 插件化，社区可接力 |
-| 比 Cursor 差远了？ | V1 聚焦 DeepSeek 用户刚需：便宜、快、可控、开源；不做多模型/并行摊大饼 |
+| 和 Cursor/Chatbot 比？ | 不是"更好的编辑器/聊天"，是"问题闭环"——对话进入、分步授权、交付结果；编辑/聊天只是环节 |
+| 非技术用户会用吗？ | 零学习成本：说出问题→被解决；场景卡片引导；交付人话化（非技术视图）|
+| 开源会不会烂尾 | 极简内核 + 插件化，社区可接力 |
 
-**Anti-persona:** 需要企业级安全审计/团队管理/多模型 A/B 的企业客户（V2+ 再议）
+**Anti-persona:** 需要企业级安全审计/团队管理/多模型 A/B 的企业客户（V2+ 再议）；只想闲聊/生成文案的通用 AI 用户（非"当前问题→交付"场景）
 
 ## Switching Dynamics
-**Push:** Cursor 越来越贵、Reasonix 不开源不透明、多模型客户端上下文频繁丢
-**Pull:** 首字 0.3s 的缓存预热、1M 上下文从容、Diff 审核写入可控、开源可自审
-**Habit:** 已熟悉 VS Code/Cursor 快捷键的开发者迁移成本
-**Anxiety:** 新工具是否稳定、DeepSeek API 稳定性、开源项目维护活跃度
+**Push:** IDE 学不会、Chatbot 不交付、改坏找不回、账单不可预期
+**Pull:** 说出问题就解决、分步授权可控、失败可恢复、产物可带走（不锁定）
+**Habit:** 已熟悉 IDE 的开发者迁移成本（编辑器降级为可选能力，不强制）
+**Anxiety:** 新工具是否稳定、DeepSeek API 稳定性、授权边界是否可信
 
 ## Customer Language
 **How they describe the problem:**
-- "用 Cursor 每月 20 刀，还老烧上下文"
-- "DeepSeek 便宜但没个好用的客户端"
-- "AI 改完代码我不敢直接让它写"
+- "我不会写代码，但我想做个 XX"
+- "这堆文件要整理，烦死了"
+- "系统又出问题了，我不会搞"
+- "AI 给的建议我也不敢让它动，怕改坏"
 **How they describe us:**
-- "专吃 DeepSeek 红利的 IDE"
-- "AI 改代码先给我看 diff"
-**Words to use:** 搭档、可控、预热、1M 上下文、审核写入、开源本地优先
-**Words to avoid:** 多模型、兼容所有、云同步、企业版（V1 不做）
+- "说出问题就给我弄好了，还教我怎么继续"
+- "每一步都问我，出问题还能退回去"
+**Words to use:** 说出问题·拿到结果·分步授权·交付·可验证·不装能·问题台账·断点续做
+**Words to avoid:** IDE、编辑器、写代码、多模型、全能助手、云同步（V1 不做）
 **Glossary:**
 | Term | Meaning |
 |------|---------|
+| 问题 | 用户当前要解决的事（一等公民：状态/产物/授权/复开入口） |
+| 问题台账 | 历史问题/交付物/复开入口的清单（"上次那个再跑一遍"） |
+| 交付包 | 产物 + 做了什么 + 验收对照 + 下一步/复跑入口 |
+| 分步授权 | 分析/方案/写入/部署逐级授权，可随时撤销 |
+| 不装能 | 超出数字能力 → 给产物 + 分步指导，不假装搞定 |
 | 搭档 | 内置 AI 协作者（第一人称"我"，称用户"你"） |
-| 预热 | 打开项目后台预缓存 KV，首字 0.3s |
-| ChangeSet | 暂存改动集合（待审核→已暂存→已写入） |
-| 本轮用量 | 详情面板折叠行的 token/缓存命中统计 |
 
 ## Brand Voice
-**Tone:** 安静、克制、可信（"搭档"人设；不炫技、不用弹窗打扰）
-**Style:** 直接、具体、少术语；确认用面板内提示条
-**Personality:** 可靠 · 克制 · 懂工程 · 不吵闹
+**Tone:** 安静、可信、可靠（"搭档"人设；不炫技、不吵闹、不装能）
+**Style:** 直接、具体、人话；交付说清"做了什么/结果/下一步"
+**Personality:** 可靠 · 解决问题 · 坦诚边界 · 不慌不忙
 
 ## Proof Points
-**Metrics:** （V1 未发布，占位：首字延迟 ~0.3s / 缓存命中 ≥90% / 核心 <5000 行）
+**Metrics:** （V1 未发布，占位：问题关闭率 / 二次委托率（北极星）/ 首次交付成功率 / 撤销率）
 **Customers:** 内部种子用户（2026-07 内测）
 **Testimonials:** （未发布，占位）
 **Value themes:**
 | Theme | Proof |
 |-------|-------|
-| 快 | 预热架构（产品/领域文档已设计） |
-| 便宜 | DeepSeek 定价 + 缓存命中省 token |
-| 可控 | Diff 审核写入模型（产品 D0 权威） |
-| 开源 | 定位承诺（README） |
+| 解决问题 | 问题闭环设计（项目对齐基线 v2，2026-08-02） |
+| 可控 | 分步授权 + 信任阶梯（基线 §10/§18） |
+| 可恢复 | 失败包 + 备份回滚（基线 §11/§20） |
+| 不装能 | 边界承诺 + 外部世界协调（基线 §15/§13） |
 
 ## Goals
-**Business goal:** V1 发布 + 首批 1000 开发者用户（开源口碑起步）
-**Conversion action:** GitHub Star + 安装体验；从 Reasonix/DeepSeek 社区迁移
+**Business goal:** V1 发布 + 首批 1000 用户（非技术 + 开发者口碑起步，问题闭环心智）
+**Conversion action:** 说出第一个问题被完整关闭 → 二次委托 → 口碑/Star
 **Current metrics:** （未发布）
