@@ -1,0 +1,143 @@
+/* NeonForge 深色主题基础令牌（D3 design-tokens 映射，V1 仅深色） */
+:root {
+  --nf-bg: #1a1b1e;
+  --nf-bg-panel: #222326;
+  --nf-bg-elevated: #2a2b2e;
+  --nf-border: #3e3e3e;
+  --nf-text: #e4e4e7;
+  --nf-text-dim: #a1a1aa;
+  --nf-accent: #3b82f6;
+  --nf-accent-soft: #1e3a5f;
+  --nf-amber: #f59e0b;
+  --nf-space-1: 4px;
+  --nf-space-2: 8px;
+  --nf-space-3: 12px;
+  --nf-space-4: 16px;
+  --nf-radius-sm: 4px;
+  --nf-radius-md: 8px;
+  --nf-font-sm: 12px;
+  --nf-font-md: 14px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root { height: 100%; }
+
+body {
+  font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+  font-size: var(--nf-font-md);
+  color: var(--nf-text);
+  background: var(--nf-bg);
+  overflow: hidden;
+}
+
+/* 布局：三栏 + 底部状态栏 */
+.nf-app {
+  display: grid;
+  grid-template-columns: 260px 1fr 280px;
+  grid-template-rows: 1fr 28px;
+  grid-template-areas: "left workspace right" "status status status";
+  height: 100%;
+  gap: 1px;
+  background: var(--nf-border);
+}
+
+.nf-panel--left { grid-area: left; }
+.nf-workspace { grid-area: workspace; }
+.nf-panel--right { grid-area: right; }
+.nf-statusbar { grid-area: status; }
+
+.nf-panel, .nf-workspace { background: var(--nf-bg-panel); overflow: hidden; display: flex; flex-direction: column; }
+
+.nf-panel__header {
+  display: flex; align-items: center; gap: var(--nf-space-2);
+  padding: var(--nf-space-2) var(--nf-space-3);
+  border-bottom: 1px solid var(--nf-border);
+  font-size: var(--nf-font-sm); color: var(--nf-text-dim);
+  flex-shrink: 0;
+}
+
+.nf-panel__body { padding: var(--nf-space-3); overflow-y: auto; flex: 1; }
+
+.nf-workspace__toolbar {
+  display: flex; align-items: center; gap: var(--nf-space-3);
+  padding: var(--nf-space-2) var(--nf-space-3);
+  border-bottom: 1px solid var(--nf-border);
+  font-size: var(--nf-font-sm); flex-shrink: 0;
+}
+
+.nf-workspace__toolbar button {
+  background: var(--nf-accent-soft); color: var(--nf-accent);
+  border: none; border-radius: var(--nf-radius-sm);
+  padding: 2px var(--nf-space-3); cursor: pointer; font-size: var(--nf-font-sm);
+}
+
+.nf-filetree-tag { color: var(--nf-text-dim); }
+
+.nf-placeholder {
+  color: var(--nf-text-dim); font-size: var(--nf-font-sm);
+  padding: var(--nf-space-2) 0; border-bottom: 1px dashed var(--nf-border);
+}
+
+.nf-meta { color: var(--nf-text-dim); font-size: var(--nf-font-sm); padding: var(--nf-space-1) 0; }
+
+/* 呼吸光条（D0 §4.3：working 蓝 2s） */
+.nf-breath {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--nf-accent);
+  animation: nf-breath-blue 2s ease-in-out infinite;
+}
+@keyframes nf-breath-blue {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* 状态栏（D0 §3.3：🟢 就绪 │ main │ 待审核: 0） */
+.nf-statusbar {
+  display: flex; align-items: center;
+  padding: 0 var(--nf-space-3);
+  background: var(--nf-bg);
+  color: var(--nf-text-dim);
+  font-size: var(--nf-font-sm);
+}
+
+/* 首次配置页（D0 §3.1） */
+.nf-app--config {
+  display: flex; align-items: center; justify-content: center;
+  background: var(--nf-bg);
+}
+
+.nf-config { width: 360px; display: flex; flex-direction: column; gap: var(--nf-space-3); }
+.nf-config__title { font-size: 28px; font-weight: 700; }
+.nf-config__sub { color: var(--nf-text-dim); font-size: var(--nf-font-md); margin-bottom: var(--nf-space-2); }
+
+.nf-config__input {
+  background: var(--nf-bg-panel); color: var(--nf-text);
+  border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md);
+  padding: var(--nf-space-3); font-size: var(--nf-font-md);
+  outline: none; width: 100%;
+}
+.nf-config__input:focus { border-color: var(--nf-accent); }
+.nf-config__input--error { border-color: #ef4444; } /* 验证失败红边 */
+
+.nf-config__err { color: #ef4444; font-size: var(--nf-font-sm); }
+.nf-config__banner {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--nf-space-2);
+  background: var(--nf-accent-soft); border-radius: var(--nf-radius-sm);
+  padding: var(--nf-space-2) var(--nf-space-3);
+  color: var(--nf-text); font-size: var(--nf-font-sm);
+}
+.nf-config__link {
+  background: none; border: none; color: var(--nf-accent);
+  cursor: pointer; font-size: var(--nf-font-sm); text-decoration: underline; flex-shrink: 0;
+}
+
+.nf-config__cta {
+  background: var(--nf-accent); color: #fff;
+  border: none; border-radius: var(--nf-radius-md);
+  padding: var(--nf-space-3); font-size: var(--nf-font-md); cursor: pointer;
+}
+.nf-config__cta:disabled { opacity: 0.6; cursor: default; }
+
+.nf-config__why { color: var(--nf-text-dim); font-size: var(--nf-font-sm); cursor: pointer; }
+.nf-config__why-text { padding: var(--nf-space-2) 0; color: var(--nf-text-dim); }

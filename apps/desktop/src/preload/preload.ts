@@ -1,0 +1,22 @@
+import { contextBridge, ipcRenderer } from 'electron'
+
+// bridge：gateway + config（IPC 收敛，renderer 不直接碰 node/electron）
+contextBridge.exposeInMainWorld('neonforge', {
+  version: process.env.npm_package_version ?? '0.1.0',
+  config: {
+    hasKey: () => ipcRenderer.invoke('config:has-key'),
+    getKey: () => ipcRenderer.invoke('config:get-key'),
+    setKey: (key: string) => ipcRenderer.invoke('config:set-key', key),
+    clearKey: () => ipcRenderer.invoke('config:clear-key')
+  },
+  gateway: {
+    validate: (apiKey: string) => ipcRenderer.invoke('gateway:validate', apiKey),
+    streamChat: (opts: { apiKey: string; level?: string; messages: Array<{ role: string; content: string }> }) =>
+      ipcRenderer.invoke('gateway:stream-chat', opts),
+    onStreamChunk: (cb: (chunk: { type: string; text?: string }) => void) => {
+      const listener = (_e: unknown, chunk: { type: string; text?: string }) => cb(chunk)
+      ipcRenderer.on('gateway:stream-chunk', listener)
+      return () => ipcRenderer.removeListener('gateway:stream-chunk', listener)
+    }
+  }
+})
