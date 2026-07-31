@@ -1,0 +1,150 @@
+import { useEffect, useRef, useState } from 'react'
+
+// ticket 04：对话最小闭环（D0 §2/§3.4）——输入发送 → Gateway 流式 → 消息/呼吸光条/推理展示
+// 消费 02：streamChat（四档 basic）+ ModelRouter（默认 Flash）；错误分支：Key 失效内嵌更新 / 服务故障提示
+
+interface Msg {
+  role: 'user' | 'assistant'
+  content: string
+  reasoning?: string
+  status: 'streaming' | 'done' | 'error'
+  error?: string
+}
+
+export default function ConversationPanel({
+  onKeyExpired,
+  onReasoning,
+  onWorkingChange
+}: {
+  onKeyExpired: () => void
+  onReasoning?: (text: string) => void
+  onWorkingChange?: (working: boolean) => void
+}) {
+  const [messages, setMessages] = useState<Msg[]>([])
+  const [input, setInput] = useState('')
+  const [working, setWorking] = useState(false)
+  const listRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const off = window.neonforge.gateway.onStreamChunk((chunk) => {
+      setMessages((prev) => {
+        const last = prev[prev.length - 1]
+        if (!last || last.role !== 'assistant' || last.status !== 'streaming') return prev
+        const next = { ...last }
+        if (chunk.type === 'reasoning') {
+          next.reasoning = (next.reasoning ?? '') + (chunk.text ?? '')
+          onReasoning?.(next.reasoning)
+        }
+        if (chunk.type === 'content') next.content = next.content + (chunk.text ?? '')
+        if (chunk.type === 'done') next.status = 'done'
+        return [...prev.slice(0, -1), next]
+      })
+    })
+    return off
+  }, [])
+
+  useEffect(() => {
+    listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
+  }, [messages, working])
+
+  const send = async () => {
+    const text = input.trim()
+    if (!text || working) return
+    setInput('')
+    setWorking(true)
+    onWorkingChange?.(true)
+    const history = messages
+      .filter((m) => m.role === 'user' || m.status === 'done')
+      .map((m) => ({ role: m.role, content: m.content }))
+    setMessages((p) => [...p, { role: 'user', content: text, status: 'done' }])
+    setMessages((p) => [...p, { role: 'assistant', content: '', reasoning: '', status: 'streaming' }])
+
+    try {
+      const key = await window.neonforge.config.getKey()
+      if (!key) {
+        finishError('key-invalid')
+        return
+      }
+      const res = await window.neonforge.gateway.streamChat({
+        apiKey: key,
+        level: 'basic', // V1 固定 basic 档（04 专家评审）
+        messages: [...history, { role: 'user', content: text }]
+      })
+      if (!res.ok) finishError(res.error ?? 'gateway-error')
+    } catch {
+      finishError('network')
+    } finally {
+      setWorking(false)
+      onWorkingChange?.(false)
+    }
+  }
+
+  const finishError = (err: string) => {
+    setMessages((p) => {
+      const last = p[p.length - 1]
+      if (!last || last.role !== 'assistant') return p
+      const next: Msg = { ...last, status: 'error' }
+      if (err === 'key-invalid' || String(err).includes('401')) {
+        next.error = 'key-invalid'
+        next.content = 'API Key 好像失效了。'
+      } else if (String(err).includes('5') || err === 'timeout' || err === 'network' || String(err).includes('gateway')) {
+        next.error = 'service'
+        next.content = '服务暂时不可用，稍后重试。'
+      } else {
+        next.error = 'unknown'
+        next.content = '出错了，请重试。'
+      }
+      return [...p.slice(0, -1), next]
+    })
+  }
+
+  return (
+    <div className="nf-chat">
+      <div className="nf-chat__list" ref={listRef} aria-live="polite" aria-relevant="additions text">
+        {messages.length === 0 && (
+          <p className="nf-placeholder">在下方输入，搭档开始分析</p>
+        )}
+        {messages.map((m, i) => (
+          <div key={i} className={`nf-msg nf-msg--${m.role}`}>
+            {m.role === 'assistant' && m.status === 'streaming' && (
+              <span className="nf-breath" />
+            )}
+            {m.role === 'user' && <span className="nf-msg__role">你</span>}
+            <div className={`nf-msg__body${m.role === 'assistant' && m.status === 'streaming' && !m.content ? ' nf-msg__body--thinking' : ''}`}>
+              {m.content || (m.status === 'streaming' ? '🧠 思考中…' : '')}
+              {m.error === 'key-invalid' && (
+                <button type="button" className="nf-config__link" onClick={onKeyExpired}>
+                  要不要更新一下？
+                </button>
+              )}
+            </div>
+            {m.reasoning && m.role === 'assistant' && m.status === 'done' && (
+              <details className="nf-msg__reasoning">
+                <summary>🧠 推理</summary>
+                <p className="nf-meta">{m.reasoning}</p>
+              </details>
+            )}
+          </div>
+        ))}
+        {working && <p className="nf-meta">搭档工作中…</p>}
+      </div>
+
+      <div className="nf-chat__input">
+        <textarea
+          value={input}
+          placeholder="问问搭档，Enter 发送 / Cmd+Enter 换行"
+          aria-label="给搭档的消息"
+          rows={2}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.metaKey) { e.preventDefault(); void send() }
+            if (e.key === 'Enter' && e.metaKey) { e.preventDefault(); setInput((v) => v + '\n') }
+          }}
+        />
+        <button type="button" className="nf-config__cta" onClick={() => void send()} disabled={working || !input.trim()}>
+          发送
+        </button>
+      </div>
+    </div>
+  )
+}

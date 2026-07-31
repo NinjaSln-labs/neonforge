@@ -1,14 +1,17 @@
 /* NeonForge 深色主题基础令牌（D3 design-tokens 映射，V1 仅深色） */
 :root {
-  --nf-bg: #1a1b1e;
-  --nf-bg-panel: #222326;
-  --nf-bg-elevated: #2a2b2e;
-  --nf-border: #3e3e3e;
-  --nf-text: #e4e4e7;
-  --nf-text-dim: #a1a1aa;
-  --nf-accent: #3b82f6;
-  --nf-accent-soft: #1e3a5f;
-  --nf-amber: #f59e0b;
+  color-scheme: dark; /* WIG：深色主题规范（滚动条/表单控件渲染） */
+  --nf-bg: #120f1e;
+  --nf-bg-panel: #1a1530;
+  --nf-bg-elevated: #262044;
+  --nf-border: #2e2547;
+  --nf-text: #f3f0ff;
+  --nf-text-dim: #a99ec4;
+  --nf-accent: #6366f1;
+  --nf-accent-soft: #2b2a52;
+  --nf-amber: #ff8a00;
+  --nf-violet: #a855f7;
+  --nf-cyan: #22d3ee;
   --nf-space-1: 4px;
   --nf-space-2: 8px;
   --nf-space-3: 12px;
@@ -31,27 +34,23 @@ body {
   overflow: hidden;
 }
 
-/* 布局：三栏 + 底部状态栏 */
+/* 布局（v3）：左会话区 | 中对话（主，1fr 最大）| 右产物区 + 底部状态栏 */
 .nf-app {
   display: grid;
-  grid-template-columns: 260px 1fr 280px;
+  grid-template-columns: 240px 1fr 380px;
   grid-template-rows: 1fr 28px;
-  grid-template-areas: "left workspace right" "status status status";
+  grid-template-areas: "session chat output" "status status status";
   height: 100%;
   gap: 1px;
   background: var(--nf-border);
 }
 
-.nf-app--companion-collapsed {
-  grid-template-columns: 40px 1fr 280px;
-}
-
-.nf-panel--left { grid-area: left; }
-.nf-workspace { grid-area: workspace; }
-.nf-panel--right { grid-area: right; }
+.nf-session { grid-area: session; }
+.nf-panel--center { grid-area: chat; }
+.nf-output { grid-area: output; }
 .nf-statusbar { grid-area: status; }
 
-.nf-panel, .nf-workspace { background: var(--nf-bg-panel); overflow: hidden; display: flex; flex-direction: column; }
+.nf-panel, .nf-workspace, .nf-session, .nf-output { background: var(--nf-bg-panel); overflow: hidden; display: flex; flex-direction: column; }
 
 .nf-panel__header {
   display: flex; align-items: center; gap: var(--nf-space-2);
@@ -238,3 +237,84 @@ body {
   font-size: 14px; cursor: pointer; text-decoration: none;
 }
 .nf-start__link:hover { color: var(--nf-accent); }
+
+/* ticket 04：对话闭环（搭档面板） */
+.nf-chat { display: flex; flex-direction: column; height: 100%; gap: var(--nf-space-2); }
+.nf-chat__list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: var(--nf-space-2); }
+.nf-msg { display: flex; flex-direction: column; gap: var(--nf-space-1); }
+.nf-msg--user { align-items: flex-end; }
+.nf-msg--assistant { align-items: flex-start; }
+.nf-msg__role { color: var(--nf-accent); font-size: var(--nf-font-sm); }
+.nf-msg__body {
+  background: var(--nf-bg-elevated); border-radius: var(--nf-radius-md);
+  padding: var(--nf-space-2) var(--nf-space-3); font-size: var(--nf-font-sm);
+  max-width: 100%; white-space: pre-wrap; word-break: break-word;
+}
+.nf-msg--user .nf-msg__body { background: var(--nf-accent-soft); }
+.nf-msg__reasoning { font-size: var(--nf-font-sm); color: var(--nf-text-dim); }
+.nf-reasoning { max-height: 160px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; }
+.nf-chat__input { display: flex; gap: var(--nf-space-2); align-items: flex-end; }
+.nf-chat__input textarea {
+  flex: 1; resize: none; background: var(--nf-bg-elevated); color: var(--nf-text);
+  border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md);
+  padding: var(--nf-space-3) var(--nf-space-3); font-size: var(--nf-font-md);
+  line-height: 1.6; min-height: 64px; outline: none;
+}
+.nf-chat__input textarea:focus { border-color: var(--nf-accent); }
+
+/* WIG：prefers-reduced-motion 降级（呼吸光条动效） */
+@media (prefers-reduced-motion: reduce) {
+  .nf-breath { animation: none; opacity: 1; }
+}
+
+/* P2：右面板 Tabs（对话/任务）+ 任务工作台 */
+.nf-tabs { display: flex; gap: var(--nf-space-1); flex: 1; }
+.nf-tabs__item {
+  background: none; border: none; color: var(--nf-text-dim);
+  padding: 2px var(--nf-space-3); font-size: var(--nf-font-sm);
+  cursor: pointer; border-radius: var(--nf-radius-sm);
+}
+.nf-tabs__item--active { background: var(--nf-bg-elevated); color: var(--nf-text); }
+.nf-tabs__item:focus-visible { outline: 1px solid var(--nf-accent); }
+
+.nf-task { display: flex; flex-direction: column; gap: var(--nf-space-2); }
+
+/* 思考中：边框呼吸（用户反馈：光晕太大，边框亮即可） */
+@keyframes nf-thinking-pulse {
+  0%, 100% { border-color: transparent; box-shadow: none; }
+  50% { border-color: var(--nf-accent); box-shadow: 0 0 8px rgba(99, 102, 241, 0.35); }
+}
+.nf-msg__body--thinking { border: 1px solid transparent; animation: nf-thinking-pulse 2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .nf-msg__body--thinking { animation: none; }
+}
+
+/* D3 激进版：渐变 + 色彩语言 */
+.nf-config__input:focus, .nf-chat__input textarea:focus {
+  border-color: transparent;
+  background-image: linear-gradient(#1a1530, #1a1530), linear-gradient(90deg, #6366f1, #a855f7, #ff8a00);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  border: 1px solid transparent;
+}
+.nf-config__cta {
+  background-image: linear-gradient(90deg, #6366f1, #a855f7);
+}
+.nf-msg--assistant .nf-msg__body { background: rgba(99, 102, 241, 0.08); }
+
+/* 会话区（左） */
+.nf-session__header { display: flex; align-items: center; padding: var(--nf-space-2) var(--nf-space-3); border-bottom: 1px solid var(--nf-border); font-size: var(--nf-font-sm); color: var(--nf-text-dim); flex-shrink: 0; }
+.nf-session__new { background: var(--nf-accent-soft); color: var(--nf-accent); border: none; border-radius: var(--nf-radius-sm); padding: 2px var(--nf-space-3); font-size: var(--nf-font-sm); cursor: pointer; margin-left: auto; }
+.nf-session__list { flex: 1; overflow-y: auto; padding: var(--nf-space-2); display: flex; flex-direction: column; gap: 2px; }
+.nf-session__item { color: var(--nf-text-dim); font-size: var(--nf-font-sm); padding: var(--nf-space-2) var(--nf-space-3); border-radius: var(--nf-radius-sm); cursor: pointer; }
+.nf-session__item:hover { background: var(--nf-bg-elevated); color: var(--nf-text); }
+
+/* 产物区（右）：工程 / 产物 Tabs */
+.nf-output__body { flex: 1; overflow-y: auto; padding: var(--nf-space-3); }
+
+/* 赛博朋克：霓虹 glow（输入框聚焦 + 主按钮光晕） */
+.nf-config__input:focus, .nf-chat__input textarea:focus {
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.30), 0 0 32px rgba(255, 138, 0, 0.18);
+}
+.nf-config__cta { box-shadow: 0 0 14px rgba(99, 102, 241, 0.28); }
+.nf-config__cta:hover { box-shadow: 0 0 20px rgba(99, 102, 241, 0.42); }

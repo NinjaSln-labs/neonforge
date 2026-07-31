@@ -11,6 +11,6 @@ test('首次启动显示配置页', async ({ page }) => {
 test('配置页输入框聚焦态', async ({ page }) => {
   await page.goto('/')
   await page.locator('.nf-config__input').focus()
-  await expect(page.locator('.nf-config__input')).toHaveCSS('border-color', 'rgb(59, 130, 246)')
+  await expect(page.locator('.nf-config__input')).toHaveCSS('background-image', /linear-gradient/)
   await expect(page.locator('.nf-config__input')).toHaveScreenshot('config-input-focus.png')
 })
