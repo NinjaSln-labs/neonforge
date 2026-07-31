@@ -32,3 +32,14 @@ declare global {
 }
 
 export {}
+
+// 交付包（ticket 05：产物 + 做了什么 + 验收对照 + 下一步 + 复跑）
+export interface AcceptanceItem { label: string; done: boolean }
+export interface DeliveryPackage {
+  status: 'draft' | 'delivered' | 'closed'
+  summary: string        // 做了什么（人话摘要）
+  artifacts: string[]    // 产物清单
+  acceptance: AcceptanceItem[] // 验收对照（对 DoD 逐项）
+  nextSteps: string[]    // 下一步/指导（含超出数字能力部分）
+  rerunLabel?: string    // 复跑入口文案
+}
