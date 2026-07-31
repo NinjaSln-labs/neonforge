@@ -20,7 +20,7 @@ export class ConfigStore {
   constructor() {
     try {
       if (existsSync(configPath())) {
-        this.config = JSON.parse(readFileSync(configPath(), 'utf-8'))
+        this.config = JSON.parse(readFileSync(configPath(), 'utf-8')) as NeonForgeConfig
       }
     } catch { this.config = {} }
   }
