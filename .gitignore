@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+out/
+release/
+build/
+*.tsbuildinfo
+
+# Vite
+.vite/
+
+# Secrets & local env (keep .env.example if added)
+.env
+.env.*
+!.env.example
+config/secrets.json
+**/secrets.json
+*.pem
+*.key
+
+# Logs & caches
+*.log
+*.bak
+npm-debug.log*
+yarn-error.log*
+.cache/
+coverage/
+.nyc_output/
+
+# OS
+.DS_Store
+._*
+Thumbs.db
+
+# Editors
+.idea/
+*.swp
+*.swo
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+
+# Electron packaging
+*.dmg
+*.AppImage
+*.exe
+*.blockmap
+*.app/
