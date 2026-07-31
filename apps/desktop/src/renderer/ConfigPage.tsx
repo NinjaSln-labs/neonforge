@@ -38,15 +38,17 @@ export default function ConfigPage({ onDone }: { onDone: () => void }) {
         className={`nf-config__input${status === 'fail' ? ' nf-config__input--error' : ''}`}
         type="password"
         placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
+        aria-label="DeepSeek API Key"
+        autoComplete="current-password"
         value={key}
         onChange={(e) => { setKey(e.target.value); if (status !== 'idle') setStatus('idle') }}
         onKeyDown={(e) => { if (e.key === 'Enter') submit() }}
         autoFocus
       />
 
-      {status === 'fail' && <p className="nf-config__err">{errorText}</p>}
+      {status === 'fail' && <p className="nf-config__err" aria-live="polite">{errorText}</p>}
       {status === 'network' && (
-        <div className="nf-config__banner">
+        <div className="nf-config__banner" aria-live="polite">
           <span>{errorText}</span>
           <button className="nf-config__link" onClick={onDone}>跳过（离线不可用）</button>
         </div>
