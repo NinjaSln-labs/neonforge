@@ -120,13 +120,13 @@ neonforge/
 ### Phase 3 — 搭档核心（Day 8-14）
 
 7. 实现消息气泡和输入框（`product/02-components.md` §3, §2）
-8. 实现搭档面板的对话显示、分段动画（`product/02-components.md` §3）
+8. 实现对话区（对话消息/输入）、分段动画（`product/02-components.md` §3）
 9. 实现呼吸光条（`product/02-components.md` §4）
 10. 对接 DeepSeek API（`domain/07-api-gateway.md`）
 
 ### Phase 4 — 工作流（Day 15-21）
 
-11. 实现详情面板 + 分析展示（`product/02-components.md` §6, §7）
+11. 实现产物区（工程/产物 Tab）+ 问题台账（`product/02-components.md` §6, §7）
 12. 实现 Diff 审核视图（`product/02-components.md` §8, `product/01-user-flows.md` Flow 6）
 13. 实现三步工作流状态机（`product/01-user-flows.md` Flow 5）
 14. 实现任务列表 + 多任务（`product/02-components.md` §5, `product/01-user-flows.md` Flow 7）
