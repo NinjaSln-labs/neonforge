@@ -6,10 +6,10 @@
   "main": "dist/main/main.js",
   "scripts": {
     "dev": "vite --config vite.config.ts",
-    "dev:electron": "npm run build:main && electron .",
-    "build:main": "tsc -p tsconfig.main.json && esbuild src/preload/preload.ts --bundle --platform=node --format=cjs --outfile=dist/preload/preload.cjs",
+    "dev:electron": "npm run build:main && env -u ELECTRON_RUN_AS_NODE electron .",
+    "build:main": "tsc -p tsconfig.main.json && esbuild src/preload/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/preload/preload.cjs",
     "build": "tsc -p tsconfig.main.json && vite build",
-    "start": "electron ."
+    "start": "env -u ELECTRON_RUN_AS_NODE electron ."
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -20,6 +20,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",
