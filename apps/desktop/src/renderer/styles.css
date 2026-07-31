@@ -42,6 +42,10 @@ body {
   background: var(--nf-border);
 }
 
+.nf-app--companion-collapsed {
+  grid-template-columns: 40px 1fr 280px;
+}
+
 .nf-panel--left { grid-area: left; }
 .nf-workspace { grid-area: workspace; }
 .nf-panel--right { grid-area: right; }
@@ -57,7 +61,25 @@ body {
   flex-shrink: 0;
 }
 
+.nf-panel__fold {
+  margin-left: auto;
+  background: none; border: none; color: var(--nf-text-dim);
+  cursor: pointer; font-size: var(--nf-font-sm); padding: 2px 6px;
+}
+.nf-panel__fold:hover { color: var(--nf-accent); }
+
+.nf-panel--collapsed .nf-panel__header { justify-content: center; padding: var(--nf-space-2); }
+.nf-panel--collapsed .nf-panel__fold { margin-left: 0; }
+
 .nf-panel__body { padding: var(--nf-space-3); overflow-y: auto; flex: 1; }
+
+.nf-workspace__split {
+  display: flex; flex: 1; min-height: 0; overflow: hidden;
+}
+
+.nf-editor {
+  display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0;
+}
 
 .nf-workspace__toolbar {
   display: flex; align-items: center; gap: var(--nf-space-3);
@@ -70,9 +92,49 @@ body {
   background: var(--nf-accent-soft); color: var(--nf-accent);
   border: none; border-radius: var(--nf-radius-sm);
   padding: 2px var(--nf-space-3); cursor: pointer; font-size: var(--nf-font-sm);
+  margin-left: auto;
 }
 
 .nf-filetree-tag { color: var(--nf-text-dim); }
+
+/* 文件树（D2 §9 / D7：宽 240px，行高 24px，字号 12px） */
+.nf-filetree {
+  width: 240px; flex-shrink: 0;
+  display: flex; flex-direction: column;
+  border-right: 1px solid var(--nf-border);
+  background: #252526;
+  transition: width 0.2s ease;
+  overflow: hidden;
+}
+.nf-filetree--collapsed { width: 36px; }
+
+.nf-filetree__header {
+  display: flex; align-items: center;
+  height: 32px; padding: 0 var(--nf-space-2);
+  border-bottom: 1px solid var(--nf-border);
+  flex-shrink: 0;
+}
+.nf-filetree__title {
+  font-size: var(--nf-font-sm); color: var(--nf-text-dim); flex: 1;
+}
+.nf-filetree__fold {
+  background: none; border: none; color: var(--nf-text-dim);
+  cursor: pointer; font-size: var(--nf-font-sm); padding: 2px 6px;
+}
+.nf-filetree__fold:hover { color: var(--nf-accent); }
+.nf-filetree__body { overflow: auto; flex: 1; padding: var(--nf-space-1) 0; }
+
+.nf-tree__row {
+  display: flex; align-items: center; gap: 4px;
+  width: 100%; height: 24px;
+  border: none; background: transparent;
+  color: var(--nf-text); font-size: 12px; line-height: 24px;
+  cursor: pointer; text-align: left; padding-right: 8px;
+}
+.nf-tree__row:hover { background: var(--nf-bg-elevated); }
+.nf-tree__row--active { background: var(--nf-accent-soft); color: var(--nf-accent); }
+.nf-tree__icon { width: 14px; flex-shrink: 0; font-size: 11px; }
+.nf-tree__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .nf-placeholder {
   color: var(--nf-text-dim); font-size: var(--nf-font-sm);
@@ -92,7 +154,7 @@ body {
   50% { opacity: 0.35; }
 }
 
-/* 状态栏（D0 §3.3：🟢 就绪 │ main │ 待审核: 0） */
+/* 状态栏（D0 §3.3） */
 .nf-statusbar {
   display: flex; align-items: center;
   padding: 0 var(--nf-space-3);
@@ -102,9 +164,13 @@ body {
 }
 
 /* 首次配置页（D0 §3.1） */
-.nf-app--config {
+.nf-app--config,
+.nf-app--start {
   display: flex; align-items: center; justify-content: center;
   background: var(--nf-bg);
+  grid-template-columns: none;
+  grid-template-rows: none;
+  grid-template-areas: none;
 }
 
 .nf-config { width: 360px; display: flex; flex-direction: column; gap: var(--nf-space-3); }
@@ -118,9 +184,9 @@ body {
   outline: none; width: 100%;
 }
 .nf-config__input:focus { border-color: var(--nf-accent); }
-.nf-config__input--error { border-color: #ef4444; } /* 验证失败红边 */
+.nf-config__input--error { border-color: #ef4444; }
 
-.nf-config__err { color: #ef4444; font-size: var(--nf-font-sm); }
+.nf-config__err { color: #ef4444; font-size: var(--nf-font-sm); padding: var(--nf-space-2); }
 .nf-config__banner {
   display: flex; align-items: center; justify-content: space-between; gap: var(--nf-space-2);
   background: var(--nf-accent-soft); border-radius: var(--nf-radius-sm);
@@ -141,3 +207,34 @@ body {
 
 .nf-config__why { color: var(--nf-text-dim); font-size: var(--nf-font-sm); cursor: pointer; }
 .nf-config__why-text { padding: var(--nf-space-2) 0; color: var(--nf-text-dim); }
+
+/* 启动页（D5 屏幕1） */
+.nf-start {
+  display: flex; flex-direction: column; align-items: center;
+  width: 520px; max-width: 90vw;
+}
+.nf-start__brand {
+  font-size: 28px; font-weight: 600; letter-spacing: -0.5px;
+  color: #d4d4d4; margin-top: 0;
+}
+.nf-start__prompt {
+  margin-top: 24px; font-size: 18px; color: #808080; font-weight: 400;
+}
+.nf-start__hint {
+  margin-top: 16px; font-size: var(--nf-font-md); color: var(--nf-text-dim); text-align: center;
+}
+.nf-start__input {
+  margin-top: 32px; width: 100%; height: 48px;
+  background: #2d2d2d; color: var(--nf-text);
+  border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md);
+  padding: 12px 16px; font-size: 16px; text-align: center; outline: none;
+}
+.nf-start__input::placeholder { color: #606060; }
+.nf-start__links {
+  margin-top: 24px; display: flex; gap: 24px; justify-content: center;
+}
+.nf-start__link {
+  background: none; border: none; color: #808080;
+  font-size: 14px; cursor: pointer; text-decoration: none;
+}
+.nf-start__link:hover { color: var(--nf-accent); }

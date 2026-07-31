@@ -1,105 +1,84 @@
 import { useEffect, useState } from 'react'
-import Editor, { DiffEditor } from '@monaco-editor/react'
 import ConfigPage from './ConfigPage'
+import StartPage from './StartPage'
+import MainWorkspace from './MainWorkspace'
 
-// ticket 01：三栏布局占位（D0 §2 信息架构）+ Monaco + DiffEditor 验证 + 状态栏（D0 §3.3）
-// ticket 02：首次配置页判断（D0 §1.3/§3.1：无有效 Key → 配置页；有 → 主工作区）
+// ticket 01：骨架；ticket 02：配置页；ticket 03：启动页 + 打开项目 + 文件树
 
-const ORIGINAL = `// auth.ts
-export function checkPermission(user) {
-  return user.role === 'admin'
-}`
-const MODIFIED = `// auth.ts
-export function checkPermission(user) {
-  return user.role === 'admin' || user.role === 'editor'
-}`
-
-function MainWorkspace() {
-  const [diffVisible, setDiffVisible] = useState(true)
-
-  return (
-    <>
-      {/* 左：搭档面板（可折叠） */}
-      <aside className="nf-panel nf-panel--left">
-        <header className="nf-panel__header">
-          <span className="nf-breath" />
-          <span className="nf-panel__title">搭档</span>
-        </header>
-        <div className="nf-panel__body">
-          <p className="nf-placeholder">对话区占位</p>
-          <p className="nf-placeholder">输入框占位</p>
-          <p className="nf-placeholder">任务列表占位（● 执行 / ◉ 待审 / ○ 排队）</p>
-        </div>
-      </aside>
-
-      {/* 中：工作区（编辑器 + DiffEditor 验证） */}
-      <main className="nf-workspace">
-        <div className="nf-workspace__toolbar">
-          <button onClick={() => setDiffVisible(v => !v)}>
-            {diffVisible ? '编辑器' : 'Diff 视图'}
-          </button>
-          <span className="nf-filetree-tag">文件树（可折叠）</span>
-        </div>
-        {diffVisible ? (
-          <DiffEditor
-            height="100%"
-            language="typescript"
-            original={ORIGINAL}
-            modified={MODIFIED}
-            theme="vs-dark"
-            options={{ renderSideBySide: true, readOnly: true }}
-          />
-        ) : (
-          <Editor height="100%" defaultLanguage="typescript" defaultValue="// NeonForge 编辑器占位" theme="vs-dark" />
-        )}
-      </main>
-
-      {/* 右：详情面板（可按需展开） */}
-      <aside className="nf-panel nf-panel--right">
-        <header className="nf-panel__header">
-          <span className="nf-panel__title">详情</span>
-        </header>
-        <div className="nf-panel__body">
-          <p className="nf-placeholder">🧠 推理过程占位</p>
-          <p className="nf-placeholder">修改计划占位</p>
-          <details>
-            <summary>▸ 本轮用量</summary>
-            <p className="nf-meta">12K tokens │ 缓存命中 87%</p>
-          </details>
-        </div>
-      </aside>
-
-      {/* 状态栏（D0 §3.3 权威） */}
-      <footer className="nf-statusbar">
-        🟢 就绪 │ main │ 待审核: 0
-      </footer>
-    </>
-  )
-}
+type Screen = 'boot' | 'config' | 'start' | 'workspace' | 'new-project'
 
 export default function App() {
-  const [ready, setReady] = useState(false)
-  const [hasKey, setHasKey] = useState(false)
+  const [screen, setScreen] = useState<Screen>('boot')
+  const [rootPath, setRootPath] = useState<string | null>(null)
 
   useEffect(() => {
     let mounted = true
-    void window.neonforge.config.hasKey().then((v) => {
-      if (mounted) { setHasKey(v); setReady(true) }
+    const bridge = window.neonforge
+    if (!bridge?.config?.hasKey) {
+      console.error('[App] window.neonforge missing — preload failed')
+      setScreen('config')
+      return
+    }
+    void bridge.config.hasKey().then((v) => {
+      if (mounted) setScreen(v ? 'start' : 'config')
+    }).catch((err) => {
+      console.error('[App] hasKey failed', err)
+      if (mounted) setScreen('config')
     })
     return () => { mounted = false }
   }, [])
 
-  if (!ready) return <div className="nf-app" />
-  if (!hasKey) {
+  const openExisting = async () => {
+    const path = await window.neonforge.workspace.openFolder()
+    if (!path) return
+    setRootPath(path)
+    setScreen('workspace')
+  }
+
+  if (screen === 'boot') return <div className="nf-app" />
+
+  if (screen === 'config') {
     return (
       <div className="nf-app nf-app--config">
-        <ConfigPage onDone={() => setHasKey(true)} />
+        <ConfigPage onDone={() => setScreen('start')} />
       </div>
     )
   }
-  return (
-    <div className="nf-app">
-      <MainWorkspace />
-    </div>
-  )
+
+  if (screen === 'start') {
+    return (
+      <div className="nf-app nf-app--start">
+        <StartPage
+          onOpenProject={() => { void openExisting() }}
+          onNewProject={() => setScreen('new-project')}
+        />
+      </div>
+    )
+  }
+
+  if (screen === 'new-project') {
+    return (
+      <div className="nf-app nf-app--start">
+        <div className="nf-start">
+          <h1 className="nf-start__brand">NeonForge</h1>
+          <p className="nf-start__prompt">从零开始</p>
+          <p className="nf-start__hint">新建项目流见 ticket 07，当前为入口占位。</p>
+          <button type="button" className="nf-start__link" onClick={() => setScreen('start')}>
+            返回启动页
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (screen === 'workspace' && rootPath) {
+    return (
+      <MainWorkspace
+        rootPath={rootPath}
+        onBackStart={() => { setRootPath(null); setScreen('start') }}
+      />
+    )
+  }
+
+  return null
 }

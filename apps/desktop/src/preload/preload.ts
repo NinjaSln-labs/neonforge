@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-// bridge：gateway + config（IPC 收敛，renderer 不直接碰 node/electron）
+// bridge：gateway + config + workspace（IPC 收敛，renderer 不直接碰 node/electron）
 contextBridge.exposeInMainWorld('neonforge', {
   version: process.env.npm_package_version ?? '0.1.0',
   config: {
@@ -18,5 +18,12 @@ contextBridge.exposeInMainWorld('neonforge', {
       ipcRenderer.on('gateway:stream-chunk', listener)
       return () => ipcRenderer.removeListener('gateway:stream-chunk', listener)
     }
+  },
+  workspace: {
+    openFolder: () => ipcRenderer.invoke('workspace:open-folder') as Promise<string | null>,
+    listDir: (dirPath: string) =>
+      ipcRenderer.invoke('workspace:list-dir', dirPath) as Promise<Array<{ name: string; path: string; kind: 'file' | 'dir' }>>,
+    readFile: (filePath: string) =>
+      ipcRenderer.invoke('workspace:read-file', filePath) as Promise<{ ok: true; content: string } | { ok: false; error: string }>
   }
 })

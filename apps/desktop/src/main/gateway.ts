@@ -56,6 +56,16 @@ export class DeepSeekGateway {
 
   // 非流式：验证 Key 用（max_tokens 最小）
   async validateKey(apiKey: string): Promise<{ ok: boolean; error?: string }> {
+    // 测试钩子：模拟断网/超时（不改系统网络）
+    if (process.env.NF_FORCE_NETWORK_ERROR === '1') {
+      return { ok: false, error: 'network' }
+    }
+    if (process.env.NF_FORCE_NETWORK_ERROR === 'timeout') {
+      return { ok: false, error: 'timeout' }
+    }
+    if (process.env.NF_FORCE_NETWORK_ERROR === 'service') {
+      return { ok: false, error: 'service-error' }
+    }
     try {
       const res = await fetch(`${API_BASE}/chat/completions`, {
         method: 'POST',

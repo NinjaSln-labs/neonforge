@@ -1,7 +1,8 @@
-// IPC handlers：renderer 经 preload → 主进程 gateway/configStore
-import { ipcMain } from 'electron'
+// IPC handlers：renderer 经 preload → 主进程 gateway/configStore/workspace
+import { BrowserWindow, ipcMain } from 'electron'
 import { gateway } from './gateway.js'
 import { configStore } from './configStore.js'
+import { workspace } from './workspace.js'
 
 export function registerIpc(): void {
   ipcMain.handle('config:has-key', () => configStore.hasValidKey())
@@ -34,4 +35,12 @@ export function registerIpc(): void {
       return { ok: false, error: e instanceof Error ? e.message : 'gateway-error' }
     }
   })
+
+  // ticket 03：打开项目 / 文件树 / 读文件
+  ipcMain.handle('workspace:open-folder', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    return workspace.openFolder(win)
+  })
+  ipcMain.handle('workspace:list-dir', (_e, dirPath: string) => workspace.listDir(dirPath))
+  ipcMain.handle('workspace:read-file', (_e, filePath: string) => workspace.readFile(filePath))
 }

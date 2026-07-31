@@ -1,0 +1,97 @@
+import { useEffect, useState } from 'react'
+import type { DirEntry } from './types'
+
+// 文件树（D2 §9 / D7：行高 24px、字号 12px；可折叠）
+function TreeNode({
+  entry,
+  depth,
+  selectedPath,
+  onOpenFile
+}: {
+  entry: DirEntry
+  depth: number
+  selectedPath: string | null
+  onOpenFile: (path: string) => void
+}) {
+  const [open, setOpen] = useState(depth === 0)
+  const [children, setChildren] = useState<DirEntry[] | null>(null)
+
+  useEffect(() => {
+    if (entry.kind !== 'dir' || !open || children !== null) return
+    let alive = true
+    void window.neonforge.workspace.listDir(entry.path).then((list) => {
+      if (alive) setChildren(list)
+    })
+    return () => { alive = false }
+  }, [entry.kind, entry.path, open, children])
+
+  if (entry.kind === 'file') {
+    return (
+      <button
+        type="button"
+        className={`nf-tree__row${selectedPath === entry.path ? ' nf-tree__row--active' : ''}`}
+        style={{ paddingLeft: 8 + depth * 12 }}
+        onClick={() => onOpenFile(entry.path)}
+      >
+        <span className="nf-tree__icon">📄</span>
+        <span className="nf-tree__name">{entry.name}</span>
+      </button>
+    )
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        className="nf-tree__row"
+        style={{ paddingLeft: 8 + depth * 12 }}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="nf-tree__icon">{open ? '📂' : '📁'}</span>
+        <span className="nf-tree__name">{entry.name}</span>
+      </button>
+      {open && children?.map((child) => (
+        <TreeNode
+          key={child.path}
+          entry={child}
+          depth={depth + 1}
+          selectedPath={selectedPath}
+          onOpenFile={onOpenFile}
+        />
+      ))}
+    </div>
+  )
+}
+
+export default function FileTree({
+  rootPath,
+  selectedPath,
+  onOpenFile,
+  collapsed,
+  onToggle
+}: {
+  rootPath: string
+  selectedPath: string | null
+  onOpenFile: (path: string) => void
+  collapsed: boolean
+  onToggle: () => void
+}) {
+  const rootName = rootPath.split(/[/\\]/).filter(Boolean).pop() ?? rootPath
+  const rootEntry: DirEntry = { name: rootName, path: rootPath, kind: 'dir' }
+
+  return (
+    <aside className={`nf-filetree${collapsed ? ' nf-filetree--collapsed' : ''}`}>
+      <header className="nf-filetree__header">
+        {!collapsed && <span className="nf-filetree__title">文件</span>}
+        <button type="button" className="nf-filetree__fold" onClick={onToggle} title={collapsed ? '展开文件树' : '折叠文件树'}>
+          {collapsed ? '→' : '←'}
+        </button>
+      </header>
+      {!collapsed && (
+        <div className="nf-filetree__body">
+          <TreeNode entry={rootEntry} depth={0} selectedPath={selectedPath} onOpenFile={onOpenFile} />
+        </div>
+      )}
+    </aside>
+  )
+}
