@@ -318,3 +318,38 @@ body {
 }
 .nf-config__cta { box-shadow: 0 0 14px rgba(99, 102, 241, 0.28); }
 .nf-config__cta:hover { box-shadow: 0 0 20px rgba(99, 102, 241, 0.42); }
+
+/* 交付包（ticket 05）：产物 + 验收对照 + 下一步 */
+.nf-delivery { display: flex; flex-direction: column; gap: var(--nf-space-3); padding: var(--nf-space-3); }
+.nf-delivery__head { display: flex; align-items: center; }
+.nf-delivery__badge {
+  background: var(--nf-accent-soft); color: var(--nf-accent);
+  padding: 2px var(--nf-space-3); border-radius: var(--nf-radius-sm);
+  font-size: var(--nf-font-sm); font-weight: 600;
+}
+.nf-delivery__summary { color: var(--nf-text); font-size: var(--nf-font-md); line-height: 1.6; }
+.nf-delivery__block { display: flex; flex-direction: column; gap: var(--nf-space-2); }
+.nf-delivery__block h4 { margin: 0; font-size: var(--nf-font-sm); color: var(--nf-text-dim); font-weight: 600; }
+.nf-delivery__artifacts, .nf-delivery__steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.nf-delivery__artifacts li, .nf-delivery__steps li { font-size: var(--nf-font-sm); color: var(--nf-text); padding: 2px 0; }
+.nf-delivery__steps li { color: var(--nf-text-dim); }
+.nf-delivery__acceptance { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.nf-delivery__acceptance li { display: flex; align-items: center; gap: var(--nf-space-2); font-size: var(--nf-font-sm); color: var(--nf-text); }
+.nf-check {
+  background: none; border: none; color: var(--nf-text-dim);
+  font-size: var(--nf-font-md); cursor: pointer; padding: 0; line-height: 1;
+}
+.nf-check--done { color: var(--nf-accent); }
+.nf-check:focus-visible { outline: 1px solid var(--nf-accent); border-radius: 2px; }
+.nf-delivery__actions { display: flex; gap: var(--nf-space-2); margin-top: var(--nf-space-2); }
+.nf-delivery__primary {
+  background-image: linear-gradient(90deg, #6366F1, #A855F7);
+  color: #fff; border: none; border-radius: var(--nf-radius-sm);
+  padding: 6px var(--nf-space-3); font-size: var(--nf-font-sm); cursor: pointer;
+}
+.nf-delivery__primary:disabled { opacity: 0.4; cursor: not-allowed; }
+.nf-delivery__ghost {
+  background: none; border: 1px solid var(--nf-border); color: var(--nf-text-dim);
+  border-radius: var(--nf-radius-sm); padding: 6px var(--nf-space-3); font-size: var(--nf-font-sm); cursor: pointer;
+}
+.nf-delivery__rerun { background: none; border: none; color: var(--nf-accent); font-size: var(--nf-font-sm); cursor: pointer; text-align: left; padding: 0; }

@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import SessionPanel from './SessionPanel'
 import OutputPanel from './OutputPanel'
 import ConversationPanel from './ConversationPanel'
+import type { DeliveryPackage } from './types'
 
 // 任务工作台（对话面板「任务」Tab，06 任务队列前为结构占位）
 function TaskPanel() {
@@ -33,6 +34,9 @@ export default function MainWorkspace({
   const [content, setContent] = useState<string>('')
   const [working, setWorking] = useState(false)
   const [chatKey, setChatKey] = useState(0)
+  const [deliveryPkg, setDeliveryPkg] = useState<DeliveryPackage | null>(
+    (window.neonforge as unknown as { demo?: { delivery?: DeliveryPackage } }).demo?.delivery ?? null
+  )
 
   const openFile = useCallback((filePath: string) => {
     void window.neonforge.workspace.readFile(filePath).then((res) => {
@@ -79,7 +83,15 @@ export default function MainWorkspace({
       </aside>
 
       {/* 右：产物区（工程 / 产物） */}
-      <OutputPanel rootPath={rootPath} activePath={activePath} content={content} onOpenFile={openFile} />
+      <OutputPanel
+        rootPath={rootPath}
+        activePath={activePath}
+        content={content}
+        deliveryPkg={deliveryPkg}
+        onOpenFile={openFile}
+        onCloseProblem={() => setDeliveryPkg((p) => (p ? { ...p, status: 'closed' } : p))}
+        onAdjustProblem={() => {}}
+      />
 
       <footer className="nf-statusbar">
         {working ? (

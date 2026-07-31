@@ -1,18 +1,26 @@
 import { useState } from 'react'
 import Editor from '@monaco-editor/react'
 import FileTree from './FileTree'
+import DeliveryPanel from './DeliveryPanel'
+import type { DeliveryPackage } from './types'
 
-// 产物区（右）：工程 / 产物 Tabs——agent 干活的产物（文件树 + 文件只读查看）
+// 产物区（右）：工程 / 产物 Tabs——工程=文件树；产物=交付包（ticket 05）
 export default function OutputPanel({
   rootPath,
   activePath,
   content,
-  onOpenFile
+  deliveryPkg,
+  onOpenFile,
+  onCloseProblem,
+  onAdjustProblem
 }: {
   rootPath: string
   activePath: string | null
   content: string
+  deliveryPkg: DeliveryPackage | null
   onOpenFile: (path: string) => void
+  onCloseProblem: () => void
+  onAdjustProblem: () => void
 }) {
   const [tab, setTab] = useState<'project' | 'output'>('project')
 
@@ -46,7 +54,9 @@ export default function OutputPanel({
         />
       ) : (
         <div className="nf-output__body" style={{ padding: 0 }}>
-          {activePath ? (
+          {deliveryPkg ? (
+            <DeliveryPanel pkg={deliveryPkg} onClose={onCloseProblem} onAdjust={onAdjustProblem} />
+          ) : activePath ? (
             <Editor
               height="100%"
               path={activePath}
@@ -56,7 +66,7 @@ export default function OutputPanel({
               options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13 }}
             />
           ) : (
-            <p className="nf-placeholder">从「工程」选文件查看内容</p>
+            <DeliveryPanel pkg={null} onClose={onCloseProblem} onAdjust={onAdjustProblem} />
           )}
         </div>
       )}
