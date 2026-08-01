@@ -467,3 +467,4 @@ body {
 .nf-settings__plugins-list { display: flex; flex-wrap: wrap; gap: 4px; }
 .nf-settings__plugin { font-size: 11px; color: var(--nf-text-dim); background: var(--nf-bg-panel); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-sm); padding: 2px 6px; }
 .nf-settings__plugin em { color: #22C55E; font-style: normal; }
+.nf-compact { font-size: 12px; color: var(--nf-text-dim); background: var(--nf-bg-elevated); border: 1px dashed var(--nf-border); border-radius: var(--nf-radius-sm); padding: 4px var(--nf-space-3); }
