@@ -411,3 +411,9 @@ body {
 .nf-flow__advance { display: flex; align-items: center; gap: var(--nf-space-3); }
 .nf-flow__stage-label { font-size: var(--nf-font-sm); color: var(--nf-text-dim); }
 .nf-flow__done { color: #22C55E; font-size: var(--nf-font-sm); font-weight: 600; }
+
+/* 数字产物交付（ticket 13）：文件清单 + 任务选择 + 变更预览 */
+.nf-digital { display: flex; flex-direction: column; gap: var(--nf-space-3); padding: var(--nf-space-3); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md); background: var(--nf-bg-elevated); }
+.nf-digital__files { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 140px; overflow-y: auto; }
+.nf-digital__files li { font-size: var(--nf-font-sm); color: var(--nf-text-dim); padding: 2px 0; }
+.nf-digital__preview { display: flex; flex-direction: column; gap: var(--nf-space-2); }
