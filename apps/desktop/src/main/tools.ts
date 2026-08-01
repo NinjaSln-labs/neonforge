@@ -79,9 +79,21 @@ async function editExecutor(args: Record<string, unknown>, ctx: { rootPath?: str
   return { file: filePath }
 }
 
-async function bashExecutor(_args: Record<string, unknown>): Promise<unknown> {
-  // V1：ShellAgent 沙箱归 07/后续——此处占位（仅记录，不执行）
-  throw new Error('bash 执行待 ShellAgent 沙箱（V1 占位——经授权后手动执行）')
+async function bashExecutor(args: Record<string, unknown>): Promise<unknown> {
+  // V1 真实执行：授权（approved=true）后执行命令（child_process）
+  // 风险标注：本机进程执行——ShellAgent 沙箱归后续；授权即同意本机执行
+  const { exec } = await import('child_process')
+  const cmd = String(args.command ?? '')
+  if (!cmd.trim()) throw new Error('bash: 缺少 command')
+  return new Promise((resolve, reject) => {
+    exec(cmd, { timeout: 30000, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err) {
+        reject(new Error(stderr ? `exit-${err.code}: ${stderr.slice(0, 500)}` : `exit-${err.code}`))
+        return
+      }
+      resolve({ stdout: stdout.slice(0, 2000), stderr: stderr.slice(0, 500) })
+    })
+  })
 }
 
 export const toolRegistry = new ToolRegistry()
