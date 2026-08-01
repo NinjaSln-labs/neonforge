@@ -91,7 +91,6 @@ function initProblems(): ProblemInstance[] {
 
   return (
     <div className="nf-app">
-      {zeroToOne && <DeliveryFlowPanel />}
       {/* 左：会话区 */}
       <SessionPanel
         problems={problems}
@@ -122,6 +121,7 @@ function initProblems(): ProblemInstance[] {
           <button type="button" className="nf-session__new" onClick={onBackStart}>启动页</button>
         </header>
         <div className="nf-panel__body">
+          {zeroToOne && <DeliveryFlowPanel />}
           {chatTab === 'chat' ? (
             <ConversationPanel key={chatKey} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} />
           ) : (
