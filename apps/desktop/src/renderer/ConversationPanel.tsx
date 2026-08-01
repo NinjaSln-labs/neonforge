@@ -37,6 +37,7 @@ export default function ConversationPanel({
   const [messages, setMessages] = useState<Msg[]>([])
   const messagesRef = useRef<Msg[]>([])
   useEffect(() => { messagesRef.current = messages }, [messages])
+  const chatRef = useRef<{ msgs: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string }>; depth: number } | null>(null)
   const [input, setInput] = useState('')
   const [working, setWorking] = useState(false)
   const [workingStage, setWorkingStage] = useState('等待回复…')
@@ -96,6 +97,40 @@ export default function ConversationPanel({
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
   }, [messages, working])
 
+  // 工具完成后触发续聊：轮询等工具执行（自动/授权）完成，全 done → 回填模型继续
+  const maybeContinue = async (depth: number) => {
+    const ctx = chatRef.current
+    if (!ctx || depth >= 4) return
+    // 轮询等工具完成（最多 15s）
+    for (let i = 0; i < 30; i++) {
+      await new Promise((r) => setTimeout(r, 500))
+      const latest = messagesRef.current
+      const lastMsg = latest[latest.length - 1]
+      if (!lastMsg || !lastMsg.toolCalls || lastMsg.toolCalls.length === 0) return
+      const waiting = lastMsg.toolCalls.filter((c) => c.status === 'pending' || c.status === 'need-approval')
+      if (waiting.length === 0) break // 全部完成
+    }
+    const latest = messagesRef.current
+    const lastMsg = latest[latest.length - 1]
+    if (!lastMsg) return
+    const calls = lastMsg.toolCalls ?? []
+    if (calls.length === 0) return
+    // 组装 tool 消息序列
+    const toolMsgs: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string }> = [
+      ...ctx.msgs,
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: calls.map((c, i) => ({ id: `call_${i}`, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.args) } }))
+      },
+      ...calls.map((c, i) => ({ role: 'tool', tool_call_id: `call_${i}`, content: c.result ?? '执行失败' }))
+    ]
+    chatRef.current = { msgs: toolMsgs, depth: depth + 1 }
+    setMessages((p) => [...p, { role: 'assistant', content: '', reasoning: '', status: 'streaming' }])
+    await new Promise((r) => setTimeout(r, 50))
+    await runChat(toolMsgs, depth + 1)
+  }
+
   // 多轮工具循环：模型返回 tool_call → 执行 → 结果回填 → 续聊（最多 4 轮）
   const runChat = async (msgs: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string }>, depth: number) => {
     if (depth > 4) return
@@ -113,27 +148,10 @@ export default function ConversationPanel({
       if (!res.ok) { finishError(res.error ?? 'gateway-error'); return }
     } catch { finishError('network'); return } finally { off() }
 
-    // 检查本轮是否有完成的工具调用 → 回填续聊（用 ref 读最新消息——闭包会旧）
-    await new Promise((r) => setTimeout(r, 400)) // 等工具执行结果写入
-    const latest = messagesRef.current
-    const lastMsg = latest[latest.length - 1]
-    const toolCalls = lastMsg?.toolCalls?.filter((c) => c.status === 'done') ?? []
-    if (toolCalls.length === 0) return
-
-    // 组装 tool 消息序列（DeepSeek 格式）
-    const toolMsgs: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string }> = [
-      ...msgs,
-      {
-        role: 'assistant',
-        content: null,
-        tool_calls: toolCalls.map((tc, i) => ({ id: `call_${i}`, type: 'function', function: { name: tc.name, arguments: JSON.stringify(tc.args) } }))
-      },
-      ...toolCalls.map((tc, i) => ({ role: 'tool', tool_call_id: `call_${i}`, content: tc.result ?? '执行失败' }))
-    ]
-    // 追加新 assistant 消息（本轮回复）
-    setMessages((p) => [...p, { role: 'assistant', content: '', reasoning: '', status: 'streaming' }])
-    await new Promise((r) => setTimeout(r, 50)) // 等新消息写入 ref
-    await runChat(toolMsgs, depth + 1)
+    // 记录本轮上下文 → 由 maybeContinue 轮询工具完成（自动执行）→ 续聊
+    chatRef.current = { msgs, depth }
+    await new Promise((r) => setTimeout(r, 1000))
+    await maybeContinue(depth)
   }
 
   const send = async () => {
@@ -181,6 +199,7 @@ export default function ConversationPanel({
         })
         return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
       })
+      setTimeout(() => void maybeContinue(chatRef.current?.depth ?? 0), 150)
     })
   }
   const rejectToolCall = (calls: ToolCallMsg[], idx: number) => {
