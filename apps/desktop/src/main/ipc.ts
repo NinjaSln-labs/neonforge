@@ -27,7 +27,12 @@ export function registerIpc(): void {
     messages: Array<{ role: string; content: string }>
   }) => {
     const send = (type: 'reasoning' | 'content' | 'tool-call' | 'done', text?: string, toolCall?: { name: string; args: Record<string, unknown> }) => {
-      event.sender.send('gateway:stream-chunk', { type, text, toolCall })
+      if (type === 'tool-call') console.log('[ipc] SEND tool-call:', toolCall?.name, JSON.stringify(toolCall?.args).slice(0, 80))
+      // 干净对象（无 undefined 字段——contextBridge 结构化传输兼容）
+      const payload: Record<string, unknown> = { type }
+      if (text !== undefined) payload.text = text
+      if (toolCall) payload.toolCall = toolCall
+      event.sender.send('gateway:stream-chunk', payload)
     }
     try {
       await gateway.streamChat(opts.apiKey, {
@@ -38,6 +43,7 @@ export function registerIpc(): void {
       })
       return { ok: true }
     } catch (e) {
+      console.log('[ipc] stream error:', e instanceof Error ? e.message : String(e))
       return { ok: false, error: e instanceof Error ? e.message : 'gateway-error' }
     }
   })

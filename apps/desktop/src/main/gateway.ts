@@ -111,6 +111,8 @@ export class DeepSeekGateway {
     }
   ): Promise<void> {
     const model = opts.model ?? this.router.route({ thinking: opts.level ?? 'basic' })
+    console.log('[gateway] stream start model=' + model + ' tools=' + (opts.tools ?? false))
+    console.log('[gateway] stream start model=' + model + ' tools=' + (opts.tools ?? false))
     const res = await fetch(`${API_BASE}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -126,6 +128,7 @@ export class DeepSeekGateway {
       }),
       signal: AbortSignal.timeout(120000)
     })
+    console.log('[gateway] http', res.status)
     if (!res.ok || !res.body) throw new Error(`gateway: http-${res.status}`)
 
     const reader = res.body.getReader()
@@ -146,8 +149,7 @@ export class DeepSeekGateway {
         if (!trimmed.startsWith('data:')) continue
         const payload = trimmed.slice(5).trim()
         if (payload === '[DONE]') {
-          opts.onDelta({ type: 'done' })
-          continue
+          continue // 不在此处发 done——循环结束统一发（保证 tool-call 先于 done）
         }
         try {
           const json = JSON.parse(payload)
@@ -171,9 +173,11 @@ export class DeepSeekGateway {
     for (const acc of toolAcc) {
       if (!acc.name) continue
       const repaired = toolCallRepair(acc.arguments)
-      if (repaired === null) continue
+      if (repaired === null) { console.log('[gateway] tool-call repair failed:', acc.name, acc.arguments.slice(0, 80)); continue }
+      console.log('[gateway] tool-call emit:', acc.name, JSON.stringify(repaired).slice(0, 120))
       opts.onDelta({ type: 'tool-call', toolCall: { name: acc.name, args: repaired as Record<string, unknown> } })
     }
+    console.log('[gateway] stream done')
     opts.onDelta({ type: 'done' })
   }
 }
