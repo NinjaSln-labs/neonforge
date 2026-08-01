@@ -253,7 +253,7 @@ body {
 .nf-msg--user .nf-msg__body { background: var(--nf-accent-soft); }
 .nf-msg__reasoning { font-size: var(--nf-font-sm); color: var(--nf-text-dim); }
 .nf-reasoning { max-height: 160px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; }
-.nf-chat__input { display: flex; gap: var(--nf-space-2); align-items: flex-end; }
+.nf-chat__input { display: flex; gap: var(--nf-space-2); align-items: flex-end; position: sticky; bottom: 0; background: var(--nf-bg); padding-top: var(--nf-space-2); z-index: 2; }
 .nf-chat__input textarea {
   flex: 1; resize: none; background: var(--nf-bg-elevated); color: var(--nf-text);
   border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md);
