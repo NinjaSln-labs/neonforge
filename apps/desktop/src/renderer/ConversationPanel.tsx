@@ -102,7 +102,28 @@ export default function ConversationPanel({
     <div className="nf-chat">
       <div className="nf-chat__list" ref={listRef} aria-live="polite" aria-relevant="additions text">
         {messages.length === 0 && (
-          <p className="nf-placeholder">在下方输入，搭档开始分析</p>
+          <div className="nf-scenes">
+            <p className="nf-placeholder">说出你当前的问题——或者从这些开始：</p>
+            <div className="nf-scenes__grid">
+              {[
+                ['📁', '整理文件', '把 Downloads 里的发票和合同分类整理'],
+                ['🔧', '做小工具', '帮我做一个每周记账的小工具'],
+                ['🛠', '修系统', 'X 系统今天出异常了，帮我看看'],
+                ['🚀', '0-1 交付', '我要做一个能发给朋友的旅行手册网页']
+              ].map(([icon, label, q]) => (
+                <button
+                  key={label}
+                  type="button"
+                  className="nf-scene"
+                  onClick={() => setInput(q)}
+                >
+                  <span className="nf-scene__icon">{icon}</span>
+                  <span className="nf-scene__label">{label}</span>
+                  <span className="nf-scene__q">{q}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         )}
         {messages.map((m, i) => (
           <div key={i} className={`nf-msg nf-msg--${m.role}`}>
