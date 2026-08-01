@@ -8,12 +8,19 @@ import type { DeliveryPackage } from './types'
 // ticket 04：对话最小闭环（D0 §2/§3.4）——输入发送 → Gateway 流式 → 消息/呼吸光条/推理展示
 // 消费 02：streamChat（四档 basic）+ ModelRouter（默认 Flash）；错误分支：Key 失效内嵌更新 / 服务故障提示
 
+interface ToolCallMsg {
+  name: string
+  args: Record<string, unknown>
+  status: 'pending' | 'done' | 'need-approval' | 'error'
+  result?: string
+}
 interface Msg {
   role: 'user' | 'assistant'
   content: string
   reasoning?: string
   status: 'streaming' | 'done' | 'error'
   error?: string
+  toolCalls?: ToolCallMsg[]
 }
 
 export default function ConversationPanel({
@@ -45,6 +52,25 @@ export default function ConversationPanel({
         }
         if (chunk.type === 'content') next.content = next.content + (chunk.text ?? '')
         if (chunk.type === 'done') next.status = 'done'
+        if (chunk.type === 'tool-call' && chunk.toolCall) {
+          const tc = chunk.toolCall
+          next.toolCalls = [...(next.toolCalls ?? []), { name: tc.name, args: tc.args, status: 'pending' }]
+          // 执行（read 自动；write/edit/bash 需 L3 授权——V1 标记待授权）
+          void window.neonforge.tools.execute(tc.name, tc.args, { approved: tc.name === 'read' }).then((r) => {
+            setMessages((prev) => {
+              const last = prev[prev.length - 1]
+              if (!last) return prev
+              const calls = (last.toolCalls ?? []).map((c, i) => {
+                if (i !== (next.toolCalls?.length ?? 1) - 1 && c.name !== tc.name) return c
+                if (c.name !== tc.name || c.status !== 'pending') return c
+                return r.ok
+                  ? { ...c, status: 'done' as const, result: typeof r.data === 'string' ? r.data.slice(0, 300) : JSON.stringify(r.data).slice(0, 300) }
+                  : { ...c, status: (r.error ?? '').includes('授权') ? ('need-approval' as const) : ('error' as const), result: r.error }
+              })
+              return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
+            })
+          })
+        }
         return [...prev.slice(0, -1), next]
       })
     })
@@ -76,6 +102,7 @@ export default function ConversationPanel({
       const res = await window.neonforge.gateway.streamChat({
         apiKey: key,
         level: 'basic', // V1 固定 basic 档（04 专家评审）
+        tools: true, // 真实执行：模型可返回工具调用（ToolRegistry 执行）
         messages: [...history, { role: 'user', content: text }]
       })
       if (!res.ok) finishError(res.error ?? 'gateway-error')
@@ -170,6 +197,21 @@ export default function ConversationPanel({
                 <summary>🧠 推理</summary>
                 <p className="nf-meta">{m.reasoning}</p>
               </details>
+            )}
+            {m.toolCalls && m.toolCalls.length > 0 && (
+              <div className="nf-toolcalls">
+                {m.toolCalls.map((tc, i) => (
+                  <div key={i} className={`nf-toolcall nf-toolcall--${tc.status}`}>
+                    <span className="nf-toolcall__icon">
+                      {tc.status === 'done' ? '✅' : tc.status === 'need-approval' ? '🔒' : tc.status === 'error' ? '❌' : '⏳'}
+                    </span>
+                    <span className="nf-toolcall__name">🔧 {tc.name}</span>
+                    <span className="nf-toolcall__args">{JSON.stringify(tc.args).slice(0, 80)}</span>
+                    {tc.result && <span className="nf-toolcall__result">{tc.result}</span>}
+                    {tc.status === 'need-approval' && <span className="nf-toolcall__hint">（需 L3 授权——V1 暂不自动执行）</span>}
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         ))}

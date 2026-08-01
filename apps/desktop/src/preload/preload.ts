@@ -13,8 +13,8 @@ contextBridge.exposeInMainWorld('neonforge', {
     validate: (apiKey: string) => ipcRenderer.invoke('gateway:validate', apiKey),
     streamChat: (opts: { apiKey: string; level?: string; messages: Array<{ role: string; content: string }> }) =>
       ipcRenderer.invoke('gateway:stream-chat', opts),
-    onStreamChunk: (cb: (chunk: { type: string; text?: string }) => void) => {
-      const listener = (_e: unknown, chunk: { type: string; text?: string }) => cb(chunk)
+    onStreamChunk: (cb: (chunk: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) => {
+      const listener = (_e: unknown, chunk: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => cb(chunk)
       ipcRenderer.on('gateway:stream-chunk', listener)
       return () => ipcRenderer.removeListener('gateway:stream-chunk', listener)
     }

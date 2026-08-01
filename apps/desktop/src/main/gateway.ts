@@ -49,6 +49,14 @@ export function toolCallRepair(raw: unknown, round: number = 0): unknown | null 
   }
 }
 
+// A0 §4 工具面：4 核心工具定义（请求带 tools → 模型返回 tool_calls → ToolRegistry 执行）
+export const TOOL_DEFS = [
+  { type: 'function', function: { name: 'read', description: '读取文件内容', parameters: { type: 'object', properties: { path: { type: 'string', description: '文件绝对路径' } }, required: ['path'] } } },
+  { type: 'function', function: { name: 'write', description: '写入文件（需 L3 授权）', parameters: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] } } },
+  { type: 'function', function: { name: 'edit', description: '替换文件内容（需 L3 授权）', parameters: { type: 'object', properties: { path: { type: 'string' }, old: { type: 'string' }, new: { type: 'string' } }, required: ['path', 'old', 'new'] } } },
+  { type: 'function', function: { name: 'bash', description: '执行命令（需 L3 授权，V1 占位）', parameters: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] } } }
+]
+
 const API_BASE = 'https://api.deepseek.com'
 
 export class DeepSeekGateway {
@@ -98,7 +106,8 @@ export class DeepSeekGateway {
       model?: ModelID
       level?: ThinkingLevel
       messages: Array<{ role: string; content: string }>
-      onDelta: (chunk: { type: 'reasoning' | 'content' | 'done'; text?: string }) => void
+      tools?: boolean
+      onDelta: (chunk: { type: 'reasoning' | 'content' | 'tool-call' | 'done'; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void
     }
   ): Promise<void> {
     const model = opts.model ?? this.router.route({ thinking: opts.level ?? 'basic' })
@@ -112,7 +121,8 @@ export class DeepSeekGateway {
         model,
         ...toDeepSeekParams(opts.level ?? 'basic'),
         messages: opts.messages,
-        stream: true
+        stream: true,
+        ...(opts.tools ? { tools: TOOL_DEFS, tool_choice: 'auto' } : {})
       }),
       signal: AbortSignal.timeout(120000)
     })
@@ -121,6 +131,7 @@ export class DeepSeekGateway {
     const reader = res.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
+    const toolAcc: Array<{ name: string; arguments: string }> = []
 
     while (true) {
       const { done, value } = await reader.read()
@@ -143,8 +154,25 @@ export class DeepSeekGateway {
           const delta = json.choices?.[0]?.delta ?? {}
           if (delta.reasoning_content) opts.onDelta({ type: 'reasoning', text: delta.reasoning_content })
           if (delta.content) opts.onDelta({ type: 'content', text: delta.content })
+          // tool_calls 增量（DeepSeek SSE：按 index 分片，arguments 为字符串增量）
+          if (Array.isArray(delta.tool_calls)) {
+            for (const tc of delta.tool_calls) {
+              const idx = tc.index ?? 0
+              const fn = tc.function ?? {}
+              toolAcc[idx] ??= { name: '', arguments: '' }
+              if (fn.name) toolAcc[idx].name += fn.name
+              if (fn.arguments) toolAcc[idx].arguments += fn.arguments
+            }
+          }
         } catch { /* 跳过半包 JSON */ }
       }
+    }
+    // 收集到的工具调用 → 修复 → 逐个发出（A0 边界：Gateway 修复，ToolRegistry 执行）
+    for (const acc of toolAcc) {
+      if (!acc.name) continue
+      const repaired = toolCallRepair(acc.arguments)
+      if (repaired === null) continue
+      opts.onDelta({ type: 'tool-call', toolCall: { name: acc.name, args: repaired as Record<string, unknown> } })
     }
     opts.onDelta({ type: 'done' })
   }
