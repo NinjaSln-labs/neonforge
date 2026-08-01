@@ -479,3 +479,14 @@ body {
 }
 .nf-flow__focus-step { font-size: 22px; font-weight: 700; color: var(--nf-text); }
 .nf-flow__focus-hint { font-size: var(--nf-font-sm); color: var(--nf-text-dim); }
+
+/* 工具调用卡片（真实执行：read 自动 / write 等需授权） */
+.nf-toolcalls { display: flex; flex-direction: column; gap: 4px; margin-top: var(--nf-space-2); }
+.nf-toolcall { display: flex; align-items: center; gap: var(--nf-space-2); font-size: 12px; padding: 4px var(--nf-space-2); border-radius: var(--nf-radius-sm); background: var(--nf-bg-elevated); border: 1px solid var(--nf-border); flex-wrap: wrap; }
+.nf-toolcall--done { border-color: rgba(34, 197, 94, 0.4); }
+.nf-toolcall--need-approval { border-color: rgba(255, 138, 0, 0.5); }
+.nf-toolcall--error { border-color: rgba(239, 68, 68, 0.5); }
+.nf-toolcall__name { color: var(--nf-text); font-weight: 600; }
+.nf-toolcall__args { color: var(--nf-text-dim); font-family: var(--nf-font-mono); }
+.nf-toolcall__result { color: var(--nf-text-dim); white-space: pre-wrap; max-width: 100%; }
+.nf-toolcall__hint { color: var(--nf-amber); }

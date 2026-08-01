@@ -23,16 +23,18 @@ export function registerIpc(): void {
   ipcMain.handle('gateway:stream-chat', async (event, opts: {
     apiKey: string
     level?: 'none' | 'basic' | 'medium' | 'high'
+    tools?: boolean
     messages: Array<{ role: string; content: string }>
   }) => {
-    const send = (type: 'reasoning' | 'content' | 'done', text?: string) => {
-      event.sender.send('gateway:stream-chunk', { type, text })
+    const send = (type: 'reasoning' | 'content' | 'tool-call' | 'done', text?: string, toolCall?: { name: string; args: Record<string, unknown> }) => {
+      event.sender.send('gateway:stream-chunk', { type, text, toolCall })
     }
     try {
       await gateway.streamChat(opts.apiKey, {
         level: opts.level ?? 'basic',
+        tools: opts.tools ?? false,
         messages: opts.messages,
-        onDelta: (chunk) => send(chunk.type, chunk.text)
+        onDelta: (chunk) => send(chunk.type, chunk.text, 'toolCall' in chunk ? chunk.toolCall : undefined)
       })
       return { ok: true }
     } catch (e) {
