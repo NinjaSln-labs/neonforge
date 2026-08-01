@@ -126,6 +126,38 @@ export default function ConversationPanel({
     }
   }
 
+  // L3 授权：允许执行（approved=true）/ 拒绝（标记拒绝）
+  const approveToolCall = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg) => {
+    setMessages((prev) => {
+      const last = prev[prev.length - 1]
+      if (!last || last.role !== 'assistant') return prev
+      const updated = (last.toolCalls ?? []).map((c, i) => i === idx ? { ...c, status: 'pending' as const } : c)
+      return [...prev.slice(0, -1), { ...last, toolCalls: updated }]
+    })
+    void window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: true }).then((r) => {
+      setMessages((prev) => {
+        if (prev.length === 0) return prev
+        const last = prev[prev.length - 1]
+        if (!last || last.role !== 'assistant') return prev
+        const calls = (last.toolCalls ?? []).map((c, i) => {
+          if (i !== idx) return c
+          return r.ok
+            ? { ...c, status: 'done' as const, result: typeof r.data === 'string' ? r.data.slice(0, 400) : JSON.stringify(r.data).slice(0, 400) }
+            : { ...c, status: 'error' as const, result: r.error }
+        })
+        return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
+      })
+    })
+  }
+  const rejectToolCall = (calls: ToolCallMsg[], idx: number) => {
+    setMessages((prev) => {
+      const last = prev[prev.length - 1]
+      if (!last || last.role !== 'assistant') return prev
+      const updated = (last.toolCalls ?? []).map((c, i) => i === idx ? { ...c, status: 'error' as const, result: '已拒绝授权——未执行' } : c)
+      return [...prev.slice(0, -1), { ...last, toolCalls: updated }]
+    })
+  }
+
   const finishError = (err: string) => {
     setMessages((p) => {
       const last = p[p.length - 1]
@@ -221,7 +253,27 @@ export default function ConversationPanel({
                     <span className="nf-toolcall__name">🔧 {tc.name}</span>
                     <span className="nf-toolcall__args">{JSON.stringify(tc.args).slice(0, 80)}</span>
                     {tc.result && <span className="nf-toolcall__result">{tc.result}</span>}
-                    {tc.status === 'need-approval' && <span className="nf-toolcall__hint">（需 L3 授权——V1 暂不自动执行）</span>}
+                    {tc.status === 'need-approval' && (
+                      <>
+                        <span className="nf-toolcall__hint">需 L3 授权</span>
+                        <div className="nf-toolcall__actions">
+                          <button
+                            type="button"
+                            className="nf-toolcall__approve"
+                            onClick={() => approveToolCall(m.toolCalls ?? [], i, tc)}
+                          >
+                            允许执行
+                          </button>
+                          <button
+                            type="button"
+                            className="nf-toolcall__reject"
+                            onClick={() => rejectToolCall(m.toolCalls ?? [], i)}
+                          >
+                            拒绝
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
