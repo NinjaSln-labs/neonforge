@@ -35,6 +35,7 @@ export default function ConversationPanel({
   const [messages, setMessages] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [working, setWorking] = useState(false)
+  const [workingStage, setWorkingStage] = useState('等待回复…')
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef('')
   const [mentionOpen, setMentionOpen] = useState(false)
@@ -50,11 +51,16 @@ export default function ConversationPanel({
         if (chunk.type === 'reasoning') {
           next.reasoning = (next.reasoning ?? '') + (chunk.text ?? '')
           onReasoning?.(next.reasoning)
+          setWorkingStage('思考中…')
         }
-        if (chunk.type === 'content') next.content = next.content + (chunk.text ?? '')
+        if (chunk.type === 'content') {
+          next.content = next.content + (chunk.text ?? '')
+          setWorkingStage('生成回复…')
+        }
         if (chunk.type === 'done') next.status = 'done'
         if (chunk.type === 'tool-call' && chunk.toolCall) {
           const tc = chunk.toolCall
+          setWorkingStage(`调用工具 ${tc.name}…`)
           next.toolCalls = [...(next.toolCalls ?? []), { name: tc.name, args: tc.args, status: 'pending' }]
           // 执行（read 自动；write/edit/bash 需 L3 授权——V1 标记待授权）
           // 纯 prev 计算更新（不依赖外层闭包引用——防消息覆盖/丢失）
@@ -95,6 +101,7 @@ export default function ConversationPanel({
       .map((m) => ({ role: m.role, content: m.content }))
     setMessages((p) => [...p, { role: 'user', content: text, status: 'done' }])
     setMessages((p) => [...p, { role: 'assistant', content: '', reasoning: '', status: 'streaming' }])
+    setWorkingStage('已发送，等待搭档…')
 
     try {
       const key = await window.neonforge.config.getKey()
@@ -188,13 +195,14 @@ export default function ConversationPanel({
             )}
             {m.role === 'user' && <span className="nf-msg__role">你</span>}
             <div className={`nf-msg__body${m.role === 'assistant' && m.status === 'streaming' && !m.content ? ' nf-msg__body--thinking' : ''}`}>
-              {m.content || (m.status === 'streaming' ? '🧠 思考中…' : '')}
+              {m.content || (m.status === 'streaming' ? '🧠 搭档处理中…' : m.status === 'error' ? '⚠️ 处理失败' : '')}
               {m.error === 'key-invalid' && (
                 <button type="button" className="nf-config__link" onClick={onKeyExpired}>
                   要不要更新一下？
                 </button>
               )}
             </div>
+            {m.role === 'user' && <span className="nf-msg__sent">✓ 已发送</span>}
             {m.reasoning && m.role === 'assistant' && m.status === 'done' && (
               <details className="nf-msg__reasoning">
                 <summary>🧠 推理</summary>
@@ -218,7 +226,12 @@ export default function ConversationPanel({
             )}
           </div>
         ))}
-        {working && <p className="nf-meta">搭档工作中…</p>}
+        {working && (
+          <div className="nf-working">
+            <span className="nf-working__dot">🔵</span>
+            <span>搭档处理中：{workingStage}</span>
+          </div>
+        )}
       </div>
 
       <div className="nf-chat__input">
