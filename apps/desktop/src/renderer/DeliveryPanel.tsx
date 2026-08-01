@@ -28,7 +28,9 @@ export default function DeliveryPanel({
   return (
     <div className="nf-delivery">
       <div className="nf-delivery__head">
-        <span className="nf-delivery__badge">{status === 'closed' ? '✅ 已关闭' : '✅ 已解决'}</span>
+        <span className={`nf-delivery__badge${status === 'closed' ? ' nf-delivery__badge--closed' : ''}`}>
+          {status === 'closed' ? '✅ 已关闭' : '✅ 已解决'}
+        </span>
       </div>
       <p className="nf-delivery__summary">{pkg.summary}</p>
 
@@ -77,15 +79,18 @@ export default function DeliveryPanel({
 
       <div className="nf-delivery__actions">
         {status !== 'closed' && (
-          <button
-            type="button"
-            className="nf-delivery__primary"
-            disabled={!allDone}
-            title={allDone ? '验收全部通过，问题关闭' : '请先勾选全部验收项'}
-            onClick={() => setStatus('closed')}
-          >
-            确认问题关闭
-          </button>
+          <>
+            <button
+              type="button"
+              className="nf-delivery__primary"
+              disabled={!allDone}
+              title={allDone ? '验收全部通过，问题关闭' : '请先勾选全部验收项'}
+              onClick={() => setStatus('closed')}
+            >
+              确认问题关闭
+            </button>
+            {!allDone && <span className="nf-delivery__hint">请先勾选全部验收项</span>}
+          </>
         )}
         {status !== 'closed' && (
           <button type="button" className="nf-delivery__ghost" onClick={onAdjust}>继续调整</button>

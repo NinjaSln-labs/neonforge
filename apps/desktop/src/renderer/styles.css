@@ -353,3 +353,5 @@ body {
   border-radius: var(--nf-radius-sm); padding: 6px var(--nf-space-3); font-size: var(--nf-font-sm); cursor: pointer;
 }
 .nf-delivery__rerun { background: none; border: none; color: var(--nf-accent); font-size: var(--nf-font-sm); cursor: pointer; text-align: left; padding: 0; }
+.nf-delivery__hint { font-size: var(--nf-font-sm); color: var(--nf-amber); align-self: center; }
+.nf-delivery__badge--closed { background: rgba(34, 197, 94, 0.15); color: #22C55E; }
