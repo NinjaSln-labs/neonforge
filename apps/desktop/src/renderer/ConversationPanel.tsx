@@ -37,7 +37,7 @@ export default function ConversationPanel({
   const [messages, setMessages] = useState<Msg[]>([])
   const messagesRef = useRef<Msg[]>([])
   useEffect(() => { messagesRef.current = messages }, [messages])
-  const chatRef = useRef<{ msgs: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string }>; depth: number } | null>(null)
+  const chatRef = useRef<{ msgs: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; reasoning_content?: string }>; depth: number } | null>(null)
   const [input, setInput] = useState('')
   const [working, setWorking] = useState(false)
   const [workingStage, setWorkingStage] = useState('等待回复…')
@@ -116,11 +116,12 @@ export default function ConversationPanel({
     const calls = lastMsg.toolCalls ?? []
     if (calls.length === 0) return
     // 组装 tool 消息序列
-    const toolMsgs: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string }> = [
+    const toolMsgs: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; reasoning_content?: string }> = [
       ...ctx.msgs,
       {
         role: 'assistant',
         content: null,
+        reasoning_content: lastMsg.reasoning ?? '',
         tool_calls: calls.map((c, i) => ({ id: `call_${i}`, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.args) } }))
       },
       ...calls.map((c, i) => ({ role: 'tool', tool_call_id: `call_${i}`, content: c.result ?? '执行失败' }))
@@ -132,7 +133,7 @@ export default function ConversationPanel({
   }
 
   // 多轮工具循环：模型返回 tool_call → 执行 → 结果回填 → 续聊（最多 4 轮）
-  const runChat = async (msgs: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string }>, depth: number) => {
+  const runChat = async (msgs: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; reasoning_content?: string }>, depth: number) => {
     if (depth > 4) return
     const key = await window.neonforge.config.getKey()
     if (!key) { finishError('key-invalid'); return }
