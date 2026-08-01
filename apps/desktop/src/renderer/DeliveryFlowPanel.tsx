@@ -2,7 +2,16 @@ import { useState } from 'react'
 
 // 0-1 交付流（ticket 07）：说需求 → 软件工程模型/敏捷 → 分步推进 → 交付部署
 // V1 UI 层：阶段机 + 模型选择 + 分步确认（真实执行由 agent 引擎驱动，后续对接）
+// v2：当前步骤聚焦——对话区内嵌（固定布局），当前阶段大卡片突出
 const FLOW_STAGES = ['需求', '设计', '开发', '测试', '部署', '交付']
+const STAGE_HINT: Record<string, string> = {
+  需求: '说清楚要做什么、给谁用、做成什么样算完',
+  设计: '确认方案、技术选型、页面/结构设计',
+  开发: '我写代码/生成内容，分步给你看',
+  测试: '验证能跑、按验收标准逐项核对',
+  部署: '发布/上线（超出数字能力→给指导）',
+  交付: '交付包 + 验收对照，确认后关闭'
+}
 
 export default function DeliveryFlowPanel() {
   const [stage, setStage] = useState(0) // 当前进行阶段（index）
@@ -16,12 +25,16 @@ export default function DeliveryFlowPanel() {
     <div className="nf-flow">
       <div className="nf-flow__head">
         <span className="nf-flow__title">🚀 0-1 交付流</span>
-        {model ? (
-          <span className="nf-flow__model">模型：{model === 'agile' ? '敏捷（迭代）' : '传统软件工程'}</span>
-        ) : (
-          <span className="nf-flow__model">选择模型后开始</span>
-        )}
+        {model && <span className="nf-flow__model">模型：{model === 'agile' ? '敏捷（迭代）' : '传统软件工程'}</span>}
       </div>
+
+      {/* 当前步骤聚焦卡 */}
+      {model && stage < FLOW_STAGES.length - 1 && (
+        <div className="nf-flow__focus">
+          <span className="nf-flow__focus-step">{FLOW_STAGES[stage]}</span>
+          <span className="nf-flow__focus-hint">{STAGE_HINT[FLOW_STAGES[stage]]}</span>
+        </div>
+      )}
 
       {/* 阶段机 */}
       <div className="nf-flow__stages">
