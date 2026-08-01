@@ -456,3 +456,9 @@ body {
 .nf-settings__seg { display: flex; gap: 4px; }
 .nf-settings__seg-btn { background: none; border: 1px solid var(--nf-border); color: var(--nf-text-dim); border-radius: var(--nf-radius-sm); padding: 2px var(--nf-space-3); font-size: 12px; cursor: pointer; }
 .nf-settings__seg-btn--on { background: var(--nf-accent-soft); border-color: var(--nf-accent); color: var(--nf-accent); }
+
+/* @引用（ticket 08b / D0 §3.9）：最近文件浮层 */
+.nf-mention { display: flex; flex-direction: column; gap: 2px; background: var(--nf-bg-elevated); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md); padding: var(--nf-space-2); max-height: 140px; overflow-y: auto; }
+.nf-mention__title { font-size: 11px; color: var(--nf-text-dim); padding: 0 var(--nf-space-2); }
+.nf-mention__item { text-align: left; background: none; border: none; color: var(--nf-text-dim); font-size: var(--nf-font-sm); padding: 3px var(--nf-space-2); border-radius: var(--nf-radius-sm); cursor: pointer; }
+.nf-mention__item:hover { background: var(--nf-accent-soft); color: var(--nf-accent); }
