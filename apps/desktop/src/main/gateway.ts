@@ -105,7 +105,7 @@ export class DeepSeekGateway {
     opts: {
       model?: ModelID
       level?: ThinkingLevel
-      messages: Array<{ role: string; content: string }>
+      messages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string }>
       tools?: boolean
       onDelta: (chunk: { type: 'reasoning' | 'content' | 'tool-call' | 'done'; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void
     }

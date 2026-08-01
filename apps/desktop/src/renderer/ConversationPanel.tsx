@@ -44,60 +44,93 @@ export default function ConversationPanel({
   const [recentFiles, setRecentFiles] = useState<string[]>([])
   const demoFiles = (window.neonforge as unknown as { demo?: { recentFiles?: string[] } }).demo?.recentFiles ?? []
 
-  useEffect(() => {
-    const off = window.neonforge.gateway.onStreamChunk((chunk) => {
-      setMessages((prev) => {
-        const last = prev[prev.length - 1]
-        // tool-call 不依赖 streaming（done 后到达也处理）；reasoning/content 仅 streaming
-        if (!last || last.role !== 'assistant') return prev
-        if (chunk.type !== 'tool-call' && last.status !== 'streaming') return prev
-        const next = { ...last }
-        if (chunk.type === 'reasoning') {
-          next.reasoning = (next.reasoning ?? '') + (chunk.text ?? '')
-          onReasoning?.(next.reasoning)
-          setWorkingStage('思考中…')
+  // 处理单个流式事件（当前轮次——写入最后一条 assistant 消息）
+  const applyChunk = (chunk: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => {
+    console.log('[conv] chunk', chunk.type)
+    setMessages((prev) => {
+      const last = prev[prev.length - 1]
+      if (!last || last.role !== 'assistant') return prev
+      if (chunk.type !== 'tool-call' && last.status !== 'streaming') return prev
+      const next = { ...last }
+      if (chunk.type === 'reasoning') {
+        next.reasoning = (next.reasoning ?? '') + (chunk.text ?? '')
+        onReasoning?.(next.reasoning)
+        setWorkingStage('思考中…')
+      }
+      if (chunk.type === 'content') {
+        next.content = next.content + (chunk.text ?? '')
+        setWorkingStage('生成回复…')
+      }
+      if (chunk.type === 'done') {
+        next.status = 'done'
+        if (!next.content && !(next.toolCalls && next.toolCalls.length > 0)) {
+          next.error = 'empty-response'
         }
-        if (chunk.type === 'content') {
-          next.content = next.content + (chunk.text ?? '')
-          setWorkingStage('生成回复…')
-        }
-        if (chunk.type === 'done') {
-          next.status = 'done'
-          // 空回复检测（无内容/无工具调用/无推理——模型异常返回）
-          if (!next.content && !(next.toolCalls && next.toolCalls.length > 0)) {
-            next.error = 'empty-response'
-          }
-        }
-        if (chunk.type === 'tool-call' && chunk.toolCall) {
-          const tc = chunk.toolCall
-          setWorkingStage(`调用工具 ${tc.name}…`)
-          next.toolCalls = [...(next.toolCalls ?? []), { name: tc.name, args: tc.args, status: 'pending' }]
-          // 执行（read 自动；write/edit/bash 需 L3 授权——V1 标记待授权）
-          // 纯 prev 计算更新（不依赖外层闭包引用——防消息覆盖/丢失）
-          void (window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: tc.name === 'read', rootPath: rootPath ?? undefined }) ?? Promise.resolve({ ok: false, error: 'tools 通道未就绪' })).then((r) => {
-            setMessages((prev) => {
-              if (prev.length === 0) return prev
-              const last = prev[prev.length - 1]
-              if (!last || last.role !== 'assistant') return prev
-              const calls = (last.toolCalls ?? []).map((c) => {
-                if (c.name !== tc.name || c.status !== 'pending') return c
-                return r.ok
-                  ? { ...c, status: 'done' as const, result: typeof r.data === 'string' ? r.data.slice(0, 300) : JSON.stringify(r.data).slice(0, 300) }
-                  : { ...c, status: (r.error ?? '').includes('授权') ? ('need-approval' as const) : ('error' as const), result: r.error }
-              })
-              return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
+      }
+      if (chunk.type === 'tool-call' && chunk.toolCall) {
+        const tc = chunk.toolCall
+        setWorkingStage(`调用工具 ${tc.name}…`)
+        next.toolCalls = [...(next.toolCalls ?? []), { name: tc.name, args: tc.args, status: 'pending' }]
+        void (window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: tc.name === 'read', rootPath: rootPath ?? undefined }) ?? Promise.resolve({ ok: false, error: 'tools 通道未就绪' })).then((r) => {
+          setMessages((prev) => {
+            if (prev.length === 0) return prev
+            const last = prev[prev.length - 1]
+            if (!last || last.role !== 'assistant') return prev
+            const calls = (last.toolCalls ?? []).map((c) => {
+              if (c.name !== tc.name || c.status !== 'pending') return c
+              return r.ok
+                ? { ...c, status: 'done' as const, result: typeof r.data === 'string' ? r.data.slice(0, 400) : JSON.stringify(r.data).slice(0, 400) }
+                : { ...c, status: (r.error ?? '').includes('授权') ? ('need-approval' as const) : ('error' as const), result: r.error }
             })
+            return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
           })
-        }
-        return [...prev.slice(0, -1), next]
-      })
+        })
+      }
+      return [...prev.slice(0, -1), next]
     })
-    return off
-  }, [])
+  }
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
   }, [messages, working])
+
+  // 多轮工具循环：模型返回 tool_call → 执行 → 结果回填 → 续聊（最多 4 轮）
+  const runChat = async (msgs: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string }>, depth: number) => {
+    if (depth > 4) return
+    const key = await window.neonforge.config.getKey()
+    if (!key) { finishError('key-invalid'); return }
+    // 本轮临时监听
+    const off = window.neonforge.gateway.onStreamChunk(applyChunk)
+    try {
+      const res = await window.neonforge.gateway.streamChat({
+        apiKey: key,
+        level: 'basic',
+        tools: true,
+        messages: msgs
+      })
+      if (!res.ok) { finishError(res.error ?? 'gateway-error'); return }
+    } catch { finishError('network'); return } finally { off() }
+
+    // 检查本轮是否有完成的工具调用 → 回填续聊
+    await new Promise((r) => setTimeout(r, 300)) // 等工具执行结果写入
+    const lastMsg = messages[messages.length - 1] // 闭包可能旧——用 ref 读
+    const toolCalls = lastMsg?.toolCalls?.filter((c) => c.status === 'done') ?? []
+    if (toolCalls.length === 0) return
+
+    // 组装 tool 消息序列（DeepSeek 格式）
+    const toolMsgs: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string }> = [
+      ...msgs,
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: toolCalls.map((tc, i) => ({ id: `call_${i}`, type: 'function', function: { name: tc.name, arguments: JSON.stringify(tc.args) } }))
+      },
+      ...toolCalls.map((tc, i) => ({ role: 'tool', tool_call_id: `call_${i}`, content: tc.result ?? '执行失败' }))
+    ]
+    // 追加新 assistant 消息（本轮回复）
+    setMessages((p) => [...p, { role: 'assistant', content: '', reasoning: '', status: 'streaming' }])
+    await runChat(toolMsgs, depth + 1)
+  }
 
   const send = async () => {
     const text = inputRef.current.trim()
@@ -107,25 +140,14 @@ export default function ConversationPanel({
     setWorking(true)
     onWorkingChange?.(true)
     const history = messages
-      .filter((m) => m.role === 'user' || m.status === 'done')
+      .filter((m) => m.role === 'user' || (m.role === 'assistant' && m.status === 'done' && m.content))
       .map((m) => ({ role: m.role, content: m.content }))
     setMessages((p) => [...p, { role: 'user', content: text, status: 'done' }])
     setMessages((p) => [...p, { role: 'assistant', content: '', reasoning: '', status: 'streaming' }])
     setWorkingStage('已发送，等待搭档…')
 
     try {
-      const key = await window.neonforge.config.getKey()
-      if (!key) {
-        finishError('key-invalid')
-        return
-      }
-      const res = await window.neonforge.gateway.streamChat({
-        apiKey: key,
-        level: 'basic', // V1 固定 basic 档（04 专家评审）
-        tools: true, // 真实执行：模型可返回工具调用（ToolRegistry 执行）
-        messages: [...history, { role: 'user', content: text }]
-      })
-      if (!res.ok) finishError(res.error ?? 'gateway-error')
+      await runChat([...history, { role: 'user', content: text }], 0)
     } catch {
       finishError('network')
     } finally {
