@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import DeliveryFlowPanel from './DeliveryFlowPanel'
 
 // ticket 04：对话最小闭环（D0 §2/§3.4）——输入发送 → Gateway 流式 → 消息/呼吸光条/推理展示
 // 消费 02：streamChat（四档 basic）+ ModelRouter（默认 Flash）；错误分支：Key 失效内嵌更新 / 服务故障提示
@@ -98,8 +99,11 @@ export default function ConversationPanel({
     })
   }
 
+  const demoFlow = !!(window.neonforge as unknown as { demo?: { deliveryFlow?: boolean } }).demo?.deliveryFlow
+
   return (
     <div className="nf-chat">
+      {demoFlow && <DeliveryFlowPanel />}
       <div className="nf-chat__list" ref={listRef} aria-live="polite" aria-relevant="additions text">
         {messages.length === 0 && (
           <div className="nf-scenes">
