@@ -50,7 +50,7 @@ export default function App() {
       <div className="nf-app nf-app--start">
         <StartPage
           onOpenProject={() => { void openExisting() }}
-          onNewProject={() => setScreen('new-project')}
+          onNewProject={() => { setRootPath(null); setScreen('workspace') }}
         />
       </div>
     )
