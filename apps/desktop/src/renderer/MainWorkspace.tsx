@@ -126,7 +126,7 @@ function initProblems(): ProblemInstance[] {
         <div className="nf-panel__body">
           {zeroToOne && <DeliveryFlowPanel />}
           {chatTab === 'chat' ? (
-            <ConversationPanel key={chatKey} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} />
+            <ConversationPanel key={chatKey} rootPath={rootPath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} />
           ) : (
             <TaskPanel />
           )}

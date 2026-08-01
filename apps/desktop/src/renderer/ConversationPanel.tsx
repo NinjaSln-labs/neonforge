@@ -24,10 +24,12 @@ interface Msg {
 }
 
 export default function ConversationPanel({
+  rootPath,
   onKeyExpired,
   onReasoning,
   onWorkingChange
 }: {
+  rootPath?: string | null
   onKeyExpired: () => void
   onReasoning?: (text: string) => void
   onWorkingChange?: (working: boolean) => void
@@ -66,7 +68,7 @@ export default function ConversationPanel({
           next.toolCalls = [...(next.toolCalls ?? []), { name: tc.name, args: tc.args, status: 'pending' }]
           // 执行（read 自动；write/edit/bash 需 L3 授权——V1 标记待授权）
           // 纯 prev 计算更新（不依赖外层闭包引用——防消息覆盖/丢失）
-          void (window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: tc.name === 'read' }) ?? Promise.resolve({ ok: false, error: 'tools 通道未就绪' })).then((r) => {
+          void (window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: tc.name === 'read', rootPath: rootPath ?? undefined }) ?? Promise.resolve({ ok: false, error: 'tools 通道未就绪' })).then((r) => {
             setMessages((prev) => {
               if (prev.length === 0) return prev
               const last = prev[prev.length - 1]
@@ -134,7 +136,7 @@ export default function ConversationPanel({
       const updated = (last.toolCalls ?? []).map((c, i) => i === idx ? { ...c, status: 'pending' as const } : c)
       return [...prev.slice(0, -1), { ...last, toolCalls: updated }]
     })
-    void window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: true }).then((r) => {
+    void window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: true, rootPath: rootPath ?? undefined }).then((r) => {
       setMessages((prev) => {
         if (prev.length === 0) return prev
         const last = prev[prev.length - 1]
