@@ -110,6 +110,8 @@ export default function ConversationPanel({
   const demoDigital = !!(window.neonforge as unknown as { demo?: { digitalDelivery?: boolean } }).demo?.digitalDelivery
   const demoTrust = !!(window.neonforge as unknown as { demo?: { trustLadder?: boolean } }).demo?.trustLadder
   const demoDod = !!(window.neonforge as unknown as { demo?: { dodAlign?: boolean } }).demo?.dodAlign
+  const compactCount = (window.neonforge as unknown as { demo?: { compactHistory?: number } }).demo?.compactHistory ?? 0
+  const compactNote = compactCount > 24 ? `对话已超过 24 条——将压缩前 ${compactCount - 12} 条为摘要（上下文不丢）` : null
   const onDeliver = (pkg: DeliveryPackage) => {
     const w = window as unknown as { neonforge: { demo?: { onDeliver?: (p: DeliveryPackage) => void } } }
     w.neonforge.demo?.onDeliver?.(pkg)
@@ -121,6 +123,7 @@ export default function ConversationPanel({
       {demoDigital && <DigitalDeliveryPanel onDeliver={onDeliver} />}
       {demoTrust && <TrustLadderPanel />}
       {demoDod && <DoDAlignPanel />}
+      {compactNote && <div className="nf-compact">🗜 {compactNote}</div>}
       <div className="nf-chat__list" ref={listRef} aria-live="polite" aria-relevant="additions text">
         {messages.length === 0 && (
           <div className="nf-scenes">
