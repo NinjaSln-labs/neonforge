@@ -61,7 +61,13 @@ export default function ConversationPanel({
           next.content = next.content + (chunk.text ?? '')
           setWorkingStage('生成回复…')
         }
-        if (chunk.type === 'done') next.status = 'done'
+        if (chunk.type === 'done') {
+          next.status = 'done'
+          // 空回复检测（无内容/无工具调用/无推理——模型异常返回）
+          if (!next.content && !(next.toolCalls && next.toolCalls.length > 0)) {
+            next.error = 'empty-response'
+          }
+        }
         if (chunk.type === 'tool-call' && chunk.toolCall) {
           const tc = chunk.toolCall
           setWorkingStage(`调用工具 ${tc.name}…`)
@@ -231,7 +237,7 @@ export default function ConversationPanel({
             )}
             {m.role === 'user' && <span className="nf-msg__role">你</span>}
             <div className={`nf-msg__body${m.role === 'assistant' && m.status === 'streaming' && !m.content ? ' nf-msg__body--thinking' : ''}`}>
-              {m.content || (m.status === 'streaming' ? '🧠 搭档处理中…' : m.status === 'error' ? '⚠️ 处理失败' : '')}
+              {m.content || (m.status === 'streaming' ? '🧠 搭档处理中…' : m.error === 'empty-response' ? '⚠️ 搭档没有返回内容——请重试或换个说法' : m.status === 'error' ? '⚠️ 处理失败' : '')}
               {m.error === 'key-invalid' && (
                 <button type="button" className="nf-config__link" onClick={onKeyExpired}>
                   要不要更新一下？
