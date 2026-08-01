@@ -1,0 +1,65 @@
+import { test, expect } from '@playwright/test'
+
+// 工具卡片（真实执行 V1）：mock SSE 发 tool-call → 卡片渲染（read 自动✅ / bash 需授权🔒）
+async function mockBridge(page: import('@playwright/test').Page) {
+  await page.addInitScript(() => {
+    window.__emit = null
+    window.neonforge = {
+      version: 'test',
+      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
+      workspace: { openFolder: async () => '/test', listDir: async () => [], readFile: async () => ({ ok: true, content: '// x' }) },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        streamChat: async () => ({ ok: true }),
+        onStreamChunk: (cb: (c: unknown) => void) => { window.__emit = cb; return () => {} }
+      },
+      tools: {
+        list: async () => [],
+        execute: async (name: string, args: Record<string, unknown>) =>
+          name === 'read'
+            ? { ok: true, data: '{"name":"neonforge-desktop","version":"0.1.0"}' }
+            : { ok: false, error: '「bash」需要授权（L3）——approved=true 后执行' }
+      }
+    }
+  })
+}
+
+test('工具卡片（read 自动执行 ✅）', async ({ page }) => {
+  await mockBridge(page)
+  await page.goto('http://localhost:5174/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.getByRole('button', { name: '打开已有项目' }).click()
+  await page.locator('.nf-chat__input textarea').fill('读取 package.json')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  await page.waitForTimeout(300)
+  await page.evaluate(() => {
+    window.__emit({ type: 'reasoning', text: '需要读取 package.json' })
+    window.__emit({ type: 'tool-call', toolCall: { name: 'read', args: { path: '/test/package.json' } } })
+    window.__emit({ type: 'done' })
+  })
+  await page.waitForTimeout(800)
+  await expect(page.locator('.nf-toolcall')).toHaveCount(1)
+  await expect(page.locator('.nf-toolcall')).toContainText('read')
+  await expect(page.locator('.nf-toolcall')).toContainText('neonforge-desktop')
+  await expect(page.locator('.nf-chat')).toHaveScreenshot('toolcall-read.png')
+})
+
+test('工具卡片（bash 需授权 🔒）', async ({ page }) => {
+  await mockBridge(page)
+  await page.goto('http://localhost:5174/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.getByRole('button', { name: '打开已有项目' }).click()
+  await page.locator('.nf-chat__input textarea').fill('看看当前目录')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  await page.waitForTimeout(300)
+  await page.evaluate(() => {
+    window.__emit({ type: 'reasoning', text: '需要查看目录' })
+    window.__emit({ type: 'tool-call', toolCall: { name: 'bash', args: { command: 'pwd && ls -la' } } })
+    window.__emit({ type: 'done' })
+  })
+  await page.waitForTimeout(800)
+  await expect(page.locator('.nf-toolcall')).toHaveCount(1)
+  await expect(page.locator('.nf-toolcall')).toContainText('bash')
+  await expect(page.locator('.nf-toolcall')).toContainText('需要授权')
+  await expect(page.locator('.nf-chat')).toHaveScreenshot('toolcall-bash-approval.png')
+})
