@@ -18,6 +18,10 @@ export interface NeonForgeBridge {
     streamChat: (opts: { apiKey: string; level?: string; tools?: boolean; messages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; reasoning_content?: string }> }) => Promise<{ ok: boolean; error?: string }>
     onStreamChunk: (cb: (chunk: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) => () => void
   }
+  delivery: {
+    applyDiff: (path: string, diff: string, approved?: boolean) => Promise<{ ok: boolean; file?: string; error?: string }>
+    revertDiff: (path: string) => Promise<{ ok: boolean; error?: string }>
+  },
   workspace: {
     openFolder: () => Promise<string | null>
     listDir: (dirPath: string) => Promise<DirEntry[]>

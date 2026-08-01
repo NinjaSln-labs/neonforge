@@ -19,6 +19,12 @@ contextBridge.exposeInMainWorld('neonforge', {
       return () => ipcRenderer.removeListener('gateway:stream-chunk', listener)
     }
   },
+  delivery: {
+    applyDiff: (path: string, diff: string, approved?: boolean) =>
+      ipcRenderer.invoke('delivery:apply-diff', { path, diff, approved: approved ?? false }) as Promise<{ ok: boolean; file?: string; error?: string }>,
+    revertDiff: (path: string) =>
+      ipcRenderer.invoke('delivery:revert-diff', { path }) as Promise<{ ok: boolean; error?: string }>
+  },
   workspace: {
     openFolder: () => ipcRenderer.invoke('workspace:open-folder') as Promise<string | null>,
     listDir: (dirPath: string) =>
