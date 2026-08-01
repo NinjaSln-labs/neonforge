@@ -121,12 +121,13 @@ export class DeepSeekGateway {
       },
       body: JSON.stringify({
         model,
-        ...toDeepSeekParams(opts.level ?? 'basic'),
+        // 工具调用模式禁用 thinking（DeepSeek thinking+tools 易陷入思考-工具循环——直接调工具快速收敛）
+        ...toDeepSeekParams(opts.tools ? 'none' : (opts.level ?? 'basic')),
         messages: opts.messages,
         stream: true,
         ...(opts.tools ? { tools: TOOL_DEFS, tool_choice: 'auto' } : {})
       }),
-      signal: AbortSignal.timeout(120000)
+      signal: AbortSignal.timeout(45000)
     })
     console.log('[gateway] http', res.status)
     if (!res.ok) {
@@ -140,6 +141,7 @@ export class DeepSeekGateway {
     const decoder = new TextDecoder()
     let buffer = ''
     const toolAcc: Array<{ name: string; arguments: string }> = []
+    let toolStart = 0 // 工具调用收集开始时间
 
     while (true) {
       const { done, value } = await reader.read()
@@ -169,6 +171,17 @@ export class DeepSeekGateway {
               toolAcc[idx] ??= { name: '', arguments: '' }
               if (fn.name) toolAcc[idx].name += fn.name
               if (fn.arguments) toolAcc[idx].arguments += fn.arguments
+            }
+            // 模型已决定调工具——等 arguments 完整后截断（分片到达——半截 JSON 会解析失败）
+            // 上限 5s：收到第一个工具调用后 5s 内强制截断（防流式挂起）
+            const named = toolAcc.filter((x) => x && x.name)
+            if (named.length > 0) {
+              if (toolStart === 0) toolStart = Date.now()
+              const allComplete = named.every((x) => { try { JSON.parse(x.arguments); return true } catch { return false } })
+              if (allComplete || Date.now() - toolStart > 5000) {
+                console.log('[gateway] tool-call 完整（或超时）——截断')
+                break
+              }
             }
           }
         } catch { /* 跳过半包 JSON */ }
