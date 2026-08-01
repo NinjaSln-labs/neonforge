@@ -58,5 +58,5 @@ export interface ProblemInstance {
 // ToolRegistry（ticket 10）：renderer 侧工具接口
 export interface NeonForgeTools {
   list: () => Promise<Array<{ name: string; source: 'core' | 'lsp'; requiresApproval: boolean }>>
-  execute: (name: string, args: Record<string, unknown>, opts?: { approved?: boolean }) => Promise<{ ok: boolean; data?: unknown; error?: string }>
+  execute: (name: string, args: Record<string, unknown>, opts?: { approved?: boolean; rootPath?: string }) => Promise<{ ok: boolean; data?: unknown; error?: string }>
 }

@@ -52,8 +52,9 @@ class ToolRegistry {
 function resolvePath(p: unknown, ctx: { rootPath?: string }): string {
   const pStr = String(p ?? '')
   if (!pStr) throw new Error('缺少路径参数')
+  // 以 rootPath 为基准（模型返回的相对/类绝对路径如 /package.json → 项目根下）
+  if (ctx.rootPath) return path.join(ctx.rootPath, pStr.replace(/^\/+/, ''))
   if (path.isAbsolute(pStr)) return pStr
-  if (ctx.rootPath) return path.join(ctx.rootPath, pStr)
   throw new Error('路径需为绝对路径或提供 rootPath')
 }
 
