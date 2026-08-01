@@ -38,6 +38,7 @@ export default function ConversationPanel({
   const messagesRef = useRef<Msg[]>([])
   useEffect(() => { messagesRef.current = messages }, [messages])
   const chatRef = useRef<{ msgs: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; reasoning_content?: string }>; depth: number } | null>(null)
+  const sessionRef = useRef(0) // 会话隔离：每次发送递增——旧会话事件/续聊失效
   const [input, setInput] = useState('')
   const [working, setWorking] = useState(false)
   const [workingStage, setWorkingStage] = useState('等待回复…')
@@ -98,9 +99,9 @@ export default function ConversationPanel({
   }, [messages, working])
 
   // 工具完成后触发续聊：轮询等工具执行（自动/授权）完成，全 done → 回填模型继续
-  const maybeContinue = async (depth: number) => {
+  const maybeContinue = async (depth: number, sid: number) => {
     const ctx = chatRef.current
-    if (!ctx || depth >= 2) return
+    if (!ctx || depth >= 2 || sessionRef.current !== sid) return
     // 等待自动执行（pending）完成——最多 8s；待授权（need-approval）立即停止（等用户点允许）
     for (let i = 0; i < 16; i++) {
       await new Promise((r) => setTimeout(r, 500))
@@ -131,18 +132,22 @@ export default function ConversationPanel({
     chatRef.current = { msgs: toolMsgs, depth: depth + 1 }
     setMessages((p) => [...p, { role: 'assistant', content: '', reasoning: '', status: 'streaming' }])
     await new Promise((r) => setTimeout(r, 50))
-    await runChat(toolMsgs, depth + 1)
+    await runChat(toolMsgs, depth + 1, sid)
   }
 
   // 多轮工具循环：模型返回 tool_call → 执行 → 结果回填 → 续聊（最多 4 轮）
-  const runChat = async (msgs: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; reasoning_content?: string }>, depth: number) => {
+  const runChat = async (msgs: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; reasoning_content?: string }>, depth: number, sid: number) => {
     if (depth > 4) return
     const key = await window.neonforge.config.getKey()
     if (!key) { finishError('key-invalid'); return }
     // 系统提示：引导直接 read（项目根相对路径）——避免 bash 全局搜索/工具循环（提速）
     const sysHint = { role: 'system', content: `你是 NeonForge 搭档。当前项目根目录：${rootPath ?? '(未指定)'}。规则：① 读文件用 read 工具（路径用项目根下的相对路径，如 package.json）② 不要用 bash find 全局搜索（直接 read 目标文件）③ 工具一次调用一个，执行完看结果再决定 ④ 找不到文件就直接告诉用户。` }
-    // 本轮临时监听
-    const off = window.neonforge.gateway.onStreamChunk(applyChunk)
+    // 本轮临时监听（会话隔离：旧会话事件不处理——防多轮并发冲突）
+    const myApply = (chunk: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => {
+      if (sessionRef.current !== sid) return
+      applyChunk(chunk)
+    }
+    const off = window.neonforge.gateway.onStreamChunk(myApply)
     try {
       const res = await window.neonforge.gateway.streamChat({
         apiKey: key,
@@ -156,7 +161,7 @@ export default function ConversationPanel({
     // 记录本轮上下文 → 由 maybeContinue 轮询工具完成（自动执行）→ 续聊
     chatRef.current = { msgs, depth }
     await new Promise((r) => setTimeout(r, 1000))
-    await maybeContinue(depth)
+    await maybeContinue(depth, sid)
   }
 
   const send = async () => {
@@ -166,6 +171,7 @@ export default function ConversationPanel({
     setInput('')
     setWorking(true)
     onWorkingChange?.(true)
+    const sid = ++sessionRef.current // 新会话——旧会话事件/续聊失效
     const history = messages
       .filter((m) => m.role === 'user' || (m.role === 'assistant' && m.status === 'done' && m.content))
       .map((m) => ({ role: m.role, content: m.content }))
@@ -174,7 +180,7 @@ export default function ConversationPanel({
     setWorkingStage('已发送，等待搭档…')
 
     try {
-      await runChat([...history, { role: 'user', content: text }], 0)
+      await runChat([...history, { role: 'user', content: text }], 0, sid)
     } catch {
       finishError('network')
     } finally {
@@ -204,7 +210,7 @@ export default function ConversationPanel({
         })
         return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
       })
-      setTimeout(() => void maybeContinue(chatRef.current?.depth ?? 0), 150)
+      setTimeout(() => void maybeContinue(chatRef.current?.depth ?? 0, sessionRef.current), 150)
     })
   }
   const rejectToolCall = (calls: ToolCallMsg[], idx: number) => {
