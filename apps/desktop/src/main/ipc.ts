@@ -28,6 +28,7 @@ export function registerIpc(): void {
   }) => {
     const send = (type: 'reasoning' | 'content' | 'tool-call' | 'done', text?: string, toolCall?: { name: string; args: Record<string, unknown> }) => {
       if (type === 'tool-call') console.log('[ipc] SEND tool-call:', toolCall?.name, JSON.stringify(toolCall?.args).slice(0, 80))
+      if (type === 'done') console.log('[ipc] SEND done')
       // 干净对象（无 undefined 字段——contextBridge 结构化传输兼容）
       const payload: Record<string, unknown> = { type }
       if (text !== undefined) payload.text = text
