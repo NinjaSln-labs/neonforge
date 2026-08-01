@@ -43,3 +43,12 @@ export interface DeliveryPackage {
   nextSteps: string[]    // 下一步/指导（含超出数字能力部分）
   rerunLabel?: string    // 复跑入口文案
 }
+
+// 问题台账（ticket 06：问题 = 一等公民——7 态状态机 + 断点续做 + 复开）
+export type ProblemStatus = 'understanding' | 'awaiting-plan' | 'executing' | 'awaiting-input' | 'delivered' | 'closed' | 'failed-recoverable'
+export interface ProblemInstance {
+  id: string
+  title: string          // 用户的问题（第一句话）
+  status: ProblemStatus
+  updatedAt: string      // 最近活动时间
+}
