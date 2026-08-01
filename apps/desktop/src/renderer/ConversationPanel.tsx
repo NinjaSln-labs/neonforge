@@ -100,7 +100,7 @@ export default function ConversationPanel({
   // 工具完成后触发续聊：轮询等工具执行（自动/授权）完成，全 done → 回填模型继续
   const maybeContinue = async (depth: number) => {
     const ctx = chatRef.current
-    if (!ctx || depth >= 4) return
+    if (!ctx || depth >= 2) return
     // 轮询等工具完成（最多 15s）
     for (let i = 0; i < 30; i++) {
       await new Promise((r) => setTimeout(r, 500))
