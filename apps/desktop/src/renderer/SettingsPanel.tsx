@@ -49,6 +49,15 @@ export default function SettingsPanel() {
         <span>长时间不动主动提醒 <em>（默认关——原则：安静不打扰）</em></span>
         <input type="checkbox" checked={remind} onChange={(e) => setRemind(e.target.checked)} />
       </label>
+
+      <div className="nf-settings__plugins">
+        <span className="nf-settings__plugins-title">内置插件（V1 无市场，仅注册）</span>
+        <div className="nf-settings__plugins-list">
+          {['code-rag', 'mcp-bridge', 'git', 'stats', 'language-server'].map((p) => (
+            <span key={p} className="nf-settings__plugin">{p} <em>✓</em></span>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
