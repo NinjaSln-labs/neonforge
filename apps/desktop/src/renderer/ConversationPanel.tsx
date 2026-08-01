@@ -46,7 +46,9 @@ export default function ConversationPanel({
     const off = window.neonforge.gateway.onStreamChunk((chunk) => {
       setMessages((prev) => {
         const last = prev[prev.length - 1]
-        if (!last || last.role !== 'assistant' || last.status !== 'streaming') return prev
+        // tool-call 不依赖 streaming（done 后到达也处理）；reasoning/content 仅 streaming
+        if (!last || last.role !== 'assistant') return prev
+        if (chunk.type !== 'tool-call' && last.status !== 'streaming') return prev
         const next = { ...last }
         if (chunk.type === 'reasoning') {
           next.reasoning = (next.reasoning ?? '') + (chunk.text ?? '')
@@ -64,7 +66,7 @@ export default function ConversationPanel({
           next.toolCalls = [...(next.toolCalls ?? []), { name: tc.name, args: tc.args, status: 'pending' }]
           // 执行（read 自动；write/edit/bash 需 L3 授权——V1 标记待授权）
           // 纯 prev 计算更新（不依赖外层闭包引用——防消息覆盖/丢失）
-          void window.neonforge.tools.execute(tc.name, tc.args, { approved: tc.name === 'read' }).then((r) => {
+          void (window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: tc.name === 'read' }) ?? Promise.resolve({ ok: false, error: 'tools 通道未就绪' })).then((r) => {
             setMessages((prev) => {
               if (prev.length === 0) return prev
               const last = prev[prev.length - 1]
