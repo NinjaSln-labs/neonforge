@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import DeliveryFlowPanel from './DeliveryFlowPanel'
 import DigitalDeliveryPanel from './DigitalDeliveryPanel'
 import TrustLadderPanel from './TrustLadderPanel'
+import DoDAlignPanel from './DoDAlignPanel'
 import type { DeliveryPackage } from './types'
 
 // ticket 04：对话最小闭环（D0 §2/§3.4）——输入发送 → Gateway 流式 → 消息/呼吸光条/推理展示
@@ -105,6 +106,7 @@ export default function ConversationPanel({
   const demoFlow = !!(window.neonforge as unknown as { demo?: { deliveryFlow?: boolean } }).demo?.deliveryFlow
   const demoDigital = !!(window.neonforge as unknown as { demo?: { digitalDelivery?: boolean } }).demo?.digitalDelivery
   const demoTrust = !!(window.neonforge as unknown as { demo?: { trustLadder?: boolean } }).demo?.trustLadder
+  const demoDod = !!(window.neonforge as unknown as { demo?: { dodAlign?: boolean } }).demo?.dodAlign
   const onDeliver = (pkg: DeliveryPackage) => {
     const w = window as unknown as { neonforge: { demo?: { onDeliver?: (p: DeliveryPackage) => void } } }
     w.neonforge.demo?.onDeliver?.(pkg)
@@ -115,6 +117,7 @@ export default function ConversationPanel({
       {demoFlow && <DeliveryFlowPanel />}
       {demoDigital && <DigitalDeliveryPanel onDeliver={onDeliver} />}
       {demoTrust && <TrustLadderPanel />}
+      {demoDod && <DoDAlignPanel />}
       <div className="nf-chat__list" ref={listRef} aria-live="polite" aria-relevant="additions text">
         {messages.length === 0 && (
           <div className="nf-scenes">

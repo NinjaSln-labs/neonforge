@@ -439,3 +439,11 @@ body {
 .nf-trust__controls { display: flex; flex-direction: column; gap: var(--nf-space-2); }
 .nf-trust__delegate { display: flex; align-items: center; gap: var(--nf-space-2); font-size: 12px; color: var(--nf-text-dim); cursor: pointer; }
 .nf-trust__btns { display: flex; gap: var(--nf-space-2); }
+
+/* DoD 对齐（ticket 15b）：复述 + 验收标准确认 */
+.nf-dod { display: flex; flex-direction: column; gap: var(--nf-space-3); padding: var(--nf-space-3); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md); background: var(--nf-bg-elevated); }
+.nf-dod__restate { color: var(--nf-text-dim); font-size: var(--nf-font-sm); margin: 0; }
+.nf-dod__restate strong { color: var(--nf-text); }
+.nf-dod__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.nf-dod__list li { display: flex; align-items: center; gap: var(--nf-space-2); font-size: var(--nf-font-sm); color: var(--nf-text); }
+.nf-dod__actions { display: flex; gap: var(--nf-space-2); }
