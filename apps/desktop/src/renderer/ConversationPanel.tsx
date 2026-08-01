@@ -56,12 +56,13 @@ export default function ConversationPanel({
           const tc = chunk.toolCall
           next.toolCalls = [...(next.toolCalls ?? []), { name: tc.name, args: tc.args, status: 'pending' }]
           // 执行（read 自动；write/edit/bash 需 L3 授权——V1 标记待授权）
+          // 纯 prev 计算更新（不依赖外层闭包引用——防消息覆盖/丢失）
           void window.neonforge.tools.execute(tc.name, tc.args, { approved: tc.name === 'read' }).then((r) => {
             setMessages((prev) => {
+              if (prev.length === 0) return prev
               const last = prev[prev.length - 1]
-              if (!last) return prev
-              const calls = (last.toolCalls ?? []).map((c, i) => {
-                if (i !== (next.toolCalls?.length ?? 1) - 1 && c.name !== tc.name) return c
+              if (!last || last.role !== 'assistant') return prev
+              const calls = (last.toolCalls ?? []).map((c) => {
                 if (c.name !== tc.name || c.status !== 'pending') return c
                 return r.ok
                   ? { ...c, status: 'done' as const, result: typeof r.data === 'string' ? r.data.slice(0, 300) : JSON.stringify(r.data).slice(0, 300) }
@@ -240,7 +241,7 @@ export default function ConversationPanel({
         )}
         <textarea
           value={input}
-          placeholder="问问搭档，Enter 发送 / Cmd+Enter 换行"
+          placeholder="输入想法…（Enter 换行 · ⌘+Enter 发送）"
           aria-label="给搭档的消息"
           rows={2}
           onChange={(e) => {
@@ -250,8 +251,10 @@ export default function ConversationPanel({
             else if (!v.includes('@')) { setMentionOpen(false) }
           }}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.metaKey) { e.preventDefault(); void send() }
-            if (e.key === 'Enter' && e.metaKey) { e.preventDefault(); setInput((v) => v + '\n') }
+            // 输入法组合中（拼音/候选确认的回车 isComposing=true）——不拦截，交给输入法
+            if (e.nativeEvent.isComposing) return
+            // Enter = 换行（内容保留）；Cmd/Ctrl+Enter = 发送
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void send() }
           }}
         />
         <button type="button" className="nf-config__cta" onClick={() => void send()} disabled={working || !input.trim()}>
