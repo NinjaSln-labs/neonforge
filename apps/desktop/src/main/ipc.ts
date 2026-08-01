@@ -1,5 +1,6 @@
 // IPC handlers：renderer 经 preload → 主进程 gateway/configStore/workspace
 import { BrowserWindow, ipcMain } from 'electron'
+import { parseUnifiedDiff, applyDiffToFile, snapshot, revert } from './applyDiff.js'
 import { gateway } from './gateway.js'
 import { configStore } from './configStore.js'
 import { workspace } from './workspace.js'
@@ -48,6 +49,16 @@ export function registerIpc(): void {
       return { ok: false, error: e instanceof Error ? e.message : 'gateway-error' }
     }
   })
+
+  // 05 交付包执行层：diff 应用（L3 授权）/ 快照回滚
+  ipcMain.handle('delivery:apply-diff', (_e, opts: { path: string; diff: string; approved?: boolean }) => {
+    if (!opts.approved) return { ok: false, error: '「applyDiff」需要授权（L3）——approved=true 后执行' }
+    const changes = parseUnifiedDiff(opts.diff ?? '')
+    if (changes.length === 0) return { ok: false, error: 'diff 解析为空——不支持该格式' }
+    snapshot(opts.path)
+    return applyDiffToFile(opts.path, changes)
+  })
+  ipcMain.handle('delivery:revert-diff', (_e, opts: { path: string }) => revert(opts.path))
 
   // ticket 03：打开项目 / 文件树 / 读文件
   ipcMain.handle('workspace:open-folder', async (event) => {
