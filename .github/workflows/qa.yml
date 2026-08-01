@@ -1,0 +1,48 @@
+name: QA Chain（ddd-qa-chain）
+
+on:
+  push:
+    paths: ['apps/desktop/**', '.github/workflows/qa.yml']
+  workflow_dispatch:
+    inputs:
+      run_e2e:
+        description: '跑 L4 真实 E2E（需 NF_TEST_KEY）'
+        type: boolean
+        default: false
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - name: Install deps
+        working-directory: apps/desktop
+        run: npm ci
+
+      # L1 领域逻辑（确定性——CI 必跑）
+      - name: L1 领域逻辑（Vitest）
+        working-directory: apps/desktop
+        run: npx vitest run
+
+      # L2 契约（类型安全——CI 必跑）
+      - name: L2 契约（tsc --noEmit）
+        working-directory: apps/desktop
+        run: npx tsc --noEmit
+
+      # L4 真实 E2E（需 API key——仅手动触发）
+      - name: L4 体验（e2e-suite——手动）
+        if: inputs.run_e2e == true && secrets.NF_TEST_KEY != ''
+        working-directory: apps/desktop
+        env:
+          NF_TEST_KEY: ${{ secrets.NF_TEST_KEY }}
+        run: node e2e-suite.mjs && node e2e-supplement.mjs
+
+      # 备注：L5 视觉回归建议本地跑（像素基线跨平台差异——Linux vs macOS 渲染不同）
+      # 如需 CI 视觉：单独 job 用 ubuntu 生成/对比 Linux 基线（snapshots-linux）
