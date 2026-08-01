@@ -34,9 +34,30 @@ export default function MainWorkspace({
   const [content, setContent] = useState<string>('')
   const [working, setWorking] = useState(false)
   const [chatKey, setChatKey] = useState(0)
-  const [deliveryPkg, setDeliveryPkg] = useState<DeliveryPackage | null>(
-    (window.neonforge as unknown as { demo?: { delivery?: DeliveryPackage } }).demo?.delivery ?? null
-  )
+  const [deliveryPkg, setDeliveryPkg] = useState<DeliveryPackage | null>(initDeliveryPkg())
+
+function initDeliveryPkg(): DeliveryPackage | null {
+  // 演示模式（VITE_NF_DEMO_DELIVERY=1）或测试注入（window.neonforge.demo.delivery）
+  const demoEnv = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_NF_DEMO_DELIVERY
+  if (demoEnv === '1') {
+    return {
+      status: 'delivered',
+      summary: '整理了 Downloads 里的发票和合同：按类型分类、统一命名、重复文件标出（未删除）',
+      artifacts: ['发票/2026-08.xlsx', '合同/2026-07-15-服务协议.pdf', '重复文件清单.csv'],
+      acceptance: [
+        { label: '发票都在「发票」文件夹', done: false },
+        { label: '文件名含日期 + 商户', done: false },
+        { label: '重复文件已标出（未删，待你确认）', done: false }
+      ],
+      nextSteps: [
+        '重复文件确认后我帮你删（授权后）',
+        '需要发布网站？域名/备案超出数字工具能力——源码已给，我指导你发布'
+      ],
+      rerunLabel: '上次那个整理，再跑一遍'
+    }
+  }
+  return (window.neonforge as unknown as { demo?: { delivery?: DeliveryPackage } }).demo?.delivery ?? null
+}
 
   const openFile = useCallback((filePath: string) => {
     void window.neonforge.workspace.readFile(filePath).then((res) => {

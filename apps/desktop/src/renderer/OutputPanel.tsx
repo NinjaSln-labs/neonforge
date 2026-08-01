@@ -44,7 +44,8 @@ export default function OutputPanel({
           </button>
         </div>
       </header>
-      {tab === 'project' ? (
+      {/* 双渲染 + 隐藏切换（保持组件状态——打勾/已关闭不因切 Tab 丢失） */}
+      <div style={{ display: tab === 'project' ? 'flex' : 'none', flex: 1, minHeight: 0 }}>
         <FileTree
           rootPath={rootPath}
           selectedPath={activePath}
@@ -52,24 +53,23 @@ export default function OutputPanel({
           collapsed={false}
           onToggle={() => {}}
         />
-      ) : (
-        <div className="nf-output__body" style={{ padding: 0 }}>
-          {deliveryPkg ? (
-            <DeliveryPanel pkg={deliveryPkg} onClose={onCloseProblem} onAdjust={onAdjustProblem} />
-          ) : activePath ? (
-            <Editor
-              height="100%"
-              path={activePath}
-              language="typescript"
-              value={content}
-              theme="vs-dark"
-              options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13 }}
-            />
-          ) : (
-            <DeliveryPanel pkg={null} onClose={onCloseProblem} onAdjust={onAdjustProblem} />
-          )}
-        </div>
-      )}
+      </div>
+      <div className="nf-output__body" style={{ display: tab === 'output' ? 'flex' : 'none', padding: 0 }}>
+        {deliveryPkg ? (
+          <DeliveryPanel pkg={deliveryPkg} onClose={onCloseProblem} onAdjust={onAdjustProblem} />
+        ) : activePath ? (
+          <Editor
+            height="100%"
+            path={activePath}
+            language="typescript"
+            value={content}
+            theme="vs-dark"
+            options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13 }}
+          />
+        ) : (
+          <DeliveryPanel pkg={null} onClose={onCloseProblem} onAdjust={onAdjustProblem} />
+        )}
+      </div>
     </section>
   )
 }
