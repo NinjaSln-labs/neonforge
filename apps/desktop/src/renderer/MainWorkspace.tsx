@@ -118,7 +118,10 @@ function initProblems(): ProblemInstance[] {
               任务
             </button>
           </div>
-          <button type="button" className="nf-session__new" onClick={onBackStart}>启动页</button>
+          <div className="nf-chat__actions">
+            <button type="button" className="nf-session__new" onClick={() => setShowSettings((v) => !v)}>⚙ 设置</button>
+            <button type="button" className="nf-session__new" onClick={onBackStart}>启动页</button>
+          </div>
         </header>
         <div className="nf-panel__body">
           {zeroToOne && <DeliveryFlowPanel />}
@@ -150,7 +153,6 @@ function initProblems(): ProblemInstance[] {
           <>🟢 就绪</>
         )}
         {' │ '}{(rootPath ?? '从零开始').split(/[/\\]/).filter(Boolean).pop()} │ 待审核: 0
-        <button type="button" className="nf-statusbar__settings" onClick={() => setShowSettings((v) => !v)}>⚙ 设置</button>
       </footer>
     </div>
   )
