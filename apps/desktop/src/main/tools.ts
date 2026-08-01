@@ -1,4 +1,4 @@
-import { promises as fs } from 'fs'
+import { promises as fs, existsSync } from 'fs'
 import path from 'path'
 
 // ToolRegistry（ticket 10 / A0 §2）：工具注册与执行分发
@@ -53,7 +53,9 @@ class ToolRegistry {
 function resolvePath(p: unknown, ctx: { rootPath?: string }): string {
   const pStr = String(p ?? '')
   if (!pStr) throw new Error('缺少路径参数')
-  // 以 rootPath 为基准（模型返回的相对/类绝对路径如 /package.json → 项目根下）
+  // ① 已是 rootPath 内或真实存在的绝对路径 → 直接用（用户显式路径/项目内路径）
+  if (ctx.rootPath && (pStr.startsWith(ctx.rootPath) || existsSync(pStr))) return pStr
+  // ② 以 rootPath 为基准（模型返回的相对/类绝对路径如 /package.json → 项目根下）
   if (ctx.rootPath) return path.join(ctx.rootPath, pStr.replace(/^\/+/, ''))
   if (path.isAbsolute(pStr)) return pStr
   throw new Error('路径需为绝对路径或提供 rootPath')
