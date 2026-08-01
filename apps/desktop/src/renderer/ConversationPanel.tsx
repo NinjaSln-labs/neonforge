@@ -108,7 +108,7 @@ export default function ConversationPanel({
 
   const demoEnv = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_NF_DEMO_DELIVERY === '1'
   const d = (window.neonforge as unknown as { demo?: Record<string, unknown> }).demo ?? {}
-  const demoFlow = demoEnv || !!d.deliveryFlow
+  const demoFlow = !!d.deliveryFlow
   const demoDigital = demoEnv || !!d.digitalDelivery
   const demoTrust = demoEnv || !!d.trustLadder
   const demoDod = demoEnv || !!d.dodAlign
