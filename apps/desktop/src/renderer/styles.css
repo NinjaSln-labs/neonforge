@@ -355,3 +355,23 @@ body {
 .nf-delivery__rerun { background: none; border: none; color: var(--nf-accent); font-size: var(--nf-font-sm); cursor: pointer; text-align: left; padding: 0; }
 .nf-delivery__hint { font-size: var(--nf-font-sm); color: var(--nf-amber); align-self: center; }
 .nf-delivery__badge--closed { background: rgba(34, 197, 94, 0.15); color: #22C55E; }
+
+/* 问题台账（ticket 06）：7 态状态圆点 */
+.nf-ledger__item {
+  display: flex; align-items: center; gap: var(--nf-space-2); width: 100%;
+  background: none; border: none; color: var(--nf-text-dim);
+  font-size: var(--nf-font-sm); padding: var(--nf-space-2) var(--nf-space-3);
+  border-radius: var(--nf-radius-sm); cursor: pointer; text-align: left;
+}
+.nf-ledger__item:hover { background: var(--nf-bg-elevated); color: var(--nf-text); }
+.nf-ledger__item--active { background: var(--nf-accent-soft); color: var(--nf-text); }
+.nf-ledger__dot { font-size: var(--nf-font-sm); width: 14px; text-align: center; }
+.nf-ledger__dot--understanding { color: var(--nf-accent); }
+.nf-ledger__dot--awaiting-plan { color: var(--nf-amber); }
+.nf-ledger__dot--executing { color: var(--nf-accent); }
+.nf-ledger__dot--awaiting-input { color: var(--nf-amber); }
+.nf-ledger__dot--delivered { color: var(--nf-violet); }
+.nf-ledger__dot--closed { color: #22C55E; }
+.nf-ledger__dot--failed-recoverable { color: #EF4444; }
+.nf-ledger__title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nf-ledger__meta { font-size: 11px; color: var(--nf-text-dim); flex-shrink: 0; }

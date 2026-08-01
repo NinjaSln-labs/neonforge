@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react'
 import SessionPanel from './SessionPanel'
 import OutputPanel from './OutputPanel'
 import ConversationPanel from './ConversationPanel'
-import type { DeliveryPackage } from './types'
+import type { DeliveryPackage, ProblemInstance } from './types'
 
 // 任务工作台（对话面板「任务」Tab，06 任务队列前为结构占位）
 function TaskPanel() {
@@ -35,6 +35,8 @@ export default function MainWorkspace({
   const [working, setWorking] = useState(false)
   const [chatKey, setChatKey] = useState(0)
   const [deliveryPkg, setDeliveryPkg] = useState<DeliveryPackage | null>(initDeliveryPkg())
+  const [problems, setProblems] = useState<ProblemInstance[]>(initProblems())
+  const [activeProblem, setActiveProblem] = useState<string | null>(problems[0]?.id ?? null)
 
 function initDeliveryPkg(): DeliveryPackage | null {
   // 演示模式（VITE_NF_DEMO_DELIVERY=1）或测试注入（window.neonforge.demo.delivery）
@@ -59,6 +61,20 @@ function initDeliveryPkg(): DeliveryPackage | null {
   return (window.neonforge as unknown as { demo?: { delivery?: DeliveryPackage } }).demo?.delivery ?? null
 }
 
+function initProblems(): ProblemInstance[] {
+  const demo = (window.neonforge as unknown as { demo?: { problems?: ProblemInstance[] } }).demo?.problems
+  if (demo) return demo
+  const demoEnv = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_NF_DEMO_DELIVERY
+  if (demoEnv === '1') {
+    return [
+      { id: 'p1', title: '整理 Downloads 里的发票和合同', status: 'closed', updatedAt: '10:20' },
+      { id: 'p2', title: '做一个能发给朋友的旅行手册网页', status: 'awaiting-plan', updatedAt: '11:05' },
+      { id: 'p3', title: '把销售表合并出月度图表', status: 'executing', updatedAt: '11:12' }
+    ]
+  }
+  return []
+}
+
   const openFile = useCallback((filePath: string) => {
     void window.neonforge.workspace.readFile(filePath).then((res) => {
       if (res.ok) {
@@ -71,7 +87,12 @@ function initDeliveryPkg(): DeliveryPackage | null {
   return (
     <div className="nf-app">
       {/* 左：会话区 */}
-      <SessionPanel onNewChat={() => setChatKey((k) => k + 1)} />
+      <SessionPanel
+        problems={problems}
+        activeId={activeProblem}
+        onSelect={(id) => setActiveProblem(id)}
+        onNew={() => { setActiveProblem(null); setChatKey((k) => k + 1) }}
+      />
 
       {/* 中：对话区（核心，最大）——对话 / 任务 Tabs */}
       <aside className="nf-panel nf-panel--center">
