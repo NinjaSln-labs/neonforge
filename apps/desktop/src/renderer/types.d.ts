@@ -15,14 +15,16 @@ export interface NeonForgeBridge {
   }
   gateway: {
     validate: (apiKey: string) => Promise<{ ok: boolean; error?: string }>
-    streamChat: (opts: { apiKey: string; level?: string; messages: Array<{ role: string; content: string }> }) => Promise<{ ok: boolean; error?: string }>
-    onStreamChunk: (cb: (chunk: { type: string; text?: string }) => void) => () => void
+    streamChat: (opts: { apiKey: string; level?: string; tools?: boolean; messages: Array<{ role: string; content: string }> }) => Promise<{ ok: boolean; error?: string }>
+    onStreamChunk: (cb: (chunk: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) => () => void
   }
   workspace: {
     openFolder: () => Promise<string | null>
     listDir: (dirPath: string) => Promise<DirEntry[]>
     readFile: (filePath: string) => Promise<{ ok: true; content: string } | { ok: false; error: string }>
+    readNotebook: (rootPath: string | null) => Promise<{ ok: true; content: string } | { ok: false; error: string } | null>
   }
+  tools: NeonForgeTools
 }
 
 declare global {
@@ -56,5 +58,5 @@ export interface ProblemInstance {
 // ToolRegistry（ticket 10）：renderer 侧工具接口
 export interface NeonForgeTools {
   list: () => Promise<Array<{ name: string; source: 'core' | 'lsp'; requiresApproval: boolean }>>
-  execute: (opts: { name: string; args: Record<string, unknown>; approved?: boolean }) => Promise<{ ok: boolean; data?: unknown; error?: string }>
+  execute: (name: string, args: Record<string, unknown>, opts?: { approved?: boolean }) => Promise<{ ok: boolean; data?: unknown; error?: string }>
 }
