@@ -52,3 +52,9 @@ export interface ProblemInstance {
   status: ProblemStatus
   updatedAt: string      // 最近活动时间
 }
+
+// ToolRegistry（ticket 10）：renderer 侧工具接口
+export interface NeonForgeTools {
+  list: () => Promise<Array<{ name: string; source: 'core' | 'lsp'; requiresApproval: boolean }>>
+  execute: (opts: { name: string; args: Record<string, unknown>; approved?: boolean }) => Promise<{ ok: boolean; data?: unknown; error?: string }>
+}

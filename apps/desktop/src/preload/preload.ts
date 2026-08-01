@@ -25,5 +25,10 @@ contextBridge.exposeInMainWorld('neonforge', {
       ipcRenderer.invoke('workspace:list-dir', dirPath) as Promise<Array<{ name: string; path: string; kind: 'file' | 'dir' }>>,
     readFile: (filePath: string) =>
       ipcRenderer.invoke('workspace:read-file', filePath) as Promise<{ ok: true; content: string } | { ok: false; error: string }>
+  },
+  tools: {
+    list: () => ipcRenderer.invoke('tools:list') as Promise<Array<{ name: string; source: 'core' | 'lsp'; requiresApproval: boolean }>>,
+    execute: (opts: { name: string; args: Record<string, unknown>; approved?: boolean }) =>
+      ipcRenderer.invoke('tools:execute', opts) as Promise<{ ok: boolean; data?: unknown; error?: string }>
   }
 })
