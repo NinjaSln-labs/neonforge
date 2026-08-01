@@ -24,7 +24,7 @@ export function registerIpc(): void {
     apiKey: string
     level?: 'none' | 'basic' | 'medium' | 'high'
     tools?: boolean
-    messages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string }>
+    messages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; reasoning_content?: string }>
   }) => {
     const send = (type: 'reasoning' | 'content' | 'tool-call' | 'done', text?: string, toolCall?: { name: string; args: Record<string, unknown> }) => {
       if (type === 'tool-call') console.log('[ipc] SEND tool-call:', toolCall?.name, JSON.stringify(toolCall?.args).slice(0, 80))

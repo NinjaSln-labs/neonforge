@@ -105,7 +105,7 @@ export class DeepSeekGateway {
     opts: {
       model?: ModelID
       level?: ThinkingLevel
-      messages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string }>
+      messages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; reasoning_content?: string }>
       tools?: boolean
       onDelta: (chunk: { type: 'reasoning' | 'content' | 'tool-call' | 'done'; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void
     }
@@ -129,7 +129,12 @@ export class DeepSeekGateway {
       signal: AbortSignal.timeout(120000)
     })
     console.log('[gateway] http', res.status)
-    if (!res.ok || !res.body) throw new Error(`gateway: http-${res.status}`)
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => '')
+      console.log('[gateway] error body:', bodyText.slice(0, 500))
+      throw new Error(`gateway: http-${res.status}`)
+    }
+    if (!res.body) throw new Error('gateway: no-body')
 
     const reader = res.body.getReader()
     const decoder = new TextDecoder()
