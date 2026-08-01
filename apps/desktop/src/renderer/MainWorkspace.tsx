@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import SessionPanel from './SessionPanel'
+import SettingsPanel from './SettingsPanel'
 import OutputPanel from './OutputPanel'
 import ConversationPanel from './ConversationPanel'
 import type { DeliveryPackage, ProblemInstance } from './types'
@@ -34,6 +35,7 @@ export default function MainWorkspace({
   const [content, setContent] = useState<string>('')
   const [working, setWorking] = useState(false)
   const [chatKey, setChatKey] = useState(0)
+  const [showSettings, setShowSettings] = useState(false)
   const [deliveryPkg, setDeliveryPkg] = useState<DeliveryPackage | null>(initDeliveryPkg())
   const [problems, setProblems] = useState<ProblemInstance[]>(initProblems())
   const [activeProblem, setActiveProblem] = useState<string | null>(problems[0]?.id ?? null)
@@ -135,6 +137,8 @@ function initProblems(): ProblemInstance[] {
         onAdjustProblem={() => {}}
       />
 
+      {showSettings && <SettingsPanel />}
+
       <footer className="nf-statusbar">
         {working ? (
           <>🔵 搭档思考中…</>
@@ -142,6 +146,7 @@ function initProblems(): ProblemInstance[] {
           <>🟢 就绪</>
         )}
         {' │ '}{rootPath.split(/[/\\]/).filter(Boolean).pop()} │ 待审核: 0
+        <button type="button" className="nf-statusbar__settings" onClick={() => setShowSettings((v) => !v)}>⚙ 设置</button>
       </footer>
     </div>
   )
