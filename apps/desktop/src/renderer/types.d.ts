@@ -48,6 +48,8 @@ export interface DeliveryPackage {
   acceptance: AcceptanceItem[] // 验收对照（对 DoD 逐项）
   nextSteps: string[]    // 下一步/指导（含超出数字能力部分）
   rerunLabel?: string    // 复跑入口文案
+  rerunPrompt?: string   // 复跑时重新发送的请求（= 用户原始需求）
+  diffs?: { path: string; diff: string }[] // 开发者视图：待审核/已应用的 diff（05 执行层 A）
 }
 
 // 问题台账（ticket 06：问题 = 一等公民——7 态状态机 + 断点续做 + 复开）

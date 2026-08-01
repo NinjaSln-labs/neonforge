@@ -14,6 +14,30 @@ export default function DeliveryPanel({
 }) {
   const [items, setItems] = useState(pkg?.acceptance ?? [])
   const [status, setStatus] = useState<'delivered' | 'closed'>(pkg?.status === 'closed' ? 'closed' : 'delivered')
+  // 05 执行层 A：diff 审核状态（applied: Set<路径>——已应用；reverted: Set<路径>）
+  const [applied, setApplied] = useState<Set<string>>(new Set())
+  const [reverted, setReverted] = useState<Set<string>>(new Set())
+  const [confirming, setConfirming] = useState<string | null>(null) // 待二次确认的 diff 路径
+
+  const applyDiff = async (d: { path: string; diff: string }) => {
+    const res = await window.neonforge.delivery.applyDiff(d.path, d.diff, true)
+    if (res.ok) {
+      setApplied((s) => new Set(s).add(d.path))
+      setConfirming(null)
+    } else {
+      setConfirming(null)
+      alert('应用失败: ' + (res.error ?? '未知错误'))
+    }
+  }
+  const revertDiff = async (d: { path: string }) => {
+    const res = await window.neonforge.delivery.revertDiff(d.path)
+    if (res.ok) {
+      setReverted((s) => new Set(s).add(d.path))
+      setApplied((s) => { const n = new Set(s); n.delete(d.path); return n })
+    } else {
+      alert('回滚失败: ' + (res.error ?? '未知错误'))
+    }
+  }
 
   if (!pkg) {
     return <p className="nf-placeholder">还没有交付包——说出你的问题，解决后这里会显示结果</p>
@@ -61,6 +85,44 @@ export default function DeliveryPanel({
           ))}
         </ul>
       </section>
+
+      {pkg.diffs && pkg.diffs.length > 0 && (
+        <section className="nf-delivery__block">
+          <h4>开发者视图 · diff 审核（L3 授权）</h4>
+          {pkg.diffs.map((d, i) => {
+            const isApplied = applied.has(d.path)
+            const isReverted = reverted.has(d.path)
+            const isConfirming = confirming === d.path
+            return (
+              <div key={i} className="nf-diffcard">
+                <div className="nf-diffcard__head">
+                  <span className="nf-diffcard__path">📄 {d.path}</span>
+                  <span className="nf-diffcard__state">
+                    {isReverted ? '↩️ 已回滚' : isApplied ? '✅ 已应用' : '⏳ 待审核'}
+                  </span>
+                </div>
+                <pre className="nf-diffcard__body">{d.diff.slice(0, 400)}</pre>
+                {isConfirming ? (
+                  <div className="nf-diffcard__actions">
+                    <span className="nf-diffcard__hint">将写入 {d.path}（快照可回滚）——确认？</span>
+                    <button type="button" className="nf-diffcard__confirm" onClick={() => void applyDiff(d)}>确认写入</button>
+                    <button type="button" className="nf-diffcard__cancel" onClick={() => setConfirming(null)}>取消</button>
+                  </div>
+                ) : isApplied ? (
+                  <div className="nf-diffcard__actions">
+                    <button type="button" className="nf-diffcard__revert" onClick={() => void revertDiff(d)}>↩️ 回滚</button>
+                  </div>
+                ) : (
+                  <div className="nf-diffcard__actions">
+                    <button type="button" className="nf-diffcard__accept" onClick={() => setConfirming(d.path)}>接受并写入</button>
+                    <button type="button" className="nf-diffcard__reject" onClick={() => setReverted((s) => new Set(s).add(d.path))}>拒绝</button>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </section>
+      )}
 
       {pkg.nextSteps.length > 0 && (
         <section className="nf-delivery__block">
