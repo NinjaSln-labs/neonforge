@@ -3,8 +3,10 @@ import { BrowserWindow, ipcMain } from 'electron'
 import { gateway } from './gateway.js'
 import { configStore } from './configStore.js'
 import { workspace } from './workspace.js'
+import { initTools, toolRegistry } from './tools.js'
 
 export function registerIpc(): void {
+  initTools()
   ipcMain.handle('config:has-key', () => configStore.hasValidKey())
   ipcMain.handle('config:get-key', () => configStore.getApiKey())
   ipcMain.handle('config:set-key', (_e, key: string) => configStore.setApiKey(key))
@@ -44,3 +46,8 @@ export function registerIpc(): void {
   ipcMain.handle('workspace:list-dir', (_e, dirPath: string) => workspace.listDir(dirPath))
   ipcMain.handle('workspace:read-file', (_e, filePath: string) => workspace.readFile(filePath))
 }
+  // ticket 10：ToolRegistry（工具清单 + 执行分发——write/edit/bash 需 approved）
+  ipcMain.handle('tools:list', () => toolRegistry.list())
+  ipcMain.handle('tools:execute', (_e, opts: { name: string; args: Record<string, unknown>; approved?: boolean }) =>
+    toolRegistry.execute(opts.name, opts.args ?? {}, { approved: opts.approved ?? false })
+  )
