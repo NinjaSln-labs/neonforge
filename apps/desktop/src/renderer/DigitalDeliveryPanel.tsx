@@ -83,7 +83,16 @@ export default function DigitalDeliveryPanel({ onDeliver }: { onDeliver: (pkg: D
         </div>
       )}
 
-      {done && <div className="nf-flow__done">✅ 处理完成——交付包已在「产物」区，验收后确认关闭</div>}
+      {done && (
+        <>
+          <div className="nf-flow__done">✅ 处理完成——交付包已在「产物」区，验收后确认关闭</div>
+          <div className="nf-digital__preview">
+            <button type="button" className="nf-delivery__ghost" onClick={() => { setTask(null); setPreview(false); setDone(false) }}>
+              ↻ 继续处理其他任务
+            </button>
+          </div>
+        </>
+      )}
     </div>
   )
 }
