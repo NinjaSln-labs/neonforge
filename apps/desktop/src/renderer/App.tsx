@@ -56,25 +56,10 @@ export default function App() {
     )
   }
 
-  if (screen === 'new-project') {
-    return (
-      <div className="nf-app nf-app--start">
-        <div className="nf-start">
-          <h1 className="nf-start__brand">NeonForge</h1>
-          <p className="nf-start__prompt">从零开始</p>
-          <p className="nf-start__hint">新建项目流见 ticket 07，当前为入口占位。</p>
-          <button type="button" className="nf-start__link" onClick={() => setScreen('start')}>
-            返回启动页
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  if (screen === 'workspace' && rootPath) {
+  if (screen === 'workspace') {
     return (
       <MainWorkspace
-        rootPath={rootPath}
+        rootPath={rootPath ?? null}
         onBackStart={() => { setRootPath(null); setScreen('start') }}
         onKeyExpired={() => setScreen('config')}
       />
