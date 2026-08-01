@@ -10,8 +10,8 @@ export default defineConfig({
   workers: 1, // 截图确定性
   retries: 0, // 视觉回归不重试（重试会覆盖 diff 产物）
   webServer: {
-    command: 'npx vite --config vite.config.ts',
-    url: 'http://localhost:5173',
+    command: 'npx vite --config vite.config.ts --port 5174 --strictPort',
+    url: 'http://localhost:5174',
     reuseExistingServer: true
   },
   use: {
