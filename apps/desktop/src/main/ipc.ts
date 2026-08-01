@@ -45,6 +45,7 @@ export function registerIpc(): void {
   })
   ipcMain.handle('workspace:list-dir', (_e, dirPath: string) => workspace.listDir(dirPath))
   ipcMain.handle('workspace:read-file', (_e, filePath: string) => workspace.readFile(filePath))
+  ipcMain.handle('workspace:read-notebook', (_e, rootPath: string | null) => workspace.readNotebook(rootPath))
 }
   // ticket 10：ToolRegistry（工具清单 + 执行分发——write/edit/bash 需 approved）
   ipcMain.handle('tools:list', () => toolRegistry.list())

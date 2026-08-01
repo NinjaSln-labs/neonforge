@@ -1,6 +1,7 @@
 // workspace：打开文件夹 / 列目录 / 读文件（Main Process，fs 不进 renderer）
 import { dialog, BrowserWindow } from 'electron'
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs'
+import { join } from 'node:path'
 import path from 'node:path'
 
 const IGNORE = new Set([
@@ -64,6 +65,18 @@ export class WorkspaceService {
       return { ok: true, content: readFileSync(filePath, 'utf-8') }
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : 'read-failed' }
+    }
+  }
+
+  // ticket 08d：搭档须知 .neonforge——项目根约定文件（存在则返回内容，无则 null）
+  async readNotebook(rootPath: string | null): Promise<{ ok: true; content: string } | { ok: false; error: string } | null> {
+    if (!rootPath) return null
+    try {
+      const p = join(rootPath, '.neonforge')
+      if (!existsSync(p)) return null
+      return { ok: true, content: readFileSync(p, 'utf-8') }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : 'notebook-read-failed' }
     }
   }
 }
