@@ -15,7 +15,7 @@ export default defineConfig({
     reuseExistingServer: true
   },
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: 'http://localhost:5174',
     browserName: 'chromium',
     viewport: { width: 1280, height: 800 },
     expect: {
