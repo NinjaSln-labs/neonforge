@@ -29,6 +29,9 @@ export default function ConversationPanel({
   const [input, setInput] = useState('')
   const [working, setWorking] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
+  const [mentionOpen, setMentionOpen] = useState(false)
+  const [recentFiles, setRecentFiles] = useState<string[]>([])
+  const demoFiles = (window.neonforge as unknown as { demo?: { recentFiles?: string[] } }).demo?.recentFiles ?? []
 
   useEffect(() => {
     const off = window.neonforge.gateway.onStreamChunk((chunk) => {
@@ -169,12 +172,36 @@ export default function ConversationPanel({
       </div>
 
       <div className="nf-chat__input">
+        {mentionOpen && (
+          <div className="nf-mention">
+            <span className="nf-mention__title">引用文件</span>
+            {recentFiles.map((f) => (
+              <button
+                key={f}
+                type="button"
+                className="nf-mention__item"
+                onClick={() => {
+                  const before = input.replace(/@[^@]*$/, '')
+                  setInput(before + '@' + f + ' ')
+                  setMentionOpen(false)
+                }}
+              >
+                📄 {f}
+              </button>
+            ))}
+          </div>
+        )}
         <textarea
           value={input}
           placeholder="问问搭档，Enter 发送 / Cmd+Enter 换行"
           aria-label="给搭档的消息"
           rows={2}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => {
+            setInput(e.target.value)
+            const v = e.target.value
+            if (v.includes('@') && demoFiles.length > 0) { setRecentFiles(demoFiles); setMentionOpen(true) }
+            else if (!v.includes('@')) { setMentionOpen(false) }
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.metaKey) { e.preventDefault(); void send() }
             if (e.key === 'Enter' && e.metaKey) { e.preventDefault(); setInput((v) => v + '\n') }
