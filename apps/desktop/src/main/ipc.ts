@@ -4,9 +4,11 @@ import { gateway } from './gateway.js'
 import { configStore } from './configStore.js'
 import { workspace } from './workspace.js'
 import { initTools, toolRegistry } from './tools.js'
+import { registerLspTools } from './lsp.js'
 
 export function registerIpc(): void {
   initTools()
+  registerLspTools(toolRegistry)
   ipcMain.handle('config:has-key', () => configStore.hasValidKey())
   ipcMain.handle('config:get-key', () => configStore.getApiKey())
   ipcMain.handle('config:set-key', (_e, key: string) => configStore.setApiKey(key))
