@@ -35,6 +35,8 @@ export default function ConversationPanel({
   onWorkingChange?: (working: boolean) => void
 }) {
   const [messages, setMessages] = useState<Msg[]>([])
+  const messagesRef = useRef<Msg[]>([])
+  useEffect(() => { messagesRef.current = messages }, [messages])
   const [input, setInput] = useState('')
   const [working, setWorking] = useState(false)
   const [workingStage, setWorkingStage] = useState('等待回复…')
@@ -111,9 +113,10 @@ export default function ConversationPanel({
       if (!res.ok) { finishError(res.error ?? 'gateway-error'); return }
     } catch { finishError('network'); return } finally { off() }
 
-    // 检查本轮是否有完成的工具调用 → 回填续聊
-    await new Promise((r) => setTimeout(r, 300)) // 等工具执行结果写入
-    const lastMsg = messages[messages.length - 1] // 闭包可能旧——用 ref 读
+    // 检查本轮是否有完成的工具调用 → 回填续聊（用 ref 读最新消息——闭包会旧）
+    await new Promise((r) => setTimeout(r, 400)) // 等工具执行结果写入
+    const latest = messagesRef.current
+    const lastMsg = latest[latest.length - 1]
     const toolCalls = lastMsg?.toolCalls?.filter((c) => c.status === 'done') ?? []
     if (toolCalls.length === 0) return
 
@@ -129,6 +132,7 @@ export default function ConversationPanel({
     ]
     // 追加新 assistant 消息（本轮回复）
     setMessages((p) => [...p, { role: 'assistant', content: '', reasoning: '', status: 'streaming' }])
+    await new Promise((r) => setTimeout(r, 50)) // 等新消息写入 ref
     await runChat(toolMsgs, depth + 1)
   }
 
@@ -210,9 +214,9 @@ export default function ConversationPanel({
   const demoEnv = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_NF_DEMO_DELIVERY === '1'
   const d = (window.neonforge as unknown as { demo?: Record<string, unknown> }).demo ?? {}
   const demoFlow = !!d.deliveryFlow
-  const demoDigital = demoEnv || !!d.digitalDelivery
-  const demoTrust = demoEnv || !!d.trustLadder
-  const demoDod = demoEnv || !!d.dodAlign
+  const demoDigital = !!d.digitalDelivery
+  const demoTrust = !!d.trustLadder
+  const demoDod = !!d.dodAlign
   const compactCount = (d.compactHistory as number) ?? (demoEnv ? 30 : 0)
   const compactNote = compactCount > 24 ? `对话已超过 24 条——将压缩前 ${compactCount - 12} 条为摘要（上下文不丢）` : null
   const onDeliver = (pkg: DeliveryPackage) => {
