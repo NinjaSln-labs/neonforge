@@ -16,9 +16,14 @@ export interface DirEntry {
 }
 
 export class WorkspaceService {
+  private currentRoot: string | null = null
+  getCurrentRoot(): string | null { return this.currentRoot }
+  setCurrentRoot(p: string | null): void { this.currentRoot = p }
+
   async openFolder(win: BrowserWindow | null): Promise<string | null> {
     // 测试钩子：跳过系统对话框，直接打开指定目录
     if (process.env.NF_TEST_PROJECT && existsSync(process.env.NF_TEST_PROJECT)) {
+      this.currentRoot = process.env.NF_TEST_PROJECT
       return process.env.NF_TEST_PROJECT
     }
     const opts: Electron.OpenDialogOptions = {
@@ -29,7 +34,8 @@ export class WorkspaceService {
       ? await dialog.showOpenDialog(win, opts)
       : await dialog.showOpenDialog(opts)
     if (result.canceled || result.filePaths.length === 0) return null
-    return result.filePaths[0] ?? null
+    this.currentRoot = result.filePaths[0] ?? null
+    return this.currentRoot
   }
 
   listDir(dirPath: string): DirEntry[] {

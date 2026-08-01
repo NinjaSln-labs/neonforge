@@ -59,6 +59,9 @@ export function registerIpc(): void {
 }
   // ticket 10：ToolRegistry（工具清单 + 执行分发——write/edit/bash 需 approved）
   ipcMain.handle('tools:list', () => toolRegistry.list())
-  ipcMain.handle('tools:execute', (_e, opts: { name: string; args: Record<string, unknown>; approved?: boolean }) =>
-    toolRegistry.execute(opts.name, opts.args ?? {}, { approved: opts.approved ?? false })
+  ipcMain.handle('tools:execute', (_e, opts: { name: string; args: Record<string, unknown>; approved?: boolean; rootPath?: string }) =>
+    toolRegistry.execute(opts.name, opts.args ?? {}, {
+      approved: opts.approved ?? false,
+      rootPath: opts.rootPath ?? workspace.getCurrentRoot() ?? undefined
+    })
   )
