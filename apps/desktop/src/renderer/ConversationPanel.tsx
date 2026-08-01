@@ -177,8 +177,17 @@ export default function ConversationPanel({
     onWorkingChange?.(true)
     const sid = ++sessionRef.current // 新会话——旧会话事件/续聊失效
     const history = messages
-      .filter((m) => m.role === 'user' || (m.role === 'assistant' && m.status === 'done' && m.content))
-      .map((m) => ({ role: m.role, content: m.content }))
+      .filter((m) => m.role === 'user' || (m.role === 'assistant' && m.status === 'done'))
+      .map((m) => {
+        if (m.role === 'assistant' && !m.content && m.toolCalls && m.toolCalls.length > 0) {
+          // 工具轮（无文本）——转文本摘要保留上下文（DeepSeek 要求 tool 消息带 reasoning_content——直接转文本避免 400）
+          const summary = m.toolCalls
+            .map((c) => `[${c.name}] ${JSON.stringify(c.args).slice(0, 60)} → ${(c.result ?? c.status).toString().slice(0, 100)}`)
+            .join('; ')
+          return { role: 'assistant', content: `（工具调用：${summary}）` }
+        }
+        return { role: m.role, content: m.content }
+      })
     setMessages((p) => [...p, { role: 'user', content: text, status: 'done' }])
     setMessages((p) => [...p, { role: 'assistant', content: '', reasoning: '', status: 'streaming' }])
     setWorkingStage('已发送，等待搭档…')
