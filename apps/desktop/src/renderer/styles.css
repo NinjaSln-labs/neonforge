@@ -462,3 +462,8 @@ body {
 .nf-mention__title { font-size: 11px; color: var(--nf-text-dim); padding: 0 var(--nf-space-2); }
 .nf-mention__item { text-align: left; background: none; border: none; color: var(--nf-text-dim); font-size: var(--nf-font-sm); padding: 3px var(--nf-space-2); border-radius: var(--nf-radius-sm); cursor: pointer; }
 .nf-mention__item:hover { background: var(--nf-accent-soft); color: var(--nf-accent); }
+.nf-settings__plugins { display: flex; flex-direction: column; gap: 4px; }
+.nf-settings__plugins-title { font-size: 11px; color: var(--nf-text-dim); }
+.nf-settings__plugins-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.nf-settings__plugin { font-size: 11px; color: var(--nf-text-dim); background: var(--nf-bg-panel); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-sm); padding: 2px 6px; }
+.nf-settings__plugin em { color: #22C55E; font-style: normal; }
