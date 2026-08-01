@@ -101,14 +101,16 @@ export default function ConversationPanel({
   const maybeContinue = async (depth: number) => {
     const ctx = chatRef.current
     if (!ctx || depth >= 2) return
-    // 轮询等工具完成（最多 15s）
-    for (let i = 0; i < 30; i++) {
+    // 等待自动执行（pending）完成——最多 8s；待授权（need-approval）立即停止（等用户点允许）
+    for (let i = 0; i < 16; i++) {
       await new Promise((r) => setTimeout(r, 500))
       const latest = messagesRef.current
       const lastMsg = latest[latest.length - 1]
       if (!lastMsg || !lastMsg.toolCalls || lastMsg.toolCalls.length === 0) return
-      const waiting = lastMsg.toolCalls.filter((c) => c.status === 'pending' || c.status === 'need-approval')
-      if (waiting.length === 0) break // 全部完成
+      const pending = lastMsg.toolCalls.filter((c) => c.status === 'pending')
+      const needsApproval = lastMsg.toolCalls.some((c) => c.status === 'need-approval')
+      if (needsApproval) return // 有待授权——等用户点允许（approveToolCall 后触发续聊）
+      if (pending.length === 0) break // 全部执行完成
     }
     const latest = messagesRef.current
     const lastMsg = latest[latest.length - 1]
@@ -137,6 +139,8 @@ export default function ConversationPanel({
     if (depth > 4) return
     const key = await window.neonforge.config.getKey()
     if (!key) { finishError('key-invalid'); return }
+    // 系统提示：引导直接 read（项目根相对路径）——避免 bash 全局搜索/工具循环（提速）
+    const sysHint = { role: 'system', content: `你是 NeonForge 搭档。当前项目根目录：${rootPath ?? '(未指定)'}。规则：① 读文件用 read 工具（路径用项目根下的相对路径，如 package.json）② 不要用 bash find 全局搜索（直接 read 目标文件）③ 工具一次调用一个，执行完看结果再决定 ④ 找不到文件就直接告诉用户。` }
     // 本轮临时监听
     const off = window.neonforge.gateway.onStreamChunk(applyChunk)
     try {
@@ -144,7 +148,7 @@ export default function ConversationPanel({
         apiKey: key,
         level: 'basic',
         tools: true,
-        messages: msgs
+        messages: [sysHint, ...msgs]
       })
       if (!res.ok) { finishError(res.error ?? 'gateway-error'); return }
     } catch { finishError('network'); return } finally { off() }
