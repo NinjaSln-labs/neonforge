@@ -36,6 +36,7 @@ export default function ConversationPanel({
   const [input, setInput] = useState('')
   const [working, setWorking] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef('')
   const [mentionOpen, setMentionOpen] = useState(false)
   const [recentFiles, setRecentFiles] = useState<string[]>([])
   const demoFiles = (window.neonforge as unknown as { demo?: { recentFiles?: string[] } }).demo?.recentFiles ?? []
@@ -83,8 +84,9 @@ export default function ConversationPanel({
   }, [messages, working])
 
   const send = async () => {
-    const text = input.trim()
+    const text = inputRef.current.trim()
     if (!text || working) return
+    inputRef.current = ''
     setInput('')
     setWorking(true)
     onWorkingChange?.(true)
@@ -245,6 +247,7 @@ export default function ConversationPanel({
           aria-label="给搭档的消息"
           rows={2}
           onChange={(e) => {
+            inputRef.current = e.target.value
             setInput(e.target.value)
             const v = e.target.value
             if (v.includes('@') && demoFiles.length > 0) { setRecentFiles(demoFiles); setMentionOpen(true) }
