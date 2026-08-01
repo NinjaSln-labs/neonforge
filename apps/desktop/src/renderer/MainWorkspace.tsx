@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 import SessionPanel from './SessionPanel'
 import SettingsPanel from './SettingsPanel'
+import DeliveryFlowPanel from './DeliveryFlowPanel'
 import OutputPanel from './OutputPanel'
 import ConversationPanel from './ConversationPanel'
 import type { DeliveryPackage, ProblemInstance } from './types'
@@ -26,7 +27,7 @@ export default function MainWorkspace({
   onBackStart,
   onKeyExpired
 }: {
-  rootPath: string
+  rootPath: string | null
   onBackStart: () => void
   onKeyExpired: () => void
 }) {
@@ -86,8 +87,11 @@ function initProblems(): ProblemInstance[] {
     })
   }, [])
 
+  const zeroToOne = !rootPath
+
   return (
     <div className="nf-app">
+      {zeroToOne && <DeliveryFlowPanel />}
       {/* 左：会话区 */}
       <SessionPanel
         problems={problems}
@@ -128,7 +132,7 @@ function initProblems(): ProblemInstance[] {
 
       {/* 右：产物区（工程 / 产物） */}
       <OutputPanel
-        rootPath={rootPath}
+        rootPath={rootPath ?? ''}
         activePath={activePath}
         content={content}
         deliveryPkg={deliveryPkg}
@@ -145,7 +149,7 @@ function initProblems(): ProblemInstance[] {
         ) : (
           <>🟢 就绪</>
         )}
-        {' │ '}{rootPath.split(/[/\\]/).filter(Boolean).pop()} │ 待审核: 0
+        {' │ '}{(rootPath ?? '从零开始').split(/[/\\]/).filter(Boolean).pop()} │ 待审核: 0
         <button type="button" className="nf-statusbar__settings" onClick={() => setShowSettings((v) => !v)}>⚙ 设置</button>
       </footer>
     </div>

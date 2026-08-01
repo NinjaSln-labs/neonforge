@@ -106,11 +106,13 @@ export default function ConversationPanel({
     })
   }
 
-  const demoFlow = !!(window.neonforge as unknown as { demo?: { deliveryFlow?: boolean } }).demo?.deliveryFlow
-  const demoDigital = !!(window.neonforge as unknown as { demo?: { digitalDelivery?: boolean } }).demo?.digitalDelivery
-  const demoTrust = !!(window.neonforge as unknown as { demo?: { trustLadder?: boolean } }).demo?.trustLadder
-  const demoDod = !!(window.neonforge as unknown as { demo?: { dodAlign?: boolean } }).demo?.dodAlign
-  const compactCount = (window.neonforge as unknown as { demo?: { compactHistory?: number } }).demo?.compactHistory ?? 0
+  const demoEnv = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_NF_DEMO_DELIVERY === '1'
+  const d = (window.neonforge as unknown as { demo?: Record<string, unknown> }).demo ?? {}
+  const demoFlow = demoEnv || !!d.deliveryFlow
+  const demoDigital = demoEnv || !!d.digitalDelivery
+  const demoTrust = demoEnv || !!d.trustLadder
+  const demoDod = demoEnv || !!d.dodAlign
+  const compactCount = (d.compactHistory as number) ?? (demoEnv ? 30 : 0)
   const compactNote = compactCount > 24 ? `对话已超过 24 条——将压缩前 ${compactCount - 12} 条为摘要（上下文不丢）` : null
   const onDeliver = (pkg: DeliveryPackage) => {
     const w = window as unknown as { neonforge: { demo?: { onDeliver?: (p: DeliveryPackage) => void } } }
