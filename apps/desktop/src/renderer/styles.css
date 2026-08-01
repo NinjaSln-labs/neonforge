@@ -447,3 +447,12 @@ body {
 .nf-dod__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .nf-dod__list li { display: flex; align-items: center; gap: var(--nf-space-2); font-size: var(--nf-font-sm); color: var(--nf-text); }
 .nf-dod__actions { display: flex; gap: var(--nf-space-2); }
+
+/* 设置（ticket 08）：语言/默认视图/提醒开关 */
+.nf-settings { display: flex; flex-direction: column; gap: var(--nf-space-3); padding: var(--nf-space-3); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md); background: var(--nf-bg-elevated); }
+.nf-settings__row { display: flex; align-items: center; justify-content: space-between; gap: var(--nf-space-3); font-size: var(--nf-font-sm); color: var(--nf-text); }
+.nf-settings__row em { color: var(--nf-text-dim); font-style: normal; font-size: 11px; }
+.nf-settings__row--switch input { accent-color: var(--nf-accent); }
+.nf-settings__seg { display: flex; gap: 4px; }
+.nf-settings__seg-btn { background: none; border: 1px solid var(--nf-border); color: var(--nf-text-dim); border-radius: var(--nf-radius-sm); padding: 2px var(--nf-space-3); font-size: 12px; cursor: pointer; }
+.nf-settings__seg-btn--on { background: var(--nf-accent-soft); border-color: var(--nf-accent); color: var(--nf-accent); }
