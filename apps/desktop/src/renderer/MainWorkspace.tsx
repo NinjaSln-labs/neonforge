@@ -46,6 +46,17 @@ export default function MainWorkspace({
   const [chatKey, setChatKey] = useState(0)
   const [rerunRequest, setRerunRequest] = useState<string | null>(null) // 05 B：复跑请求
   const [showSettings, setShowSettings] = useState(false)
+  // 08 快捷键（D0 §6）：⌘+, 打开/关闭设置（全局）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+        e.preventDefault()
+        setShowSettings((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
   const [deliveryPkg, setDeliveryPkg] = useState<DeliveryPackage | null>(initDeliveryPkg())
   const [problems, setProblems] = useState<ProblemInstance[]>(initProblems)
   const [activeProblem, setActiveProblem] = useState<string | null>(null)
