@@ -1,5 +1,6 @@
 import { promises as fs, existsSync } from 'fs'
 import path from 'path'
+import { snapshot as takeSnapshot, revert as revertFile } from './applyDiff.js'
 
 // ToolRegistry（ticket 10 / A0 §2）：工具注册与执行分发
 // 边界判定：ToolRegistry=目录与分发；ShellAgent=bash 执行；Gateway=工具调用修复（02 已实现）
@@ -68,8 +69,10 @@ function readExecutor(args: Record<string, unknown>, ctx: { rootPath?: string })
 async function writeExecutor(args: Record<string, unknown>, ctx: { rootPath?: string }): Promise<unknown> {
   const filePath = resolvePath(args.path, ctx)
   await fs.mkdir(path.dirname(filePath), { recursive: true })
+  // 先备份后写（基线 §11）：已存在文件写前快照 .nf-bak（新文件无旧内容——回滚语义为无快照）
+  takeSnapshot(filePath)
   await fs.writeFile(filePath, String(args.content ?? ''), 'utf-8')
-  return { file: filePath, bytes: String(args.content ?? '').length }
+  return { file: filePath, bytes: String(args.content ?? '').length, snapshot: true }
 }
 
 async function editExecutor(args: Record<string, unknown>, ctx: { rootPath?: string }): Promise<unknown> {
@@ -78,8 +81,10 @@ async function editExecutor(args: Record<string, unknown>, ctx: { rootPath?: str
   const newText = String(args.new ?? '')
   const content = await fs.readFile(filePath, 'utf-8')
   if (!content.includes(oldText)) throw new Error(`未找到待替换内容（path: ${filePath}）`)
+  // 先备份后写：替换前快照（回滚恢复原样）
+  takeSnapshot(filePath)
   await fs.writeFile(filePath, content.replace(oldText, newText), 'utf-8')
-  return { file: filePath }
+  return { file: filePath, snapshot: true }
 }
 
 async function bashExecutor(args: Record<string, unknown>, ctx: { rootPath?: string }): Promise<unknown> {
@@ -107,4 +112,9 @@ export function initTools(): void {
   toolRegistry.register({ name: 'write', source: 'core', requiresApproval: true, execute: writeExecutor })
   toolRegistry.register({ name: 'edit', source: 'core', requiresApproval: true, execute: editExecutor })
   toolRegistry.register({ name: 'bash', source: 'core', requiresApproval: true, execute: bashExecutor })
+}
+
+// 工具写文件回滚（write/edit 写前已快照 .nf-bak——回滚恢复原样；无快照返回错误）
+export function revertToolFile(filePath: string): { ok: true } | { ok: false; error: string } {
+  return revertFile(filePath)
 }
