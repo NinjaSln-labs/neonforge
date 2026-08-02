@@ -513,6 +513,10 @@ body {
 .nf-diffline--del { background: rgba(239, 68, 68, 0.16); color: #f87171; }
 .nf-diffline--ctx { color: var(--nf-text-dim); }
 .nf-diffcard__expand { background: none; border: 1px solid var(--nf-border); color: var(--nf-cyan); border-radius: 4px; padding: 1px 8px; font-size: 11px; margin-top: 4px; cursor: pointer; }
+/* 非技术视图主路径（D0 §3.8）：全部接受并写入 */
+.nf-diffcard__acceptall { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: rgba(99, 102, 241, 0.12); border-radius: 6px; margin-bottom: 6px; flex-wrap: wrap; }
+.nf-diffcard__acceptall-btn { background: var(--nf-accent); color: #fff; border: none; border-radius: 4px; padding: 4px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.nf-diffcard__acceptall-btn:disabled { opacity: 0.5; cursor: wait; }
 .nf-diffcard__actions { display: flex; gap: 6px; margin-top: 6px; align-items: center; flex-wrap: wrap; }
 .nf-diffcard__accept { background: var(--nf-accent); color: #fff; border: none; border-radius: 4px; padding: 2px 10px; font-size: 12px; cursor: pointer; }
 .nf-diffcard__reject { background: none; border: 1px solid var(--nf-border); color: var(--nf-text-dim); border-radius: 4px; padding: 2px 10px; font-size: 12px; cursor: pointer; }

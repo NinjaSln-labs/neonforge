@@ -62,3 +62,21 @@ test('diff 审核视图（接受→确认→已应用）', async ({ page }) => {
   await expect(page.locator('.nf-diffcard')).toContainText('已应用')
   await expect(page.locator('.nf-diffcard')).toHaveScreenshot('diff-applied.png')
 })
+
+test('非技术视图主路径：全部接受并写入（D0 §3.8——批量应用所有 diff）', async ({ page }) => {
+  await mockBridge(page)
+  await page.goto('http://localhost:5174/')
+  await page.getByRole('button', { name: '打开已有项目' }).click()
+  await page.waitForSelector('.nf-chat__input textarea', { timeout: 8000 })
+  await page.getByRole('button', { name: '产物' }).click()
+  await page.waitForTimeout(500)
+  // 批量按钮出现（有待审核 diff）
+  await expect(page.locator('.nf-diffcard__acceptall')).toBeVisible()
+  await expect(page.locator('.nf-diffcard__acceptall')).toContainText('全部接受并写入')
+  await page.locator('.nf-diffcard__acceptall-btn').click()
+  await page.waitForTimeout(400)
+  // 全部已应用（批量按钮消失——无待审核项）+ 单卡状态已应用
+  await expect(page.locator('.nf-diffcard__acceptall')).toHaveCount(0)
+  await expect(page.locator('.nf-diffcard')).toContainText('已应用')
+  await expect(page.locator('.nf-diffcard')).toHaveScreenshot('diff-accept-all.png')
+})

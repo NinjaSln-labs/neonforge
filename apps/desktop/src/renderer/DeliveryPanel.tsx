@@ -49,6 +49,24 @@ export default function DeliveryPanel({
     }
   }
 
+  // 非技术视图主路径（D0 §3.8）：全部接受并写入（批量应用所有待审核 diff——逐条成功/失败记录）
+  const [acceptAllBusy, setAcceptAllBusy] = useState(false)
+  const acceptAll = async (diffs: Array<{ path: string; diff: string }>) => {
+    const pending = diffs.filter((d) => !applied.has(d.path) && !reverted.has(d.path))
+    if (pending.length === 0) return
+    setAcceptAllBusy(true)
+    const ok: string[] = []
+    const fail: Array<{ path: string; error: string }> = []
+    for (const d of pending) {
+      const res = await window.neonforge.delivery.applyDiff(d.path, d.diff, true)
+      if (res.ok) ok.push(d.path)
+      else fail.push({ path: d.path, error: res.error ?? '未知错误' })
+    }
+    setApplied((s) => { const n = new Set(s); ok.forEach((p) => n.add(p)); return n })
+    setAcceptAllBusy(false)
+    if (fail.length > 0) alert(`有 ${fail.length} 个改动未应用：\n` + fail.map((f) => `· ${f.path}: ${f.error}`).join('\n'))
+  }
+
   // 目视 diff：展开/折叠（默认展开小 diff，大 diff 折叠——>80 行收起）
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const diffLineClass = (l: DiffLine) =>
@@ -125,6 +143,15 @@ export default function DeliveryPanel({
       {pkg.diffs && pkg.diffs.length > 0 && (
         <section className="nf-delivery__block">
           <h4>开发者视图 · diff 审核（L3 授权）</h4>
+          {/* 非技术视图主路径（D0 §3.8）：改动说明先行，全部接受为默认操作——免逐条确认 */}
+          {(pkg.diffs.some((d) => !applied.has(d.path) && !reverted.has(d.path))) && (
+            <div className="nf-diffcard__acceptall">
+              <span className="nf-diffcard__hint">已审阅以上改动——全部接受并写入（写前快照，可逐条回滚）</span>
+              <button type="button" className="nf-diffcard__acceptall-btn" disabled={acceptAllBusy} onClick={() => void acceptAll(pkg.diffs ?? [])}>
+                {acceptAllBusy ? '写入中…' : '全部接受并写入'}
+              </button>
+            </div>
+          )}
           {pkg.diffs.map((d, i) => {
             const isApplied = applied.has(d.path)
             const isReverted = reverted.has(d.path)

@@ -46,3 +46,15 @@ test('快捷键 ⌘, 打开/关闭设置（D0 §6）', async ({ page }) => {
   await page.keyboard.press('Meta+,')
   await expect(page.locator('.nf-settings')).toHaveCount(0)
 })
+
+test('快捷键表完整（D0 §6——只列已实现：⌘, / ⌘Enter / ⌘N / ⌘E）', async ({ page }) => {
+  await mockBridge(page)
+  await page.goto('http://localhost:5174/')
+  await page.getByRole('button', { name: '打开已有项目' }).click()
+  await page.getByRole('button', { name: '⚙ 设置' }).click()
+  await expect(page.locator('.nf-settings')).toBeVisible()
+  await expect(page.locator('.nf-settings')).toContainText('⌘ + , 打开 / 关闭设置')
+  await expect(page.locator('.nf-settings')).toContainText('⌘ + Enter 发送消息')
+  await expect(page.locator('.nf-settings')).toContainText('⌘ + N 新任务')
+  await expect(page.locator('.nf-settings')).toContainText('⌘ + E @引用当前文件')
+})
