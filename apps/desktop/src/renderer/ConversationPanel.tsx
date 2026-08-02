@@ -4,11 +4,12 @@ import DigitalDeliveryPanel from './DigitalDeliveryPanel'
 import TrustLadderPanel from './TrustLadderPanel'
 import DoDAlignPanel from './DoDAlignPanel'
 import type { DeliveryPackage } from './types'
+import { loadSession, saveSession, serializeMessages } from './sessionStore'
 
 // ticket 04：对话最小闭环（D0 §2/§3.4）——输入发送 → Gateway 流式 → 消息/呼吸光条/推理展示
 // 消费 02：streamChat（四档 basic）+ ModelRouter（默认 Flash）；错误分支：Key 失效内嵌更新 / 服务故障提示
 
-interface ToolCallMsg {
+export interface ToolCallMsg {
   name: string
   args: Record<string, unknown>
   status: 'pending' | 'done' | 'need-approval' | 'error' | 'reverted'
@@ -49,6 +50,25 @@ export default function ConversationPanel({
   const [messages, setMessages] = useState<Msg[]>([])
   const messagesRef = useRef<Msg[]>([])
   useEffect(() => { messagesRef.current = messages }, [messages])
+  // 断点续做（ticket 06/基线 §21）：挂载恢复上次会话（onNew 已 clearSession → 空）
+  useEffect(() => {
+    const stored = loadSession()
+    if (stored && stored.length > 0) {
+      setMessages(stored.map((s) => ({
+        role: s.role,
+        content: s.content,
+        reasoning: s.reasoning,
+        status: 'done' as const,
+        toolCalls: s.toolCalls
+      })))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  // 断点续做：完整消息变化 → 持久化（过滤半截 streaming——streaming 时 serialize 为空不覆盖存档）
+  useEffect(() => {
+    const serialized = serializeMessages(messages)
+    if (serialized.length > 0) saveSession(serialized)
+  }, [messages])
   const chatRef = useRef<{ msgs: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; reasoning_content?: string }>; depth: number } | null>(null)
   const sessionRef = useRef(0) // 会话隔离：每次发送递增——旧会话事件/续聊失效
   const applyChunkRef = useRef<((c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) | null>(null)
