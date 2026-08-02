@@ -1,10 +1,10 @@
 import { useState } from 'react'
 
 // 0-1 交付流（ticket 07）：说需求 → 软件工程模型/敏捷 → 分步推进 → 交付部署
-// V1 UI 层：阶段机 + 模型选择 + 分步确认（真实执行由 agent 引擎驱动，后续对接）
-// v2：当前步骤聚焦——对话区内嵌（固定布局），当前阶段大卡片突出
-const FLOW_STAGES = ['需求', '设计', '开发', '测试', '部署', '交付']
-const STAGE_HINT: Record<string, string> = {
+// V2：阶段状态提升——onStageChange/onModelSelect 通知 MainWorkspace（注入对话阶段指引）
+// v3：当前步骤聚焦——对话区内嵌（固定布局），当前阶段大卡片突出
+export const FLOW_STAGES = ['需求', '设计', '开发', '测试', '部署', '交付']
+export const STAGE_HINT: Record<string, string> = {
   需求: '说清楚要做什么、给谁用、做成什么样算完',
   设计: '确认方案、技术选型、页面/结构设计',
   开发: '我写代码/生成内容，分步给你看',
@@ -13,12 +13,27 @@ const STAGE_HINT: Record<string, string> = {
   交付: '交付包 + 验收对照，确认后关闭'
 }
 
-export default function DeliveryFlowPanel() {
+export default function DeliveryFlowPanel({
+  onStageChange,
+  onModelSelect
+}: {
+  onStageChange?: (stage: number) => void
+  onModelSelect?: (model: 'traditional' | 'agile') => void
+}) {
   const [stage, setStage] = useState(0) // 当前进行阶段（index）
   const [model, setModel] = useState<'traditional' | 'agile' | null>(null)
 
   const advance = () => {
-    if (stage < FLOW_STAGES.length - 1) setStage((s) => s + 1)
+    if (stage < FLOW_STAGES.length - 1) {
+      const next = stage + 1
+      setStage(next)
+      onStageChange?.(next)
+    }
+  }
+
+  const pickModel = (m: 'traditional' | 'agile') => {
+    setModel(m)
+    onModelSelect?.(m)
   }
 
   return (
@@ -48,10 +63,10 @@ export default function DeliveryFlowPanel() {
       {/* 模型选择（未选时） */}
       {!model && (
         <div className="nf-flow__models">
-          <button type="button" className="nf-flow__model-btn" onClick={() => setModel('traditional')}>
+          <button type="button" className="nf-flow__model-btn" onClick={() => pickModel('traditional')}>
             传统软件工程 <span className="nf-flow__hint">瀑布 / 增量 / 螺旋（按项目类型推荐）</span>
           </button>
-          <button type="button" className="nf-flow__model-btn" onClick={() => setModel('agile')}>
+          <button type="button" className="nf-flow__model-btn" onClick={() => pickModel('agile')}>
             敏捷开发 <span className="nf-flow__hint">Scrum / Kanban 迭代，可 demo</span>
           </button>
         </div>
