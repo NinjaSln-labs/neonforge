@@ -7,6 +7,7 @@ import { workspace } from './workspace.js'
 import { initTools, toolRegistry, revertToolFile } from './tools.js'
 import { registerLspTools, lsp } from './lsp.js'
 import { context } from './context.js'
+import { codeRag } from './codeRag.js'
 import { buildStandardPrefix, planPreheat, prefixCache, preheating } from './preheat.js'
 
 export function registerIpc(): void {
@@ -106,4 +107,8 @@ export function registerIpc(): void {
   // ticket 12 ContextEngine：@引用文件 → 精准上下文片段（注入对话）
   ipcMain.handle('context:resolve', (_e, opts: { files: string[] }) =>
     context.resolve(workspace.getCurrentRoot(), opts.files ?? [])
+  )
+  // ticket 12 Layer2：CodeRAG 关键词检索兜底（V1 降级——不建向量索引）
+  ipcMain.handle('rag:search', (_e, opts: { query: string }) =>
+    codeRag.search(workspace.getCurrentRoot(), opts.query)
   )

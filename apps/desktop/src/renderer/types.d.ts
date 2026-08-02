@@ -32,6 +32,9 @@ export interface NeonForgeBridge {
   context: {
     resolve: (files: string[]) => Promise<{ fragments: Array<{ path: string; content: string; truncated: boolean }> }>
   }
+  rag: {
+    search: (query: string) => Promise<{ hits: Array<{ path: string; line: number; snippet: string }>; note?: string }>
+  }
   preheat: {
     status: () => Promise<{ plan: { shouldPreheat: boolean; why: string; actions: string[] }; cache: { standardPrefix: string; hash: string; history: Array<{ hash: string; at: string; hit: boolean }> } | null }>
   }
