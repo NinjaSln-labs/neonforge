@@ -37,7 +37,8 @@ export default function ConversationPanel({
   onToolResult,
   onUserMessage,
   recentFilesExternal,
-  stageHint
+  stageHint,
+  activeAuthorizedLogs
 }: {
   rootPath?: string | null
   currentFile?: string | null // 08 快捷键 Cmd+E：当前选中文件（@引用——D0 §6）
@@ -50,6 +51,7 @@ export default function ConversationPanel({
   onUserMessage?: (text: string) => void
   recentFilesExternal?: string[]
   stageHint?: string // 0-1 交付阶段指引（ticket 07——注入对话引导模型按阶段产出）
+  activeAuthorizedLogs?: string[] // 06/14 授权记录可回溯：当前问题快照 authorized（TrustLadder 展示）
 }) {
   const [messages, setMessages] = useState<Msg[]>([])
   const messagesRef = useRef<Msg[]>([])
@@ -390,7 +392,7 @@ export default function ConversationPanel({
     <div className="nf-chat">
       {demoFlow && <DeliveryFlowPanel />}
       {demoDigital && <DigitalDeliveryPanel onDeliver={onDeliver} />}
-      {demoTrust && <TrustLadderPanel />}
+      {demoTrust && <TrustLadderPanel authorizedLogs={activeAuthorizedLogs} />}
       {demoDod && <DoDAlignPanel />}
       {compactNote && <div className="nf-compact">🗜 {compactNote}</div>}
       <div className="nf-chat__list" ref={listRef} aria-live="polite" aria-relevant="additions text">
