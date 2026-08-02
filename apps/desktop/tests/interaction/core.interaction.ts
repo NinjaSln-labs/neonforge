@@ -133,3 +133,40 @@ test('@引用：输入 @ → 浮层 → 点击插入（ContextEngine 入口）',
   // 点击插入文件名（recentFiles 中的文件名）
   await expect(input).toHaveValue(/@a\.ts\s*$/)
 })
+
+test('信任阶梯：授权记录接真实数据（06 问题快照 authorized——可回溯）', async ({ page }) => {
+  // 独立 mock：trustLadder + 问题快照 authorized（真实数据路径）
+  await page.addInitScript(() => {
+    const bridge = {
+      version: 'test',
+      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
+      workspace: { openFolder: async () => '/test', listDir: async () => [], readFile: async () => ({ ok: true, content: '// x' }), readNotebook: async () => null, initProject: async () => ({ ok: true, path: '/test', title: 't' }) },
+      gateway: { validate: async () => ({ ok: true }), streamChat: async () => ({ ok: true }), onStreamChunk: () => () => {} },
+      delivery: { applyDiff: async () => ({ ok: true, file: '/test/a.txt' }), revertDiff: async () => ({ ok: true }) },
+      tools: { list: async () => [], execute: async () => ({ ok: true, data: { file: '/test/a.txt', snapshot: true } }), revert: async () => ({ ok: true }) },
+      context: { resolve: async () => ({ fragments: [] }) },
+      rag: { search: async () => ({ hits: [] }) },
+      plugins: { list: async () => [], toggle: async () => true },
+      preheat: { status: async () => ({ plan: { shouldPreheat: false, why: '', actions: [] }, cache: null }) },
+      compaction: { compact: async () => ({ ok: false, error: '未达阈值' }) },
+      demo: {
+        trustLadder: true,
+        problems: [
+          { id: 'p1', title: '整理发票', status: 'executing', updatedAt: '10:00', snapshot: { goal: '整理发票', decisions: [], authorized: ['[write] /tmp/a.txt', '[write] /tmp/b.txt'], pending: [] } }
+        ]
+      }
+    }
+    ;(window as unknown as { neonforge: unknown }).neonforge = bridge
+  })
+  await page.goto('http://localhost:5174/')
+  await page.getByRole('button', { name: '打开已有项目' }).click()
+  await page.waitForSelector('.nf-chat__input textarea', { timeout: 8000 })
+  // 选中问题（activeProblem 生效 → 快照 authorized 传给 TrustLadder）
+  await page.locator('.nf-ledger__item').first().click()
+  await page.waitForTimeout(300)
+  // 授权记录显示真实文件操作（demo 记录不存在——真实数据优先）
+  await expect(page.locator('.nf-trust')).toContainText('/tmp/a.txt')
+  await expect(page.locator('.nf-trust')).toContainText('/tmp/b.txt')
+  // demo 记录不显示（真实数据替换——demo 记录 action 含「旅行手册」）
+  await expect(page.locator('.nf-trust')).not.toContainText('旅行手册')
+})

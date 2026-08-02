@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 // 信任阶梯（ticket 14）：L1-L4 渐进授权可视化 + 授权记录 + 委托规则
+// 2026-08-02：授权记录接真实数据（06 问题快照 authorized——对接 ticket 06「授权记录可回溯」AC）
 const LEVELS = [
   ['L1', '观察', '只读分析 / 草稿 / 本地整理', '首次授权，静默'],
   ['L2', '建议', '生成方案 / 补丁 / PR', '一键应用'],
@@ -8,18 +9,23 @@ const LEVELS = [
   ['L4', '委托', '高度信任重复任务', '规则授权，可降级']
 ] as const
 
-export default function TrustLadderPanel() {
+const DEMO_LOGS = [
+  { t: '11:05', action: '只读分析（旅行手册项目）', level: 'L1', ok: true },
+  { t: '11:06', action: '生成方案建议', level: 'L2', ok: true },
+  { t: '11:12', action: '写入：sales-merge.py（快照已建）', level: 'L3', ok: true }
+]
+
+export default function TrustLadderPanel({ authorizedLogs }: { authorizedLogs?: string[] }) {
   const [level, setLevel] = useState(1) // 当前信任等级（L1 起步，演示推进）
   const [delegate, setDelegate] = useState(false)
-  const [logs, setLogs] = useState([
-    { t: '11:05', action: '只读分析（旅行手册项目）', level: 'L1', ok: true },
-    { t: '11:06', action: '生成方案建议', level: 'L2', ok: true },
-    { t: '11:12', action: '写入：sales-merge.py（快照已建）', level: 'L3', ok: true }
-  ])
+  // 授权记录：真实数据（06 问题快照 authorized——可回溯）优先；无则 demo 回退
+  const [demoLogs, setDemoLogs] = useState(DEMO_LOGS)
+  const realLogs = (authorizedLogs ?? []).map((a) => ({ t: '', action: a, level: 'L3', ok: true }))
+  const logs = realLogs.length > 0 ? realLogs : demoLogs
 
   const upgrade = () => { if (level < 3) setLevel((l) => l + 1) }
   const addLog = () => {
-    setLogs((prev) => [
+    setDemoLogs((prev) => [
       { t: '11:1' + (prev.length + 1), action: `L${level + 1} 操作授权（快照可回滚）`, level: `L${level + 1}`, ok: true },
       ...prev
     ])
