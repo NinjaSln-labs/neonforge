@@ -6,11 +6,13 @@ import type { DeliveryPackage } from './types'
 export default function DeliveryPanel({
   pkg,
   onClose,
-  onAdjust
+  onAdjust,
+  onRerun
 }: {
   pkg: DeliveryPackage | null
   onClose: () => void
   onAdjust: () => void
+  onRerun: (prompt: string) => void
 }) {
   const [items, setItems] = useState(pkg?.acceptance ?? [])
   const [status, setStatus] = useState<'delivered' | 'closed'>(pkg?.status === 'closed' ? 'closed' : 'delivered')
@@ -134,7 +136,11 @@ export default function DeliveryPanel({
       )}
 
       {pkg.rerunLabel && (
-        <button type="button" className="nf-delivery__rerun" onClick={onAdjust}>
+        <button
+          type="button"
+          className="nf-delivery__rerun"
+          onClick={() => (pkg.rerunPrompt ? onRerun(pkg.rerunPrompt) : onAdjust())}
+        >
           ↻ {pkg.rerunLabel}
         </button>
       )}

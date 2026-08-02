@@ -12,7 +12,8 @@ export default function OutputPanel({
   deliveryPkg,
   onOpenFile,
   onCloseProblem,
-  onAdjustProblem
+  onAdjustProblem,
+  onRerun
 }: {
   rootPath: string
   activePath: string | null
@@ -21,6 +22,7 @@ export default function OutputPanel({
   onOpenFile: (path: string) => void
   onCloseProblem: () => void
   onAdjustProblem: () => void
+  onRerun: (prompt: string) => void
 }) {
   const [tab, setTab] = useState<'project' | 'output'>('project')
 
@@ -56,7 +58,7 @@ export default function OutputPanel({
       </div>
       <div className="nf-output__body" style={{ display: tab === 'output' ? 'flex' : 'none', padding: 0 }}>
         {deliveryPkg ? (
-          <DeliveryPanel pkg={deliveryPkg} onClose={onCloseProblem} onAdjust={onAdjustProblem} />
+          <DeliveryPanel pkg={deliveryPkg} onClose={onCloseProblem} onAdjust={onAdjustProblem} onRerun={onRerun} />
         ) : activePath ? (
           <Editor
             height="100%"
@@ -67,7 +69,7 @@ export default function OutputPanel({
             options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13 }}
           />
         ) : (
-          <DeliveryPanel pkg={null} onClose={onCloseProblem} onAdjust={onAdjustProblem} />
+          <DeliveryPanel pkg={null} onClose={onCloseProblem} onAdjust={onAdjustProblem} onRerun={onRerun} />
         )}
       </div>
     </section>
