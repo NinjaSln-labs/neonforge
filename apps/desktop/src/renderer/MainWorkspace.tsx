@@ -6,6 +6,7 @@ import OutputPanel from './OutputPanel'
 import ConversationPanel from './ConversationPanel'
 import type { DeliveryPackage, ProblemInstance } from './types'
 import { createProblem, loadProblems, saveProblems } from './problemStore'
+import { clearSession } from './sessionStore'
 
 // 任务工作台（对话面板「任务」Tab，06 任务队列前为结构占位）
 function TaskPanel() {
@@ -118,7 +119,7 @@ function initProblems(): ProblemInstance[] {
         problems={problems}
         activeId={activeProblem}
         onSelect={handleSelectProblem}
-        onNew={() => { setActiveProblem(null); setChatKey((k) => k + 1) }}
+        onNew={() => { setActiveProblem(null); clearSession(); setChatKey((k) => k + 1) }}
       />
 
       {/* 中：对话区（核心，最大）——对话 / 任务 Tabs */}
