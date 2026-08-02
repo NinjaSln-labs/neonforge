@@ -36,6 +36,7 @@ export default function MainWorkspace({
   const [content, setContent] = useState<string>('')
   const [working, setWorking] = useState(false)
   const [chatKey, setChatKey] = useState(0)
+  const [rerunRequest, setRerunRequest] = useState<string | null>(null) // 05 B：复跑请求
   const [showSettings, setShowSettings] = useState(false)
   const [deliveryPkg, setDeliveryPkg] = useState<DeliveryPackage | null>(initDeliveryPkg())
   const [problems, setProblems] = useState<ProblemInstance[]>(initProblems())
@@ -58,7 +59,8 @@ function initDeliveryPkg(): DeliveryPackage | null {
         '重复文件确认后我帮你删（授权后）',
         '需要发布网站？域名/备案超出数字工具能力——源码已给，我指导你发布'
       ],
-      rerunLabel: '上次那个整理，再跑一遍'
+      rerunLabel: '上次那个整理，再跑一遍',
+      rerunPrompt: '帮我整理一下这个目录'
     }
   }
   return (window.neonforge as unknown as { demo?: { delivery?: DeliveryPackage } }).demo?.delivery ?? null
@@ -126,7 +128,7 @@ function initProblems(): ProblemInstance[] {
         <div className="nf-panel__body">
           {zeroToOne && <DeliveryFlowPanel />}
           {chatTab === 'chat' ? (
-            <ConversationPanel key={chatKey} rootPath={rootPath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} />
+            <ConversationPanel key={chatKey} rootPath={rootPath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} />
           ) : (
             <TaskPanel />
           )}
@@ -142,6 +144,7 @@ function initProblems(): ProblemInstance[] {
         onOpenFile={openFile}
         onCloseProblem={() => setDeliveryPkg((p) => (p ? { ...p, status: 'closed' } : p))}
         onAdjustProblem={() => {}}
+        onRerun={(prompt) => setRerunRequest(prompt)}
       />
 
       {showSettings && <SettingsPanel />}
