@@ -31,7 +31,8 @@ export default function ConversationPanel({
   onReasoning,
   onWorkingChange,
   externalRequest,
-  onExternalConsumed
+  onExternalConsumed,
+  onToolResult
 }: {
   rootPath?: string | null
   onKeyExpired: () => void
@@ -39,6 +40,7 @@ export default function ConversationPanel({
   onWorkingChange?: (working: boolean) => void
   externalRequest?: string | null
   onExternalConsumed?: () => void
+  onToolResult?: (r: { name: string; file?: string; ok: boolean }) => void
 }) {
   const [messages, setMessages] = useState<Msg[]>([])
   const messagesRef = useRef<Msg[]>([])
@@ -105,6 +107,8 @@ export default function ConversationPanel({
         next.toolCalls = [...(next.toolCalls ?? []), { name: tc.name, args: tc.args, status: 'pending' }]
         void (window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: tc.name === 'read', rootPath: rootPath ?? undefined }) ?? Promise.resolve({ ok: false, error: 'tools 通道未就绪' })).then((r) => {
           const data = r.data as { file?: string; snapshot?: boolean } | undefined
+          // 13 交付包联动：真实文件操作成功（write/edit 返回 file）→ 上报变更（产物区展示）
+          if (r.ok && data?.file) onToolResult?.({ name: tc.name, file: data.file, ok: true })
           setMessages((prev) => {
             if (prev.length === 0) return prev
             const last = prev[prev.length - 1]
@@ -233,6 +237,8 @@ export default function ConversationPanel({
     })
     void window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: true, rootPath: rootPath ?? undefined }).then((r) => {
       const data = r.data as { file?: string; snapshot?: boolean } | undefined
+      // 13 交付包联动：授权后真实写入成功 → 上报变更
+      if (r.ok && data?.file) onToolResult?.({ name: tc.name, file: data.file, ok: true })
       setMessages((prev) => {
         if (prev.length === 0) return prev
         const last = prev[prev.length - 1]
