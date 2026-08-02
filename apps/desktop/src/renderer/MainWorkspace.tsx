@@ -50,12 +50,17 @@ export default function MainWorkspace({
   const [chatKey, setChatKey] = useState(0)
   const [rerunRequest, setRerunRequest] = useState<string | null>(null) // 05 B：复跑请求
   const [showSettings, setShowSettings] = useState(false)
-  // 08 快捷键（D0 §6）：⌘+, 打开/关闭设置（全局）
+  // 08 快捷键（D0 §6）：⌘, 打开/关闭设置 + ⌘N 新任务（全局）
+  const handleNew = () => { setActiveProblem(null); clearSession(); setChatKey((k) => k + 1) }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === ',') {
         e.preventDefault()
         setShowSettings((v) => !v)
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'n') {
+        e.preventDefault()
+        handleNew()
       }
     }
     window.addEventListener('keydown', onKey)
@@ -168,7 +173,7 @@ function initProblems(): ProblemInstance[] {
         problems={problems}
         activeId={activeProblem}
         onSelect={handleSelectProblem}
-        onNew={() => { setActiveProblem(null); clearSession(); setChatKey((k) => k + 1) }}
+        onNew={handleNew}
       />
 
       {/* 中：对话区（核心，最大）——对话 / 任务 Tabs */}
@@ -198,7 +203,7 @@ function initProblems(): ProblemInstance[] {
         <div className="nf-panel__body">
           {zeroToOne && <DeliveryFlowPanel onStageChange={handleStageChange} onModelSelect={setFlowModel} />}
           {chatTab === 'chat' ? (
-            <ConversationPanel key={chatKey} rootPath={rootPath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} recentFilesExternal={projectFiles} stageHint={stageHint} />
+            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} recentFilesExternal={projectFiles} stageHint={stageHint} />
           ) : (
             <TaskPanel />
           )}
