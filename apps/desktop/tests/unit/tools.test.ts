@@ -60,4 +60,25 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     expect(r.ok).toBe(false)
     expect(r.error).toContain('无快照')
   })
+
+  it('search：关键词检索（Layer2 CodeRAG——agentic grep 模式）返回命中+行号+片段', async () => {
+    const src = path.join(TMP, 'src')
+    mkdirSync(src, { recursive: true })
+    writeFileSync(path.join(src, 'a.ts'), 'export function greet() {}\nconst TODO = 1\n', 'utf-8')
+    writeFileSync(path.join(src, 'b.ts'), 'import { greet } from "./a"\n', 'utf-8')
+    const r = await toolRegistry.execute('search', { query: 'greet' }, { rootPath: TMP })
+    expect(r.ok).toBe(true)
+    const hits = (r.data as { hits: Array<{ path: string; line: number; snippet: string }> }).hits
+    expect(hits.length).toBeGreaterThan(0)
+    expect(hits[0].path).toContain('a.ts')
+    expect(hits[0].line).toBe(1)
+    expect(hits[0].snippet).toContain('greet')
+  })
+
+  it('search：无 rootPath → 提示无项目；空 query → 无有效关键词', async () => {
+    const r1 = await toolRegistry.execute('search', { query: 'x' }, {})
+    expect((r1.data as { hits: unknown[]; note?: string }).hits).toEqual([])
+    const r2 = await toolRegistry.execute('search', { query: '' }, { rootPath: TMP })
+    expect((r2.data as { hits: unknown[]; note?: string }).note).toContain('无有效关键词')
+  })
 })
