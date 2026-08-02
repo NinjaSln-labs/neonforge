@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import SessionPanel from './SessionPanel'
 import SettingsPanel from './SettingsPanel'
 import DeliveryFlowPanel from './DeliveryFlowPanel'
@@ -41,6 +41,22 @@ export default function MainWorkspace({
   const [deliveryPkg, setDeliveryPkg] = useState<DeliveryPackage | null>(initDeliveryPkg())
   const [problems, setProblems] = useState<ProblemInstance[]>(initProblems())
   const [activeProblem, setActiveProblem] = useState<string | null>(problems[0]?.id ?? null)
+  // 13 交付包联动：真实工具执行（write/edit）成功 → 收集变更 → 生成真实交付包（覆盖 demo）
+  const [realChanges, setRealChanges] = useState<Array<{ file: string; op: string }>>([])
+  const handleToolResult = (r: { name: string; file?: string; ok: boolean }) => {
+    if (!r.ok || !r.file) return
+    setRealChanges((prev) => (prev.some((c) => c.file === r.file) ? prev : [...prev, { file: r.file as string, op: r.name }]))
+  }
+  useEffect(() => {
+    if (realChanges.length === 0) return
+    setDeliveryPkg({
+      status: 'delivered',
+      summary: `已${realChanges.length === 1 ? '写入/修改 1 个文件' : `写入/修改 ${realChanges.length} 个文件`}（写前快照已建——可在对话中回滚）`,
+      artifacts: realChanges.map((c) => c.file),
+      acceptance: [],
+      nextSteps: []
+    })
+  }, [realChanges])
 
 function initDeliveryPkg(): DeliveryPackage | null {
   // 演示模式（VITE_NF_DEMO_DELIVERY=1）或测试注入（window.neonforge.demo.delivery）
@@ -128,7 +144,7 @@ function initProblems(): ProblemInstance[] {
         <div className="nf-panel__body">
           {zeroToOne && <DeliveryFlowPanel />}
           {chatTab === 'chat' ? (
-            <ConversationPanel key={chatKey} rootPath={rootPath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} />
+            <ConversationPanel key={chatKey} rootPath={rootPath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} />
           ) : (
             <TaskPanel />
           )}

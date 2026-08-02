@@ -68,3 +68,48 @@ test('交付包空态（无交付时）', async ({ page }) => {
   await expect(page.locator('.nf-output')).toContainText('还没有交付包')
   await expect(page.locator('.nf-output')).toHaveScreenshot('delivery-empty.png')
 })
+
+test('真实执行 → 产物区交付包联动（write 授权后）', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__emit = null
+    window.neonforge = {
+      version: 'test',
+      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
+      workspace: { openFolder: async () => '/test', listDir: async () => [], readFile: async () => ({ ok: true, content: '// x' }) },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        streamChat: async () => ({ ok: true }),
+        onStreamChunk: (cb: (c: unknown) => void) => { window.__emit = cb; return () => {} }
+      },
+      tools: {
+        list: async () => [],
+        execute: async (name: string, _args: Record<string, unknown>, opts?: { approved?: boolean }) =>
+          name === 'write' && opts?.approved
+            ? { ok: true, data: { file: '/test/notes.txt', snapshot: true } }
+            : { ok: false, error: `「${name}」需要授权（L3）——approved=true 后执行` },
+        revert: async () => ({ ok: true })
+      }
+    }
+  })
+  await page.goto('http://localhost:5174/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.getByRole('button', { name: '打开已有项目' }).click()
+  await page.locator('.nf-chat__input textarea').fill('帮我写一个 notes 文件')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  await page.waitForTimeout(300)
+  await page.evaluate(() => {
+    window.__emit({ type: 'reasoning', text: '需要写入文件' })
+    window.__emit({ type: 'tool-call', toolCall: { name: 'write', args: { path: '/test/notes.txt', content: 'hello' } } })
+    window.__emit({ type: 'done' })
+  })
+  await page.waitForTimeout(500)
+  await page.locator('.nf-toolcall__approve').click()
+  await page.waitForTimeout(600)
+  // 产物 Tab → 真实交付包联动（变更说明 + 产物清单；无验收项——不显示验收对照/确认关闭）
+  await page.getByRole('button', { name: '产物' }).click()
+  await expect(page.locator('.nf-delivery__summary')).toContainText('写入/修改 1 个文件')
+  await expect(page.locator('.nf-delivery__artifacts')).toContainText('/test/notes.txt')
+  await expect(page.locator('.nf-delivery__acceptance')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '确认问题关闭' })).toHaveCount(0)
+  await expect(page.locator('.nf-output')).toHaveScreenshot('delivery-real-execution.png')
+})
