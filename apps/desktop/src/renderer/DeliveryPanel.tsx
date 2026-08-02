@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { DeliveryPackage } from './types'
 
 // 交付包视图（ticket 05）：产物 + 验收对照 + 下一步/指导——「问题已解决」的可验证呈现
@@ -16,6 +16,13 @@ export default function DeliveryPanel({
 }) {
   const [items, setItems] = useState(pkg?.acceptance ?? [])
   const [status, setStatus] = useState<'delivered' | 'closed'>(pkg?.status === 'closed' ? 'closed' : 'delivered')
+  // 双渲染保活：pkg 延迟更新（如 07 阶段推进/真实执行后）→ 同步 items/status（useState 不随 prop 变）
+  useEffect(() => {
+    if (pkg) {
+      setItems(pkg.acceptance ?? [])
+      if (pkg.status === 'closed') setStatus('closed')
+    }
+  }, [pkg])
   // 05 执行层 A：diff 审核状态（applied: Set<路径>——已应用；reverted: Set<路径>）
   const [applied, setApplied] = useState<Set<string>>(new Set())
   const [reverted, setReverted] = useState<Set<string>>(new Set())

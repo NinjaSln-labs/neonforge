@@ -106,15 +106,15 @@ export default function MainWorkspace({
   }, [rootPath])
   useEffect(() => {
     if (realChanges.length === 0) return
-    setDeliveryPkg({
+    setDeliveryPkg((prev) => ({
       status: 'delivered',
       summary: `已${realChanges.length === 1 ? '写入/修改 1 个文件' : `写入/修改 ${realChanges.length} 个文件`}（写前快照已建——可在对话中回滚）`,
       artifacts: realChanges.map((c) => c.file),
-      acceptance: [],
+      acceptance: prev?.acceptance ?? [], // 保留阶段验收项（07 编排——若已设置）
       nextSteps: [],
       rerunLabel: '↻ 再跑一遍',
       rerunPrompt: lastPromptRef.current ?? undefined
-    })
+    }))
   }, [realChanges])
 
 function initDeliveryPkg(): DeliveryPackage | null {
@@ -145,6 +145,21 @@ function initProblems(): ProblemInstance[] {
   const stageHint = flowModel
     ? `【0-1 交付 · ${flowModel === 'agile' ? '敏捷（迭代）' : '传统软件工程'} · ${stageName} 阶段】${STAGE_HINT[stageName]}——按本阶段工作；阶段完成请提示用户点「确认推进」。`
     : undefined
+  // 07 阶段产物编排：阶段推进 → 交付包验收项（阶段确认列表——确定性，不依赖模型）
+  const handleStageChange = (stage: number) => {
+    setFlowStage(stage)
+    const acceptance = FLOW_STAGES.map((s, i) => ({
+      label: i < stage ? `${s} 阶段已完成` : i === stage ? `${s} 阶段进行中` : `${s} 待开始`,
+      done: i < stage
+    }))
+    setDeliveryPkg((prev) => ({
+      status: 'delivered',
+      summary: prev?.summary ?? '0-1 交付进行中',
+      artifacts: prev?.artifacts ?? [],
+      acceptance,
+      nextSteps: []
+    }))
+  }
 
   return (
     <div className="nf-app">
@@ -181,7 +196,7 @@ function initProblems(): ProblemInstance[] {
           </div>
         </header>
         <div className="nf-panel__body">
-          {zeroToOne && <DeliveryFlowPanel onStageChange={setFlowStage} onModelSelect={setFlowModel} />}
+          {zeroToOne && <DeliveryFlowPanel onStageChange={handleStageChange} onModelSelect={setFlowModel} />}
           {chatTab === 'chat' ? (
             <ConversationPanel key={chatKey} rootPath={rootPath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} recentFilesExternal={projectFiles} stageHint={stageHint} />
           ) : (
