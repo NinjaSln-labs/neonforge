@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { createProblem, loadProblems, saveProblems, PROBLEMS_KEY, PROBLEMS_MAX } from '../../src/renderer/problemStore'
+import { createProblem, loadProblems, saveProblems, updateProblemSnapshot, PROBLEMS_KEY, PROBLEMS_MAX } from '../../src/renderer/problemStore'
 
 // localStorage 在 node 环境不存在——vitest jsdom/happy-dom 才提供；用 stub 模拟
 function stubLocalStorage(): void {
@@ -48,5 +48,32 @@ describe('problemStore（问题台账——创建/持久化）', () => {
     saveProblems(many)
     const loaded = loadProblems()
     expect(loaded).toHaveLength(PROBLEMS_MAX)
+  })
+})
+
+describe('问题会话快照（基线 §21 断点续做深度——2026-08-02 增强）', () => {
+  beforeEach(() => stubLocalStorage())
+
+  it('createProblem：初始化快照（goal=首句 + 空数组）', () => {
+    const p = createProblem('整理发票')
+    expect(p.snapshot).toEqual({ goal: '整理发票', decisions: [], authorized: [], pending: [] })
+  })
+
+  it('updateProblemSnapshot：替换语义（patch 整字段覆盖；调用方读取+追加）', () => {
+    let p = createProblem('整理发票')
+    p = updateProblemSnapshot(p, { authorized: ['[write] /tmp/a.txt'] })
+    expect(p.snapshot?.authorized).toEqual(['[write] /tmp/a.txt'])
+    // 调用方追加模式（MainWorkspace：读取 → 展开 → 传新数组）
+    p = updateProblemSnapshot(p, { authorized: [...(p.snapshot?.authorized ?? []), '[write] /tmp/b.txt'], pending: ['确认分类'] })
+    expect(p.snapshot?.authorized).toEqual(['[write] /tmp/a.txt', '[write] /tmp/b.txt'])
+    expect(p.snapshot?.pending).toEqual(['确认分类'])
+    expect(p.snapshot?.goal).toBe('整理发票') // 未改字段保留
+  })
+
+  it('updateProblemSnapshot：旧数据无快照 → 从 title 兜底创建', () => {
+    const old = { id: 'p1', title: '旧问题', status: 'executing' as const, updatedAt: '10:00' }
+    const updated = updateProblemSnapshot(old, { decisions: ['方案 A'] })
+    expect(updated.snapshot?.goal).toBe('旧问题')
+    expect(updated.snapshot?.decisions).toEqual(['方案 A'])
   })
 })
