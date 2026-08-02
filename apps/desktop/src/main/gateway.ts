@@ -237,6 +237,41 @@ export class DeepSeekGateway {
       return { ok: false, error: e instanceof Error ? e.message : 'network', ms: Date.now() - start }
     }
   }
+
+  // 压缩摘要（ticket 11 Compaction）：compactor 角色非流式——历史 → 紧凑摘要（thinking=none + v4-flash）
+  async summarize(
+    apiKey: string,
+    history: Array<{ role: string; content: string | null }>
+  ): Promise<{ ok: true; summary: string } | { ok: false; error: string }> {
+    try {
+      const res = await fetch(`${API_BASE}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'deepseek-v4-flash',
+          ...toDeepSeekParams('none'),
+          messages: [
+            { role: 'system', content: '你是 NeonForge 对话压缩器。把以下对话历史压缩为紧凑中文摘要（保留：用户目标、已决策、已授权、已完成事项、关键约束、失败/待办；忽略寒暄与工具细节）。用「对话摘要：」开头，200 字内。' },
+            ...history,
+            { role: 'user', content: '请压缩以上对话为摘要。' }
+          ],
+          max_tokens: 400,
+          stream: false
+        }),
+        signal: AbortSignal.timeout(30000)
+      })
+      const j = await res.json() as { choices?: Array<{ message?: { content?: string } }>; error?: { message?: string } }
+      if (!res.ok) return { ok: false, error: j.error?.message ?? `http-${res.status}` }
+      const summary = j.choices?.[0]?.message?.content?.trim()
+      if (!summary) return { ok: false, error: '压缩返回空摘要' }
+      return { ok: true, summary }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : 'network' }
+    }
+  }
 }
 
 export const gateway = new DeepSeekGateway()
