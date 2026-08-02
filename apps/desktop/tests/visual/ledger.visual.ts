@@ -51,3 +51,30 @@ test('台账空态（无问题）', async ({ page }) => {
   await expect(page.locator('.nf-session')).toContainText('还没有问题')
   await expect(page.locator('.nf-session')).toHaveScreenshot('ledger-empty.png')
 })
+
+test('发送问题 → 台账创建实例（问题 = 一等公民）', async ({ page }) => {
+  await mockBridge(page, false)
+  await page.goto('http://localhost:5174/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.getByRole('button', { name: '打开已有项目' }).click()
+  await expect(page.locator('.nf-session')).toContainText('还没有问题')
+  const textarea = page.locator('.nf-chat__input textarea')
+  await textarea.fill('帮我整理发票文件')
+  await textarea.press('Meta+Enter')
+  await page.waitForTimeout(600)
+  await expect(page.locator('.nf-ledger__item')).toHaveCount(1)
+  await expect(page.locator('.nf-ledger__item')).toContainText('帮我整理发票文件')
+  await expect(page.locator('.nf-ledger__item')).toContainText('执行中')
+})
+
+test('closed 问题复开 → 复跑（上次那个再跑一遍）', async ({ page }) => {
+  await mockBridge(page, true)
+  await page.goto('http://localhost:5174/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.getByRole('button', { name: '打开已有项目' }).click()
+  await expect(page.locator('.nf-ledger__item')).toHaveCount(4)
+  // 点击 closed 问题（p1 整理 Downloads）→ 复开复跑
+  await page.getByRole('button', { name: /整理 Downloads 里的发票和合同/ }).click()
+  await page.waitForTimeout(600)
+  await expect(page.locator('.nf-msg--user')).toContainText('整理 Downloads 里的发票和合同')
+})
