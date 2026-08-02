@@ -71,11 +71,19 @@ export interface DeliveryPackage {
 
 // 问题台账（ticket 06：问题 = 一等公民——7 态状态机 + 断点续做 + 复开）
 export type ProblemStatus = 'understanding' | 'awaiting-plan' | 'executing' | 'awaiting-input' | 'delivered' | 'closed' | 'failed-recoverable'
+// 会话级状态快照（基线 §21 断点续做深度——目标/已决策/已授权/待办；2026-08-02 增强）
+export interface ProblemSnapshot {
+  goal: string          // 目标（用户问题第一句）
+  decisions: string[]   // 已确认决策
+  authorized: string[]  // 已授权操作
+  pending: string[]     // 待办/待确认
+}
 export interface ProblemInstance {
   id: string
   title: string          // 用户的问题（第一句话）
   status: ProblemStatus
   updatedAt: string      // 最近活动时间
+  snapshot?: ProblemSnapshot // 断点续做快照（可选——旧数据兼容）
 }
 
 // ToolRegistry（ticket 10）：renderer 侧工具接口

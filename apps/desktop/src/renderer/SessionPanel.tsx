@@ -40,19 +40,31 @@ export default function SessionPanel({
       <div className="nf-session__list">
         {problems.length === 0 && <p className="nf-placeholder">还没有问题——说出你当前的问题</p>}
         {problems.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            className={`nf-ledger__item${activeId === p.id ? ' nf-ledger__item--active' : ''}`}
-            onClick={() => onSelect(p.id)}
-          >
-            <span className={`nf-ledger__dot nf-ledger__dot--${p.status}`} aria-hidden="true">{STATUS_DOT[p.status]}</span>
-            <span className="nf-ledger__title">{p.title}</span>
-            <span className="nf-ledger__meta">
-              {STATUS_LABEL[p.status]}
-              {p.status === 'closed' && ' · 可复开'}
-            </span>
-          </button>
+          <div key={p.id} className={`nf-ledger__wrap${activeId === p.id ? ' nf-ledger__wrap--active' : ''}`}>
+            <button
+              type="button"
+              className={`nf-ledger__item${activeId === p.id ? ' nf-ledger__item--active' : ''}`}
+              onClick={() => onSelect(p.id)}
+            >
+              <span className={`nf-ledger__dot nf-ledger__dot--${p.status}`} aria-hidden="true">{STATUS_DOT[p.status]}</span>
+              <span className="nf-ledger__title">{p.title}</span>
+              <span className="nf-ledger__meta">
+                {STATUS_LABEL[p.status]}
+                {p.status === 'closed' && ' · 可复开'}
+              </span>
+            </button>
+            {/* 06 断点续做深度（基线 §21）：选中问题展示会话快照——目标/已授权/待办（唤醒上下文） */}
+            {activeId === p.id && p.snapshot && (
+              <div className="nf-ledger__snapshot">
+                {p.snapshot.authorized.length > 0 && (
+                  <div className="nf-ledger__snap-row">已授权：{p.snapshot.authorized.slice(-3).map((a) => a.replace(/\[[^\]]+\]\s*/, '')).join(' · ')}</div>
+                )}
+                {p.snapshot.pending.length > 0 && (
+                  <div className="nf-ledger__snap-row">待办：{p.snapshot.pending.slice(-2).join(' · ')}</div>
+                )}
+              </div>
+            )}
+          </div>
         ))}
       </div>
     </section>
