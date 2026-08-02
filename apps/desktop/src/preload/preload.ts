@@ -51,6 +51,11 @@ contextBridge.exposeInMainWorld('neonforge', {
     search: (query: string) =>
       ipcRenderer.invoke('rag:search', { query }) as Promise<{ hits: Array<{ path: string; line: number; snippet: string }>; note?: string }>
   },
+  plugins: {
+    list: () => ipcRenderer.invoke('plugins:list') as Promise<Array<{ name: string; version: string; active: boolean }>>,
+    toggle: (name: string, active: boolean) =>
+      ipcRenderer.invoke('plugins:toggle', { name, active }) as Promise<boolean>
+  },
   preheat: {
     status: () =>
       ipcRenderer.invoke('preheat:status') as Promise<{ plan: { shouldPreheat: boolean; why: string; actions: string[] }; cache: { standardPrefix: string; hash: string; history: Array<{ hash: string; at: string; hit: boolean }> } | null }>

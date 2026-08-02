@@ -9,9 +9,11 @@ import { registerLspTools, lsp } from './lsp.js'
 import { context } from './context.js'
 import { codeRag } from './codeRag.js'
 import { buildStandardPrefix, planPreheat, prefixCache, preheating } from './preheat.js'
+import { initPlugins, pluginRegistry } from './pluginSystem.js'
 
 export function registerIpc(): void {
   initTools()
+  initPlugins() // 08：注册 5 内置插件（生命周期钩子）
   registerLspTools(toolRegistry)
   ipcMain.handle('config:has-key', () => configStore.hasValidKey())
   ipcMain.handle('config:get-key', () => configStore.getApiKey())
@@ -113,4 +115,9 @@ export function registerIpc(): void {
   // ticket 12 Layer2：CodeRAG 关键词检索兜底（V1 降级——不建向量索引）
   ipcMain.handle('rag:search', (_e, opts: { query: string }) =>
     codeRag.search(workspace.getCurrentRoot(), opts.query)
+  )
+  // ticket 08：内置插件注册表（list/toggle——生命周期钩子）
+  ipcMain.handle('plugins:list', () => pluginRegistry.list())
+  ipcMain.handle('plugins:toggle', (_e, opts: { name: string; active: boolean }) =>
+    pluginRegistry.setActive(opts.name, opts.active)
   )
