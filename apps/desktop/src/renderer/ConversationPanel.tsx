@@ -202,7 +202,8 @@ export default function ConversationPanel({
     const key = await window.neonforge.config.getKey()
     if (!key) { finishError('key-invalid'); return }
     // 系统提示：引导直接 read（项目根相对路径）——避免 bash 全局搜索/工具循环（提速）
-    const sysHint = { role: 'system', content: `你是 NeonForge 搭档。当前项目根目录：${rootPath ?? '(未指定)'}。规则：① 读文件用 read 工具（路径用项目根下的相对路径，如 package.json）② 不要用 bash find 全局搜索（直接 read 目标文件）③ 工具一次调用一个，执行完看结果再决定 ④ 找不到文件就直接告诉用户。` }
+    // 2026-08-02：LSP 工具接入模型（HANDOFF §3 第一优先）——引导用 find_definition/find_references/get_type_info 查真实代码上下文
+    const sysHint = { role: 'system', content: `你是 NeonForge 搭档。当前项目根目录：${rootPath ?? '(未指定)'}。规则：① 读文件用 read 工具（路径用项目根下的相对路径，如 package.json）② 不要用 bash find 全局搜索（直接 read 目标文件）③ 工具一次调用一个，执行完看结果再决定 ④ 找不到文件就直接告诉用户 ⑤ 查符号定义/引用/类型用 LSP 工具：find_definition/find_references/get_type_info（传 path + symbol，如 {path: 'src/a.ts', symbol: 'greet'}）⑥ 查文件错误/import 用 get_diagnostics/get_imports。` }
     try {
       const res = await window.neonforge.gateway.streamChat({
         apiKey: key,
