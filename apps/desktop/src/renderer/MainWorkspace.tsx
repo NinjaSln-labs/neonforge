@@ -5,6 +5,7 @@ import DeliveryFlowPanel from './DeliveryFlowPanel'
 import OutputPanel from './OutputPanel'
 import ConversationPanel from './ConversationPanel'
 import type { DeliveryPackage, ProblemInstance } from './types'
+import { createProblem, loadProblems, saveProblems } from './problemStore'
 
 // 任务工作台（对话面板「任务」Tab，06 任务队列前为结构占位）
 function TaskPanel() {
@@ -39,8 +40,8 @@ export default function MainWorkspace({
   const [rerunRequest, setRerunRequest] = useState<string | null>(null) // 05 B：复跑请求
   const [showSettings, setShowSettings] = useState(false)
   const [deliveryPkg, setDeliveryPkg] = useState<DeliveryPackage | null>(initDeliveryPkg())
-  const [problems, setProblems] = useState<ProblemInstance[]>(initProblems())
-  const [activeProblem, setActiveProblem] = useState<string | null>(problems[0]?.id ?? null)
+  const [problems, setProblems] = useState<ProblemInstance[]>(initProblems)
+  const [activeProblem, setActiveProblem] = useState<string | null>(null)
   // 13 交付包联动：真实工具执行（write/edit）成功 → 收集变更 → 生成真实交付包（覆盖 demo）
   const [realChanges, setRealChanges] = useState<Array<{ file: string; op: string }>>([])
   const lastPromptRef = useRef<string | null>(null) // 最近用户输入——复跑 rerunPrompt 兜底
@@ -48,7 +49,25 @@ export default function MainWorkspace({
     if (!r.ok || !r.file) return
     setRealChanges((prev) => (prev.some((c) => c.file === r.file) ? prev : [...prev, { file: r.file as string, op: r.name }]))
   }
-  const handleUserMessage = (text: string) => { lastPromptRef.current = text }
+  const handleUserMessage = (text: string) => {
+    lastPromptRef.current = text
+    // 06 问题台账：发送 → 创建问题实例（持久化——断点续做基础；同标题复跑 → 更新状态不新增）
+    setProblems((prev) => {
+      const inst = createProblem(text)
+      const dup = prev.find((x) => x.title === inst.title)
+      return dup
+        ? [{ ...dup, updatedAt: inst.updatedAt, status: 'executing' as const }, ...prev.filter((x) => x.id !== dup.id)]
+        : [inst, ...prev]
+    })
+  }
+  // 06 问题台账：台账持久化
+  useEffect(() => { saveProblems(problems) }, [problems])
+  // 06 问题台账：选中问题——closed 复开 → 复跑（「上次那个再跑一遍」）
+  const handleSelectProblem = (id: string) => {
+    setActiveProblem(id)
+    const p = problems.find((x) => x.id === id)
+    if (p && p.status === 'closed') setRerunRequest(p.title)
+  }
   // ticket 12 ContextEngine：项目顶层文件 → @mention 列表（真实数据，替换 demo）
   const [projectFiles, setProjectFiles] = useState<string[]>([])
   useEffect(() => {
@@ -76,8 +95,9 @@ function initDeliveryPkg(): DeliveryPackage | null {
 }
 
 function initProblems(): ProblemInstance[] {
-  // 数据源：测试注入（window.neonforge.demo.problems）——产品运行时无 demo 字段 → 空台账
-  return (window.neonforge as unknown as { demo?: { problems?: ProblemInstance[] } }).demo?.problems ?? []
+  // 数据源：测试注入（window.neonforge.demo.problems）优先；否则 localStorage 持久化台账（断点续做基础）
+  const demo = (window.neonforge as unknown as { demo?: { problems?: ProblemInstance[] } }).demo?.problems
+  return demo ?? loadProblems()
 }
 
   const openFile = useCallback((filePath: string) => {
@@ -97,7 +117,7 @@ function initProblems(): ProblemInstance[] {
       <SessionPanel
         problems={problems}
         activeId={activeProblem}
-        onSelect={(id) => setActiveProblem(id)}
+        onSelect={handleSelectProblem}
         onNew={() => { setActiveProblem(null); setChatKey((k) => k + 1) }}
       />
 
