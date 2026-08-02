@@ -26,6 +26,11 @@ jobs:
         working-directory: apps/desktop
         run: npm ci
 
+      # Playwright 浏览器（L3 交互测试需要——GitHub runner 无缓存）
+      - name: Install Playwright browsers
+        working-directory: apps/desktop
+        run: npx playwright install --with-deps chromium
+
       # L1 领域逻辑（确定性——CI 必跑）
       - name: L1 领域逻辑（Vitest）
         working-directory: apps/desktop
@@ -35,6 +40,11 @@ jobs:
       - name: L2 契约（tsc --noEmit）
         working-directory: apps/desktop
         run: npx tsc --noEmit
+
+      # L3 组件交互（纯 DOM 断言无截图——跨平台稳定，CI 必跑；ddd-qa-chain 缺层 2026-08-02 补）
+      - name: L3 组件交互（Playwright interaction）
+        working-directory: apps/desktop
+        run: npx playwright test --project=interaction
 
       # L4 真实 E2E（需 API key——仅手动触发）
       - name: L4 体验（e2e-suite——手动）
