@@ -49,12 +49,20 @@ export function toolCallRepair(raw: unknown, round: number = 0): unknown | null 
   }
 }
 
-// A0 §4 工具面：4 核心工具定义（请求带 tools → 模型返回 tool_calls → ToolRegistry 执行）
+// A0 §4 工具面：4 核心工具 + 6 LSP 工具定义（请求带 tools → 模型返回 tool_calls → ToolRegistry 执行）
+// LSP 工具（ticket 12 真实语言服务器）：模型经 LSP 上下文回答问题（HANDOFF §3 第一优先——2026-08-02 接入模型）
+// 参数设计：模型不知道行号——用 path + symbol（符号名）定位，LSP 侧文本扫描转 line/character（确定性零 token）
 export const TOOL_DEFS = [
   { type: 'function', function: { name: 'read', description: '读取文件内容', parameters: { type: 'object', properties: { path: { type: 'string', description: '文件绝对路径' } }, required: ['path'] } } },
   { type: 'function', function: { name: 'write', description: '写入文件（需 L3 授权）', parameters: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] } } },
   { type: 'function', function: { name: 'edit', description: '替换文件内容（需 L3 授权）', parameters: { type: 'object', properties: { path: { type: 'string' }, old: { type: 'string' }, new: { type: 'string' } }, required: ['path', 'old', 'new'] } } },
-  { type: 'function', function: { name: 'bash', description: '执行命令（需 L3 授权，V1 占位）', parameters: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] } } }
+  { type: 'function', function: { name: 'bash', description: '执行命令（需 L3 授权，V1 占位）', parameters: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] } } },
+  { type: 'function', function: { name: 'find_definition', description: '查找符号（函数/变量/类）的定义位置——LSP 真实查询', parameters: { type: 'object', properties: { path: { type: 'string', description: '文件绝对路径或项目根相对路径' }, symbol: { type: 'string', description: '符号名（如 greet）——无需行号' } }, required: ['path', 'symbol'] } } },
+  { type: 'function', function: { name: 'find_references', description: '查找符号的全部引用位置——LSP 真实查询', parameters: { type: 'object', properties: { path: { type: 'string', description: '文件绝对路径或项目根相对路径' }, symbol: { type: 'string', description: '符号名' } }, required: ['path', 'symbol'] } } },
+  { type: 'function', function: { name: 'get_type_info', description: '获取符号的类型信息（hover）——LSP 真实查询', parameters: { type: 'object', properties: { path: { type: 'string', description: '文件绝对路径或项目根相对路径' }, symbol: { type: 'string', description: '符号名' } }, required: ['path', 'symbol'] } } },
+  { type: 'function', function: { name: 'get_diagnostics', description: '获取文件全部诊断（类型/语法错误）——LSP 真实查询', parameters: { type: 'object', properties: { path: { type: 'string', description: '文件绝对路径或项目根相对路径' } }, required: ['path'] } } },
+  { type: 'function', function: { name: 'get_imports', description: '提取文件 import 语句（本地扫描——零成本）', parameters: { type: 'object', properties: { path: { type: 'string', description: '文件绝对路径或项目根相对路径' } }, required: ['path'] } } },
+  { type: 'function', function: { name: 'get_call_chain', description: '获取文件符号结构（documentSymbol 降级）', parameters: { type: 'object', properties: { path: { type: 'string', description: '文件绝对路径或项目根相对路径' } }, required: ['path'] } } }
 ]
 
 const API_BASE = 'https://api.deepseek.com'
