@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import SessionPanel from './SessionPanel'
 import SettingsPanel from './SettingsPanel'
-import DeliveryFlowPanel from './DeliveryFlowPanel'
+import DeliveryFlowPanel, { FLOW_STAGES, STAGE_HINT } from './DeliveryFlowPanel'
 import OutputPanel from './OutputPanel'
 import ConversationPanel from './ConversationPanel'
 import type { DeliveryPackage, ProblemInstance } from './types'
@@ -34,12 +34,14 @@ export default function MainWorkspace({
   rootPath,
   onBackStart,
   onKeyExpired,
-  onProjectCreated
+  onProjectCreated,
+  zeroToOneMode = false
 }: {
   rootPath: string | null
   onBackStart: () => void
   onKeyExpired: () => void
   onProjectCreated?: (path: string) => void
+  zeroToOneMode?: boolean
 }) {
   const [chatTab, setChatTab] = useState<'chat' | 'tasks'>('chat')
   const [activePath, setActivePath] = useState<string | null>(null)
@@ -135,7 +137,14 @@ function initProblems(): ProblemInstance[] {
     })
   }, [])
 
-  const zeroToOne = !rootPath
+  const zeroToOne = zeroToOneMode
+  // ticket 07 阶段机：阶段/模型状态提升——注入对话阶段指引（模型按阶段产出）
+  const [flowStage, setFlowStage] = useState(0)
+  const [flowModel, setFlowModel] = useState<'traditional' | 'agile' | null>(null)
+  const stageName = FLOW_STAGES[flowStage]
+  const stageHint = flowModel
+    ? `【0-1 交付 · ${flowModel === 'agile' ? '敏捷（迭代）' : '传统软件工程'} · ${stageName} 阶段】${STAGE_HINT[stageName]}——按本阶段工作；阶段完成请提示用户点「确认推进」。`
+    : undefined
 
   return (
     <div className="nf-app">
@@ -172,9 +181,9 @@ function initProblems(): ProblemInstance[] {
           </div>
         </header>
         <div className="nf-panel__body">
-          {zeroToOne && <DeliveryFlowPanel />}
+          {zeroToOne && <DeliveryFlowPanel onStageChange={setFlowStage} onModelSelect={setFlowModel} />}
           {chatTab === 'chat' ? (
-            <ConversationPanel key={chatKey} rootPath={rootPath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} recentFilesExternal={projectFiles} />
+            <ConversationPanel key={chatKey} rootPath={rootPath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} recentFilesExternal={projectFiles} stageHint={stageHint} />
           ) : (
             <TaskPanel />
           )}

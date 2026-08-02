@@ -35,7 +35,8 @@ export default function ConversationPanel({
   onExternalConsumed,
   onToolResult,
   onUserMessage,
-  recentFilesExternal
+  recentFilesExternal,
+  stageHint
 }: {
   rootPath?: string | null
   onKeyExpired: () => void
@@ -46,6 +47,7 @@ export default function ConversationPanel({
   onToolResult?: (r: { name: string; file?: string; ok: boolean }) => void
   onUserMessage?: (text: string) => void
   recentFilesExternal?: string[]
+  stageHint?: string // 0-1 交付阶段指引（ticket 07——注入对话引导模型按阶段产出）
 }) {
   const [messages, setMessages] = useState<Msg[]>([])
   const messagesRef = useRef<Msg[]>([])
@@ -263,6 +265,10 @@ export default function ConversationPanel({
           msgs.unshift({ role: 'system', content: `【搭档须知 .neonforge】\n${nb.content.slice(0, 2000)}` })
         }
       } catch { /* 注入失败不影响发送 */ }
+    }
+    // ticket 07：0-1 交付阶段指引（引导模型按阶段产出——优先级最高，最前）
+    if (stageHint) {
+      msgs.unshift({ role: 'system', content: stageHint })
     }
     try {
       await runChat([...history, ...msgs], 0, sid)
