@@ -1,10 +1,22 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 // 设置（ticket 08 / D0 §9 最小集）：语言 / 默认视图 / 主动提醒开关（原则 6：安静默认）
 export default function SettingsPanel() {
   const [lang, setLang] = useState<'zh' | 'en'>('zh')
   const [view, setView] = useState<'chat' | 'output'>('chat')
   const [remind, setRemind] = useState(false)
+  // 08 内置插件：真实注册表状态（mock/无通道 → null → 静态占位）
+  const [plugins, setPlugins] = useState<Array<{ name: string; active: boolean }> | null>(null)
+  useEffect(() => {
+    void window.neonforge.plugins?.list?.().then(setPlugins)
+  }, [])
+  const pluginList = plugins ?? ['code-rag', 'mcp-bridge', 'git', 'stats', 'language-server'].map((name) => ({ name, active: true }))
+
+  const togglePlugin = (name: string, active: boolean) => {
+    void window.neonforge.plugins?.toggle?.(name, active).then((ok) => {
+      if (ok) setPlugins((prev) => prev?.map((p) => (p.name === name ? { ...p, active } : p)) ?? null)
+    })
+  }
 
   return (
     <div className="nf-settings">
@@ -53,8 +65,18 @@ export default function SettingsPanel() {
       <div className="nf-settings__plugins">
         <span className="nf-settings__plugins-title">内置插件（V1 无市场，仅注册）</span>
         <div className="nf-settings__plugins-list">
-          {['code-rag', 'mcp-bridge', 'git', 'stats', 'language-server'].map((p) => (
-            <span key={p} className="nf-settings__plugin">{p} <em>✓</em></span>
+          {pluginList.map((p) => (
+            <span key={p.name} className="nf-settings__plugin">
+              {p.name} <em>{p.active ? '✓' : '○'}</em>
+              <button
+                type="button"
+                className="nf-settings__plugin-toggle"
+                aria-label={`${p.active ? '停用' : '启用'} ${p.name}`}
+                onClick={() => togglePlugin(p.name, !p.active)}
+              >
+                {p.active ? '停用' : '启用'}
+              </button>
+            </span>
           ))}
         </div>
       </div>
