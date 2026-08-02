@@ -4,6 +4,7 @@ import { defineConfig } from '@playwright/test'
 export default defineConfig({
   testDir: './tests/visual',
   testMatch: '**/*.visual.ts',
+  testIgnore: '**/._*', // macOS AppleDouble 元数据文件——不匹配（坑 10）
   snapshotDir: './snapshots',
   snapshotPathTemplate: '{snapshotDir}/{testFilePath}/{arg}{ext}',
   fullyParallel: true,

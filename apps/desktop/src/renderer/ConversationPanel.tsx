@@ -11,8 +11,10 @@ import type { DeliveryPackage } from './types'
 interface ToolCallMsg {
   name: string
   args: Record<string, unknown>
-  status: 'pending' | 'done' | 'need-approval' | 'error'
+  status: 'pending' | 'done' | 'need-approval' | 'error' | 'reverted'
   result?: string
+  file?: string       // write/edit 成功写入的文件路径（回滚目标）
+  canRevert?: boolean // 写前已快照——可回滚
 }
 interface Msg {
   role: 'user' | 'assistant'
@@ -102,6 +104,7 @@ export default function ConversationPanel({
         setWorkingStage(`调用工具 ${tc.name}…`)
         next.toolCalls = [...(next.toolCalls ?? []), { name: tc.name, args: tc.args, status: 'pending' }]
         void (window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: tc.name === 'read', rootPath: rootPath ?? undefined }) ?? Promise.resolve({ ok: false, error: 'tools 通道未就绪' })).then((r) => {
+          const data = r.data as { file?: string; snapshot?: boolean } | undefined
           setMessages((prev) => {
             if (prev.length === 0) return prev
             const last = prev[prev.length - 1]
@@ -109,7 +112,7 @@ export default function ConversationPanel({
             const calls = (last.toolCalls ?? []).map((c) => {
               if (c.name !== tc.name || c.status !== 'pending') return c
               return r.ok
-                ? { ...c, status: 'done' as const, result: typeof r.data === 'string' ? r.data.slice(0, 400) : JSON.stringify(r.data).slice(0, 400) }
+                ? { ...c, status: 'done' as const, result: typeof r.data === 'string' ? r.data.slice(0, 400) : JSON.stringify(r.data).slice(0, 400), file: data?.file, canRevert: !!(data?.file && data.snapshot) }
                 : { ...c, status: (r.error ?? '').includes('授权') ? ('need-approval' as const) : ('error' as const), result: r.error }
             })
             return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
@@ -229,6 +232,7 @@ export default function ConversationPanel({
       return [...prev.slice(0, -1), { ...last, toolCalls: updated }]
     })
     void window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: true, rootPath: rootPath ?? undefined }).then((r) => {
+      const data = r.data as { file?: string; snapshot?: boolean } | undefined
       setMessages((prev) => {
         if (prev.length === 0) return prev
         const last = prev[prev.length - 1]
@@ -236,7 +240,7 @@ export default function ConversationPanel({
         const calls = (last.toolCalls ?? []).map((c, i) => {
           if (i !== idx) return c
           return r.ok
-            ? { ...c, status: 'done' as const, result: typeof r.data === 'string' ? r.data.slice(0, 400) : JSON.stringify(r.data).slice(0, 400) }
+            ? { ...c, status: 'done' as const, result: typeof r.data === 'string' ? r.data.slice(0, 400) : JSON.stringify(r.data).slice(0, 400), file: data?.file, canRevert: !!(data?.file && data.snapshot) }
             : { ...c, status: 'error' as const, result: r.error }
         })
         return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
@@ -250,6 +254,25 @@ export default function ConversationPanel({
       if (!last || last.role !== 'assistant') return prev
       const updated = (last.toolCalls ?? []).map((c, i) => i === idx ? { ...c, status: 'error' as const, result: '已拒绝授权——未执行' } : c)
       return [...prev.slice(0, -1), { ...last, toolCalls: updated }]
+    })
+  }
+  // 真实执行安全闭环（基线 §10/§11）：write/edit 写前已快照——回滚恢复原样
+  // 按 file 匹配更新（工具卡可能不在最后一条消息——maybeContinue 已追加新 streaming 消息）
+  const revertToolCall = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg) => {
+    if (!tc.file) return
+    void window.neonforge.tools?.revert?.(tc.file).then((r) => {
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.role !== 'assistant' || !m.toolCalls) return m
+          let changed = false
+          const updated = m.toolCalls.map((c) => {
+            if (c.file !== tc.file || c.status !== 'done') return c
+            changed = true
+            return { ...c, status: 'reverted' as const, result: r.ok ? '已回滚——文件恢复原样' : (r.error ?? '回滚失败') }
+          })
+          return changed ? { ...m, toolCalls: updated } : m
+        })
+      )
     })
   }
 
@@ -343,11 +366,20 @@ export default function ConversationPanel({
                 {m.toolCalls.map((tc, i) => (
                   <div key={i} className={`nf-toolcall nf-toolcall--${tc.status}`}>
                     <span className="nf-toolcall__icon">
-                      {tc.status === 'done' ? '✅' : tc.status === 'need-approval' ? '🔒' : tc.status === 'error' ? '❌' : '⏳'}
+                      {tc.status === 'done' ? '✅' : tc.status === 'need-approval' ? '🔒' : tc.status === 'reverted' ? '↩️' : tc.status === 'error' ? '❌' : '⏳'}
                     </span>
                     <span className="nf-toolcall__name">🔧 {tc.name}</span>
                     <span className="nf-toolcall__args">{JSON.stringify(tc.args).slice(0, 80)}</span>
                     {tc.result && <span className="nf-toolcall__result">{tc.result}</span>}
+                    {tc.status === 'done' && tc.canRevert && (
+                      <button
+                        type="button"
+                        className="nf-toolcall__revert"
+                        onClick={() => revertToolCall(m.toolCalls ?? [], i, tc)}
+                      >
+                        ↩️ 回滚
+                      </button>
+                    )}
                     {tc.status === 'need-approval' && (
                       <>
                         <span className="nf-toolcall__hint">需 L3 授权</span>

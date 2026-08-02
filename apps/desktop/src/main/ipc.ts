@@ -4,7 +4,7 @@ import { parseUnifiedDiff, applyDiffToFile, snapshot, revert } from './applyDiff
 import { gateway } from './gateway.js'
 import { configStore } from './configStore.js'
 import { workspace } from './workspace.js'
-import { initTools, toolRegistry } from './tools.js'
+import { initTools, toolRegistry, revertToolFile } from './tools.js'
 import { registerLspTools } from './lsp.js'
 
 export function registerIpc(): void {
@@ -77,3 +77,5 @@ export function registerIpc(): void {
       rootPath: opts.rootPath ?? workspace.getCurrentRoot() ?? undefined
     })
   )
+  // 工具写文件回滚（write/edit 写前已快照 .nf-bak——回滚恢复原样）
+  ipcMain.handle('tools:revert', (_e, opts: { path: string }) => revertToolFile(opts.path))

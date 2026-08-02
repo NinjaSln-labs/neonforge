@@ -37,6 +37,8 @@ contextBridge.exposeInMainWorld('neonforge', {
   tools: {
     list: () => ipcRenderer.invoke('tools:list') as Promise<Array<{ name: string; source: 'core' | 'lsp'; requiresApproval: boolean }>>,
     execute: (name: string, args: Record<string, unknown>, opts?: { approved?: boolean; rootPath?: string }) =>
-      ipcRenderer.invoke('tools:execute', { name, args, approved: opts?.approved ?? false, rootPath: opts?.rootPath }) as Promise<{ ok: boolean; data?: unknown; error?: string }>
+      ipcRenderer.invoke('tools:execute', { name, args, approved: opts?.approved ?? false, rootPath: opts?.rootPath }) as Promise<{ ok: boolean; data?: unknown; error?: string }>,
+    revert: (filePath: string) =>
+      ipcRenderer.invoke('tools:revert', { path: filePath }) as Promise<{ ok: boolean; error?: string }>
   }
 })
