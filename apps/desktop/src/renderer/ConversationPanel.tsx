@@ -321,13 +321,12 @@ export default function ConversationPanel({
     })
   }
 
-  const demoEnv = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_NF_DEMO_DELIVERY === '1'
   const d = (window.neonforge as unknown as { demo?: Record<string, unknown> }).demo ?? {}
   const demoFlow = !!d.deliveryFlow
   const demoDigital = !!d.digitalDelivery
   const demoTrust = !!d.trustLadder
   const demoDod = !!d.dodAlign
-  const compactCount = (d.compactHistory as number) ?? (demoEnv ? 30 : 0)
+  const compactCount = (d.compactHistory as number) ?? 0
   const compactNote = compactCount > 24 ? `对话已超过 24 条——将压缩前 ${compactCount - 12} 条为摘要（上下文不丢）` : null
   const onDeliver = (pkg: DeliveryPackage) => {
     const w = window as unknown as { neonforge: { demo?: { onDeliver?: (p: DeliveryPackage) => void } } }
