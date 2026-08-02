@@ -198,6 +198,36 @@ export class DeepSeekGateway {
     console.log('[gateway] stream done')
     opts.onDelta({ type: 'done' })
   }
+
+  // 预热（ticket 09 / A0 §6 裁决 D-C7）：最小成本请求让服务端缓存 prefix KV
+  // v4-flash + thinking=disabled + max_tokens=1；system 携带完整 prefix（KV 缓存前缀）+ 极简 user 保证请求合法
+  async preheat(apiKey: string, prefix: string): Promise<{ ok: boolean; error?: string; ms: number }> {
+    const start = Date.now()
+    try {
+      const res = await fetch(`${API_BASE}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'deepseek-v4-flash',
+          ...toDeepSeekParams('none'),
+          messages: [
+            { role: 'system', content: prefix },
+            { role: 'user', content: '继续' }
+          ],
+          max_tokens: 1
+        }),
+        signal: AbortSignal.timeout(20000)
+      })
+      const ms = Date.now() - start
+      if (res.ok) return { ok: true, ms }
+      return { ok: false, error: `http-${res.status}`, ms }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : 'network', ms: Date.now() - start }
+    }
+  }
 }
 
 export const gateway = new DeepSeekGateway()

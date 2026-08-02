@@ -96,3 +96,51 @@ export class PrefixCache {
 }
 
 export const prefixCache = new PrefixCache()
+
+// ---------- PreheatingService（真实 API 预热——ticket 09 / D-C7） ----------
+
+export interface PreheatEvent { type: 'started' | 'completed' | 'failed'; at: string; ms?: number }
+
+export interface PreheatStatus {
+  status: 'idle' | 'preheating' | 'ready' | 'failed'
+  lastMs?: number
+  lastError?: string
+  events: PreheatEvent[]
+}
+
+const EVENTS_MAX = 20
+
+export class PreheatingService {
+  private status: PreheatStatus = { status: 'idle', events: [] }
+
+  getStatus(): PreheatStatus { return this.status }
+
+  // 触发预热（防并发；成功/失败更新状态；失败降级不阻塞——A0 §6）
+  async run(
+    apiKey: string,
+    prefix: StandardPrefix,
+    preheatFn: (key: string, prefixText: string) => Promise<{ ok: boolean; error?: string; ms: number }>
+  ): Promise<PreheatStatus> {
+    if (this.status.status === 'preheating') return this.status // 并发防护
+    this.status = {
+      status: 'preheating',
+      events: [...this.status.events, { type: 'started' as const, at: new Date().toISOString() }].slice(-EVENTS_MAX)
+    }
+    const r = await preheatFn(apiKey, prefix.text)
+    this.status = r.ok
+      ? {
+          status: 'ready',
+          lastMs: r.ms,
+          events: [...this.status.events, { type: 'completed' as const, at: new Date().toISOString(), ms: r.ms }].slice(-EVENTS_MAX)
+        }
+      : {
+          status: 'failed',
+          lastMs: r.ms,
+          lastError: r.error,
+          events: [...this.status.events, { type: 'failed' as const, at: new Date().toISOString(), ms: r.ms }].slice(-EVENTS_MAX)
+        }
+    return this.status
+  }
+}
+
+export const preheating = new PreheatingService()
