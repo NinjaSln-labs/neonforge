@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { DeliveryPackage } from './types'
+import { parseDiffLines, type DiffLine } from './diffRender'
 
 // 交付包视图（ticket 05）：产物 + 验收对照 + 下一步/指导——「问题已解决」的可验证呈现
 // 视觉：深紫浮面 + 靛紫 accent；验收打勾交互；「确认关闭」= 问题终态（交付 ≠ 解决）
@@ -46,6 +47,30 @@ export default function DeliveryPanel({
     } else {
       alert('回滚失败: ' + (res.error ?? '未知错误'))
     }
+  }
+
+  // 目视 diff：展开/折叠（默认展开小 diff，大 diff 折叠——>80 行收起）
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const diffLineClass = (l: DiffLine) =>
+    l.type === 'hunk' ? 'nf-diffline nf-diffline--hunk'
+    : l.type === 'add' ? 'nf-diffline nf-diffline--add'
+    : l.type === 'del' ? 'nf-diffline nf-diffline--del'
+    : 'nf-diffline nf-diffline--ctx'
+  const renderDiffLines = (d: { path: string; diff: string }, isExpanded: boolean) => {
+    const lines = parseDiffLines(d.diff)
+    if (lines.length === 0) return <pre className="nf-diffcard__body">{d.diff.slice(0, 400)}</pre> // 解析失败 fallback
+    const shown = isExpanded ? lines : lines.slice(0, 80)
+    return (
+      <pre className="nf-diffcard__body nf-diffcard__body--lines">
+        {shown.map((l, i) => (
+          <div key={i} className={diffLineClass(l)}>
+            <span className="nf-diffline__ln">{l.type === 'hunk' ? '' : l.oldLine ?? '·'} {l.type === 'hunk' ? '' : l.newLine ?? '·'}</span>
+            <span className="nf-diffline__mark">{l.type === 'add' ? '+' : l.type === 'del' ? '−' : l.type === 'hunk' ? '@@' : ' '}</span>
+            <span className="nf-diffline__text">{l.content || ' '}</span>
+          </div>
+        ))}
+      </pre>
+    )
   }
 
   if (!pkg) {
@@ -104,6 +129,9 @@ export default function DeliveryPanel({
             const isApplied = applied.has(d.path)
             const isReverted = reverted.has(d.path)
             const isConfirming = confirming === d.path
+            const isExpanded = expanded.has(d.path)
+            const totalLines = parseDiffLines(d.diff).length
+            const canExpand = totalLines > 80
             return (
               <div key={i} className="nf-diffcard">
                 <div className="nf-diffcard__head">
@@ -112,7 +140,16 @@ export default function DeliveryPanel({
                     {isReverted ? '↩️ 已回滚' : isApplied ? '✅ 已应用' : '⏳ 待审核'}
                   </span>
                 </div>
-                <pre className="nf-diffcard__body">{d.diff.slice(0, 400)}</pre>
+                {renderDiffLines(d, isExpanded || !canExpand)}
+                {canExpand && (
+                  <button
+                    type="button"
+                    className="nf-diffcard__expand"
+                    onClick={() => setExpanded((s) => { const n = new Set(s); if (n.has(d.path)) n.delete(d.path); else n.add(d.path); return n })}
+                  >
+                    {isExpanded ? '▲ 收起' : `▼ 展开全部（${totalLines} 行）`}
+                  </button>
+                )}
                 {isConfirming ? (
                   <div className="nf-diffcard__actions">
                     <span className="nf-diffcard__hint">将写入 {d.path}（快照可回滚）——确认？</span>

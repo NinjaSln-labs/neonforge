@@ -41,6 +41,10 @@ test('diff 审核视图（待审核态）', async ({ page }) => {
   await expect(page.locator('.nf-diffcard')).toContainText('/test/a.txt')
   await expect(page.locator('.nf-diffcard')).toContainText('待审核')
   await expect(page.locator('.nf-diffcard__accept')).toHaveCount(1)
+  // 目视 diff：行级渲染（hunk 标题 + del 红 + add 绿——不再截断纯文本）
+  await expect(page.locator('.nf-diffline--hunk')).toHaveCount(1)
+  await expect(page.locator('.nf-diffline--del')).toContainText('hello worl')
+  await expect(page.locator('.nf-diffline--add')).toContainText('hello world')
   await expect(page.locator('.nf-diffcard')).toHaveScreenshot('diff-pending.png')
 })
 
