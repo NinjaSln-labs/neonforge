@@ -29,6 +29,9 @@ export interface NeonForgeBridge {
     readNotebook: (rootPath: string | null) => Promise<{ ok: true; content: string } | { ok: false; error: string } | null>
   }
   tools: NeonForgeTools
+  context: {
+    resolve: (files: string[]) => Promise<{ fragments: Array<{ path: string; content: string; truncated: boolean }> }>
+  }
 }
 
 declare global {

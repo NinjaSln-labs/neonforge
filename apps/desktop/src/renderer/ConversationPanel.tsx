@@ -33,7 +33,8 @@ export default function ConversationPanel({
   externalRequest,
   onExternalConsumed,
   onToolResult,
-  onUserMessage
+  onUserMessage,
+  recentFilesExternal
 }: {
   rootPath?: string | null
   onKeyExpired: () => void
@@ -43,6 +44,7 @@ export default function ConversationPanel({
   onExternalConsumed?: () => void
   onToolResult?: (r: { name: string; file?: string; ok: boolean }) => void
   onUserMessage?: (text: string) => void
+  recentFilesExternal?: string[]
 }) {
   const [messages, setMessages] = useState<Msg[]>([])
   const messagesRef = useRef<Msg[]>([])
@@ -78,7 +80,9 @@ export default function ConversationPanel({
   }, [externalRequest])
   const [mentionOpen, setMentionOpen] = useState(false)
   const [recentFiles, setRecentFiles] = useState<string[]>([])
-  const demoFiles = (window.neonforge as unknown as { demo?: { recentFiles?: string[] } }).demo?.recentFiles ?? []
+  const demoFiles = (recentFilesExternal && recentFilesExternal.length > 0)
+    ? recentFilesExternal
+    : (window.neonforge as unknown as { demo?: { recentFiles?: string[] } }).demo?.recentFiles ?? []
 
   // 处理单个流式事件（当前轮次——写入最后一条 assistant 消息）
   const applyChunk = (chunk: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => {
@@ -219,8 +223,20 @@ export default function ConversationPanel({
     setMessages((p) => [...p, { role: 'assistant', content: '', reasoning: '', status: 'streaming' }])
     setWorkingStage('已发送，等待搭档…')
 
+    // ticket 12 ContextEngine：@引用文件 → 注入精准上下文（零 token 确定性——不走 LLM read）
+    const msgs: Array<{ role: 'user' | 'system'; content: string }> = [{ role: 'user', content: text }]
+    const mentionFiles = (text.match(/@(\S+)/g) ?? []).map((m) => m.slice(1))
+    if (mentionFiles.length > 0 && rootPath) {
+      try {
+        const ctx = await window.neonforge.context.resolve(mentionFiles)
+        if (ctx.fragments.length > 0) {
+          const note = '【已注入文件上下文（@引用）】\n' + ctx.fragments.map((f) => `--- ${f.path}${f.truncated ? '（截断）' : ''} ---\n${f.content}`).join('\n\n')
+          msgs.unshift({ role: 'system', content: note })
+        }
+      } catch { /* 注入失败不影响发送 */ }
+    }
     try {
-      await runChat([...history, { role: 'user', content: text }], 0, sid)
+      await runChat([...history, ...msgs], 0, sid)
     } catch {
       finishError('network')
     } finally {

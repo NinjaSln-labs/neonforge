@@ -6,6 +6,7 @@ import { configStore } from './configStore.js'
 import { workspace } from './workspace.js'
 import { initTools, toolRegistry, revertToolFile } from './tools.js'
 import { registerLspTools, lsp } from './lsp.js'
+import { context } from './context.js'
 
 export function registerIpc(): void {
   initTools()
@@ -81,3 +82,7 @@ export function registerIpc(): void {
   )
   // 工具写文件回滚（write/edit 写前已快照 .nf-bak——回滚恢复原样）
   ipcMain.handle('tools:revert', (_e, opts: { path: string }) => revertToolFile(opts.path))
+  // ticket 12 ContextEngine：@引用文件 → 精准上下文片段（注入对话）
+  ipcMain.handle('context:resolve', (_e, opts: { files: string[] }) =>
+    context.resolve(workspace.getCurrentRoot(), opts.files ?? [])
+  )

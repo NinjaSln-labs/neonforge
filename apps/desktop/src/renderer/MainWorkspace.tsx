@@ -49,6 +49,14 @@ export default function MainWorkspace({
     setRealChanges((prev) => (prev.some((c) => c.file === r.file) ? prev : [...prev, { file: r.file as string, op: r.name }]))
   }
   const handleUserMessage = (text: string) => { lastPromptRef.current = text }
+  // ticket 12 ContextEngine：项目顶层文件 → @mention 列表（真实数据，替换 demo）
+  const [projectFiles, setProjectFiles] = useState<string[]>([])
+  useEffect(() => {
+    if (!rootPath) { setProjectFiles([]); return }
+    void window.neonforge.workspace.listDir(rootPath).then((entries) =>
+      setProjectFiles(entries.filter((e) => e.kind === 'file').map((e) => e.name))
+    )
+  }, [rootPath])
   useEffect(() => {
     if (realChanges.length === 0) return
     setDeliveryPkg({
@@ -148,7 +156,7 @@ function initProblems(): ProblemInstance[] {
         <div className="nf-panel__body">
           {zeroToOne && <DeliveryFlowPanel />}
           {chatTab === 'chat' ? (
-            <ConversationPanel key={chatKey} rootPath={rootPath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} />
+            <ConversationPanel key={chatKey} rootPath={rootPath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} recentFilesExternal={projectFiles} />
           ) : (
             <TaskPanel />
           )}
