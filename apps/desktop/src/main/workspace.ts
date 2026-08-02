@@ -3,6 +3,7 @@ import { dialog, BrowserWindow } from 'electron'
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import path from 'node:path'
+import { slugify, projectBaseDir, initProjectFiles } from './projectInit.js'
 
 const IGNORE = new Set([
   'node_modules', '.git', 'dist', 'out', 'build', 'coverage',
@@ -83,6 +84,19 @@ export class WorkspaceService {
       return { ok: true, content: readFileSync(p, 'utf-8') }
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : 'notebook-read-failed' }
+    }
+  }
+
+  // ticket 07：0-1 项目初始化——从零开始 → 创建真实项目目录 + 骨架（Documents/NeonForge/<slug>）
+  initProject(title: string): { ok: true; path: string; title: string } | { ok: false; error: string } {
+    try {
+      const slug = slugify(title)
+      const dir = join(projectBaseDir(), slug)
+      initProjectFiles(dir, title)
+      this.currentRoot = dir
+      return { ok: true, path: dir, title }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : 'init-project-failed' }
     }
   }
 }

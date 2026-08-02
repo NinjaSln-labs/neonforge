@@ -40,3 +40,31 @@ test('选敏捷 → 分步推进到交付', async ({ page }) => {
   await expect(page.locator('.nf-flow')).toContainText('交付完成')
   await expect(page.locator('.nf-chat')).toHaveScreenshot('flow-done.png')
 })
+
+test('0-1 从零开始 → 发送需求 → 创建真实项目（ticket 07 执行地基）', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.neonforge = {
+      version: 'test',
+      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
+      workspace: {
+        openFolder: async () => null,
+        listDir: async () => [{ name: 'README.md', path: '/tmp/nf-proj/travel-site/README.md', kind: 'file' }],
+        readFile: async () => ({ ok: true, content: '# x' }),
+        initProject: async (title: string) => ({ ok: true, path: '/tmp/nf-proj/travel-site', title })
+      },
+      gateway: { validate: async () => ({ ok: true }), streamChat: async () => ({ ok: true }), onStreamChunk: () => () => {} }
+    }
+  })
+  await page.goto('http://localhost:5174/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.getByRole('button', { name: '从零开始' }).click()
+  // 0-1 模式：交付流面板 + 状态栏「从零开始」
+  await expect(page.locator('.nf-flow')).toBeVisible()
+  await expect(page.locator('.nf-statusbar')).toContainText('从零开始')
+  // 发送需求 → initProject → rootPath 更新（状态栏显示项目 slug + 0-1 面板退场——真实项目就绪）
+  await page.locator('.nf-chat__input textarea').fill('做一个旅行手册网站')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  await page.waitForTimeout(600)
+  await expect(page.locator('.nf-statusbar')).toContainText('travel-site')
+  await expect(page.locator('.nf-flow')).toHaveCount(0)
+})
