@@ -365,6 +365,10 @@ body {
 }
 .nf-ledger__item:hover { background: var(--nf-bg-elevated); color: var(--nf-text); }
 .nf-ledger__item--active { background: var(--nf-accent-soft); color: var(--nf-text); }
+/* 06 断点续做深度：选中问题会话快照（基线 §21——已授权/待办唤醒） */
+.nf-ledger__wrap--active { background: var(--nf-bg-elevated); border-radius: var(--nf-radius-sm); }
+.nf-ledger__snapshot { padding: 0 var(--nf-space-3) var(--nf-space-2); font-size: 11px; color: var(--nf-text-dim); display: flex; flex-direction: column; gap: 2px; }
+.nf-ledger__snap-row { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nf-ledger__dot { font-size: var(--nf-font-sm); width: 14px; text-align: center; }
 .nf-ledger__dot--understanding { color: var(--nf-accent); }
 .nf-ledger__dot--awaiting-plan { color: var(--nf-amber); }

@@ -5,7 +5,7 @@ import DeliveryFlowPanel, { FLOW_STAGES, STAGE_HINT } from './DeliveryFlowPanel'
 import OutputPanel from './OutputPanel'
 import ConversationPanel from './ConversationPanel'
 import type { DeliveryPackage, ProblemInstance } from './types'
-import { createProblem, loadProblems, saveProblems } from './problemStore'
+import { createProblem, loadProblems, saveProblems, updateProblemSnapshot } from './problemStore'
 import { clearSession } from './sessionStore'
 
 // 任务工作台（对话面板「任务」Tab，06 任务队列前为结构占位）
@@ -75,6 +75,15 @@ export default function MainWorkspace({
   const handleToolResult = (r: { name: string; file?: string; ok: boolean }) => {
     if (!r.ok || !r.file) return
     setRealChanges((prev) => (prev.some((c) => c.file === r.file) ? prev : [...prev, { file: r.file as string, op: r.name }]))
+    // 06 断点续做深度（基线 §21）：授权操作记录到问题快照 authorized（跨会话可回溯）
+    if (activeProblem) {
+      setProblems((prev) => prev.map((p) => {
+        if (p.id !== activeProblem) return p
+        const label = `[${r.name}] ${r.file}`
+        const auth = p.snapshot?.authorized ?? []
+        return auth.includes(label) ? p : updateProblemSnapshot(p, { authorized: [...auth, label] })
+      }))
+    }
   }
   const handleUserMessage = (text: string) => {
     lastPromptRef.current = text
@@ -88,9 +97,17 @@ export default function MainWorkspace({
     setProblems((prev) => {
       const inst = createProblem(text)
       const dup = prev.find((x) => x.title === inst.title)
-      return dup
-        ? [{ ...dup, updatedAt: inst.updatedAt, status: 'executing' as const }, ...prev.filter((x) => x.id !== dup.id)]
-        : [inst, ...prev]
+      if (dup) {
+        // 复跑/续做：保留快照（目标更新 + 记录待办）
+        const snap = updateProblemSnapshot(dup, {
+          goal: text,
+          pending: [...(dup.snapshot?.pending ?? []).filter((x) => x !== text).slice(-4), text]
+        })
+        setActiveProblem(dup.id)
+        return [{ ...snap, updatedAt: inst.updatedAt, status: 'executing' as const }, ...prev.filter((x) => x.id !== dup.id)]
+      }
+      setActiveProblem(inst.id)
+      return [inst, ...prev]
     })
   }
   // 06 问题台账：台账持久化
