@@ -255,6 +255,15 @@ export default function ConversationPanel({
         }
       } catch { /* 注入失败不影响发送 */ }
     }
+    // ticket 08d：搭档须知 .neonforge 注入（项目级指令——readNotebook 已实现未消费；全局指令放最前）
+    if (rootPath) {
+      try {
+        const nb = await window.neonforge.workspace.readNotebook(rootPath)
+        if (nb?.ok && nb.content.trim()) {
+          msgs.unshift({ role: 'system', content: `【搭档须知 .neonforge】\n${nb.content.slice(0, 2000)}` })
+        }
+      } catch { /* 注入失败不影响发送 */ }
+    }
     try {
       await runChat([...history, ...msgs], 0, sid)
     } catch {
