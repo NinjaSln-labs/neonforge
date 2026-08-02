@@ -10,6 +10,7 @@ type Screen = 'boot' | 'config' | 'start' | 'workspace' | 'new-project'
 export default function App() {
   const [screen, setScreen] = useState<Screen>('boot')
   const [rootPath, setRootPath] = useState<string | null>(null)
+  const [zeroToOne, setZeroToOne] = useState(false) // 0-1 交付模式（从零开始——创建项目后仍保持流程）
 
   useEffect(() => {
     let mounted = true
@@ -50,7 +51,7 @@ export default function App() {
       <div className="nf-app nf-app--start">
         <StartPage
           onOpenProject={() => { void openExisting() }}
-          onNewProject={() => { setRootPath(null); setScreen('workspace') }}
+          onNewProject={() => { setRootPath(null); setZeroToOne(true); setScreen('workspace') }}
         />
       </div>
     )
@@ -60,9 +61,10 @@ export default function App() {
     return (
       <MainWorkspace
         rootPath={rootPath ?? null}
-        onBackStart={() => { setRootPath(null); setScreen('start') }}
+        onBackStart={() => { setRootPath(null); setZeroToOne(false); setScreen('start') }}
         onKeyExpired={() => setScreen('config')}
         onProjectCreated={(p) => setRootPath(p)}
+        zeroToOneMode={zeroToOne}
       />
     )
   }
