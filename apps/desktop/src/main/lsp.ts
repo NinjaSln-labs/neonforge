@@ -180,11 +180,18 @@ export class LspService {
   }
 
   // 6 工具查询分发（A0 §4 工具面）
-  async query(kind: string, args: Record<string, unknown>): Promise<unknown> {
+  // rootPath：模型传相对/类绝对路径（如 /src/a.ts）→ join rootPath 解析（复用 tools.ts 路径语义）
+  async query(kind: string, args: Record<string, unknown>, rootPath?: string): Promise<unknown> {
     const conn = this.requireConn()
-    const filePath = String(args.path ?? '')
-    const line = Number(args.line ?? 0)
-    const character = Number(args.character ?? 0)
+    const filePath = resolveLspPath(String(args.path ?? ''), rootPath)
+    // 模型给 symbol（符号名）→ 文本扫描定位（无需行号）；显式 line/character 优先
+    const hasExplicitPos = typeof args.line === 'number' && typeof args.character === 'number'
+    let line = hasExplicitPos ? Number(args.line) : 0
+    let character = hasExplicitPos ? Number(args.character) : 0
+    if (!hasExplicitPos && args.symbol && existsSync(filePath)) {
+      const pos = locateSymbol(readFileSync(filePath, 'utf-8'), String(args.symbol))
+      if (pos) { line = pos.line; character = pos.character }
+    }
     const uri = await this.ensureOpen(filePath)
     const position = { line, character }
     const doc = { uri }
@@ -247,9 +254,30 @@ function resolveImportPath(fromFile: string, spec: string, projectPath: string |
   return null
 }
 
+// 路径解析：① 已是绝对路径（rootPath 内或真实存在）→ 直接用；② 相对/类绝对路径（如 /src/a.ts）→ join rootPath
+// 语义对齐 tools.ts resolvePath（模型传 /package.json 类相对路径 → 项目根下）
+function resolveLspPath(p: string, rootPath?: string): string {
+  if (!p) throw new Error('缺少 path 参数')
+  if (rootPath && (p.startsWith(rootPath) || existsSync(p))) return p
+  if (rootPath) return path.join(rootPath, p.replace(/^\/+/, ''))
+  if (path.isAbsolute(p)) return p
+  throw new Error('路径需为绝对路径或提供 rootPath')
+}
+
+// 文本扫描定位符号（symbol → line/character）——确定性零 token，模型无需算行号
+export function locateSymbol(text: string, symbol: string): { line: number; character: number } | null {
+  if (!symbol) return null
+  const lines = text.split(/\r?\n/)
+  for (let i = 0; i < lines.length; i++) {
+    const col = lines[i].indexOf(symbol)
+    if (col !== -1) return { line: i, character: col }
+  }
+  return null
+}
+
 export const lsp = new LspService()
 
-// 注册 6 LSP 工具到 ToolRegistry（source: 'lsp'；不加入模型 TOOL_DEFS——ContextEngine 内部调用）
+// 注册 6 LSP 工具到 ToolRegistry（source: 'lsp'；2026-08-02 起加入模型 TOOL_DEFS——deepseek 模型可自主调用查询真实代码上下文）
 export function registerLspTools(registry: {
   register(t: { name: string; source: 'lsp'; requiresApproval: boolean; execute: (args: Record<string, unknown>, ctx: { rootPath?: string }) => Promise<unknown> }): void
 }): void {
@@ -258,7 +286,7 @@ export function registerLspTools(registry: {
       name,
       source: 'lsp',
       requiresApproval: false,
-      execute: (args) => lsp.query(name, args)
+      execute: (args, ctx) => lsp.query(name, args, ctx?.rootPath)
     })
   }
 }
