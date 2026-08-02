@@ -5,7 +5,7 @@ import { gateway } from './gateway.js'
 import { configStore } from './configStore.js'
 import { workspace } from './workspace.js'
 import { initTools, toolRegistry, revertToolFile } from './tools.js'
-import { registerLspTools } from './lsp.js'
+import { registerLspTools, lsp } from './lsp.js'
 
 export function registerIpc(): void {
   initTools()
@@ -60,10 +60,12 @@ export function registerIpc(): void {
   })
   ipcMain.handle('delivery:revert-diff', (_e, opts: { path: string }) => revert(opts.path))
 
-  // ticket 03：打开项目 / 文件树 / 读文件
+  // ticket 03：打开项目 / 文件树 / 读文件（打开成功后自动连接 LSP——ticket 12 真实语言服务器）
   ipcMain.handle('workspace:open-folder', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
-    return workspace.openFolder(win)
+    const root = await workspace.openFolder(win)
+    if (root) void lsp.connect(root).catch((e) => console.log('[lsp] connect failed:', e instanceof Error ? e.message : String(e)))
+    return root
   })
   ipcMain.handle('workspace:list-dir', (_e, dirPath: string) => workspace.listDir(dirPath))
   ipcMain.handle('workspace:read-file', (_e, filePath: string) => workspace.readFile(filePath))
