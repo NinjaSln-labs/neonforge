@@ -1,9 +1,11 @@
 import { defineConfig } from '@playwright/test'
 
-// pixel-perfect 视觉回归：renderer 走 dev server（Web 形态，验证 UI 层）
+// NeonForge 质量链：
+// - L5 视觉回归（pixel-perfect 截图——macOS 基线，本地跑；CI Linux 渲染不同 → 不进 CI）
+// - L3 组件交互测试（纯 DOM 断言无截图——跨平台稳定，CI 可跑；ddd-qa-chain 缺层 2026-08-02 补）
 export default defineConfig({
-  testDir: './tests/visual',
-  testMatch: '**/*.visual.ts',
+  testDir: './tests',
+  testMatch: /\.(visual|interaction)\.ts$/,
   testIgnore: '**/._*', // macOS AppleDouble 元数据文件——不匹配（坑 10）
   snapshotDir: './snapshots',
   snapshotPathTemplate: '{snapshotDir}/{testFilePath}/{arg}{ext}',
@@ -27,5 +29,18 @@ export default defineConfig({
         animations: 'disabled'
       }
     }
-  }
+  },
+  projects: [
+    {
+      name: 'visual', // L5 视觉回归（像素基线）
+      testDir: './tests/visual',
+      testMatch: '**/*.visual.ts'
+    },
+    {
+      name: 'interaction', // L3 组件交互（无截图——CI 可跑）
+      testDir: './tests/interaction',
+      testMatch: '**/*.interaction.ts',
+      use: { expect: { toHaveScreenshot: undefined } } // 禁用截图断言（L3 无像素基线）
+    }
+  ]
 })
