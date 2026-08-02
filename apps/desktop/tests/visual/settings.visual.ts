@@ -32,3 +32,17 @@ test('设置面板（⚙ 打开 + 语言/视图/提醒）', async ({ page }) => 
   await expect(page.locator('.nf-settings__seg-btn--on').first()).toHaveText('English')
   await expect(page.locator('.nf-settings')).toHaveScreenshot('settings-lang-en.png')
 })
+
+test('快捷键 ⌘, 打开/关闭设置（D0 §6）', async ({ page }) => {
+  await mockBridge(page)
+  await page.goto('http://localhost:5174/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.getByRole('button', { name: '打开已有项目' }).click()
+  await expect(page.locator('.nf-settings')).toHaveCount(0)
+  // ⌘, 打开
+  await page.keyboard.press('Meta+,')
+  await expect(page.locator('.nf-settings')).toBeVisible()
+  // ⌘, 关闭
+  await page.keyboard.press('Meta+,')
+  await expect(page.locator('.nf-settings')).toHaveCount(0)
+})
