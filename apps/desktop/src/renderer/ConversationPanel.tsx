@@ -274,8 +274,22 @@ export default function ConversationPanel({
     if (stageHint) {
       msgs.unshift({ role: 'system', content: stageHint })
     }
+    // ticket 11 Compaction：对话历史超阈值（>100 条或 >200K 字符）→ 压缩为摘要 + 保留最近 20 条（上下文不丢）
+    let chatHistory = history
+    if (history.length > 100) {
+      try {
+        const compacted = await window.neonforge.compaction.compact(history)
+        if (compacted.ok) {
+          chatHistory = [
+            { role: 'user' as const, content: compacted.summary },
+            ...compacted.kept.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content ?? '' }))
+          ]
+          setWorkingStage('已压缩长对话（摘要 + 最近 20 条）…')
+        }
+      } catch { /* 压缩失败 → 全量发送（降级不阻塞） */ }
+    }
     try {
-      await runChat([...history, ...msgs], 0, sid)
+      await runChat([...chatHistory, ...msgs], 0, sid)
     } catch {
       finishError('network')
     } finally {
