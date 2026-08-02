@@ -32,7 +32,8 @@ export default function ConversationPanel({
   onWorkingChange,
   externalRequest,
   onExternalConsumed,
-  onToolResult
+  onToolResult,
+  onUserMessage
 }: {
   rootPath?: string | null
   onKeyExpired: () => void
@@ -41,6 +42,7 @@ export default function ConversationPanel({
   externalRequest?: string | null
   onExternalConsumed?: () => void
   onToolResult?: (r: { name: string; file?: string; ok: boolean }) => void
+  onUserMessage?: (text: string) => void
 }) {
   const [messages, setMessages] = useState<Msg[]>([])
   const messagesRef = useRef<Msg[]>([])
@@ -196,6 +198,8 @@ export default function ConversationPanel({
     if (!text || working) return
     inputRef.current = ''
     setInput('')
+    // 13 复跑入口：上报用户输入（真实交付包 rerunPrompt 用）
+    onUserMessage?.(text)
     setWorking(true)
     onWorkingChange?.(true)
     const sid = ++sessionRef.current // 新会话——旧会话事件/续聊失效
