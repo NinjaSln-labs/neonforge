@@ -33,11 +33,13 @@ function TaskPanel() {
 export default function MainWorkspace({
   rootPath,
   onBackStart,
-  onKeyExpired
+  onKeyExpired,
+  onProjectCreated
 }: {
   rootPath: string | null
   onBackStart: () => void
   onKeyExpired: () => void
+  onProjectCreated?: (path: string) => void
 }) {
   const [chatTab, setChatTab] = useState<'chat' | 'tasks'>('chat')
   const [activePath, setActivePath] = useState<string | null>(null)
@@ -69,6 +71,12 @@ export default function MainWorkspace({
   }
   const handleUserMessage = (text: string) => {
     lastPromptRef.current = text
+    // ticket 07：从零开始 → 首条消息创建真实项目目录（0-1 交付真实执行地基——后续阶段模型在真实项目内 write/read）
+    if (!rootPath && onProjectCreated) {
+      void window.neonforge.workspace.initProject(text).then((r) => {
+        if (r.ok) onProjectCreated(r.path)
+      })
+    }
     // 06 问题台账：发送 → 创建问题实例（持久化——断点续做基础；同标题复跑 → 更新状态不新增）
     setProblems((prev) => {
       const inst = createProblem(text)

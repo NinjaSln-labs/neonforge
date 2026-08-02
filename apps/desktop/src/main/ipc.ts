@@ -93,6 +93,8 @@ export function registerIpc(): void {
   ipcMain.handle('workspace:list-dir', (_e, dirPath: string) => workspace.listDir(dirPath))
   ipcMain.handle('workspace:read-file', (_e, filePath: string) => workspace.readFile(filePath))
   ipcMain.handle('workspace:read-notebook', (_e, rootPath: string | null) => workspace.readNotebook(rootPath))
+  // ticket 07：0-1 项目初始化（从零开始 → 真实目录 + 骨架）
+  ipcMain.handle('workspace:init-project', (_e, title: string) => workspace.initProject(title))
 }
   // ticket 10：ToolRegistry（工具清单 + 执行分发——write/edit/bash 需 approved）
   ipcMain.handle('tools:list', () => toolRegistry.list())
