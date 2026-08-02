@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildStandardPrefix, estimateTokens, PrefixCache } from '../../src/main/preheat'
+import { buildStandardPrefix, estimateTokens, PrefixCache, PreheatingService } from '../../src/main/preheat'
 
 describe('StandardPrefix 构建（ticket 09——确定性零 token 成本）', () => {
   it('结构：含叙述/工具/文件树 + 同输入同 hash', () => {
@@ -59,5 +59,43 @@ describe('PrefixCache（Append-Only + hash 检测——≥90% 命中目标）', 
     expect(r2.state.standardPrefix).toContain('b.ts')
     expect(r2.state.history).toHaveLength(2)
     expect(r2.state.history[0].hit).toBe(false)
+  })
+})
+
+describe('PreheatingService（真实 API 预热——D-C7）', () => {
+  const prefix = buildStandardPrefix('/p', ['a.ts'])
+
+  it('成功：idle → preheating → ready + started/completed 事件', async () => {
+    const s = new PreheatingService()
+    expect(s.getStatus().status).toBe('idle')
+    const r = await s.run('key', prefix, async () => ({ ok: true, ms: 123 }))
+    expect(r.status).toBe('ready')
+    expect(r.lastMs).toBe(123)
+    expect(r.events.map((e) => e.type)).toEqual(['started', 'completed'])
+  })
+
+  it('失败：→ failed + lastError + failed 事件（降级不阻塞）', async () => {
+    const s = new PreheatingService()
+    const r = await s.run('key', prefix, async () => ({ ok: false, error: 'http-500', ms: 50 }))
+    expect(r.status).toBe('failed')
+    expect(r.lastError).toBe('http-500')
+    expect(r.events.map((e) => e.type)).toEqual(['started', 'failed'])
+  })
+
+  it('防并发：preheating 中重复 run → 直接返回当前状态（不重复请求）', async () => {
+    const s = new PreheatingService()
+    let calls = 0
+    const fn = async () => { calls++; await new Promise((r) => setTimeout(r, 50)); return { ok: true as const, ms: 10 } }
+    const p1 = s.run('key', prefix, fn)
+    const p2 = s.run('key', prefix, fn)
+    await Promise.all([p1, p2])
+    expect(calls).toBe(1)
+    expect(s.getStatus().status).toBe('ready')
+  })
+
+  it('事件上限 20（防膨胀）', async () => {
+    const s = new PreheatingService()
+    for (let i = 0; i < 15; i++) await s.run('key', prefix, async () => ({ ok: true, ms: 1 }))
+    expect(s.getStatus().events.length).toBeLessThanOrEqual(20)
   })
 })
