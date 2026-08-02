@@ -36,6 +36,10 @@ export interface NeonForgeBridge {
   rag: {
     search: (query: string) => Promise<{ hits: Array<{ path: string; line: number; snippet: string }>; note?: string }>
   }
+  plugins: {
+    list: () => Promise<Array<{ name: string; version: string; active: boolean }>>
+    toggle: (name: string, active: boolean) => Promise<boolean>
+  }
   preheat: {
     status: () => Promise<{ plan: { shouldPreheat: boolean; why: string; actions: string[] }; cache: { standardPrefix: string; hash: string; history: Array<{ hash: string; at: string; hit: boolean }> } | null }>
   }
