@@ -40,5 +40,9 @@ contextBridge.exposeInMainWorld('neonforge', {
       ipcRenderer.invoke('tools:execute', { name, args, approved: opts?.approved ?? false, rootPath: opts?.rootPath }) as Promise<{ ok: boolean; data?: unknown; error?: string }>,
     revert: (filePath: string) =>
       ipcRenderer.invoke('tools:revert', { path: filePath }) as Promise<{ ok: boolean; error?: string }>
+  },
+  context: {
+    resolve: (files: string[]) =>
+      ipcRenderer.invoke('context:resolve', { files }) as Promise<{ fragments: Array<{ path: string; content: string; truncated: boolean }> }>
   }
 })
