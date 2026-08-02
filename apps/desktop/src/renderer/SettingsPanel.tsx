@@ -58,6 +58,14 @@ export default function SettingsPanel() {
           ))}
         </div>
       </div>
+
+      <div className="nf-settings__shortcuts">
+        <span className="nf-settings__plugins-title">快捷键</span>
+        <div className="nf-settings__shortcuts-list">
+          <span>⌘ + , 打开 / 关闭设置</span>
+          <span>⌘ + Enter 发送消息</span>
+        </div>
+      </div>
     </div>
   )
 }
