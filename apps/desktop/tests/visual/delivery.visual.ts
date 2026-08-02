@@ -112,4 +112,12 @@ test('真实执行 → 产物区交付包联动（write 授权后）', async ({ 
   await expect(page.locator('.nf-delivery__acceptance')).toHaveCount(0)
   await expect(page.getByRole('button', { name: '确认问题关闭' })).toHaveCount(0)
   await expect(page.locator('.nf-output')).toHaveScreenshot('delivery-real-execution.png')
+  // 复跑入口：rerunPrompt = 最近用户输入 → 点击 → 对话预填并重发（用户消息 +1）
+  // 等首次会话完全结束（working false——maybeContinue 续聊链 ~1.5s）再复跑
+  await expect(page.locator('.nf-statusbar')).toContainText('就绪')
+  await expect(page.locator('.nf-delivery__rerun')).toContainText('再跑一遍')
+  await page.locator('.nf-delivery__rerun').click()
+  await page.waitForTimeout(400)
+  await expect(page.locator('.nf-msg--user')).toHaveCount(2)
+  await expect(page.locator('.nf-msg--user').last()).toContainText('帮我写一个 notes 文件')
 })
