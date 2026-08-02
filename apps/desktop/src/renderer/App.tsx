@@ -62,6 +62,7 @@ export default function App() {
         rootPath={rootPath ?? null}
         onBackStart={() => { setRootPath(null); setScreen('start') }}
         onKeyExpired={() => setScreen('config')}
+        onProjectCreated={(p) => setRootPath(p)}
       />
     )
   }

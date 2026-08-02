@@ -32,7 +32,9 @@ contextBridge.exposeInMainWorld('neonforge', {
     readFile: (filePath: string) =>
       ipcRenderer.invoke('workspace:read-file', filePath) as Promise<{ ok: true; content: string } | { ok: false; error: string }>,
     readNotebook: (rootPath: string | null) =>
-      ipcRenderer.invoke('workspace:read-notebook', rootPath) as Promise<{ ok: true; content: string } | { ok: false; error: string } | null>
+      ipcRenderer.invoke('workspace:read-notebook', rootPath) as Promise<{ ok: true; content: string } | { ok: false; error: string } | null>,
+    initProject: (title: string) =>
+      ipcRenderer.invoke('workspace:init-project', title) as Promise<{ ok: true; path: string; title: string } | { ok: false; error: string }>
   },
   tools: {
     list: () => ipcRenderer.invoke('tools:list') as Promise<Array<{ name: string; source: 'core' | 'lsp'; requiresApproval: boolean }>>,

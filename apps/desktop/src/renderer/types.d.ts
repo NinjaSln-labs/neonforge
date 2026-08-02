@@ -27,6 +27,7 @@ export interface NeonForgeBridge {
     listDir: (dirPath: string) => Promise<DirEntry[]>
     readFile: (filePath: string) => Promise<{ ok: true; content: string } | { ok: false; error: string }>
     readNotebook: (rootPath: string | null) => Promise<{ ok: true; content: string } | { ok: false; error: string } | null>
+    initProject: (title: string) => Promise<{ ok: true; path: string; title: string } | { ok: false; error: string }>
   }
   tools: NeonForgeTools
   context: {
