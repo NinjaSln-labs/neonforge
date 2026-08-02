@@ -44,5 +44,9 @@ contextBridge.exposeInMainWorld('neonforge', {
   context: {
     resolve: (files: string[]) =>
       ipcRenderer.invoke('context:resolve', { files }) as Promise<{ fragments: Array<{ path: string; content: string; truncated: boolean }> }>
+  },
+  preheat: {
+    status: () =>
+      ipcRenderer.invoke('preheat:status') as Promise<{ plan: { shouldPreheat: boolean; why: string; actions: string[] }; cache: { standardPrefix: string; hash: string; history: Array<{ hash: string; at: string; hit: boolean }> } | null }>
   }
 })

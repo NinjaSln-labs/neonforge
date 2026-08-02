@@ -10,13 +10,19 @@ import { clearSession } from './sessionStore'
 
 // 任务工作台（对话面板「任务」Tab，06 任务队列前为结构占位）
 function TaskPanel() {
+  const [preheatInfo, setPreheatInfo] = useState<{ cache: { hash: string; history: Array<{ hit: boolean }> } | null } | null>(null)
+  useEffect(() => {
+    void window.neonforge.preheat?.status?.().then(setPreheatInfo)
+  }, [])
+  const history = preheatInfo?.cache?.history ?? []
+  const hitRate = history.length > 0 ? Math.round((history.filter((h) => h.hit).length / history.length) * 100) : 0
   return (
     <div className="nf-task">
       <p className="nf-placeholder">当前任务：无（● 执行 / ◉ 待审 / ○ 排队）</p>
       <p className="nf-placeholder">待审核变更：无（05 diff 审核入口）</p>
       <details>
         <summary>▸ 本轮用量</summary>
-        <p className="nf-meta">—</p>
+        <p className="nf-meta">{preheatInfo?.cache ? `前缀缓存 ${hitRate}% 命中（hash ${preheatInfo.cache.hash}）` : '—'}</p>
       </details>
     </div>
   )

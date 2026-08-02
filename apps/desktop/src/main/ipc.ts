@@ -7,6 +7,7 @@ import { workspace } from './workspace.js'
 import { initTools, toolRegistry, revertToolFile } from './tools.js'
 import { registerLspTools, lsp } from './lsp.js'
 import { context } from './context.js'
+import { buildStandardPrefix, planPreheat, prefixCache } from './preheat.js'
 
 export function registerIpc(): void {
   initTools()
@@ -65,9 +66,21 @@ export function registerIpc(): void {
   ipcMain.handle('workspace:open-folder', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const root = await workspace.openFolder(win)
-    if (root) void lsp.connect(root).catch((e) => console.log('[lsp] connect failed:', e instanceof Error ? e.message : String(e)))
+    if (root) {
+      void lsp.connect(root).catch((e) => console.log('[lsp] connect failed:', e instanceof Error ? e.message : String(e)))
+      // 09 预热：构建 StandardPrefix + PrefixCache（纯本地零成本——hash 变才重建）
+      try {
+        const files = workspace.listDir(root).filter((e) => e.kind === 'file').map((e) => e.name)
+        prefixCache.ensure(buildStandardPrefix(root, files))
+      } catch (e) { console.log('[preheat] build failed:', e instanceof Error ? e.message : String(e)) }
+    }
     return root
   })
+  // 09 预热：状态查询（plan + PrefixCache——renderer 用量行显示）
+  ipcMain.handle('preheat:status', () => ({
+    plan: planPreheat(workspace.getCurrentRoot()),
+    cache: prefixCache.get()
+  }))
   ipcMain.handle('workspace:list-dir', (_e, dirPath: string) => workspace.listDir(dirPath))
   ipcMain.handle('workspace:read-file', (_e, filePath: string) => workspace.readFile(filePath))
   ipcMain.handle('workspace:read-notebook', (_e, rootPath: string | null) => workspace.readNotebook(rootPath))
