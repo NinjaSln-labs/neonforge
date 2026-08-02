@@ -220,7 +220,7 @@ function initProblems(): ProblemInstance[] {
         <div className="nf-panel__body">
           {zeroToOne && <DeliveryFlowPanel onStageChange={handleStageChange} onModelSelect={setFlowModel} />}
           {chatTab === 'chat' ? (
-            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} recentFilesExternal={projectFiles} stageHint={stageHint} />
+            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} recentFilesExternal={projectFiles} stageHint={stageHint} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} />
           ) : (
             <TaskPanel />
           )}
