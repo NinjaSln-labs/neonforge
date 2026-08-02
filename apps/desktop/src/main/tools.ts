@@ -1,6 +1,7 @@
 import { promises as fs, existsSync } from 'fs'
 import path from 'path'
 import { snapshot as takeSnapshot, revert as revertFile } from './applyDiff.js'
+import { codeRag } from './codeRag.js'
 
 // ToolRegistry（ticket 10 / A0 §2）：工具注册与执行分发
 // 边界判定：ToolRegistry=目录与分发；ShellAgent=bash 执行；Gateway=工具调用修复（02 已实现）
@@ -106,12 +107,19 @@ async function bashExecutor(args: Record<string, unknown>, ctx: { rootPath?: str
 
 export const toolRegistry = new ToolRegistry()
 
-// 注册 4 核心工具（6 LSP 随 12 ContextEngine 注册）
+// 注册 4 核心工具 + search（Layer2 CodeRAG——2026-08-02 接入模型；6 LSP 随 12 ContextEngine 注册）
 export function initTools(): void {
   toolRegistry.register({ name: 'read', source: 'core', requiresApproval: false, execute: readExecutor })
   toolRegistry.register({ name: 'write', source: 'core', requiresApproval: true, execute: writeExecutor })
   toolRegistry.register({ name: 'edit', source: 'core', requiresApproval: true, execute: editExecutor })
   toolRegistry.register({ name: 'bash', source: 'core', requiresApproval: true, execute: bashExecutor })
+  // Layer2 CodeRAG：关键词检索兜底（Claude Code grep 模式——2026-08-02 调研：agentic 工具检索为行业共识，见 .scratch/neonforge-v1/layer2-retrieval-research.md）
+  toolRegistry.register({
+    name: 'search',
+    source: 'core',
+    requiresApproval: false,
+    execute: (args, ctx) => codeRag.search(ctx?.rootPath ?? null, String(args.query ?? '')) as unknown as Promise<unknown>
+  })
 }
 
 // 工具写文件回滚（write/edit 写前已快照 .nf-bak——回滚恢复原样；无快照返回错误）
