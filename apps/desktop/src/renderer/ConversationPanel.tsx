@@ -27,12 +27,16 @@ export default function ConversationPanel({
   rootPath,
   onKeyExpired,
   onReasoning,
-  onWorkingChange
+  onWorkingChange,
+  externalRequest,
+  onExternalConsumed
 }: {
   rootPath?: string | null
   onKeyExpired: () => void
   onReasoning?: (text: string) => void
   onWorkingChange?: (working: boolean) => void
+  externalRequest?: string | null
+  onExternalConsumed?: () => void
 }) {
   const [messages, setMessages] = useState<Msg[]>([])
   const messagesRef = useRef<Msg[]>([])
@@ -54,6 +58,18 @@ export default function ConversationPanel({
   const [workingStage, setWorkingStage] = useState('等待回复…')
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef('')
+  // 05 执行层 B：外部请求（复跑）——非空则预填输入框并发送
+  const sendRef = useRef<() => Promise<void>>(async () => {})
+  useEffect(() => {
+    if (externalRequest && typeof externalRequest === 'string' && externalRequest.trim()) {
+      const text = externalRequest.trim()
+      inputRef.current = text
+      setInput(text)
+      onExternalConsumed?.()
+      // 下一 tick 发送（等 state 同步——send 读 inputRef 已就绪）
+      setTimeout(() => void sendRef.current(), 50)
+    }
+  }, [externalRequest])
   const [mentionOpen, setMentionOpen] = useState(false)
   const [recentFiles, setRecentFiles] = useState<string[]>([])
   const demoFiles = (window.neonforge as unknown as { demo?: { recentFiles?: string[] } }).demo?.recentFiles ?? []
@@ -201,6 +217,8 @@ export default function ConversationPanel({
       onWorkingChange?.(false)
     }
   }
+  // 05 B：sendRef 同步最新 send（externalRequest 触发用）
+  useEffect(() => { sendRef.current = send }, [send])
 
   // L3 授权：允许执行（approved=true）/ 拒绝（标记拒绝）
   const approveToolCall = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg) => {
