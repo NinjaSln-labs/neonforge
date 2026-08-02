@@ -7,7 +7,7 @@ import { workspace } from './workspace.js'
 import { initTools, toolRegistry, revertToolFile } from './tools.js'
 import { registerLspTools, lsp } from './lsp.js'
 import { context } from './context.js'
-import { buildStandardPrefix, planPreheat, prefixCache } from './preheat.js'
+import { buildStandardPrefix, planPreheat, prefixCache, preheating } from './preheat.js'
 
 export function registerIpc(): void {
   initTools()
@@ -68,18 +68,26 @@ export function registerIpc(): void {
     const root = await workspace.openFolder(win)
     if (root) {
       void lsp.connect(root).catch((e) => console.log('[lsp] connect failed:', e instanceof Error ? e.message : String(e)))
-      // 09 预热：构建 StandardPrefix + PrefixCache（纯本地零成本——hash 变才重建）
+      // 09 预热：StandardPrefix + PrefixCache + 真实 API 预热（hash 变化且有 Key → 后台最小成本请求，不阻塞）
       try {
         const files = workspace.listDir(root).filter((e) => e.kind === 'file').map((e) => e.name)
-        prefixCache.ensure(buildStandardPrefix(root, files))
+        const prefix = buildStandardPrefix(root, files)
+        const { hit } = prefixCache.ensure(prefix)
+        const key = configStore.getApiKey()
+        if (!hit && key) {
+          void preheating.run(key, prefix, (k, p) => gateway.preheat(k, p)).catch((e) =>
+            console.log('[preheat] run failed:', e instanceof Error ? e.message : String(e))
+          )
+        }
       } catch (e) { console.log('[preheat] build failed:', e instanceof Error ? e.message : String(e)) }
     }
     return root
   })
-  // 09 预热：状态查询（plan + PrefixCache——renderer 用量行显示）
+  // 09 预热：状态查询（plan + PrefixCache + PreheatingService——renderer 用量行显示）
   ipcMain.handle('preheat:status', () => ({
     plan: planPreheat(workspace.getCurrentRoot()),
-    cache: prefixCache.get()
+    cache: prefixCache.get(),
+    preheat: preheating.getStatus()
   }))
   ipcMain.handle('workspace:list-dir', (_e, dirPath: string) => workspace.listDir(dirPath))
   ipcMain.handle('workspace:read-file', (_e, filePath: string) => workspace.readFile(filePath))
