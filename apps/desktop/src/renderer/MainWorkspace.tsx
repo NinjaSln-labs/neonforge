@@ -71,41 +71,13 @@ export default function MainWorkspace({
   }, [realChanges])
 
 function initDeliveryPkg(): DeliveryPackage | null {
-  // 演示模式（VITE_NF_DEMO_DELIVERY=1）或测试注入（window.neonforge.demo.delivery）
-  const demoEnv = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_NF_DEMO_DELIVERY
-  if (demoEnv === '1') {
-    return {
-      status: 'delivered',
-      summary: '整理了 Downloads 里的发票和合同：按类型分类、统一命名、重复文件标出（未删除）',
-      artifacts: ['发票/2026-08.xlsx', '合同/2026-07-15-服务协议.pdf', '重复文件清单.csv'],
-      acceptance: [
-        { label: '发票都在「发票」文件夹', done: false },
-        { label: '文件名含日期 + 商户', done: false },
-        { label: '重复文件已标出（未删，待你确认）', done: false }
-      ],
-      nextSteps: [
-        '重复文件确认后我帮你删（授权后）',
-        '需要发布网站？域名/备案超出数字工具能力——源码已给，我指导你发布'
-      ],
-      rerunLabel: '上次那个整理，再跑一遍',
-      rerunPrompt: '帮我整理一下这个目录'
-    }
-  }
+  // 数据源：测试注入（window.neonforge.demo.delivery——视觉基线/演示）——产品运行时无 demo 字段 → 空态（真实执行后联动生成）
   return (window.neonforge as unknown as { demo?: { delivery?: DeliveryPackage } }).demo?.delivery ?? null
 }
 
 function initProblems(): ProblemInstance[] {
-  const demo = (window.neonforge as unknown as { demo?: { problems?: ProblemInstance[] } }).demo?.problems
-  if (demo) return demo
-  const demoEnv = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_NF_DEMO_DELIVERY
-  if (demoEnv === '1') {
-    return [
-      { id: 'p1', title: '整理 Downloads 里的发票和合同', status: 'closed', updatedAt: '10:20' },
-      { id: 'p2', title: '做一个能发给朋友的旅行手册网页', status: 'awaiting-plan', updatedAt: '11:05' },
-      { id: 'p3', title: '把销售表合并出月度图表', status: 'executing', updatedAt: '11:12' }
-    ]
-  }
-  return []
+  // 数据源：测试注入（window.neonforge.demo.problems）——产品运行时无 demo 字段 → 空台账
+  return (window.neonforge as unknown as { demo?: { problems?: ProblemInstance[] } }).demo?.problems ?? []
 }
 
   const openFile = useCallback((filePath: string) => {
