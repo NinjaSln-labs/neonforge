@@ -69,24 +69,26 @@ export default function DeliveryPanel({
         </section>
       )}
 
-      <section className="nf-delivery__block">
-        <h4>验收对照</h4>
-        <ul className="nf-delivery__acceptance">
-          {items.map((it, i) => (
-            <li key={i}>
-              <button
-                type="button"
-                className={`nf-check${it.done ? ' nf-check--done' : ''}`}
-                aria-label={it.done ? `取消勾选：${it.label}` : `勾选：${it.label}`}
-                onClick={() => toggle(i)}
-              >
-                {it.done ? '☑' : '☐'}
-              </button>
-              <span>{it.label}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
+      {items.length > 0 && (
+        <section className="nf-delivery__block">
+          <h4>验收对照</h4>
+          <ul className="nf-delivery__acceptance">
+            {items.map((it, i) => (
+              <li key={i}>
+                <button
+                  type="button"
+                  className={`nf-check${it.done ? ' nf-check--done' : ''}`}
+                  aria-label={it.done ? `取消勾选：${it.label}` : `勾选：${it.label}`}
+                  onClick={() => toggle(i)}
+                >
+                  {it.done ? '☑' : '☐'}
+                </button>
+                <span>{it.label}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {pkg.diffs && pkg.diffs.length > 0 && (
         <section className="nf-delivery__block">
@@ -146,7 +148,7 @@ export default function DeliveryPanel({
       )}
 
       <div className="nf-delivery__actions">
-        {status !== 'closed' && (
+        {status !== 'closed' && items.length > 0 && (
           <>
             <button
               type="button"
