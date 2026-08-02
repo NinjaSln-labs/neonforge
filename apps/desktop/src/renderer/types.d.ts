@@ -43,6 +43,9 @@ export interface NeonForgeBridge {
   preheat: {
     status: () => Promise<{ plan: { shouldPreheat: boolean; why: string; actions: string[] }; cache: { standardPrefix: string; hash: string; history: Array<{ hash: string; at: string; hit: boolean }> } | null }>
   }
+  compaction: {
+    compact: (history: Array<{ role: string; content: string | null }>) => Promise<{ ok: true; summary: string; kept: Array<{ role: string; content: string | null }> } | { ok: false; error: string }>
+  }
 }
 
 declare global {

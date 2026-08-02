@@ -10,6 +10,7 @@ import { context } from './context.js'
 import { codeRag } from './codeRag.js'
 import { buildStandardPrefix, planPreheat, prefixCache, preheating } from './preheat.js'
 import { initPlugins, pluginRegistry } from './pluginSystem.js'
+import { compaction } from './compact.js'
 
 export function registerIpc(): void {
   initTools()
@@ -121,3 +122,10 @@ export function registerIpc(): void {
   ipcMain.handle('plugins:toggle', (_e, opts: { name: string; active: boolean }) =>
     pluginRegistry.setActive(opts.name, opts.active)
   )
+  // ticket 11 Compaction：对话历史压缩（触发判定 + 真实摘要 compactor——Gateway.summarize）
+  ipcMain.handle('compaction:compact', async (_e, opts: { history: Array<{ role: string; content: string | null }> }) => {
+    const apiKey = configStore.getApiKey()
+    if (!apiKey) return { ok: false, error: '无 API Key——无法压缩' }
+    if (!compaction.shouldCompact(opts.history ?? [])) return { ok: false, error: '历史未达压缩阈值' }
+    return compaction.compact(apiKey, (k, h) => gateway.summarize(k, h), opts.history ?? [])
+  })
