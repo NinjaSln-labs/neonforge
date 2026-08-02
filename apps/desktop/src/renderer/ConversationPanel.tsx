@@ -28,6 +28,7 @@ interface Msg {
 
 export default function ConversationPanel({
   rootPath,
+  currentFile,
   onKeyExpired,
   onReasoning,
   onWorkingChange,
@@ -39,6 +40,7 @@ export default function ConversationPanel({
   stageHint
 }: {
   rootPath?: string | null
+  currentFile?: string | null // 08 快捷键 Cmd+E：当前选中文件（@引用——D0 §6）
   onKeyExpired: () => void
   onReasoning?: (text: string) => void
   onWorkingChange?: (working: boolean) => void
@@ -512,6 +514,17 @@ export default function ConversationPanel({
           onKeyDown={(e) => {
             // 输入法组合中（拼音/候选确认的回车 isComposing=true）——不拦截，交给输入法
             if (e.nativeEvent.isComposing) return
+            // 08 快捷键（D0 §6）：Cmd/Ctrl+E = @引用当前选中文件（插入 @文件名 到输入框——发送时 ContextEngine 注入）
+            if (e.key === 'e' && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault()
+              if (currentFile) {
+                const name = currentFile.split('/').pop() ?? currentFile
+                inputRef.current = inputRef.current + `@${name} `
+                setInput(inputRef.current)
+                if (inputRef.current.includes('@') && demoFiles.length > 0) { setRecentFiles(demoFiles); setMentionOpen(true) }
+              }
+              return
+            }
             // Enter = 换行（内容保留）；Cmd/Ctrl+Enter = 发送
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void send() }
           }}
