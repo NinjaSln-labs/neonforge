@@ -1,8 +1,21 @@
 import { useState } from 'react'
-import Editor from '@monaco-editor/react'
+import Editor, { loader } from '@monaco-editor/react'
+import * as monaco from 'monaco-editor'
+import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker'
+import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 import FileTree from './FileTree'
 import DeliveryPanel from './DeliveryPanel'
 import type { DeliveryPackage } from './types'
+
+// 2026-08-03 v30 D3：Monaco 本地打包（@monaco-editor/react 默认 CDN 加载——离线空白；改为本地 monaco-editor 包 + vite worker）
+// 只读查看器：TS worker 足够；其他语言回退 editor worker
+;(self as unknown as { MonacoEnvironment: { getWorker: (_: string, label: string) => Worker } }).MonacoEnvironment = {
+  getWorker(_: string, label: string) {
+    if (label === 'typescript' || label === 'javascript') return new tsWorker()
+    return new editorWorker()
+  }
+}
+loader.config({ monaco })
 
 // 产物区（右）：工程 / 产物 Tabs——工程=文件树；产物=交付包（ticket 05）
 export default function OutputPanel({
