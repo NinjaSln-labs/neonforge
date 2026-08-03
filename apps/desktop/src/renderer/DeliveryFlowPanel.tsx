@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { IconCheck } from './icons'
+import { IconCheck, IconDot, IconRocket } from './icons'
 
 // 0-1 交付流（ticket 07）：说需求 → 软件工程模型/敏捷 → 分步推进 → 交付部署
 // V2：阶段状态提升——onStageChange/onModelSelect 通知 MainWorkspace（注入对话阶段指引）
@@ -40,7 +40,7 @@ export default function DeliveryFlowPanel({
   return (
     <div className="nf-flow">
       <div className="nf-flow__head">
-        <span className="nf-flow__title">🚀 0-1 交付流</span>
+        <span className="nf-flow__title"><IconRocket size={14} /> 0-1 交付流</span>
         {model && <span className="nf-flow__model">模型：{model === 'agile' ? '敏捷（迭代）' : '传统软件工程'}</span>}
       </div>
 
@@ -56,7 +56,7 @@ export default function DeliveryFlowPanel({
       <div className="nf-flow__stages">
         {FLOW_STAGES.map((name, i) => (
           <span key={name} className={`nf-flow__stage${i < stage ? ' nf-flow__stage--done' : ''}${i === stage ? ' nf-flow__stage--active' : ''}`}>
-            {i < stage ? '✓' : i === stage ? '●' : '○'} {name}
+            {i < stage ? <IconCheck size={12} /> : i === stage ? <IconDot size={12} /> : <IconDot size={12} className="nf-flow__stage-idle" />} {name}
           </span>
         ))}
       </div>

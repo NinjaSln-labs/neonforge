@@ -73,6 +73,18 @@ export const IconPlus = (p: IconProps) => (
 export const IconDot = (p: IconProps) => (
   <Svg {...p}><circle cx="12" cy="12" r="6" /></Svg>
 )
+// 信任阶梯（TrustLadderPanel）：盾牌——授权/信任语义
+export const IconShield = (p: IconProps) => (
+  <Svg {...p}><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" /></Svg>
+)
+// 数字交付：合并同类文件（DigitalDeliveryPanel 任务）
+export const IconMerge = (p: IconProps) => (
+  <Svg {...p}><circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M6 21V9a9 9 0 0 0 9 9" /></Svg>
+)
+// DoD 对齐（DoDAlignPanel）：靶心——验收标准/目标语义
+export const IconTarget = (p: IconProps) => (
+  <Svg {...p}><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></Svg>
+)
 
 // 工具名 → 图标（工具卡）
 export function ToolIcon({ name, size, className }: { name: string } & IconProps) {

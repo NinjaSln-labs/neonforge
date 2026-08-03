@@ -22,6 +22,10 @@
   --nf-text-dim: #a99ec4;
   --nf-accent: #6366f1;
   --nf-accent-soft: #2b2a52;
+  /* 2026-08-03 无障碍修复：小字 accent 文字专用（#6366f1 仅 3.94 不达标——link/激活态 12px 文字用亮版） */
+  --nf-accent-text: #818cf8;
+  /* 2026-08-03 无障碍修复：按钮白字底色加深（#6366f1 白字 4.47 边缘——实底按钮用 indigo-600 6.29） */
+  --nf-accent-strong: #4f46e5;
   --nf-amber: #ff8a00;
   --nf-violet: #a855f7;
   --nf-cyan: #22d3ee;
@@ -34,7 +38,7 @@
   --nf-font-sm: 12px;
   --nf-font-md: 14px;
   --nf-font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --nf-text-tertiary: #6f6799;
+  --nf-text-tertiary: #948dbe; /* 2026-08-03 无障碍：3.41→5.71（#6f6799 对 11px 说明文字不达标） */
   --nf-font-display: "Space Grotesk", -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
 }
 
@@ -50,8 +54,12 @@ body {
   overflow: hidden;
 }
 
-/* 2026-08-03 品牌字体应用（visual-direction §二 字体）：Display 用于品牌/标题/步骤数字 */
-.nf-start__brand, .nf-config__title, .nf-flow__focus-step, .nf-flow__title {
+/* 2026-08-03 品牌字体应用（visual-direction §二 字体）：Display 用于品牌/标题/步骤数字
+   2026-08-03 扩展（B3）：面板标题/会话标题/流程标题/交付徽章/台账标题——中文自动回退 PingFang */
+.nf-start__brand, .nf-config__title, .nf-flow__focus-step, .nf-flow__title,
+.nf-panel__header, .nf-session__header, .nf-filetree__title,
+.nf-delivery__badge, .nf-ledger__title, .nf-trust__body strong,
+.nf-settings__plugins-title, .nf-scene__label {
   font-family: var(--nf-font-display);
 }
 
@@ -165,7 +173,7 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   cursor: pointer; text-align: left; padding-right: 8px;
 }
 .nf-tree__row:hover { background: var(--nf-bg-elevated); }
-.nf-tree__row--active { background: var(--nf-accent-soft); color: var(--nf-accent); }
+.nf-tree__row--active { background: var(--nf-accent-soft); color: var(--nf-accent-text); }
 .nf-tree__icon { width: 14px; flex-shrink: 0; font-size: 11px; }
 .nf-tree__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -234,12 +242,12 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   color: var(--nf-text); font-size: var(--nf-font-sm);
 }
 .nf-config__link {
-  background: none; border: none; color: var(--nf-accent);
+  background: none; border: none; color: var(--nf-accent-text);
   cursor: pointer; font-size: var(--nf-font-sm); text-decoration: underline; flex-shrink: 0;
 }
 
 .nf-config__cta {
-  background: var(--nf-accent); color: #fff;
+  background: var(--nf-accent-strong); color: #fff;
   border: none; border-radius: var(--nf-radius-md);
   padding: var(--nf-space-3); font-size: var(--nf-font-md); cursor: pointer;
 }
@@ -273,7 +281,7 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 }
 .nf-start__cta--primary {
   border: none;
-  background-image: linear-gradient(90deg, #6366f1, #a855f7);
+  background-image: linear-gradient(90deg, var(--nf-accent-strong), #7c3aed);
   color: #fff; box-shadow: 0 0 14px rgba(99, 102, 241, 0.28);
 }
 .nf-start__cta--primary:hover { box-shadow: 0 0 20px rgba(99, 102, 241, 0.42); }
@@ -346,13 +354,13 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   border: 1px solid transparent;
 }
 .nf-config__cta {
-  background-image: linear-gradient(90deg, #6366f1, #a855f7);
+  background-image: linear-gradient(90deg, var(--nf-accent-strong), #7c3aed);
 }
 .nf-msg--assistant .nf-msg__body { background: rgba(99, 102, 241, 0.10); border-left: 2px solid rgba(99, 102, 241, 0.45); }
 
 /* 会话区（左） */
 .nf-session__header { display: flex; align-items: center; padding: var(--nf-space-2) var(--nf-space-3); border-bottom: 1px solid var(--nf-border); font-size: var(--nf-font-sm); color: var(--nf-text-dim); flex-shrink: 0; }
-.nf-session__new { background: var(--nf-accent-soft); color: var(--nf-accent); border: none; border-radius: var(--nf-radius-sm); padding: 2px var(--nf-space-3); font-size: var(--nf-font-sm); cursor: pointer; margin-left: auto; }
+.nf-session__new { background: var(--nf-accent-soft); color: var(--nf-accent-text); border: none; border-radius: var(--nf-radius-sm); padding: 2px var(--nf-space-3); font-size: var(--nf-font-sm); cursor: pointer; margin-left: auto; }
 .nf-session__list { flex: 1; overflow-y: auto; padding: var(--nf-space-2); display: flex; flex-direction: column; gap: 2px; }
 .nf-session__item { color: var(--nf-text-dim); font-size: var(--nf-font-sm); padding: var(--nf-space-2) var(--nf-space-3); border-radius: var(--nf-radius-sm); cursor: pointer; }
 .nf-session__item:hover { background: var(--nf-bg-elevated); color: var(--nf-text); }
@@ -387,11 +395,11 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   background: none; border: none; color: var(--nf-text-dim);
   font-size: var(--nf-font-md); cursor: pointer; padding: 0; line-height: 1;
 }
-.nf-check--done { color: var(--nf-accent); }
+.nf-check--done { color: var(--nf-accent-text); }
 .nf-check:focus-visible { outline: 1px solid var(--nf-accent); border-radius: 2px; }
 .nf-delivery__actions { display: flex; gap: var(--nf-space-2); margin-top: var(--nf-space-2); }
 .nf-delivery__primary {
-  background-image: linear-gradient(90deg, #6366F1, #A855F7);
+  background-image: linear-gradient(90deg, var(--nf-accent-strong), #7C3AED);
   color: #fff; border: none; border-radius: var(--nf-radius-sm);
   padding: 6px var(--nf-space-3); font-size: var(--nf-font-sm); cursor: pointer;
 }
@@ -400,7 +408,7 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   background: none; border: 1px solid var(--nf-border); color: var(--nf-text-dim);
   border-radius: var(--nf-radius-sm); padding: 6px var(--nf-space-3); font-size: var(--nf-font-sm); cursor: pointer;
 }
-.nf-delivery__rerun { background: none; border: none; color: var(--nf-accent); font-size: var(--nf-font-sm); cursor: pointer; text-align: left; padding: 0; }
+.nf-delivery__rerun { background: none; border: none; color: var(--nf-accent-text); font-size: var(--nf-font-sm); cursor: pointer; text-align: left; padding: 0; }
 .nf-delivery__hint { font-size: var(--nf-font-sm); color: var(--nf-amber); align-self: center; }
 .nf-delivery__badge--closed { background: rgba(34, 197, 94, 0.15); color: #22C55E; }
 
@@ -461,7 +469,9 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-flow__stages { display: flex; flex-wrap: wrap; gap: var(--nf-space-2); }
 .nf-flow__stage { font-size: var(--nf-font-sm); color: var(--nf-text-dim); padding: 2px var(--nf-space-2); border-radius: var(--nf-radius-sm); background: var(--nf-bg-panel); }
 .nf-flow__stage--done { color: #22C55E; }
-.nf-flow__stage--active { color: var(--nf-accent); background: var(--nf-accent-soft); font-weight: 600; }
+.nf-flow__stage--active { color: var(--nf-accent-text); background: var(--nf-accent-soft); font-weight: 600; }
+/* 2026-08-03 B2：阶段机待开始圆点（○→SVG idle 色） */
+.nf-flow__stage .nf-flow__stage-idle { color: var(--nf-text-tertiary); }
 .nf-flow__models { display: flex; gap: var(--nf-space-2); }
 .nf-flow__model-btn {
   flex: 1; display: flex; flex-direction: column; gap: 2px; text-align: left;
@@ -575,12 +585,12 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-toolcall__note { color: var(--nf-text-dim); font-size: 11px; }
 .nf-toolcall__stop { background: none; border: 1px solid var(--nf-border); color: var(--nf-text-dim); border-radius: 4px; padding: 2px 10px; font-size: 12px; cursor: pointer; }
 .nf-toolcall__stop:hover { border-color: rgba(239, 68, 68, 0.6); color: #ef4444; }
-.nf-toolcall__approveall { background: var(--nf-accent); color: #fff; border: none; border-radius: 4px; padding: 3px 12px; font-size: 12px; cursor: pointer; align-self: flex-start; }
+.nf-toolcall__approveall { background: var(--nf-accent-strong); color: #fff; border: none; border-radius: 4px; padding: 3px 12px; font-size: 12px; cursor: pointer; align-self: flex-start; }
 .nf-msg__sent { font-size: 11px; color: #22C55E; }
 .nf-working { display: flex; align-items: center; gap: var(--nf-space-2); font-size: var(--nf-font-sm); color: var(--nf-accent); padding: var(--nf-space-2) 0; }
 .nf-working__dot { animation: nf-thinking-pulse 2s ease-in-out infinite; }
 .nf-toolcall__actions { display: flex; gap: 6px; }
-.nf-toolcall__approve { background: var(--nf-accent); color: #fff; border: none; border-radius: 4px; padding: 2px 10px; font-size: 12px; cursor: pointer; }
+.nf-toolcall__approve { background: var(--nf-accent-strong); color: #fff; border: none; border-radius: 4px; padding: 2px 10px; font-size: 12px; cursor: pointer; }
 .nf-toolcall__reject { background: none; border: 1px solid var(--nf-border); color: var(--nf-text-dim); border-radius: 4px; padding: 2px 10px; font-size: 12px; cursor: pointer; }
 /* 05 执行层 A：diff 审核卡片 */
 .nf-diffcard { border: 1px solid var(--nf-border); border-radius: 8px; padding: 8px; margin: 8px 0; background: var(--nf-bg-elevated); }
@@ -601,12 +611,41 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-diffcard__expand { background: none; border: 1px solid var(--nf-border); color: var(--nf-cyan); border-radius: 4px; padding: 1px 8px; font-size: 11px; margin-top: 4px; cursor: pointer; }
 /* 非技术视图主路径（D0 §3.8）：全部接受并写入 */
 .nf-diffcard__acceptall { display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: rgba(99, 102, 241, 0.12); border-radius: 6px; margin-bottom: 6px; flex-wrap: wrap; }
-.nf-diffcard__acceptall-btn { background: var(--nf-accent); color: #fff; border: none; border-radius: 4px; padding: 4px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.nf-diffcard__acceptall-btn { background: var(--nf-accent-strong); color: #fff; border: none; border-radius: 4px; padding: 4px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
 .nf-diffcard__acceptall-btn:disabled { opacity: 0.5; cursor: wait; }
 .nf-diffcard__actions { display: flex; gap: 6px; margin-top: 6px; align-items: center; flex-wrap: wrap; }
-.nf-diffcard__accept { background: var(--nf-accent); color: #fff; border: none; border-radius: 4px; padding: 2px 10px; font-size: 12px; cursor: pointer; }
+.nf-diffcard__accept { background: var(--nf-accent-strong); color: #fff; border: none; border-radius: 4px; padding: 2px 10px; font-size: 12px; cursor: pointer; }
 .nf-diffcard__reject { background: none; border: 1px solid var(--nf-border); color: var(--nf-text-dim); border-radius: 4px; padding: 2px 10px; font-size: 12px; cursor: pointer; }
 .nf-diffcard__confirm { background: var(--nf-amber); color: #1a1530; border: none; border-radius: 4px; padding: 2px 10px; font-size: 12px; cursor: pointer; font-weight: 600; }
 .nf-diffcard__cancel { background: none; border: 1px solid var(--nf-border); color: var(--nf-text-dim); border-radius: 4px; padding: 2px 10px; font-size: 12px; cursor: pointer; }
 .nf-diffcard__revert { background: none; border: 1px solid var(--nf-amber); color: var(--nf-amber); border-radius: 4px; padding: 2px 10px; font-size: 12px; cursor: pointer; }
 .nf-diffcard__hint { font-size: 11px; color: var(--nf-amber); }
+
+/* 2026-08-03 审计修复（B1/C2）：对话流「搭档处理中」🔵 emoji → SVG 呼吸点 */
+.nf-working__dot { color: var(--nf-accent); animation: nf-breath-blue 2s ease-in-out infinite; display: inline-flex; }
+
+/* 2026-08-03 审计修复（B2）：交付验收未勾选空圈（替代 ☐ 字符） */
+.nf-check__empty {
+  display: inline-block; width: 12px; height: 12px;
+  border: 1.5px solid var(--nf-text-tertiary); border-radius: 3px;
+  vertical-align: -2px;
+}
+
+/* 2026-08-03 审计修复（A3）：交付操作失败内联错误条（替代原生 alert） */
+.nf-delivery__error {
+  display: flex; align-items: center; gap: var(--nf-space-2);
+  background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: var(--nf-radius-sm); padding: var(--nf-space-2) var(--nf-space-3);
+  color: #fca5a5; font-size: var(--nf-font-sm); margin-top: var(--nf-space-2);
+}
+.nf-delivery__error svg { flex-shrink: 0; }
+
+/* 2026-08-03 审计修复（B2）：内联 SVG 图标与文本基线对齐（状态点/勾选/标记） */
+.nf-ledger__dot, .nf-trust__mark, .nf-trust__ok, .nf-flow__stage svg {
+  display: inline-flex; vertical-align: -2px;
+}
+.nf-flow__stage { display: inline-flex; align-items: center; gap: 4px; }
+.nf-trust__mark { display: inline-flex; align-items: center; gap: 4px; }
+.nf-trust__ok { color: #22C55E; display: inline-flex; vertical-align: -2px; }
+.nf-ledger__dot { display: inline-flex; align-items: center; justify-content: center; width: 14px; }
+.nf-ledger__dot svg { display: block; }

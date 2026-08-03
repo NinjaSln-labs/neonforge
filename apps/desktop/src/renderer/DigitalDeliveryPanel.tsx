@@ -1,15 +1,15 @@
 import { useState } from 'react'
 import type { DeliveryPackage } from './types'
-import { IconCheck, IconFolder, IconRotateCcw } from './icons'
+import { IconCheck, IconClock, IconFile, IconFolder, IconMerge, IconRotateCcw, IconSparkles } from './icons'
 
 // 数字产物交付（ticket 13）：非技术主路径——文件整理/数据加工 → 变更预览 → L3 授权 → 交付
 const DEMO_FILES = ['发票/2026-07-10-淘宝.pdf', '发票/2026-07-15-京东.pdf', '发票/2026-07-22-美团.pdf', '合同/2026-07-18-服务协议.docx', '合同/2026-07-25-采购单.pdf', '重复/2026-07-10-淘宝-副本.pdf']
 
-const TASKS = [
-  ['🗂', '按类型整理分类', '把文件按 发票/合同/其他 分文件夹'],
-  ['🔀', '合并同类文件', '发票合并成一张表'],
-  ['📄', '格式转换', 'docx → pdf'],
-  ['🧹', '数据清洗', '去掉重复/补全格式']
+const TASKS: Array<{ icon: (p: { size?: number }) => React.ReactElement; label: string; q: string }> = [
+  { icon: IconFolder, label: '按类型整理分类', q: '把文件按 发票/合同/其他 分文件夹' },
+  { icon: IconMerge, label: '合并同类文件', q: '发票合并成一张表' },
+  { icon: IconFile, label: '格式转换', q: 'docx → pdf' },
+  { icon: IconSparkles, label: '数据清洗', q: '去掉重复/补全格式' }
 ]
 
 export default function DigitalDeliveryPanel({ onDeliver }: { onDeliver: (pkg: DeliveryPackage) => void }) {
@@ -51,15 +51,15 @@ export default function DigitalDeliveryPanel({ onDeliver }: { onDeliver: (pkg: D
 
       {/* 文件列表 */}
       <ul className="nf-digital__files">
-        {DEMO_FILES.map((f) => <li key={f}>📄 {f}</li>)}
+        {DEMO_FILES.map((f) => <li key={f}><IconFile size={12} /> {f}</li>)}
       </ul>
 
       {/* 处理任务选择 */}
       {!task && (
         <div className="nf-flow__models">
-          {TASKS.map(([icon, label, q]) => (
+          {TASKS.map(({ icon: Icon, label, q }) => (
             <button key={label} type="button" className="nf-flow__model-btn" onClick={() => setTask(label)}>
-              <span>{icon} {label}</span>
+              <span><Icon size={14} /> {label}</span>
               <span className="nf-flow__hint">{q}</span>
             </button>
           ))}
@@ -77,7 +77,7 @@ export default function DigitalDeliveryPanel({ onDeliver }: { onDeliver: (pkg: D
       {/* 执行中 */}
       {preview && !done && (
         <div className="nf-digital__preview">
-          <p className="nf-flow__stage-label">{processing ? '⏳ 处理中…' : '变更预览：按类型分类 → 发票 4 / 合同 2 / 重复标出（不删除）'}</p>
+          <p className="nf-flow__stage-label">{processing ? <><IconClock size={12} /> 处理中…</> : '变更预览：按类型分类 → 发票 4 / 合同 2 / 重复标出（不删除）'}</p>
           {!processing && (
             <button type="button" className="nf-delivery__primary" onClick={confirmAndDeliver}>确认并交付</button>
           )}

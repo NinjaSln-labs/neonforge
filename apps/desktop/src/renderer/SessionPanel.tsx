@@ -1,5 +1,6 @@
+import type { ReactElement } from 'react'
 import type { ProblemInstance, ProblemStatus } from './types'
-import { IconPlus } from './icons'
+import { IconCheck, IconDot, IconPlus, IconX } from './icons'
 
 // 问题台账（ticket 06）：问题 = 一等公民——7 态状态机、状态圆点、复开入口
 const STATUS_LABEL: Record<ProblemStatus, string> = {
@@ -11,14 +12,15 @@ const STATUS_LABEL: Record<ProblemStatus, string> = {
   closed: '已关闭',
   'failed-recoverable': '失败可恢复'
 }
-const STATUS_DOT: Record<ProblemStatus, string> = {
-  understanding: '●',
-  'awaiting-plan': '◉',
-  executing: '●',
-  'awaiting-input': '◉',
-  delivered: '●',
-  closed: '✓',
-  'failed-recoverable': '✕'
+// 2026-08-03 B2 审计修复：状态圆点字符（●◉✓✕）→ SVG（颜色由 .nf-ledger__dot--<status> 控制，文本标签已双编码）
+const STATUS_DOT: Record<ProblemStatus, () => ReactElement> = {
+  understanding: () => <IconDot size={12} />,
+  'awaiting-plan': () => <IconDot size={12} />,
+  executing: () => <IconDot size={12} />,
+  'awaiting-input': () => <IconDot size={12} />,
+  delivered: () => <IconDot size={12} />,
+  closed: () => <IconCheck size={12} />,
+  'failed-recoverable': () => <IconX size={12} />
 }
 
 export default function SessionPanel({
@@ -47,7 +49,7 @@ export default function SessionPanel({
               className={`nf-ledger__item${activeId === p.id ? ' nf-ledger__item--active' : ''}`}
               onClick={() => onSelect(p.id)}
             >
-              <span className={`nf-ledger__dot nf-ledger__dot--${p.status}`} aria-hidden="true">{STATUS_DOT[p.status]}</span>
+              <span className={`nf-ledger__dot nf-ledger__dot--${p.status}`} aria-hidden="true">{STATUS_DOT[p.status]()}</span>
               <span className="nf-ledger__title">{p.title}</span>
               <span className="nf-ledger__meta">
                 {STATUS_LABEL[p.status]}

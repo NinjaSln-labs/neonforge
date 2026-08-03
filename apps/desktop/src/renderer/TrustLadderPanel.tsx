@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { IconCheck, IconDot, IconShield } from './icons'
 
 // 信任阶梯（ticket 14）：L1-L4 渐进授权可视化 + 授权记录 + 委托规则
 // 2026-08-02：授权记录接真实数据（06 问题快照 authorized——对接 ticket 06「授权记录可回溯」AC）
@@ -41,7 +42,7 @@ export default function TrustLadderPanel({ authorizedLogs, delegateLowRisk, onDe
   return (
     <div className="nf-trust">
       <div className="nf-flow__head">
-        <span className="nf-flow__title">🛡 信任阶梯</span>
+        <span className="nf-flow__title"><IconShield size={14} /> 信任阶梯</span>
         <span className="nf-flow__model">当前：L{level} · 渐进解锁</span>
       </div>
 
@@ -55,7 +56,7 @@ export default function TrustLadderPanel({ authorizedLogs, delegateLowRisk, onDe
               <span>{scope}</span>
               <em>{auth}</em>
             </div>
-            {i + 1 === level && <span className="nf-trust__mark">● 当前</span>}
+            {i + 1 === level && <span className="nf-trust__mark"><IconDot size={10} /> 当前</span>}
           </div>
         ))}
       </div>
@@ -64,7 +65,7 @@ export default function TrustLadderPanel({ authorizedLogs, delegateLowRisk, onDe
       <div className="nf-trust__logs">
         <h4>授权记录</h4>
         <ul>
-          {logs.map((l, i) => <li key={i}><span className="nf-trust__ok">✓</span> {l.action} <em>（{l.level}）</em></li>)}
+          {logs.map((l, i) => <li key={i}><span className="nf-trust__ok"><IconCheck size={11} /></span> {l.action} <em>（{l.level}）</em></li>)}
         </ul>
       </div>
 
