@@ -19,9 +19,9 @@ function TaskPanel() {
   const hitRate = history.length > 0 ? Math.round((history.filter((h) => h.hit).length / history.length) * 100) : 0
   return (
     <div className="nf-task">
-      {/* 2026-08-03 A7 审计修复：占位措辞诚实化——任务队列尚未实现（原「当前任务：无」永远假信息） */}
-      <p className="nf-placeholder">任务队列：V2 即将支持——当前无进行中任务</p>
-      <p className="nf-placeholder">待审核变更：无（diff 审核在「产物」区）</p>
+      {/* 2026-08-03 A7 审计修复：占位措辞诚实化——任务队列尚未实现（原「当前任务：无」永远假信息）；v35 去 V2/diff 术语 */}
+      <p className="nf-placeholder">任务队列：即将支持——暂时没有进行中的任务</p>
+      <p className="nf-placeholder">待审核变更：无（审核在「产物」区）</p>
       <details>
         <summary>▸ 本轮用量</summary>
         <p className="nf-meta">{preheatInfo?.cache ? `前缀缓存 ${hitRate}% 命中（hash ${preheatInfo.cache.hash}）` : '—'}</p>

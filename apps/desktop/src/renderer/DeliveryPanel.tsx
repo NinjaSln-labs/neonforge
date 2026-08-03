@@ -153,11 +153,11 @@ export default function DeliveryPanel({
 
       {pkg.diffs && pkg.diffs.length > 0 && (
         <section className="nf-delivery__block">
-          <h4>开发者视图 · diff 审核（L3 授权）</h4>
+          <h4>开发者视图 · 改动审核（需授权）</h4>
           {/* 非技术视图主路径（D0 §3.8）：改动说明先行，全部接受为默认操作——免逐条确认 */}
           {(pkg.diffs.some((d) => !applied.has(d.path) && !reverted.has(d.path))) && (
             <div className="nf-diffcard__acceptall">
-              <span className="nf-diffcard__hint">已审阅以上改动——全部接受并写入（写前快照，可逐条回滚）</span>
+              <span className="nf-diffcard__hint">以上改动已审阅——全部接受并写入（已备份，可逐条还原）</span>
               <button type="button" className="nf-diffcard__acceptall-btn" disabled={acceptAllBusy} onClick={() => void acceptAll(pkg.diffs ?? [])}>
                 {acceptAllBusy ? '写入中…' : '全部接受并写入'}
               </button>
@@ -190,7 +190,7 @@ export default function DeliveryPanel({
                 )}
                 {isConfirming ? (
                   <div className="nf-diffcard__actions">
-                    <span className="nf-diffcard__hint">将写入 {d.path}（快照可回滚）——确认？</span>
+                    <span className="nf-diffcard__hint">将写入 {d.path}（已备份可还原）——确认？</span>
                     <button type="button" className="nf-diffcard__confirm" onClick={() => void applyDiff(d)}>确认写入</button>
                     <button type="button" className="nf-diffcard__cancel" onClick={() => setConfirming(null)}>取消</button>
                   </div>

@@ -54,7 +54,7 @@ export default function SessionPanel({
               <span className="nf-ledger__title">{p.title}</span>
               <span className="nf-ledger__meta">
                 {STATUS_LABEL[p.status]}
-                {p.status === 'closed' && ' · 可复开'}
+                {p.status === 'closed' && ' · 可重新开始'}
               </span>
             </button>
             {/* 06 断点续做深度（基线 §21）：选中问题展示会话快照——目标/已授权/待办（唤醒上下文） */}

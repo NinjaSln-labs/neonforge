@@ -30,8 +30,8 @@ test('选敏捷 → 分步推进到交付', async ({ page }) => {
   await page.goto('http://localhost:5174/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
-  await page.getByRole('button', { name: /敏捷开发/ }).click()
-  await expect(page.locator('.nf-flow')).toContainText('模型：敏捷（迭代）')
+  await page.getByRole('button', { name: /快速迭代/ }).click()
+  await expect(page.locator('.nf-flow')).toContainText('方式：快速迭代')
   // 推进 6 步到交付完成
   for (let i = 0; i < 6; i++) {
     const btn = page.locator('.nf-flow__advance button')
@@ -92,7 +92,7 @@ test('0-1 阶段指引注入（选模型 → 发送 → streamChat 含阶段提�
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
   // 选敏捷 → 发送需求 → streamChat messages 含阶段指引（需求阶段）
-  await page.getByRole('button', { name: /敏捷开发/ }).click()
+  await page.getByRole('button', { name: /快速迭代/ }).click()
   await page.locator('.nf-chat__input textarea').fill('做一个记账工具')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
   await page.waitForTimeout(600)
@@ -120,7 +120,7 @@ test('阶段推进 → 交付包阶段验收项（07 编排）', async ({ page }
   await page.goto('http://localhost:5174/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
-  await page.getByRole('button', { name: /敏捷开发/ }).click()
+  await page.getByRole('button', { name: /快速迭代/ }).click()
   await page.locator('.nf-chat__input textarea').fill('做一个记账工具')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
   await page.waitForTimeout(600)

@@ -16,22 +16,22 @@ export function toolLevel(name: string): 'L1' | 'L3' {
   return toolRisk(name) === 'none' ? 'L1' : 'L3'
 }
 
-// 授权卡文案：等级 + 影响（写哪个文件/执行什么命令）+ 快照提示（写前已备份可回滚）
-// 2026-08-03 v31 B1 审计修复：非技术用户优先——去掉内部信任等级术语「L3」（V1 主受众不懂），用人类语言「需要授权 · 操作」
+// 授权卡文案：等级 + 影响（写哪个文件/执行什么命令）+ 提示（写前已备份可还原）
+// 2026-08-03 v31 B1：去内部术语「L3」；v35：note 人类化（「快照 .nf-bak」→「备份原文件」——技术词隐藏）
 export interface AuthHint {
   level: string // 如「需要授权 · 写入文件」
   impact: string // 影响目标（文件路径 / 命令截断）
-  note: string // 快照/风险提示
+  note: string // 备份/风险提示
 }
 
 export function buildAuthHint(name: string, args: Record<string, unknown>): AuthHint {
   if (name === 'write' || name === 'edit') {
     const file = String(args.path ?? '?')
-    return { level: '需要授权 · 写入文件', impact: file, note: '写前自动快照备份 .nf-bak——可一键回滚' }
+    return { level: '需要授权 · 写入文件', impact: file, note: '会先备份原文件，之后可一键还原' }
   }
   if (name === 'bash') {
     const cmd = String(args.command ?? '').trim()
-    return { level: '需要授权 · 执行命令', impact: cmd.length > 60 ? cmd.slice(0, 60) + '…' : cmd || '?', note: '本机进程执行——授权即同意运行该命令' }
+    return { level: '需要授权 · 执行命令', impact: cmd.length > 60 ? cmd.slice(0, 60) + '…' : cmd || '?', note: '这条命令会在你的电脑上运行——点允许才会执行' }
   }
   return { level: '需要授权', impact: JSON.stringify(args).slice(0, 60), note: '' }
 }

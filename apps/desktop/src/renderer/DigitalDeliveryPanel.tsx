@@ -70,7 +70,7 @@ export default function DigitalDeliveryPanel({ onDeliver }: { onDeliver: (pkg: D
       {task && !preview && !done && (
         <div className="nf-digital__preview">
           <p className="nf-flow__stage-label">将处理 {DEMO_FILES.length} 个文件：{task}——影响范围如上清单，确认后执行</p>
-          <button type="button" className="nf-delivery__primary" onClick={startProcess}>开始处理（L3 授权）</button>
+          <button type="button" className="nf-delivery__primary" onClick={startProcess}>开始处理（需授权）</button>
         </div>
       )}
 
