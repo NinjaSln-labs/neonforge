@@ -9,21 +9,17 @@ export default function StartPage({
   return (
     <div className="nf-start">
       <h1 className="nf-start__brand">NeonForge</h1>
-      <p className="nf-start__prompt">今天想做什么？</p>
-      <input
-        className="nf-start__input"
-        placeholder="用自然语言描述…"
-        readOnly
-        aria-label="自然语言入口（对话闭环见 ticket 04）"
-      />
-      <div className="nf-start__links">
-        <button type="button" className="nf-start__link" onClick={onOpenProject}>
+      <p className="nf-start__slogan">说出问题，拿到结果</p>
+      <p className="nf-start__prompt">今天想做什么？——用自然语言告诉搭档，剩下交给它</p>
+      <div className="nf-start__actions">
+        <button type="button" className="nf-start__cta nf-start__cta--primary" onClick={onOpenProject}>
           打开已有项目
         </button>
-        <button type="button" className="nf-start__link" onClick={onNewProject}>
+        <button type="button" className="nf-start__cta nf-start__cta--ghost" onClick={onNewProject}>
           从零开始
         </button>
       </div>
+      <p className="nf-start__hint">整理文件 · 做小工具 · 修系统 · 0-1 交付</p>
     </div>
   )
 }
