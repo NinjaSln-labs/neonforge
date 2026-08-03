@@ -214,8 +214,8 @@ test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 1
     window.__emit({ type: 'tool-call', toolCall: { name: 'edit', args: { path: '/test/b.txt', old: 'a', new: 'b' } } })
     window.__emit({ type: 'done' })
   })
-  // 授权卡风险明示（ticket 14）：等级 L3·写入文件 + 影响路径 + 快照提示
-  await expect(page.locator('.nf-toolcall__hint').first()).toContainText('L3 · 写入文件')
+  // 授权卡风险明示（ticket 14 / v31 B1 人类化）：需要授权·写入文件 + 影响路径 + 快照提示
+  await expect(page.locator('.nf-toolcall__hint').first()).toContainText('需要授权 · 写入文件')
   await expect(page.locator('.nf-toolcall__impact').first()).toContainText('/test/a.txt')
   await expect(page.locator('.nf-toolcall__note').first()).toContainText('快照')
   // 疲劳防护：同批 ≥2 低危待授权 → 合并授权按钮出现

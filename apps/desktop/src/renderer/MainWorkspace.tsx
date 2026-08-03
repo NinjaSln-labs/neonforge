@@ -193,6 +193,8 @@ function initProblems(): ProblemInstance[] {
 
   return (
     <div className="nf-app">
+      {/* 2026-08-03 v31 A3：工作区总标题（sr-only——读屏文档结构，视觉隐藏） */}
+      <h1 className="nf-sr-only">NeonForge 工作区</h1>
       {/* 左：会话区 */}
       <SessionPanel
         problems={problems}

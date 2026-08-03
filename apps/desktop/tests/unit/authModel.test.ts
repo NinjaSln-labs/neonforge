@@ -20,17 +20,19 @@ describe('authModel 授权执行模型（ticket 14）', () => {
     expect(toolLevel('bash')).toBe('L3')
   })
 
-  it('buildAuthHint：write/edit 明示 L3·写入文件 + 影响路径 + 快照提示', () => {
+  // 2026-08-03 v31 B1：授权卡术语人类化——去内部「L3」用「需要授权 · 操作」（非技术用户优先）
+  it('buildAuthHint：write/edit 明示「需要授权·写入文件」+ 影响路径 + 快照提示', () => {
     const h = buildAuthHint('write', { path: '/tmp/a.txt', content: 'x' })
-    expect(h.level).toContain('L3')
+    expect(h.level).toContain('需要授权')
     expect(h.level).toContain('写入文件')
     expect(h.impact).toBe('/tmp/a.txt')
     expect(h.note).toContain('快照')
     expect(h.note).toContain('回滚')
   })
 
-  it('buildAuthHint：bash 明示 L3·执行命令 + 命令截断 + 本机执行风险', () => {
+  it('buildAuthHint：bash 明示「需要授权·执行命令」+ 命令截断 + 本机执行风险', () => {
     const h = buildAuthHint('bash', { command: 'rm -rf /tmp/x && echo done' })
+    expect(h.level).toContain('需要授权')
     expect(h.level).toContain('执行命令')
     expect(h.impact).toContain('rm -rf')
     expect(h.note).toContain('本机进程执行')
