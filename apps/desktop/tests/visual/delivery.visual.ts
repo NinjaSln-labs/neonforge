@@ -36,7 +36,7 @@ test('交付包视图（产物 Tab 渲染）', async ({ page }) => {
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.getByRole('button', { name: '产物' }).click()
-  await expect(page.locator('.nf-delivery__badge')).toHaveText('✅ 已解决')
+  await expect(page.locator('.nf-delivery__badge')).toHaveText('已解决')
   await expect(page.locator('.nf-delivery__summary')).toContainText('整理了 Downloads')
   await expect(page.locator('.nf-delivery__acceptance li')).toHaveCount(3)
   await expect(page.locator('.nf-output')).toHaveScreenshot('delivery-package.png')
@@ -55,7 +55,7 @@ test('验收交互：打勾 → 确认问题关闭', async ({ page }) => {
   for (let i = 0; i < 3; i++) { await checks.nth(i).click() }
   await expect(page.getByRole('button', { name: '确认问题关闭' })).toBeEnabled()
   await page.getByRole('button', { name: '确认问题关闭' }).click()
-  await expect(page.locator('.nf-delivery__badge')).toHaveText('✅ 已关闭')
+  await expect(page.locator('.nf-delivery__badge')).toHaveText('已关闭')
   await expect(page.locator('.nf-output')).toHaveScreenshot('delivery-closed.png')
 })
 

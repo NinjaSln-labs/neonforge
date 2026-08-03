@@ -89,7 +89,7 @@ test('工具卡片（write 授权执行 → 可回滚 ↩️ → 已回滚）', 
   // 授权执行 → done + 回滚按钮
   await page.locator('.nf-toolcall__approve').click()
   await page.waitForTimeout(500)
-  await expect(page.locator('.nf-toolcall')).toContainText('✅')
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(1)
   await expect(page.locator('.nf-toolcall__revert')).toBeVisible()
   await expect(page.locator('.nf-chat')).toHaveScreenshot('toolcall-write-revert.png')
   // 回滚 → 已回滚状态

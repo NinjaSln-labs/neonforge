@@ -21,7 +21,7 @@ test('设置面板（⚙ 打开 + 语言/视图/提醒）', async ({ page }) => 
   // 默认隐藏
   await expect(page.locator('.nf-settings')).toHaveCount(0)
   // 打开设置
-  await page.getByRole('button', { name: '⚙ 设置' }).click()
+  await page.getByRole('button', { name: '设置' }).click()
   await expect(page.locator('.nf-settings')).toBeVisible()
   await expect(page.locator('.nf-settings')).toContainText('语言')
   await expect(page.locator('.nf-settings')).toContainText('默认视图')
@@ -51,7 +51,7 @@ test('快捷键表完整（D0 §6——只列已实现：⌘, / ⌘Enter / ⌘N 
   await mockBridge(page)
   await page.goto('http://localhost:5174/')
   await page.getByRole('button', { name: '打开已有项目' }).click()
-  await page.getByRole('button', { name: '⚙ 设置' }).click()
+  await page.getByRole('button', { name: '设置' }).click()
   await expect(page.locator('.nf-settings')).toBeVisible()
   await expect(page.locator('.nf-settings')).toContainText('⌘ + , 打开 / 关闭设置')
   await expect(page.locator('.nf-settings')).toContainText('⌘ + Enter 发送消息')

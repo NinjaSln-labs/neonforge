@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { DirEntry } from './types'
+import { IconFile, IconFolder, IconFolderOpen } from './icons'
 
 // 文件树（D2 §9 / D7：行高 24px、字号 12px；可折叠）
 function TreeNode({
@@ -33,7 +34,7 @@ function TreeNode({
         style={{ paddingLeft: 8 + depth * 12 }}
         onClick={() => onOpenFile(entry.path)}
       >
-        <span className="nf-tree__icon">📄</span>
+        <span className="nf-tree__icon"><IconFile size={12} /></span>
         <span className="nf-tree__name">{entry.name}</span>
       </button>
     )
@@ -47,7 +48,7 @@ function TreeNode({
         style={{ paddingLeft: 8 + depth * 12 }}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="nf-tree__icon">{open ? '📂' : '📁'}</span>
+        <span className="nf-tree__icon">{open ? <IconFolderOpen size={12} /> : <IconFolder size={12} />}</span>
         <span className="nf-tree__name">{entry.name}</span>
       </button>
       {open && children?.map((child) => (

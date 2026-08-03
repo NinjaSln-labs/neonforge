@@ -1,4 +1,5 @@
 import type { ProblemInstance, ProblemStatus } from './types'
+import { IconPlus } from './icons'
 
 // 问题台账（ticket 06）：问题 = 一等公民——7 态状态机、状态圆点、复开入口
 const STATUS_LABEL: Record<ProblemStatus, string> = {
@@ -35,7 +36,7 @@ export default function SessionPanel({
     <section className="nf-session">
       <header className="nf-session__header">
         <span>问题</span>
-        <button type="button" className="nf-session__new" onClick={onNew}>＋ 新问题</button>
+        <button type="button" className="nf-session__new" onClick={onNew}><IconPlus size={12} /> 新问题</button>
       </header>
       <div className="nf-session__list">
         {problems.length === 0 && <p className="nf-placeholder">还没有问题——说出你当前的问题</p>}

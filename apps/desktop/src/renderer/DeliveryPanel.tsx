@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { DeliveryPackage } from './types'
 import { parseDiffLines, type DiffLine } from './diffRender'
+import { IconCheck, IconClock, IconFile, IconRotateCcw, IconX } from './icons'
 
 // 交付包视图（ticket 05）：产物 + 验收对照 + 下一步/指导——「问题已解决」的可验证呈现
 // 视觉：深紫浮面 + 靛紫 accent；验收打勾交互；「确认关闭」= 问题终态（交付 ≠ 解决）
@@ -105,7 +106,7 @@ export default function DeliveryPanel({
     <div className="nf-delivery">
       <div className="nf-delivery__head">
         <span className={`nf-delivery__badge${status === 'closed' ? ' nf-delivery__badge--closed' : ''}`}>
-          {status === 'closed' ? '✅ 已关闭' : '✅ 已解决'}
+          {status === 'closed' ? <><IconCheck size={12} /> 已关闭</> : <><IconCheck size={12} /> 已解决</>}
         </span>
       </div>
       <p className="nf-delivery__summary">{pkg.summary}</p>
@@ -162,9 +163,9 @@ export default function DeliveryPanel({
             return (
               <div key={i} className="nf-diffcard">
                 <div className="nf-diffcard__head">
-                  <span className="nf-diffcard__path">📄 {d.path}</span>
+                  <span className="nf-diffcard__path"><IconFile size={12} /> {d.path}</span>
                   <span className="nf-diffcard__state">
-                    {isReverted ? '↩️ 已回滚' : isApplied ? '✅ 已应用' : '⏳ 待审核'}
+                    {isReverted ? <><IconRotateCcw size={12} /> 已回滚</> : isApplied ? <><IconCheck size={12} /> 已应用</> : <><IconClock size={12} /> 待审核</>}
                   </span>
                 </div>
                 {renderDiffLines(d, isExpanded || !canExpand)}
@@ -214,7 +215,7 @@ export default function DeliveryPanel({
           className="nf-delivery__rerun"
           onClick={() => (pkg.rerunPrompt ? onRerun(pkg.rerunPrompt) : onAdjust())}
         >
-          ↻ {pkg.rerunLabel}
+          <IconRotateCcw size={12} /> {pkg.rerunLabel}
         </button>
       )}
 

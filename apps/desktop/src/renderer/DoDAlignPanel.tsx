@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { IconCheck } from './icons'
 
 // DoD 对齐（ticket 15b）：动手前用用户的话复述问题 + 验收标准——"什么叫解决"前置
 export default function DoDAlignPanel() {
@@ -61,7 +62,7 @@ export default function DoDAlignPanel() {
           <button type="button" className="nf-delivery__ghost">调整理解</button>
         </div>
       )}
-      {confirmed && <p className="nf-flow__done">✅ 验收标准已对齐——开始解决（按此对照交付）</p>}
+      {confirmed && <p className="nf-flow__done"><IconCheck size={12} /> 验收标准已对齐——开始解决（按此对照交付）</p>}
     </div>
   )
 }

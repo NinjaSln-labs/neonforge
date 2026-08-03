@@ -7,6 +7,11 @@ import type { DeliveryPackage } from './types'
 import { loadSession, saveSession, serializeMessages } from './sessionStore'
 // ticket 14 信任阶梯：授权执行模型（等级/影响/合并判定——L4 委托 + 疲劳防护）
 import { buildAuthHint, canMergeApprove, toolRisk } from './authModel'
+// 2026-08-03 视觉审计 P1-6：内联 SVG 图标（替换 emoji 图标）
+import {
+  IconBrain, IconCheck, IconClock, IconFile, IconFolder, IconLock,
+  IconRotateCcw, IconRocket, IconSparkles, IconSquare, IconWrench, IconX, ToolIcon
+} from './icons'
 
 // ticket 04：对话最小闭环（D0 §2/§3.4）——输入发送 → Gateway 流式 → 消息/呼吸光条/推理展示
 // 消费 02：streamChat（四档 basic）+ ModelRouter（默认 Flash）；错误分支：Key 失效内嵌更新 / 服务故障提示
@@ -422,25 +427,25 @@ export default function ConversationPanel({
       {demoDigital && <DigitalDeliveryPanel onDeliver={onDeliver} />}
       {demoTrust && <TrustLadderPanel authorizedLogs={activeAuthorizedLogs} delegateLowRisk={delegateLowRisk} onDelegateChange={handleDelegateChange} />}
       {demoDod && <DoDAlignPanel />}
-      {compactNote && <div className="nf-compact">🗜 {compactNote}</div>}
+      {compactNote && <div className="nf-compact"><IconClock size={12} /> {compactNote}</div>}
       <div className="nf-chat__list" ref={listRef} aria-live="polite" aria-relevant="additions text">
         {messages.length === 0 && (
           <div className="nf-scenes">
             <p className="nf-placeholder">说出你当前的问题——或者从这些开始：</p>
             <div className="nf-scenes__grid">
               {[
-                ['📁', '整理文件', '把 Downloads 里的发票和合同分类整理'],
-                ['🔧', '做小工具', '帮我做一个每周记账的小工具'],
-                ['🛠', '修系统', 'X 系统今天出异常了，帮我看看'],
-                ['🚀', '0-1 交付', '我要做一个能发给朋友的旅行手册网页']
-              ].map(([icon, label, q]) => (
+                { icon: IconFolder, label: '整理文件', q: '把 Downloads 里的发票和合同分类整理' },
+                { icon: IconWrench, label: '做小工具', q: '帮我做一个每周记账的小工具' },
+                { icon: IconSparkles, label: '修系统', q: 'X 系统今天出异常了，帮我看看' },
+                { icon: IconRocket, label: '0-1 交付', q: '我要做一个能发给朋友的旅行手册网页' }
+              ].map(({ icon: Icon, label, q }) => (
                 <button
                   key={label}
                   type="button"
                   className="nf-scene"
                   onClick={() => setInput(q)}
                 >
-                  <span className="nf-scene__icon">{icon}</span>
+                  <span className="nf-scene__icon"><Icon size={20} /></span>
                   <span className="nf-scene__label">{label}</span>
                   <span className="nf-scene__q">{q}</span>
                 </button>
@@ -455,17 +460,17 @@ export default function ConversationPanel({
             )}
             {m.role === 'user' && <span className="nf-msg__role">你</span>}
             <div className={`nf-msg__body${m.role === 'assistant' && m.status === 'streaming' && !m.content ? ' nf-msg__body--thinking' : ''}`}>
-              {m.content || (m.status === 'streaming' ? '🧠 搭档处理中…' : m.error === 'empty-response' ? '⚠️ 搭档没有返回内容——请重试或换个说法' : m.status === 'error' ? '⚠️ 处理失败' : '')}
+              {m.content || (m.status === 'streaming' ? '搭档处理中…' : m.error === 'empty-response' ? '搭档没有返回内容——请重试或换个说法' : m.status === 'error' ? '处理失败' : '')}
               {m.error === 'key-invalid' && (
                 <button type="button" className="nf-config__link" onClick={onKeyExpired}>
                   要不要更新一下？
                 </button>
               )}
             </div>
-            {m.role === 'user' && <span className="nf-msg__sent">✓ 已发送</span>}
+            {m.role === 'user' && <span className="nf-msg__sent"><IconCheck size={11} /> 已发送</span>}
             {m.reasoning && m.role === 'assistant' && m.status === 'done' && (
               <details className="nf-msg__reasoning">
-                <summary>🧠 推理</summary>
+                <summary><IconBrain size={12} /> 推理</summary>
                 <p className="nf-meta">{m.reasoning}</p>
               </details>
             )}
@@ -477,9 +482,9 @@ export default function ConversationPanel({
                   return (
                   <div key={i} className={`nf-toolcall nf-toolcall--${tc.status}`}>
                     <span className="nf-toolcall__icon">
-                      {tc.status === 'done' ? '✅' : tc.status === 'need-approval' ? '🔒' : tc.status === 'reverted' ? '↩️' : tc.status === 'error' ? '❌' : '⏳'}
+                      {tc.status === 'done' ? <IconCheck size={11} /> : tc.status === 'need-approval' ? <IconLock size={11} /> : tc.status === 'reverted' ? <IconRotateCcw size={11} /> : tc.status === 'error' ? <IconX size={11} /> : <IconClock size={11} />}
                     </span>
-                    <span className="nf-toolcall__name">🔧 {tc.name}</span>
+                    <span className="nf-toolcall__name"><ToolIcon name={tc.name} size={12} /> {tc.name}</span>
                     <span className="nf-toolcall__args">{JSON.stringify(tc.args).slice(0, 80)}</span>
                     {tc.result && <span className="nf-toolcall__result">{tc.result}</span>}
                     {tc.status === 'done' && tc.canRevert && (
@@ -488,7 +493,7 @@ export default function ConversationPanel({
                         className="nf-toolcall__revert"
                         onClick={() => revertToolCall(m.toolCalls ?? [], i, tc)}
                       >
-                        ↩️ 回滚
+                        <IconRotateCcw size={12} /> 回滚
                       </button>
                     )}
                     {tc.status === 'need-approval' && (
@@ -516,7 +521,7 @@ export default function ConversationPanel({
                     )}
                     {tc.status === 'pending' && (
                       <button type="button" className="nf-toolcall__stop" onClick={() => stopToolCall(m.toolCalls ?? [], i)}>
-                        ⏹ 停止
+                        <IconSquare size={12} /> 停止
                       </button>
                     )}
                   </div>
@@ -555,7 +560,7 @@ export default function ConversationPanel({
                   setMentionOpen(false)
                 }}
               >
-                📄 {f}
+                <IconFile size={12} /> {f}
               </button>
             ))}
           </div>
