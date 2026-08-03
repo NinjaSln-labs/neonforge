@@ -26,7 +26,7 @@ test('@ 引用（输入 @ → 浮层 → 点击插入）', async ({ page }) => {
   await expect(page.locator('.nf-mention__item')).toHaveCount(3)
   await expect(page.locator('.nf-chat')).toHaveScreenshot('mention-open.png')
   // 点击文件 → 插入标签
-  await page.getByRole('button', { name: /gateway.ts/ }).click()
+  await page.getByRole('option', { name: /gateway.ts/ }).click()
   await expect(textarea).toHaveValue(/@src\/main\/gateway\.ts /)
   await expect(page.locator('.nf-mention')).toHaveCount(0)
   await expect(page.locator('.nf-chat')).toHaveScreenshot('mention-inserted.png')

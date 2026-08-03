@@ -17,8 +17,9 @@ export function toolLevel(name: string): 'L1' | 'L3' {
 }
 
 // 授权卡文案：等级 + 影响（写哪个文件/执行什么命令）+ 快照提示（写前已备份可回滚）
+// 2026-08-03 v31 B1 审计修复：非技术用户优先——去掉内部信任等级术语「L3」（V1 主受众不懂），用人类语言「需要授权 · 操作」
 export interface AuthHint {
-  level: string // 如「L3 · 写入文件」
+  level: string // 如「需要授权 · 写入文件」
   impact: string // 影响目标（文件路径 / 命令截断）
   note: string // 快照/风险提示
 }
@@ -26,13 +27,13 @@ export interface AuthHint {
 export function buildAuthHint(name: string, args: Record<string, unknown>): AuthHint {
   if (name === 'write' || name === 'edit') {
     const file = String(args.path ?? '?')
-    return { level: 'L3 · 写入文件', impact: file, note: '写前自动快照备份 .nf-bak——可一键回滚' }
+    return { level: '需要授权 · 写入文件', impact: file, note: '写前自动快照备份 .nf-bak——可一键回滚' }
   }
   if (name === 'bash') {
     const cmd = String(args.command ?? '').trim()
-    return { level: 'L3 · 执行命令', impact: cmd.length > 60 ? cmd.slice(0, 60) + '…' : cmd || '?', note: '本机进程执行——授权即同意运行该命令' }
+    return { level: '需要授权 · 执行命令', impact: cmd.length > 60 ? cmd.slice(0, 60) + '…' : cmd || '?', note: '本机进程执行——授权即同意运行该命令' }
   }
-  return { level: 'L3', impact: JSON.stringify(args).slice(0, 60), note: '' }
+  return { level: '需要授权', impact: JSON.stringify(args).slice(0, 60), note: '' }
 }
 
 // 疲劳防护：同批多个待授权工具且全部低危 → 可合并授权（bash 高危永远单独确认）

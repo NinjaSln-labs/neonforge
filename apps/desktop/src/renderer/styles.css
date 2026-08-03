@@ -44,6 +44,13 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* 2026-08-03 v31 A3：屏幕阅读器专用（视觉隐藏——文档结构语义） */
+.nf-sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
 html, body, #root { height: 100%; }
 
 body {
@@ -379,7 +386,7 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-delivery { display: flex; flex-direction: column; gap: var(--nf-space-3); padding: var(--nf-space-3); }
 .nf-delivery__head { display: flex; align-items: center; }
 .nf-delivery__badge {
-  background: var(--nf-accent-soft); color: var(--nf-accent);
+  background: var(--nf-accent-soft); color: var(--nf-accent-text);
   padding: 2px var(--nf-space-3); border-radius: var(--nf-radius-sm);
   font-size: var(--nf-font-sm); font-weight: 600;
 }
@@ -587,7 +594,7 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-toolcall__stop:hover { border-color: rgba(239, 68, 68, 0.6); color: #ef4444; }
 .nf-toolcall__approveall { background: var(--nf-accent-strong); color: #fff; border: none; border-radius: 4px; padding: 3px 12px; font-size: 12px; cursor: pointer; align-self: flex-start; }
 .nf-msg__sent { font-size: 11px; color: #22C55E; }
-.nf-working { display: flex; align-items: center; gap: var(--nf-space-2); font-size: var(--nf-font-sm); color: var(--nf-accent); padding: var(--nf-space-2) 0; }
+.nf-working { display: flex; align-items: center; gap: var(--nf-space-2); font-size: var(--nf-font-sm); color: var(--nf-accent-text); padding: var(--nf-space-2) 0; }
 .nf-working__dot { animation: nf-thinking-pulse 2s ease-in-out infinite; }
 .nf-toolcall__actions { display: flex; gap: 6px; }
 .nf-toolcall__approve { background: var(--nf-accent-strong); color: #fff; border: none; border-radius: 4px; padding: 2px 10px; font-size: 12px; cursor: pointer; }
