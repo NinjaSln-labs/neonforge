@@ -226,3 +226,42 @@ test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 1
   await expect(page.locator('.nf-toolcall--done')).toHaveCount(2)
   await expect(page.locator('.nf-toolcall__approveall')).toHaveCount(0)
 })
+
+// 2026-08-04 回归：0-1 从零开始「确认推进」按钮常驻可见（原 flow 面板在滚动容器内——对话一多按钮滚出视口，用户找不到）
+test('0-1 从零开始：确认推进按钮常驻可见（修复——不在滚动容器内，对话滚动不隐藏）', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.neonforge = {
+      version: 'test',
+      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
+      workspace: {
+        openFolder: async () => null,
+        listDir: async () => [{ name: 'a.ts', path: '/test/a.ts', kind: 'file' }],
+        readFile: async (p: string) => ({ ok: true, content: '// ' + p }),
+        readNotebook: async () => null,
+        initProject: async () => ({ ok: true, path: '/test', title: 't' })
+      },
+      gateway: { validate: async () => ({ ok: true }), streamChat: async () => ({ ok: true }), onStreamChunk: () => () => {} },
+      tools: { execute: async () => ({ ok: true }), list: async () => [] },
+      context: { resolve: async () => ({ fragments: [] }) },
+      compaction: { compact: async () => ({ ok: false }) },
+      plugins: { list: async () => [], toggle: async () => true }
+    }
+    ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
+  })
+  await page.goto('http://localhost:5174/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.getByRole('button', { name: '从零开始' }).click()
+  // 选模型 → 出现「确认推进」按钮（文案与模型阶段指引提示一致）
+  await page.getByRole('button', { name: /快速迭代/ }).click()
+  const advance = page.locator('.nf-flow__advance button')
+  await expect(advance).toBeVisible()
+  await expect(advance).toContainText('确认推进')
+  // 修复验证：推进按钮不在 .nf-panel__body（滚动容器）内——对话滚动不隐藏
+  const inScrollBody = await advance.evaluate((el) => !!el.closest('.nf-panel__body'))
+  expect(inScrollBody).toBe(false)
+  // 发送需求 → 对话开始后按钮仍常驻可见
+  await page.locator('.nf-chat__input textarea').fill('做一个设计类小游戏')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  await page.waitForTimeout(300)
+  await expect(advance).toBeVisible()
+})

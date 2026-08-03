@@ -40,6 +40,8 @@ export default function OutputPanel({
   onRerun: (prompt: string) => void
 }) {
   const [tab, setTab] = useState<'project' | 'output'>('project')
+  // 2026-08-04 UX 修复：文件树折叠真实化（原 onToggle 空函数——折叠按钮可见但无效）
+  const [treeCollapsed, setTreeCollapsed] = useState(false)
 
   return (
     <section className="nf-output">
@@ -67,8 +69,8 @@ export default function OutputPanel({
           rootPath={rootPath}
           selectedPath={activePath}
           onOpenFile={(p) => { onOpenFile(p); setTab('output') }}
-          collapsed={false}
-          onToggle={() => {}}
+          collapsed={treeCollapsed}
+          onToggle={() => setTreeCollapsed((v) => !v)}
         />
       </div>
       <div className="nf-output__body" style={{ display: tab === 'output' ? 'flex' : 'none', padding: 0 }}>
