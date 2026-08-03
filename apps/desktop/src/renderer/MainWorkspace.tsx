@@ -252,10 +252,10 @@ function initProblems(): ProblemInstance[] {
 
       {showSettings && <SettingsPanel />}
 
-      {/* 2026-08-03 A4/C3 审计修复：移除硬编码假数据「待审核: 0」+ 状态栏 aria-live（思考中/就绪变化播报） */}
+      {/* 2026-08-03 A4/C3 审计修复：移除硬编码假数据「待审核: 0」+ 状态栏 aria-live（处理中/就绪变化播报） */}
       <footer className="nf-statusbar" role="status" aria-live="polite">
         {working ? (
-          <><span className="nf-statusbar__dot nf-statusbar__dot--working" />搭档思考中…</>
+          <><span className="nf-statusbar__dot nf-statusbar__dot--working" />搭档处理中…</>
         ) : (
           <><span className="nf-statusbar__dot nf-statusbar__dot--ready" />就绪</>
         )}

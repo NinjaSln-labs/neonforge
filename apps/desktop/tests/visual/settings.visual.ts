@@ -51,7 +51,7 @@ test('快捷键表完整（D0 §6——只列已实现：⌘, / Enter / ⌘N / �
   await expect(page.locator('.nf-settings')).toBeVisible()
   await expect(page.locator('.nf-settings')).toContainText('⌘ + , 打开 / 关闭设置')
   // 2026-08-03 A6：发送改为 Enter（Shift+Enter 换行）
-  await expect(page.locator('.nf-settings')).toContainText('Enter 发送消息（Shift+Enter 换行）')
+  await expect(page.locator('.nf-settings')).toContainText('Enter 发送消息 · Shift+Enter 换行')
   await expect(page.locator('.nf-settings')).toContainText('⌘ + N 新任务')
   await expect(page.locator('.nf-settings')).toContainText('⌘ + E @引用当前文件')
 })

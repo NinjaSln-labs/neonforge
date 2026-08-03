@@ -47,7 +47,7 @@ export default function SettingsPanel() {
         <span className="nf-settings__plugins-title">快捷键（只列已实现）</span>
         <div className="nf-settings__shortcuts-list">
           <span>⌘ + , 打开 / 关闭设置</span>
-          <span>Enter 发送消息（Shift+Enter 换行）</span>
+          <span>Enter 发送消息 · Shift+Enter 换行</span>
           <span>⌘ + N 新任务</span>
           <span>⌘ + E @引用当前文件</span>
         </div>
