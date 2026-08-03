@@ -21,11 +21,11 @@ export default function SettingsPanel() {
     <div className="nf-settings">
       <div className="nf-flow__head">
         <span className="nf-flow__title"><IconSettings size={14} /> 设置</span>
-        <span className="nf-flow__model">最小集（V1）</span>
+        <span className="nf-flow__model">基础版</span>
       </div>
 
       <div className="nf-settings__plugins">
-        <span className="nf-settings__plugins-title">内置插件（V1 无市场，仅注册）</span>
+        <span className="nf-settings__plugins-title">内置插件（暂不支持安装新插件）</span>
         <div className="nf-settings__plugins-list">
           {pluginList.map((p) => (
             <span key={p.name} className="nf-settings__plugin">

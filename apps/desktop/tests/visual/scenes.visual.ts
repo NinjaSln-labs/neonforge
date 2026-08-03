@@ -20,7 +20,7 @@ test('场景卡片渲染（对话空态）', async ({ page }) => {
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await expect(page.locator('.nf-scene')).toHaveCount(4)
   await expect(page.locator('.nf-scene').first()).toHaveText(/整理文件/)
-  await expect(page.locator('.nf-scene').nth(3)).toHaveText(/0-1 交付/)
+  await expect(page.locator('.nf-scene').nth(3)).toHaveText(/做新项目/)
   await expect(page.locator('.nf-chat')).toHaveScreenshot('scenes-empty.png')
 })
 

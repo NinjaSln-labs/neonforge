@@ -152,7 +152,12 @@ export default function ConversationPanel({
       }
       if (chunk.type === 'tool-call' && chunk.toolCall) {
         const tc = chunk.toolCall
-        setWorkingStage(`调用工具 ${tc.name}…`)
+        // 2026-08-03 v35：workingStage 人类化（原「调用工具 bash…」技术腔——按工具名映射自然描述）
+        const stageMap: Record<string, string> = {
+          read: '正在读取文件…', write: '正在写入文件…', edit: '正在修改文件…',
+          bash: '正在执行命令…', search: '正在搜索…'
+        }
+        setWorkingStage(stageMap[tc.name] ?? (tc.name.startsWith('find_') || tc.name.startsWith('get_') ? '正在查代码…' : '正在处理…'))
         next.toolCalls = [...(next.toolCalls ?? []), { name: tc.name, args: tc.args, status: 'pending' }]
         // ticket 14 L4 委托：低危文件操作（write/edit）命中委托规则 → 免确认直接执行（仍快照可回滚）；bash 高危永远单独授权
         const autoApproved = tc.name === 'read' || (delegateLowRisk && toolRisk(tc.name) === 'low')
@@ -404,13 +409,13 @@ export default function ConversationPanel({
       const next: Msg = { ...last, status: 'error' }
       if (err === 'key-invalid' || String(err).includes('401')) {
         next.error = 'key-invalid'
-        next.content = 'API Key 好像失效了。'
+        next.content = 'API Key 好像失效了，换个 Key 试试。'
       } else if (String(err).includes('5') || err === 'timeout' || err === 'network' || String(err).includes('gateway')) {
         next.error = 'service'
-        next.content = '服务暂时不可用，稍后重试。'
+        next.content = '服务暂时不可用，稍后再试。'
       } else {
         next.error = 'unknown'
-        next.content = '出错了，请重试。'
+        next.content = '刚才出错了，请再试一次。'
       }
       return [...p.slice(0, -1), next]
     })
@@ -438,13 +443,13 @@ export default function ConversationPanel({
       <div className="nf-chat__list" ref={listRef} aria-live="polite" aria-relevant="additions text">
         {messages.length === 0 && (
           <div className="nf-scenes">
-            <p className="nf-placeholder">说出你当前的问题——或者从这些开始：</p>
+            <p className="nf-placeholder">想解决什么？直接说，或从这些开始：</p>
             <div className="nf-scenes__grid">
               {[
                 { icon: IconFolder, label: '整理文件', q: '把 Downloads 里的发票和合同分类整理' },
                 { icon: IconWrench, label: '做小工具', q: '帮我做一个每周记账的小工具' },
                 { icon: IconSparkles, label: '修系统', q: 'X 系统今天出异常了，帮我看看' },
-                { icon: IconRocket, label: '0-1 交付', q: '我要做一个能发给朋友的旅行手册网页' }
+                { icon: IconRocket, label: '做新项目', q: '我要做一个能发给朋友的旅行手册网页' }
               ].map(({ icon: Icon, label, q }) => (
                 <button
                   key={label}
