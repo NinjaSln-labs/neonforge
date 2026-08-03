@@ -42,9 +42,11 @@ if (!gotTheLock) {
     })
 
     // 启动默认最大化（2026-08-03 用户优化）——铺满屏幕但保留标题栏/菜单栏
+    // v38 修复：macOS 窗口状态恢复（restorable——记住上次关闭的窗口 frame）可能在显示时覆盖 maximize
+    // → 先 show 再延迟 maximize——上次非最大化关闭也不残留，启动必铺满（「有时候不是全屏」根治）
     win.once('ready-to-show', () => {
-      win.maximize()
       win.show()
+      setTimeout(() => { if (!win.isDestroyed()) win.maximize() }, 30)
     })
 
     win.webContents.on('preload-error', (_e, pathFailed, err) => {
