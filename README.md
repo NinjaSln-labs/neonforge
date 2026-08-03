@@ -2,67 +2,109 @@
 
 > 为 DeepSeek 打造的 **AI 问题工作台**：说出你当前的问题，拿到结果。帮用户解决当前的问题——一切能被数字工具解决的。
 
-**产品定位**：AI 问题工作台（非 IDE、非 Chatbot）——对话进入 · 分步授权 · 内在工程/设计/编排自动推进 · 交付可验证结果 · 超出数字能力部分给产物+指导（不装能）
+**产品定位**：AI 问题工作台（非 IDE、非 Chatbot）——对话进入 · 分步授权 · 内在工程/设计/编排自动推进 · 交付可验证结果 · 超出数字能力部分给产物 + 指导（不装能）。
 
-**谁在用**：不会写代码的人（说出问题→被解决→拿到数字产物+指导）· 开发者（异常修复/0-1 交付，授权闭环）
+**谁在用**：不会写代码的人（说出问题 → 被解决 → 拿到数字产物 + 指导）· 开发者（异常修复 / 0-1 交付，授权闭环）。
 
 **核心流**：`说出问题 → 分析 → 分步授权 → 解决 → 交付结果（数字产物/修复闭环）→ 反馈 + 指导继续`
 
-**技术栈**：Electron + React + Monaco + Vite + Zustand + TypeScript + SQLite
+---
+
+## 当前状态（2026-08-03）
+
+- **工程：tickets 01-15 全部收官**（信任阶梯 / 授权执行 / 可撤销 / 断点续做 / 交付包 / 0-1 编排 / Compaction / ContextEngine / LSP / CodeRAG / 预热 全链路落地）
+- **质量链全绿**：L1 Vitest 88 · L2 tsc 0 错 · L3 组件交互 8 · L4 真实 Key E2E 10/10 · L5 视觉 47（39 visual + 8 interaction）
+- **V1 门禁**：D0 §11 包含项 12/12 实现，无越界
+
+## 功能亮点
+
+1. **缓存预热**：打开项目即预热，首字延迟 ~0.1s（真实 API 实测：冷启动 275ms → 预热后 KV 命中 118ms，达标 D8 ≤500ms）
+2. **精准上下文（1M 预算思路）**：LSP 真实连接（definition/references/type/diagnostics）+ CodeRAG 关键词检索 + `@引用` 文件注入——不倾倒垃圾 token
+3. **Diff 审核写入**：写操作先快照（`.nf-bak`）→ 审核 → 应用 → 可一键回滚；交付包批量接受
+4. **信任阶梯授权**：L1 观察 → L2 建议 → L3 操作（逐项授权 + 快照提示 + 风险明示）→ L4 委托（低危自动授权可撤销）；疲劳防护（批量合并授权，高危命令单独确认）；任何时刻可停止/撤销
+5. **问题 = 一等公民**：问题台账 + 会话快照（目标/已决策/已授权/待办）+ 断点续做 + 复跑
+6. **长对话不丢**：Compaction 自动压缩（真实摘要 + 保留最近 20 条）
+7. **单实例**：同时只运行一个应用，重复启动聚焦已有窗口
+
+## 快速上手
+
+> 需要 DeepSeek API Key（`https://platform.deepseek.com` 获取）。
+
+```bash
+cd apps/desktop
+npm install                # 依赖（Electron 下载失败见下方镜像）
+npm run dev                # 仅 renderer dev server（:5173）
+npm run dev:electron       # 完整应用（dev 模式，连接 :5173）
+```
+
+- 首次启动在「设置」中粘贴 API Key（Key 存本地 safeStorage，不上传）
+- 「打开已有项目」→ 在对话里说出问题 → 分步授权 → 拿到交付结果
+- 「从零开始」→ 自动创建项目骨架 → 0-1 交付（阶段指引 + 交付包验收）
+
+### 打包安装
+
+```bash
+cd apps/desktop
+npm run dist               # 产出 release/（macOS: .dmg + .zip；win: .nsis；linux: AppImage）
+```
+
+> **ExFAT/外置卷已知问题**：electron-builder 在 ExFAT 卷打包会生成损坏的 asar（报 `chromium-pickle` offset 越界）——仓库在 ExFAT 卷时指定输出到本地卷：`npm run build && npx electron-builder -c.directories.output=/tmp/nf-release`
+>
+> macOS 未签名版本首次打开需右键 → 打开（Gatekeeper 提示）。代码签名/公证列入后续路线。
+
+### 测试
+
+```bash
+npx vitest run                          # L1 领域逻辑（88）
+npx tsc -p tsconfig.json --noEmit       # L2 契约
+npx playwright test --project=interaction # L3 组件交互（8）
+npx playwright test                     # L5 视觉 + L3（47）
+NF_TEST_KEY=<key> node e2e-suite.mjs    # L4 真实 Key E2E（前置：mkdir -p /tmp/nf-e2e-test）
+```
+
+### 镜像（Electron 下载失败时）
+
+```bash
+ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ node install.js
+```
+
+## 技术栈与架构
+
+**技术栈**：Electron 36 + React 19 + TypeScript + Vite + esbuild + Monaco（产物查看） + Vitest + Playwright
 
 **四层领域架构**：
+
 ```
 Engineering   — AgentChain 流水线 → DiffApply → ChangeSet 交付
-Orchestrate   — Compaction · PrefixCache · ContextEngine
-Design        — ThinkingLevel · ReasoningViz
-Code          — Editor · ToolRegistry · DeepSeekGateway · PluginSystem
+Orchestrate   — Compaction · PrefixCache · ContextEngine · Preheating
+Design        — 信任阶梯授权 · 推理可视化 · 交付包验收
+Code          — ToolRegistry · DeepSeekGateway · PluginSystem · LSP
 ```
-
----
 
 ## 文档
 
-```
-docs/
-├── product/   # 产品设计（设计→工程交付，8 份）
-└── domain/    # 领域驱动设计 + 技术架构（8 份）
-```
+| 文档 | 说明 |
+|------|------|
+| `docs/product/00-product-design.md`（D0） | 产品设计总纲 |
+| `docs/domain/00-domain-authority.md`（A0） | 领域实现权威 |
+| `.agents/product-marketing.md` | 定位 / ICP / 差异化 |
+| `.scratch/launch/launch-plan.md` | 发布计划（五阶段 + ORB 渠道）|
 
-### 产品 & 设计（`docs/product/`）
+产品/领域文档全索引见 `docs/product/` 与 `docs/domain/`（D0-D9 / A0-A9）。
 
-| 编号 | 文档 | 说明 |
-|------|------|------|
-| D0 | [产品设计规范](./docs/product/00-product-design.md) | **总纲**：完整产品定义、页面规格、交互模式、状态处理、语气指南 |
-| D1 | [用户旅程图](./docs/product/01-user-flows.md) | 所有界面流转、分支路径、关键决策点 |
-| D2 | [UI 组件规格](./docs/product/02-components.md) | 19 个组件：变体、尺寸、状态、动画参数 |
-| D3 | [设计令牌](./docs/product/03-design-tokens.md) | 色彩/字体/间距/圆角/阴影/动画 — CSS 变量可直接映射 |
-| D4 | [对齐索引](./docs/product/04-alignment.md) | 不同角色读什么、文档交叉引用、工程实现顺序 |
-| D5 | [视觉设计规范](./docs/product/05-visual-spec.md) | 屏幕级视觉、三层深度、动效时序、Figma 画板指引 |
-| D6 | [竞品产品参考](./docs/product/00-product-reference.md) | Codex Desktop & Cursor 产品设计分析 |
-| D7 | [交叉审计报告](./docs/product/06-product-design-audit.md) | 设计→交付前的独立审计（含修复状态） |
-| D8 | [成功指标](./docs/product/07-success-metrics.md) | 北极星 + leading/lagging 指标、分阶段验证阈值（0-1 落地标尺） |
+## Known Limitations（V1）
 
-### 技术架构（`docs/domain/`）
+- **打包版 LSP 降级**：dev 模式 LSP 完整可用（查符号定义/引用/类型）；打包版若系统未装 `typescript-language-server` 则 LSP 工具提示未连接——对话/工具/交付主链路不受影响
+- macOS 未签名（见上）；Windows/Linux 打包目标已配置未实测
+- 单实例锁按应用作用域；测试环境注意残留实例（见 CI 脚本）
 
-| 编号 | 文档 | 说明 |
-|------|------|------|
-| A0 | [领域权威总纲](./docs/domain/00-domain-authority.md) | **实现权威（v2.0）**：模型策略、16 限界上下文、AgentChain 规格化、工具面、1M 预算、EventBus 规则、产品↔领域 V1 矩阵；A1–A7 冲突处以此为准 |
-| A1 | [竞品技术分析](./docs/domain/01-reference-analysis.md) | Pi / Reasonix / DeepCode / Cursor 技术对比 |
-| A2 | [领域模型](./docs/domain/02-domain-model.md) | 四层架构、12 限界上下文、设计原则、统一语言 |
-| A3 | [战略设计](./docs/domain/03-strategic-design.md) | 限界上下文详细建模、上下文映射 |
-| A4 | [战术设计](./docs/domain/04-tactical-design.md) | 聚合根、值对象、领域服务、不变性规则 |
-| A5 | [架构设计](./docs/domain/05-architecture.md) | 分层架构、管线设计、模块目录树、技术选型 |
-| A6 | [领域事件](./docs/domain/06-domain-events.md) | 完整事件目录、关键时序图 |
-| A7 | [API网关设计](./docs/domain/07-api-gateway.md) | DeepSeek API 适配、1M 上下文策略、PrefixCache + 预热 |
-| A8 | [交叉审计报告](./docs/domain/08-domain-design-audit.md) | 领域文档交叉验证（第 1 轮，就绪度 42；第 2 轮 8 Critical 已由 A0 闭合） |
-| A9 | [PRD↔领域追溯矩阵](./docs/domain/09-traceability.md) | D0 ↔ A0 追溯（直接/精化/偏离 + 同构说明），实现防漂移 |
+## 贡献指南
 
-### 执行区产出（非 docs/，工程执行资产）
+1. Fork + 新分支（`feat/xxx` 或 `fix/xxx`）
+2. 改动前先读 `docs/domain/00-domain-authority.md`（A0 实现权威）与对应 ticket（`.scratch/neonforge-v1/issues/`）
+3. 改动后质量链全绿再提 PR：`npx vitest run` + `npx tsc -p tsconfig.json --noEmit` + 相关 L3/L5
+4. 安全约定：Key 不落盘不上传；写操作先快照；IPC 参数校验
 
-| 资产 | 位置 | 说明 |
-|------|------|------|
-| 工程 tickets | `.scratch/neonforge-v1/issues/` | 9 个垂直切片（01-scaffold 已开工） |
-| launch 计划 | `.scratch/launch/launch-plan.md` | 五阶段 + ORB 渠道 |
-| 高风险决策压力测试 | `.scratch/grill/high-risk-decisions.md` | 串行队列 / DeepSeek-only（均通过） |
-| product-marketing 上下文 | `.agents/product-marketing.md` | 定位/ICP/竞品/差异化 |
-| 工程代码 | `apps/desktop/` | Electron + Vite + React + TS + Monaco |
+---
+
+**License**：未定（V1 开源发布前确定）· **Contact**：GitHub Issues
