@@ -649,3 +649,40 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-trust__ok { color: #22C55E; display: inline-flex; vertical-align: -2px; }
 .nf-ledger__dot { display: inline-flex; align-items: center; justify-content: center; width: 14px; }
 .nf-ledger__dot svg { display: block; }
+
+/* 2026-08-03 v30 D1：行动节点链动效（visual-direction §三 未做项落地——克制原则：只动 agent 行动相关）
+   待批准=amber 琥珀脉动（能量感·等用户）· 执行中=靛蓝呼吸（进行中）· 完成=绿色勾一次浮现（进场不循环） */
+@keyframes nf-ember-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 138, 0, 0.35); }
+  50% { box-shadow: 0 0 0 4px rgba(255, 138, 0, 0); }
+}
+@keyframes nf-node-in {
+  from { transform: scale(0.6); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.nf-toolcall--need-approval .nf-toolcall__icon { animation: nf-ember-pulse 1.6s ease-out infinite; }
+.nf-toolcall--pending .nf-toolcall__icon { animation: nf-breath-blue 1.6s ease-in-out infinite; }
+.nf-toolcall--done .nf-toolcall__icon { animation: nf-node-in 200ms ease-out; }
+
+/* 2026-08-03 v30 D2：启动页深空氛围——靛蓝/紫 ambient 光晕（克制：柔和不抢品牌渐变签名） */
+.nf-app--start { position: relative; overflow: hidden; }
+.nf-app--start::before {
+  content: ''; position: absolute; pointer-events: none;
+  width: 720px; height: 540px; left: 50%; top: 18%;
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse at center, rgba(99, 102, 241, 0.14), transparent 65%);
+}
+.nf-app--start::after {
+  content: ''; position: absolute; pointer-events: none;
+  width: 560px; height: 420px; left: 50%; bottom: -10%;
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse at center, rgba(168, 85, 247, 0.10), transparent 65%);
+}
+.nf-app--start .nf-start { position: relative; z-index: 1; }
+
+/* v30 D1/D2：prefers-reduced-motion 降级（动效关闭——光晕是静态，保留） */
+@media (prefers-reduced-motion: reduce) {
+  .nf-toolcall--need-approval .nf-toolcall__icon,
+  .nf-toolcall--pending .nf-toolcall__icon,
+  .nf-toolcall--done .nf-toolcall__icon { animation: none; }
+}
