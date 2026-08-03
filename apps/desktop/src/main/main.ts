@@ -30,6 +30,7 @@ if (!gotTheLock) {
     const win = new BrowserWindow({
       width: 1280,
       height: 800,
+      show: false, // 等 ready-to-show 再显示——避免启动闪烁（默认最大化）
       title: 'NeonForge',
       backgroundColor: '#1a1b1e', // D3 tokens: 深色主题背景
       webPreferences: {
@@ -38,6 +39,12 @@ if (!gotTheLock) {
         nodeIntegration: false,
         sandbox: false
       }
+    })
+
+    // 启动默认最大化（2026-08-03 用户优化）——铺满屏幕但保留标题栏/菜单栏
+    win.once('ready-to-show', () => {
+      win.maximize()
+      win.show()
     })
 
     win.webContents.on('preload-error', (_e, pathFailed, err) => {
