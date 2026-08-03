@@ -227,8 +227,13 @@ function initProblems(): ProblemInstance[] {
             <button type="button" className="nf-session__new" onClick={onBackStart}>启动页</button>
           </div>
         </header>
+        {/* 2026-08-04 UX 修复：0-1 交付流面板移出滚动容器——对话滚动时「模型选择/确认推进」常驻可见（原在 .nf-panel__body 内被对话内容滚出视口——用户找不到推进按钮） */}
+        {zeroToOne && (
+          <div className="nf-flow__dock">
+            <DeliveryFlowPanel onStageChange={handleStageChange} onModelSelect={setFlowModel} />
+          </div>
+        )}
         <div className="nf-panel__body">
-          {zeroToOne && <DeliveryFlowPanel onStageChange={handleStageChange} onModelSelect={setFlowModel} />}
           {chatTab === 'chat' ? (
             <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} recentFilesExternal={projectFiles} stageHint={stageHint} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} />
           ) : (
