@@ -21,7 +21,6 @@ export default function SettingsPanel() {
     <div className="nf-settings">
       <div className="nf-flow__head">
         <span className="nf-flow__title"><IconSettings size={14} /> 设置</span>
-        <span className="nf-flow__model">基础版</span>
       </div>
 
       <div className="nf-settings__plugins">

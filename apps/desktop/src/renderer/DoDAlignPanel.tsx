@@ -59,7 +59,7 @@ export default function DoDAlignPanel() {
           >
             确认，开始解决
           </button>
-          <button type="button" className="nf-delivery__ghost">调整理解</button>
+          {/* 2026-08-04：移除空函数「调整理解」按钮（原无 onClick——假交互）；调整需求请回对话重说 */}
         </div>
       )}
       {confirmed && <p className="nf-flow__done"><IconCheck size={12} /> 验收标准已对齐——开始解决（按此对照交付）</p>}

@@ -44,9 +44,10 @@ export default function DeliveryFlowPanel({
         {model && <span className="nf-flow__model">方式：{model === 'agile' ? '快速迭代' : '稳扎稳打'}</span>}
       </div>
 
-      {/* 当前步骤聚焦卡 */}
+      {/* 当前步骤聚焦卡（2026-08-04：加「当前阶段」标签——原「需求」大字似输入框误导；明确是状态指示非输入区） */}
       {model && stage < FLOW_STAGES.length - 1 && (
         <div className="nf-flow__focus">
+          <span className="nf-flow__focus-tag">当前阶段</span>
           <span className="nf-flow__focus-step">{FLOW_STAGES[stage]}</span>
           <span className="nf-flow__focus-hint">{STAGE_HINT[FLOW_STAGES[stage]]}</span>
         </div>
@@ -61,9 +62,11 @@ export default function DeliveryFlowPanel({
         ))}
       </div>
 
-      {/* 模型选择（未选时）——2026-08-03 v35：传统/敏捷术语人类化（非技术用户「稳扎稳打/快速迭代」） */}
+      {/* 模型选择（未选时）——2026-08-03 v35：传统/敏捷术语人类化（非技术用户「稳扎稳打/快速迭代」）
+          2026-08-04：加引导文案——明确这是必选入口（用户曾误以为不可用/忽略） */}
       {!model && (
         <div className="nf-flow__models">
+          <span className="nf-flow__models-hint">先选一种做项目的方式——搭档会按阶段带你推进</span>
           <button type="button" className="nf-flow__model-btn" onClick={() => pickModel('traditional')}>
             稳扎稳打 <span className="nf-flow__hint">先定方案再开发（适合重要/安全相关的项目）</span>
           </button>
@@ -73,12 +76,12 @@ export default function DeliveryFlowPanel({
         </div>
       )}
 
-      {/* 分步推进 */}
+      {/* 分步推进（2026-08-04：按钮文案统一为「确认推进」——与模型阶段指引提示一致，用户按提示找按钮） */}
       {model && stage < FLOW_STAGES.length - 1 && (
         <div className="nf-flow__advance">
-          <span className="nf-flow__stage-label">当前阶段：{FLOW_STAGES[stage]}（确认后推进）</span>
+          <span className="nf-flow__stage-label">当前阶段：{FLOW_STAGES[stage]}——完成就点「确认推进」</span>
           <button type="button" className="nf-delivery__primary" onClick={advance}>
-            确认 {FLOW_STAGES[stage]} 完成 → 下一步
+            确认推进 →
           </button>
         </div>
       )}

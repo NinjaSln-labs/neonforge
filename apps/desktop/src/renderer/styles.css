@@ -316,7 +316,7 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-msg--user .nf-msg__body { background: var(--nf-accent-soft); }
 .nf-msg__reasoning { font-size: var(--nf-font-sm); color: var(--nf-text-dim); }
 .nf-reasoning { max-height: 160px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; }
-.nf-chat__input { display: flex; gap: var(--nf-space-2); align-items: flex-end; position: relative; bottom: 0; background: var(--nf-bg); padding-top: var(--nf-space-2); z-index: 2; }
+.nf-chat__input { display: flex; gap: var(--nf-space-2); align-items: flex-end; position: relative; bottom: 0; background: var(--nf-bg-panel); padding-top: var(--nf-space-2); z-index: 2; }
 .nf-chat__input textarea {
   flex: 1; resize: none; background: var(--nf-bg-elevated); color: var(--nf-text);
   border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md);
@@ -458,8 +458,10 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-scene__label { color: var(--nf-text); font-size: var(--nf-font-sm); font-weight: 600; }
 .nf-scene__q { color: var(--nf-text-dim); font-size: 12px; }
 
-/* 0-1 交付流（ticket 07）：阶段机 + 模型选择 + 分步推进 */
-.nf-flow { display: flex; flex-direction: column; gap: var(--nf-space-3); padding: var(--nf-space-3); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md); background: var(--nf-bg-elevated); }
+/* 0-1 交付流（ticket 07）：阶段机 + 模型选择 + 分步推进
+   2026-08-04：面板移出滚动容器（.nf-flow__dock 固定）——对话滚动时交互常驻可见 */
+.nf-flow__dock { flex-shrink: 0; padding: var(--nf-space-2) var(--nf-space-3) 0; }
+.nf-flow { display: flex; flex-direction: column; gap: var(--nf-space-2); padding: var(--nf-space-2) var(--nf-space-3); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md); background: var(--nf-bg-elevated); }
 .nf-flow__head { display: flex; align-items: center; justify-content: space-between; }
 .nf-flow__title { display: flex; align-items: center; gap: 6px; color: var(--nf-text); font-weight: 600; font-size: var(--nf-font-sm); }
 .nf-flow__title svg { color: var(--nf-accent); }
@@ -479,11 +481,13 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-flow__stage--active { color: var(--nf-accent-text); background: var(--nf-accent-soft); font-weight: 600; }
 /* 2026-08-03 B2：阶段机待开始圆点（○→SVG idle 色） */
 .nf-flow__stage .nf-flow__stage-idle { color: var(--nf-text-tertiary); }
-.nf-flow__models { display: flex; gap: var(--nf-space-2); }
+.nf-flow__models { display: flex; flex-wrap: wrap; gap: var(--nf-space-2); }
+/* 2026-08-04：模型选择引导文案（明确必选入口——独占一行） */
+.nf-flow__models-hint { font-size: 11px; color: var(--nf-text-dim); flex-basis: 100%; }
 .nf-flow__model-btn {
-  flex: 1; display: flex; flex-direction: column; gap: 2px; text-align: left;
+  flex: 1 1 220px; display: flex; flex-direction: column; gap: 2px; text-align: left;
   background: var(--nf-bg-panel); border: 1px solid var(--nf-border); color: var(--nf-text);
-  border-radius: var(--nf-radius-md); padding: var(--nf-space-3); cursor: pointer; font-size: var(--nf-font-sm);
+  border-radius: var(--nf-radius-md); padding: var(--nf-space-2) var(--nf-space-3); cursor: pointer; font-size: var(--nf-font-sm);
 }
 .nf-flow__model-btn:hover { border-color: var(--nf-accent); box-shadow: 0 0 10px rgba(99, 102, 241, 0.2); }
 .nf-flow__hint { color: var(--nf-text-dim); font-size: 11px; }
@@ -564,8 +568,10 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   border: 1px solid transparent; border-radius: var(--nf-radius-md);
   padding: var(--nf-space-3);
 }
-.nf-flow__focus-step { font-size: 22px; font-weight: 700; color: var(--nf-text); }
-.nf-flow__focus-hint { font-size: var(--nf-font-sm); color: var(--nf-text-dim); }
+.nf-flow__focus-step { font-size: 18px; font-weight: 700; color: var(--nf-text); }
+/* 2026-08-04：聚焦卡「当前阶段」标签（明确状态指示非输入框） */
+.nf-flow__focus-tag { font-size: 11px; color: var(--nf-accent-text); background: var(--nf-accent-soft); padding: 1px var(--nf-space-2); border-radius: var(--nf-radius-sm); flex-shrink: 0; }
+.nf-flow__focus-hint { font-size: var(--nf-font-sm); color: var(--nf-text-dim); flex: 1; }
 
 /* 工具调用卡片（真实执行：read 自动 / write 等需授权）
    2026-08-03 行动节点链视觉化：左侧渐变链 + 状态色节点圆点（visual-direction §二 签名） */
