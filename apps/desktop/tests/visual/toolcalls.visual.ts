@@ -65,6 +65,8 @@ test('工具卡片（bash 需授权 🔒）', async ({ page }) => {
   await expect(page.locator('.nf-toolcall')).toHaveCount(1)
   await expect(page.locator('.nf-toolcall')).toContainText('bash')
   await expect(page.locator('.nf-toolcall')).toContainText('需要授权')
+  // 等授权卡完整渲染（need-approval → 「允许执行」按钮出现）再截图——消除过渡态时序抖动（基线固化为完整状态）
+  await expect(page.locator('.nf-toolcall__approve')).toBeVisible()
   await expect(page.locator('.nf-chat')).toHaveScreenshot('toolcall-bash-approval.png')
 })
 
