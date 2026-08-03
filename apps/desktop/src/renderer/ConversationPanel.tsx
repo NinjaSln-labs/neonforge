@@ -9,7 +9,7 @@ import { loadSession, saveSession, serializeMessages } from './sessionStore'
 import { buildAuthHint, canMergeApprove, toolRisk } from './authModel'
 // 2026-08-03 视觉审计 P1-6：内联 SVG 图标（替换 emoji 图标）
 import {
-  IconBrain, IconCheck, IconClock, IconFile, IconFolder, IconLock,
+  IconBrain, IconCheck, IconClock, IconDot, IconFile, IconFolder, IconLock,
   IconRotateCcw, IconRocket, IconSparkles, IconSquare, IconWrench, IconX, ToolIcon
 } from './icons'
 
@@ -539,7 +539,7 @@ export default function ConversationPanel({
         ))}
         {working && (
           <div className="nf-working">
-            <span className="nf-working__dot">🔵</span>
+            <IconDot size={12} className="nf-working__dot" />
             <span>搭档处理中：{workingStage}</span>
           </div>
         )}
@@ -567,7 +567,7 @@ export default function ConversationPanel({
         )}
         <textarea
           value={input}
-          placeholder="输入想法…（Enter 换行 · ⌘+Enter 发送）"
+          placeholder="输入想法…（Enter 发送 · Shift+Enter 换行）"
           aria-label="给搭档的消息"
           rows={2}
           onChange={(e) => {
@@ -591,8 +591,9 @@ export default function ConversationPanel({
               }
               return
             }
-            // Enter = 换行（内容保留）；Cmd/Ctrl+Enter = 发送
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void send() }
+            // 2026-08-03 A6 审计修复：Enter=发送（非技术用户直觉——V1 主受众）；Shift+Enter=换行；⌘/Ctrl+Enter 也发送（兼容旧习惯）
+            // 注意：⌘+Enter 也命中 Enter 分支（metaKey 不排除）——发送；Shift+Enter 不拦截——textarea 默认换行
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() }
           }}
         />
         <button type="button" className="nf-config__cta" onClick={() => void send()} disabled={working || !input.trim()}>

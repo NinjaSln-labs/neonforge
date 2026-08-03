@@ -13,6 +13,7 @@ export default function OutputPanel({
   onOpenFile,
   onCloseProblem,
   onAdjustProblem,
+  onConfirmed,
   onRerun
 }: {
   rootPath: string
@@ -22,6 +23,7 @@ export default function OutputPanel({
   onOpenFile: (path: string) => void
   onCloseProblem: () => void
   onAdjustProblem: () => void
+  onConfirmed?: () => void // 2026-08-03 A5：交付包确认关闭 → 上层同步台账
   onRerun: (prompt: string) => void
 }) {
   const [tab, setTab] = useState<'project' | 'output'>('project')
@@ -58,7 +60,7 @@ export default function OutputPanel({
       </div>
       <div className="nf-output__body" style={{ display: tab === 'output' ? 'flex' : 'none', padding: 0 }}>
         {deliveryPkg ? (
-          <DeliveryPanel pkg={deliveryPkg} onClose={onCloseProblem} onAdjust={onAdjustProblem} onRerun={onRerun} />
+          <DeliveryPanel pkg={deliveryPkg} onClose={onCloseProblem} onAdjust={onAdjustProblem} onRerun={onRerun} onConfirmed={onConfirmed} />
         ) : activePath ? (
           <Editor
             height="100%"
@@ -69,7 +71,7 @@ export default function OutputPanel({
             options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13 }}
           />
         ) : (
-          <DeliveryPanel pkg={null} onClose={onCloseProblem} onAdjust={onAdjustProblem} onRerun={onRerun} />
+          <DeliveryPanel pkg={null} onClose={onCloseProblem} onAdjust={onAdjustProblem} onRerun={onRerun} onConfirmed={onConfirmed} />
         )}
       </div>
     </section>

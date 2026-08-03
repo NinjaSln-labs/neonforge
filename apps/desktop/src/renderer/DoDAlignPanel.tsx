@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { IconCheck } from './icons'
+import { IconCheck, IconTarget } from './icons'
 
 // DoD 对齐（ticket 15b）：动手前用用户的话复述问题 + 验收标准——"什么叫解决"前置
 export default function DoDAlignPanel() {
@@ -25,8 +25,8 @@ export default function DoDAlignPanel() {
   return (
     <div className="nf-dod">
       <div className="nf-flow__head">
-        <span className="nf-flow__title">🎯 对齐：什么叫「解决」</span>
-        {confirmed && <span className="nf-flow__model">已确认 ✓</span>}
+        <span className="nf-flow__title"><IconTarget size={14} /> 对齐：什么叫「解决」</span>
+        {confirmed && <span className="nf-flow__model"><IconCheck size={11} /> 已确认</span>}
       </div>
 
       <p className="nf-dod__restate">
@@ -42,7 +42,7 @@ export default function DoDAlignPanel() {
               aria-label={accepted[i] ? `取消：${d}` : `确认：${d}`}
               onClick={() => toggle(i)}
             >
-              {accepted[i] ? '☑' : '☐'}
+              {accepted[i] ? <IconCheck size={13} /> : <span className="nf-check__empty" />}
             </button>
             <span>{d}</span>
           </li>

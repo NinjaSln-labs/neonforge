@@ -19,8 +19,9 @@ function TaskPanel() {
   const hitRate = history.length > 0 ? Math.round((history.filter((h) => h.hit).length / history.length) * 100) : 0
   return (
     <div className="nf-task">
-      <p className="nf-placeholder">当前任务：无（● 执行 / ◉ 待审 / ○ 排队）</p>
-      <p className="nf-placeholder">待审核变更：无（05 diff 审核入口）</p>
+      {/* 2026-08-03 A7 审计修复：占位措辞诚实化——任务队列尚未实现（原「当前任务：无」永远假信息） */}
+      <p className="nf-placeholder">任务队列：V2 即将支持——当前无进行中任务</p>
+      <p className="nf-placeholder">待审核变更：无（diff 审核在「产物」区）</p>
       <details>
         <summary>▸ 本轮用量</summary>
         <p className="nf-meta">{preheatInfo?.cache ? `前缀缓存 ${hitRate}% 命中（hash ${preheatInfo.cache.hash}）` : '—'}</p>
@@ -118,6 +119,12 @@ export default function MainWorkspace({
     setActiveProblem(id)
     const p = problems.find((x) => x.id === id)
     if (p && p.status === 'closed') setRerunRequest(p.title)
+  }
+  // 2026-08-03 A5 审计修复：交付包「确认问题关闭」→ 同步问题台账（SessionPanel 状态 closed——跨组件状态一致）
+  const handleConfirmClosed = () => {
+    if (!activeProblem) return
+    setProblems((prev) => prev.map((p) => (p.id === activeProblem ? { ...p, status: 'closed' as const } : p)))
+    setDeliveryPkg((p) => (p ? { ...p, status: 'closed' } : p))
   }
   // ticket 12 ContextEngine：项目顶层文件 → @mention 列表（真实数据，替换 demo）
   const [projectFiles, setProjectFiles] = useState<string[]>([])
@@ -236,19 +243,21 @@ function initProblems(): ProblemInstance[] {
         deliveryPkg={deliveryPkg}
         onOpenFile={openFile}
         onCloseProblem={() => setDeliveryPkg((p) => (p ? { ...p, status: 'closed' } : p))}
-        onAdjustProblem={() => {}}
+        onAdjustProblem={() => setChatTab('chat')} /* 2026-08-03 A2 审计修复：继续调整 → 切回对话 Tab（原空函数无反应） */
+        onConfirmed={handleConfirmClosed}
         onRerun={(prompt) => setRerunRequest(prompt)}
       />
 
       {showSettings && <SettingsPanel />}
 
-      <footer className="nf-statusbar">
+      {/* 2026-08-03 A4/C3 审计修复：移除硬编码假数据「待审核: 0」+ 状态栏 aria-live（思考中/就绪变化播报） */}
+      <footer className="nf-statusbar" role="status" aria-live="polite">
         {working ? (
           <><span className="nf-statusbar__dot nf-statusbar__dot--working" />搭档思考中…</>
         ) : (
           <><span className="nf-statusbar__dot nf-statusbar__dot--ready" />就绪</>
         )}
-        {' │ '}{(rootPath ?? '从零开始').split(/[/\\]/).filter(Boolean).pop()} │ 待审核: 0
+        {' │ '}{(rootPath ?? '从零开始').split(/[/\\]/).filter(Boolean).pop()}
       </footer>
     </div>
   )
