@@ -84,7 +84,8 @@ export default function FileTree({
     <aside className={`nf-filetree${collapsed ? ' nf-filetree--collapsed' : ''}`}>
       <header className="nf-filetree__header">
         {!collapsed && <span className="nf-filetree__title">文件</span>}
-        <button type="button" className="nf-filetree__fold" onClick={onToggle} title={collapsed ? '展开文件树' : '折叠文件树'}>
+        {/* 2026-08-03 C4 审计修复：纯图标按钮补 aria-label（title 不构成无障碍名） */}
+        <button type="button" className="nf-filetree__fold" onClick={onToggle} aria-label={collapsed ? '展开文件树' : '折叠文件树'} title={collapsed ? '展开文件树' : '折叠文件树'}>
           {collapsed ? '→' : '←'}
         </button>
       </header>

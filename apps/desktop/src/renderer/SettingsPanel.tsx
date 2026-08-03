@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react'
 import { IconSettings } from './icons'
 
-// 设置（ticket 08 / D0 §9 最小集）：语言 / 默认视图 / 主动提醒开关（原则 6：安静默认）
+// 设置（ticket 08 / D0 §9 最小集）——2026-08-03 A1 审计修复：移除不生效的假设置（语言/默认视图/主动提醒无消费方——诚实性优先）
+// 保留真实内容：内置插件（真实 IPC 注册表）+ 快捷键表（真实已实现）
 export default function SettingsPanel() {
-  const [lang, setLang] = useState<'zh' | 'en'>('zh')
-  const [view, setView] = useState<'chat' | 'output'>('chat')
-  const [remind, setRemind] = useState(false)
   // 08 内置插件：真实注册表状态（mock/无通道 → null → 静态占位）
   const [plugins, setPlugins] = useState<Array<{ name: string; active: boolean }> | null>(null)
   useEffect(() => {
@@ -25,43 +23,6 @@ export default function SettingsPanel() {
         <span className="nf-flow__title"><IconSettings size={14} /> 设置</span>
         <span className="nf-flow__model">最小集（V1）</span>
       </div>
-
-      <label className="nf-settings__row">
-        <span>语言</span>
-        <div className="nf-settings__seg">
-          {(['zh', 'en'] as const).map((v) => (
-            <button
-              key={v}
-              type="button"
-              className={`nf-settings__seg-btn${lang === v ? ' nf-settings__seg-btn--on' : ''}`}
-              onClick={() => setLang(v)}
-            >
-              {v === 'zh' ? '中文' : 'English'}
-            </button>
-          ))}
-        </div>
-      </label>
-
-      <label className="nf-settings__row">
-        <span>默认视图</span>
-        <div className="nf-settings__seg">
-          {([['chat', '对话优先'], ['output', '工程优先']] as const).map(([v, label]) => (
-            <button
-              key={v}
-              type="button"
-              className={`nf-settings__seg-btn${view === v ? ' nf-settings__seg-btn--on' : ''}`}
-              onClick={() => setView(v)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </label>
-
-      <label className="nf-settings__row nf-settings__row--switch">
-        <span>长时间不动主动提醒 <em>（默认关——原则：安静不打扰）</em></span>
-        <input type="checkbox" checked={remind} onChange={(e) => setRemind(e.target.checked)} />
-      </label>
 
       <div className="nf-settings__plugins">
         <span className="nf-settings__plugins-title">内置插件（V1 无市场，仅注册）</span>
@@ -86,7 +47,7 @@ export default function SettingsPanel() {
         <span className="nf-settings__plugins-title">快捷键（只列已实现）</span>
         <div className="nf-settings__shortcuts-list">
           <span>⌘ + , 打开 / 关闭设置</span>
-          <span>⌘ + Enter 发送消息</span>
+          <span>Enter 发送消息（Shift+Enter 换行）</span>
           <span>⌘ + N 新任务</span>
           <span>⌘ + E @引用当前文件</span>
         </div>
