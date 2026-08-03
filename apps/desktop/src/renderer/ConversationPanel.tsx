@@ -530,7 +530,7 @@ export default function ConversationPanel({
                 {/* ticket 14 疲劳防护：同批 ≥2 低危文件操作待授权 → 合并授权（bash 高危永不合并——canMergeApprove 已保证） */}
                 {canMergeApprove((m.toolCalls ?? []).filter((c) => c.status === 'need-approval')) && (
                   <button type="button" className="nf-toolcall__approveall" onClick={() => approveAllToolCalls(m.toolCalls ?? [])}>
-                    允许全部（L3 合并授权）
+                    允许全部（本次待授权文件操作）
                   </button>
                 )}
               </div>
@@ -547,12 +547,14 @@ export default function ConversationPanel({
 
       <div className="nf-chat__input">
         {mentionOpen && (
-          <div className="nf-mention">
+          // 2026-08-03 v31 A4 审计修复：@引用浮层语义（listbox + 输入框 aria 关联——读屏/键盘发现性）
+          <div id="nf-mention-list" className="nf-mention" role="listbox" aria-label="引用文件">
             <span className="nf-mention__title">引用文件</span>
             {recentFiles.map((f) => (
               <button
                 key={f}
                 type="button"
+                role="option"
                 className="nf-mention__item"
                 onClick={() => {
                   const before = input.replace(/@[^@]*$/, '')
@@ -569,6 +571,11 @@ export default function ConversationPanel({
           value={input}
           placeholder="输入想法…（Enter 发送 · Shift+Enter 换行）"
           aria-label="给搭档的消息"
+          role="combobox"
+          aria-haspopup="listbox"
+          aria-expanded={mentionOpen}
+          aria-controls="nf-mention-list"
+          aria-autocomplete="list"
           rows={2}
           onChange={(e) => {
             inputRef.current = e.target.value

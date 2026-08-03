@@ -37,7 +37,8 @@ export default function SessionPanel({
   return (
     <section className="nf-session">
       <header className="nf-session__header">
-        <span>问题</span>
+        {/* 2026-08-03 v31 A3：面板标题语义化（aria heading——读屏文档结构，视觉零变化） */}
+        <span role="heading" aria-level={2}>问题</span>
         <button type="button" className="nf-session__new" onClick={onNew}><IconPlus size={12} /> 新问题</button>
       </header>
       <div className="nf-session__list">
