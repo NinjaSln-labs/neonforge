@@ -109,4 +109,4 @@ Code          — ToolRegistry · DeepSeekGateway · PluginSystem · LSP
 
 ---
 
-**License**：未定（V1 开源发布前确定）· **Contact**：GitHub Issues
+**License**：MIT（见 [LICENSE](LICENSE)）· **Contact**：GitHub Issues
