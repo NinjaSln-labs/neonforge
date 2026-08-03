@@ -8,7 +8,9 @@
 
 **核心流**：`说出问题 → 分析 → 分步授权 → 解决 → 交付结果（数字产物/修复闭环）→ 反馈 + 指导继续`
 
-<img src="demo/neonforge-demo.gif" width="720" alt="NeonForge 核心流演示（真实 API 录制）" />
+<video controls width="720" src="demo/neonforge-demo.mov" title="NeonForge 核心流演示（真实 API 录制——首次配置 → 打开项目 → 两轮对话）">
+  你的浏览器不支持 video 标签——<a href="demo/neonforge-demo.mov">下载演示视频</a>。
+</video>
 
 ---
 

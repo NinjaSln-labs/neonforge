@@ -61,6 +61,29 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     expect(r.error).toContain('无快照')
   })
 
+  it('read：相对路径必须解析到 rootPath 下（v37 修复——防止读到 main cwd 同名文件）', async () => {
+    // 项目内真实文件：相对路径 package.json → 应读项目文件（而非 Electron 启动目录的同名文件）
+    const file = path.join(TMP, 'package.json')
+    writeFileSync(file, '{"name":"project-pkg"}\n', 'utf-8')
+    const r = await toolRegistry.execute('read', { path: 'package.json' }, { rootPath: TMP })
+    expect(r.ok).toBe(true)
+    expect(String(r.data)).toContain('project-pkg')
+    // 类绝对路径 /package.json 同样 join rootPath（模型相对语义）
+    const r2 = await toolRegistry.execute('read', { path: '/package.json' }, { rootPath: TMP })
+    expect(r2.ok).toBe(true)
+    expect(String(r2.data)).toContain('project-pkg')
+    // 项目外真实绝对路径 → 直接用（坑 12：不重复 join）
+    const outside = '/tmp/nf-unit-tools-outside.json'
+    writeFileSync(outside, '{"k":"outside"}\n', 'utf-8')
+    try {
+      const r3 = await toolRegistry.execute('read', { path: outside }, { rootPath: TMP })
+      expect(r3.ok).toBe(true)
+      expect(String(r3.data)).toContain('outside')
+    } finally {
+      rmSync(outside, { force: true })
+    }
+  })
+
   it('search：关键词检索（Layer2 CodeRAG——agentic grep 模式）返回命中+行号+片段', async () => {
     const src = path.join(TMP, 'src')
     mkdirSync(src, { recursive: true })
