@@ -279,13 +279,14 @@ export const lsp = new LspService()
 
 // 注册 6 LSP 工具到 ToolRegistry（source: 'lsp'；2026-08-02 起加入模型 TOOL_DEFS——deepseek 模型可自主调用查询真实代码上下文）
 export function registerLspTools(registry: {
-  register(t: { name: string; source: 'lsp'; requiresApproval: boolean; execute: (args: Record<string, unknown>, ctx: { rootPath?: string }) => Promise<unknown> }): void
+  register(t: { name: string; source: 'lsp'; requiresApproval: boolean; risk: 'none'; execute: (args: Record<string, unknown>, ctx: { rootPath?: string }) => Promise<unknown> }): void
 }): void {
   for (const name of LSP_TOOLS) {
     registry.register({
       name,
       source: 'lsp',
       requiresApproval: false,
+      risk: 'none',
       execute: (args, ctx) => lsp.query(name, args, ctx?.rootPath)
     })
   }

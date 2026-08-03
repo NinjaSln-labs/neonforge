@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { initTools, toolRegistry, revertToolFile } from '../../src/main/tools'
+import { initTools, toolRegistry, revertToolFile, cancelActiveCommand } from '../../src/main/tools'
 
 const TMP = '/tmp/nf-unit-tools'
 
@@ -80,5 +80,32 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     expect((r1.data as { hits: unknown[]; note?: string }).hits).toEqual([])
     const r2 = await toolRegistry.execute('search', { query: '' }, { rootPath: TMP })
     expect((r2.data as { hits: unknown[]; note?: string }).note).toContain('无有效关键词')
+  })
+
+  it('list：返回 risk 等级（ticket 14——read/search=none L1 观察，write/edit=low L3 文件操作，bash=high L3 命令执行）', () => {
+    const tools = toolRegistry.list()
+    expect(tools.find((t) => t.name === 'read')?.risk).toBe('none')
+    expect(tools.find((t) => t.name === 'search')?.risk).toBe('none')
+    expect(tools.find((t) => t.name === 'write')?.risk).toBe('low')
+    expect(tools.find((t) => t.name === 'edit')?.risk).toBe('low')
+    expect(tools.find((t) => t.name === 'bash')?.risk).toBe('high')
+  })
+
+  it('bash：取消当前活动命令（ticket 14 可撤销——任何时刻停止，不卡死）', async () => {
+    const execPromise = toolRegistry.execute('bash', { command: 'sleep 10' }, { approved: true })
+    // 轮询等 bash 子进程启动（child_process 动态导入 + exec 启动有延迟）
+    let cancelled = false
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 50))
+      const c = cancelActiveCommand()
+      if (c.ok) { cancelled = true; break }
+    }
+    expect(cancelled).toBe(true)
+    const r = await execPromise
+    expect(r.ok).toBe(false)
+    expect(r.error).toContain('已停止')
+    // 无活动命令 → 取消返回错误
+    const c2 = cancelActiveCommand()
+    expect(c2.ok).toBe(false)
   })
 })

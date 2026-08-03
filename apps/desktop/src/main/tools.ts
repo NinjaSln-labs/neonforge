@@ -5,12 +5,16 @@ import { codeRag } from './codeRag.js'
 
 // ToolRegistry（ticket 10 / A0 §2）：工具注册与执行分发
 // 边界判定：ToolRegistry=目录与分发；ShellAgent=bash 执行；Gateway=工具调用修复（02 已实现）
-// 授权：requiresApproval 工具（write/edit/bash）须显式 approved=true 才执行（对齐基线 §10 信任阶梯）
+// 授权（ticket 14 信任阶梯）：requiresApproval 工具（write/edit/bash）须显式 approved=true 才执行
+// risk 等级：none=L1 观察（read/search/LSP 无需授权）；low=L3 文件操作（write/edit 写前快照可回滚）；high=L3 命令执行（bash 高危——永远单独确认）
+
+export type ToolRisk = 'none' | 'low' | 'high'
 
 export interface Tool {
   name: string
   source: 'core' | 'lsp'
   requiresApproval: boolean
+  risk: ToolRisk
   execute: (args: Record<string, unknown>, ctx: { rootPath?: string }) => Promise<unknown>
 }
 
@@ -27,8 +31,8 @@ class ToolRegistry {
     this.tools.set(tool.name, tool)
   }
 
-  list(): Array<{ name: string; source: Tool['source']; requiresApproval: boolean }> {
-    return [...this.tools.values()].map(({ name, source, requiresApproval }) => ({ name, source, requiresApproval }))
+  list(): Array<{ name: string; source: Tool['source']; requiresApproval: boolean; risk: ToolRisk }> {
+    return [...this.tools.values()].map(({ name, source, requiresApproval, risk }) => ({ name, source, requiresApproval, risk }))
   }
 
   async execute(
@@ -88,36 +92,51 @@ async function editExecutor(args: Record<string, unknown>, ctx: { rootPath?: str
   return { file: filePath, snapshot: true }
 }
 
+// 当前活动 bash 子进程（ticket 14 可撤销：任何时刻停止当前操作——cancelActiveCommand kill）
+let activeProc: { proc: import('child_process').ChildProcess; cmd: string } | null = null
+
 async function bashExecutor(args: Record<string, unknown>, ctx: { rootPath?: string }): Promise<unknown> {
   // V1 真实执行：授权（approved=true）后执行命令（child_process）——在项目根目录执行
-  // 风险标注：本机进程执行——ShellAgent 沙箱归后续；授权即同意本机执行
+  // 风险标注（ticket 14）：high 风险——本机进程执行；授权即同意本机执行；可随时停止（cancelActiveCommand）
   const { exec } = await import('child_process')
   const cmd = String(args.command ?? '')
   if (!cmd.trim()) throw new Error('bash: 缺少 command')
   return new Promise((resolve, reject) => {
-    exec(cmd, { cwd: ctx.rootPath ?? undefined, timeout: 30000, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
+    const child = exec(cmd, { cwd: ctx.rootPath ?? undefined, timeout: 30000, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
+      if (activeProc?.proc === child) activeProc = null
       if (err) {
-        reject(new Error(stderr ? `exit-${err.code}: ${stderr.slice(0, 500)}` : `exit-${err.code}`))
+        reject(new Error(err.killed ? `已停止（${cmd.slice(0, 40)}…）` : stderr ? `exit-${err.code}: ${stderr.slice(0, 500)}` : `exit-${err.code}`))
         return
       }
       resolve({ stdout: stdout.slice(0, 2000), stderr: stderr.slice(0, 500) })
     })
+    activeProc = { proc: child, cmd }
   })
+}
+
+// 可撤销（ticket 14）：停止当前活动命令（bash 高危——任何时刻可停；无活动命令返回错误）
+export function cancelActiveCommand(): { ok: true } | { ok: false; error: string } {
+  if (!activeProc) return { ok: false, error: '无活动命令' }
+  activeProc.proc.kill('SIGKILL')
+  activeProc = null
+  return { ok: true }
 }
 
 export const toolRegistry = new ToolRegistry()
 
 // 注册 4 核心工具 + search（Layer2 CodeRAG——2026-08-02 接入模型；6 LSP 随 12 ContextEngine 注册）
 export function initTools(): void {
-  toolRegistry.register({ name: 'read', source: 'core', requiresApproval: false, execute: readExecutor })
-  toolRegistry.register({ name: 'write', source: 'core', requiresApproval: true, execute: writeExecutor })
-  toolRegistry.register({ name: 'edit', source: 'core', requiresApproval: true, execute: editExecutor })
-  toolRegistry.register({ name: 'bash', source: 'core', requiresApproval: true, execute: bashExecutor })
+  // risk（ticket 14）：none=L1 观察无需授权；low=L3 文件操作（写前快照可回滚）；high=L3 命令执行（高危单独确认）
+  toolRegistry.register({ name: 'read', source: 'core', requiresApproval: false, risk: 'none', execute: readExecutor })
+  toolRegistry.register({ name: 'write', source: 'core', requiresApproval: true, risk: 'low', execute: writeExecutor })
+  toolRegistry.register({ name: 'edit', source: 'core', requiresApproval: true, risk: 'low', execute: editExecutor })
+  toolRegistry.register({ name: 'bash', source: 'core', requiresApproval: true, risk: 'high', execute: bashExecutor })
   // Layer2 CodeRAG：关键词检索兜底（Claude Code grep 模式——2026-08-02 调研：agentic 工具检索为行业共识，见 .scratch/neonforge-v1/layer2-retrieval-research.md）
   toolRegistry.register({
     name: 'search',
     source: 'core',
     requiresApproval: false,
+    risk: 'none',
     execute: (args, ctx) => codeRag.search(ctx?.rootPath ?? null, String(args.query ?? '')) as unknown as Promise<unknown>
   })
 }
