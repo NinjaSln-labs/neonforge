@@ -73,7 +73,7 @@ export default function TrustLadderPanel({ authorizedLogs, delegateLowRisk, onDe
       <div className="nf-trust__controls">
         <label className="nf-trust__delegate">
           <input type="checkbox" checked={delegate} onChange={(e) => setDelegate(e.target.checked)} />
-          L4 委托：低危文件操作（write/edit）自动授权——写前备份可回滚，可随时降级/撤销（bash 命令始终单独确认）
+          L4 委托：低风险文件操作自动授权（不用每次确认）——会先备份、可随时关闭；执行命令始终单独确认
         </label>
         <div className="nf-trust__btns">
           {level < 3 && <button type="button" className="nf-delivery__primary" onClick={upgrade}>提升信任等级</button>}

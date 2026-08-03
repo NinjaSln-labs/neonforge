@@ -40,8 +40,8 @@ export default function DeliveryFlowPanel({
   return (
     <div className="nf-flow">
       <div className="nf-flow__head">
-        <span className="nf-flow__title"><IconRocket size={14} /> 0-1 交付流</span>
-        {model && <span className="nf-flow__model">模型：{model === 'agile' ? '敏捷（迭代）' : '传统软件工程'}</span>}
+        <span className="nf-flow__title"><IconRocket size={14} /> 从零做项目</span>
+        {model && <span className="nf-flow__model">方式：{model === 'agile' ? '快速迭代' : '稳扎稳打'}</span>}
       </div>
 
       {/* 当前步骤聚焦卡 */}
@@ -61,14 +61,14 @@ export default function DeliveryFlowPanel({
         ))}
       </div>
 
-      {/* 模型选择（未选时） */}
+      {/* 模型选择（未选时）——2026-08-03 v35：传统/敏捷术语人类化（非技术用户「稳扎稳打/快速迭代」） */}
       {!model && (
         <div className="nf-flow__models">
           <button type="button" className="nf-flow__model-btn" onClick={() => pickModel('traditional')}>
-            传统软件工程 <span className="nf-flow__hint">瀑布 / 增量 / 螺旋（按项目类型推荐）</span>
+            稳扎稳打 <span className="nf-flow__hint">先定方案再开发（适合重要/安全相关的项目）</span>
           </button>
           <button type="button" className="nf-flow__model-btn" onClick={() => pickModel('agile')}>
-            敏捷开发 <span className="nf-flow__hint">Scrum / Kanban 迭代，可 demo</span>
+            快速迭代 <span className="nf-flow__hint">边做边看效果（适合探索型的项目）</span>
           </button>
         </div>
       )}

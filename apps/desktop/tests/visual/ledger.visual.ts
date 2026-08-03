@@ -27,7 +27,7 @@ test('问题台账（多状态渲染）', async ({ page }) => {
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await expect(page.locator('.nf-ledger__item')).toHaveCount(4)
-  await expect(page.locator('.nf-session')).toContainText('已关闭 · 可复开')
+  await expect(page.locator('.nf-session')).toContainText('已关闭 · 可重新开始')
   await expect(page.locator('.nf-session')).toContainText('方案待确认')
   await expect(page.locator('.nf-session')).toContainText('失败可恢复')
   await expect(page.locator('.nf-session')).toHaveScreenshot('ledger-list.png')
