@@ -4,7 +4,7 @@ import { parseUnifiedDiff, applyDiffToFile, snapshot, revert } from './applyDiff
 import { gateway } from './gateway.js'
 import { configStore } from './configStore.js'
 import { workspace } from './workspace.js'
-import { initTools, toolRegistry, revertToolFile } from './tools.js'
+import { initTools, toolRegistry, revertToolFile, cancelActiveCommand } from './tools.js'
 import { registerLspTools, lsp } from './lsp.js'
 import { context } from './context.js'
 import { codeRag } from './codeRag.js'
@@ -109,6 +109,8 @@ export function registerIpc(): void {
   )
   // 工具写文件回滚（write/edit 写前已快照 .nf-bak——回滚恢复原样）
   ipcMain.handle('tools:revert', (_e, opts: { path: string }) => revertToolFile(opts.path))
+  // ticket 14 可撤销：任何时刻停止当前操作（bash 高危——cancelActiveCommand kill；无活动命令返回错误）
+  ipcMain.handle('tools:cancel', () => cancelActiveCommand())
   // ticket 12 ContextEngine：@引用文件 → 精准上下文片段（注入对话）
   ipcMain.handle('context:resolve', (_e, opts: { files: string[] }) =>
     context.resolve(workspace.getCurrentRoot(), opts.files ?? [])

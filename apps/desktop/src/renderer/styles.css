@@ -494,6 +494,11 @@ body {
 .nf-toolcall__args { color: var(--nf-text-dim); font-family: var(--nf-font-mono); }
 .nf-toolcall__result { color: var(--nf-text-dim); white-space: pre-wrap; max-width: 100%; }
 .nf-toolcall__hint { color: var(--nf-amber); }
+.nf-toolcall__impact { color: var(--nf-text); font-family: var(--nf-font-mono); }
+.nf-toolcall__note { color: var(--nf-text-dim); font-size: 11px; }
+.nf-toolcall__stop { background: none; border: 1px solid var(--nf-border); color: var(--nf-text-dim); border-radius: 4px; padding: 2px 10px; font-size: 12px; cursor: pointer; }
+.nf-toolcall__stop:hover { border-color: rgba(239, 68, 68, 0.6); color: #ef4444; }
+.nf-toolcall__approveall { background: var(--nf-accent); color: #fff; border: none; border-radius: 4px; padding: 3px 12px; font-size: 12px; cursor: pointer; align-self: flex-start; }
 .nf-msg__sent { font-size: 11px; color: #22C55E; }
 .nf-working { display: flex; align-items: center; gap: var(--nf-space-2); font-size: var(--nf-font-sm); color: var(--nf-accent); padding: var(--nf-space-2) 0; }
 .nf-working__dot { animation: nf-thinking-pulse 2s ease-in-out infinite; }

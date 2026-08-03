@@ -37,11 +37,13 @@ contextBridge.exposeInMainWorld('neonforge', {
       ipcRenderer.invoke('workspace:init-project', title) as Promise<{ ok: true; path: string; title: string } | { ok: false; error: string }>
   },
   tools: {
-    list: () => ipcRenderer.invoke('tools:list') as Promise<Array<{ name: string; source: 'core' | 'lsp'; requiresApproval: boolean }>>,
+    list: () => ipcRenderer.invoke('tools:list') as Promise<Array<{ name: string; source: 'core' | 'lsp'; requiresApproval: boolean; risk: 'none' | 'low' | 'high' }>>,
     execute: (name: string, args: Record<string, unknown>, opts?: { approved?: boolean; rootPath?: string }) =>
       ipcRenderer.invoke('tools:execute', { name, args, approved: opts?.approved ?? false, rootPath: opts?.rootPath }) as Promise<{ ok: boolean; data?: unknown; error?: string }>,
     revert: (filePath: string) =>
-      ipcRenderer.invoke('tools:revert', { path: filePath }) as Promise<{ ok: boolean; error?: string }>
+      ipcRenderer.invoke('tools:revert', { path: filePath }) as Promise<{ ok: boolean; error?: string }>,
+    // ticket 14 可撤销：停止当前活动命令（bash 高危——任何时刻可停）
+    cancel: () => ipcRenderer.invoke('tools:cancel') as Promise<{ ok: boolean; error?: string }>
   },
   context: {
     resolve: (files: string[]) =>

@@ -86,9 +86,11 @@ export interface ProblemInstance {
   snapshot?: ProblemSnapshot // 断点续做快照（可选——旧数据兼容）
 }
 
-// ToolRegistry（ticket 10）：renderer 侧工具接口
+// ToolRegistry（ticket 10/14）：renderer 侧工具接口（risk：none=L1 观察 / low=L3 文件操作 / high=L3 命令执行）
 export interface NeonForgeTools {
-  list: () => Promise<Array<{ name: string; source: 'core' | 'lsp'; requiresApproval: boolean }>>
+  list: () => Promise<Array<{ name: string; source: 'core' | 'lsp'; requiresApproval: boolean; risk: 'none' | 'low' | 'high' }>>
   execute: (name: string, args: Record<string, unknown>, opts?: { approved?: boolean; rootPath?: string }) => Promise<{ ok: boolean; data?: { file?: string; snapshot?: boolean } | unknown; error?: string }>
   revert: (filePath: string) => Promise<{ ok: boolean; error?: string }>
+  // ticket 14 可撤销：停止当前活动命令（bash 高危——任何时刻可停，不卡死）
+  cancel: () => Promise<{ ok: boolean; error?: string }>
 }

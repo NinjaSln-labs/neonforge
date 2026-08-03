@@ -170,3 +170,59 @@ test('信任阶梯：授权记录接真实数据（06 问题快照 authorized—
   // demo 记录不显示（真实数据替换——demo 记录 action 含「旅行手册」）
   await expect(page.locator('.nf-trust')).not.toContainText('旅行手册')
 })
+
+test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 14 疲劳防护——L3 合并授权，全 low 才合并）', async ({ page }) => {
+  // 独立 mock：__emit 通道发真实 tool-call 流（write ×2 → 均 need-approval → 合并授权按钮）
+  await page.addInitScript(() => {
+    window.__emit = null
+    const bridge = {
+      version: 'test',
+      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
+      workspace: { openFolder: async () => '/test', listDir: async () => [], readFile: async () => ({ ok: true, content: '// x' }), readNotebook: async () => null, initProject: async () => ({ ok: true, path: '/test', title: 't' }) },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        streamChat: async () => ({ ok: true }),
+        onStreamChunk: (cb: (c: unknown) => void) => { window.__emit = cb; return () => {} }
+      },
+      delivery: { applyDiff: async () => ({ ok: true, file: '/test/a.txt' }), revertDiff: async () => ({ ok: true }) },
+      tools: {
+        list: async () => [],
+        execute: async (name: string, args: Record<string, unknown>, opts?: { approved?: boolean }) => {
+          if (name === 'read') return { ok: true, data: 'x' }
+          if ((name === 'write' || name === 'edit') && opts?.approved) return { ok: true, data: { file: '/test/' + String(args.path).split('/').pop(), snapshot: true } }
+          return { ok: false, error: `「${name}」需要授权（L3）——approved=true 后执行` }
+        },
+        revert: async () => ({ ok: true }),
+        cancel: async () => ({ ok: false, error: '无活动命令' })
+      },
+      context: { resolve: async () => ({ fragments: [] }) },
+      rag: { search: async () => ({ hits: [] }) },
+      plugins: { list: async () => [], toggle: async () => true },
+      preheat: { status: async () => ({ plan: { shouldPreheat: false, why: '', actions: [] }, cache: null }) },
+      compaction: { compact: async () => ({ ok: false, error: '未达阈值' }) }
+    }
+    ;(window as unknown as { neonforge: unknown }).neonforge = bridge
+  })
+  await page.goto('http://localhost:5174/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.getByRole('button', { name: '打开已有项目' }).click()
+  await page.locator('.nf-chat__input textarea').fill('批量整理文件')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  await page.waitForTimeout(300)
+  await page.evaluate(() => {
+    window.__emit({ type: 'tool-call', toolCall: { name: 'write', args: { path: '/test/a.txt', content: 'x' } } })
+    window.__emit({ type: 'tool-call', toolCall: { name: 'edit', args: { path: '/test/b.txt', old: 'a', new: 'b' } } })
+    window.__emit({ type: 'done' })
+  })
+  // 授权卡风险明示（ticket 14）：等级 L3·写入文件 + 影响路径 + 快照提示
+  await expect(page.locator('.nf-toolcall__hint').first()).toContainText('L3 · 写入文件')
+  await expect(page.locator('.nf-toolcall__impact').first()).toContainText('/test/a.txt')
+  await expect(page.locator('.nf-toolcall__note').first()).toContainText('快照')
+  // 疲劳防护：同批 ≥2 低危待授权 → 合并授权按钮出现
+  await expect(page.locator('.nf-toolcall__approveall')).toBeVisible()
+  // 点击合并授权 → 两个卡全部执行完成
+  await page.locator('.nf-toolcall__approveall').click()
+  await page.waitForTimeout(600)
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(2)
+  await expect(page.locator('.nf-toolcall__approveall')).toHaveCount(0)
+})
