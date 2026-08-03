@@ -5,6 +5,8 @@ import TrustLadderPanel from './TrustLadderPanel'
 import DoDAlignPanel from './DoDAlignPanel'
 import type { DeliveryPackage } from './types'
 import { loadSession, saveSession, serializeMessages } from './sessionStore'
+// ticket 14 信任阶梯：授权执行模型（等级/影响/合并判定——L4 委托 + 疲劳防护）
+import { buildAuthHint, canMergeApprove, toolRisk } from './authModel'
 
 // ticket 04：对话最小闭环（D0 §2/§3.4）——输入发送 → Gateway 流式 → 消息/呼吸光条/推理展示
 // 消费 02：streamChat（四档 basic）+ ModelRouter（默认 Flash）；错误分支：Key 失效内嵌更新 / 服务故障提示
@@ -90,6 +92,14 @@ export default function ConversationPanel({
   const [input, setInput] = useState('')
   const [working, setWorking] = useState(false)
   const [workingStage, setWorkingStage] = useState('等待回复…')
+  // ticket 14 L4 委托：低危文件操作（write/edit）自动授权免确认（可随时撤销——localStorage 持久化；bash 高危永不委托）
+  const [delegateLowRisk, setDelegateLowRisk] = useState(() => {
+    try { return localStorage.getItem('nf-delegate-lowrisk') === '1' } catch { return false }
+  })
+  const handleDelegateChange = (v: boolean) => {
+    setDelegateLowRisk(v)
+    try { localStorage.setItem('nf-delegate-lowrisk', v ? '1' : '0') } catch { /* 存储不可用——内存态仍工作 */ }
+  }
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef('')
   // 05 执行层 B：外部请求（复跑）——非空则预填输入框并发送
@@ -137,7 +147,9 @@ export default function ConversationPanel({
         const tc = chunk.toolCall
         setWorkingStage(`调用工具 ${tc.name}…`)
         next.toolCalls = [...(next.toolCalls ?? []), { name: tc.name, args: tc.args, status: 'pending' }]
-        void (window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: tc.name === 'read', rootPath: rootPath ?? undefined }) ?? Promise.resolve({ ok: false, error: 'tools 通道未就绪' })).then((r) => {
+        // ticket 14 L4 委托：低危文件操作（write/edit）命中委托规则 → 免确认直接执行（仍快照可回滚）；bash 高危永远单独授权
+        const autoApproved = tc.name === 'read' || (delegateLowRisk && toolRisk(tc.name) === 'low')
+        void (window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: autoApproved, rootPath: rootPath ?? undefined }) ?? Promise.resolve({ ok: false, error: 'tools 通道未就绪' })).then((r) => {
           const data = r.data as { file?: string; snapshot?: boolean } | undefined
           // 13 交付包联动：真实文件操作成功（write/edit 返回 file）→ 上报变更（产物区展示）
           if (r.ok && data?.file) onToolResult?.({ name: tc.name, file: data.file, ok: true })
@@ -357,6 +369,22 @@ export default function ConversationPanel({
     })
   }
 
+  // ticket 14 可撤销：任何时刻停止当前操作（bash 高危——cancelActiveCommand kill；卡标记已停止，续聊回填让模型知道被停止）
+  const stopToolCall = (calls: ToolCallMsg[], idx: number) => {
+    void (window.neonforge.tools?.cancel?.() ?? Promise.resolve({ ok: false, error: 'cancel 通道未就绪' }))
+    setMessages((prev) => {
+      const last = prev[prev.length - 1]
+      if (!last || last.role !== 'assistant') return prev
+      const updated = (last.toolCalls ?? []).map((c, i) => i === idx ? { ...c, status: 'error' as const, result: '已停止——未继续执行' } : c)
+      return [...prev.slice(0, -1), { ...last, toolCalls: updated }]
+    })
+    setTimeout(() => void maybeContinue(chatRef.current?.depth ?? 0, sessionRef.current), 150)
+  }
+  // ticket 14 疲劳防护：同批多个低危文件操作合并授权（bash 高危永远单独确认——canMergeApprove 已保证全 low）
+  const approveAllToolCalls = (calls: ToolCallMsg[]) => {
+    calls.forEach((tc, i) => { if (tc.status === 'need-approval') approveToolCall(calls, i, tc) })
+  }
+
   const finishError = (err: string) => {
     setMessages((p) => {
       const last = p[p.length - 1]
@@ -392,7 +420,7 @@ export default function ConversationPanel({
     <div className="nf-chat">
       {demoFlow && <DeliveryFlowPanel />}
       {demoDigital && <DigitalDeliveryPanel onDeliver={onDeliver} />}
-      {demoTrust && <TrustLadderPanel authorizedLogs={activeAuthorizedLogs} />}
+      {demoTrust && <TrustLadderPanel authorizedLogs={activeAuthorizedLogs} delegateLowRisk={delegateLowRisk} onDelegateChange={handleDelegateChange} />}
       {demoDod && <DoDAlignPanel />}
       {compactNote && <div className="nf-compact">🗜 {compactNote}</div>}
       <div className="nf-chat__list" ref={listRef} aria-live="polite" aria-relevant="additions text">
@@ -443,7 +471,10 @@ export default function ConversationPanel({
             )}
             {m.toolCalls && m.toolCalls.length > 0 && (
               <div className="nf-toolcalls">
-                {m.toolCalls.map((tc, i) => (
+                {m.toolCalls.map((tc, i) => {
+                  // ticket 14：授权卡风险明示——等级 + 影响（写哪个文件/执行什么命令）+ 快照提示
+                  const hint = buildAuthHint(tc.name, tc.args)
+                  return (
                   <div key={i} className={`nf-toolcall nf-toolcall--${tc.status}`}>
                     <span className="nf-toolcall__icon">
                       {tc.status === 'done' ? '✅' : tc.status === 'need-approval' ? '🔒' : tc.status === 'reverted' ? '↩️' : tc.status === 'error' ? '❌' : '⏳'}
@@ -462,7 +493,9 @@ export default function ConversationPanel({
                     )}
                     {tc.status === 'need-approval' && (
                       <>
-                        <span className="nf-toolcall__hint">需 L3 授权</span>
+                        <span className="nf-toolcall__hint">{hint.level}</span>
+                        {hint.impact && <span className="nf-toolcall__impact">→ {hint.impact}</span>}
+                        {hint.note && <span className="nf-toolcall__note">{hint.note}</span>}
                         <div className="nf-toolcall__actions">
                           <button
                             type="button"
@@ -481,8 +514,20 @@ export default function ConversationPanel({
                         </div>
                       </>
                     )}
+                    {tc.status === 'pending' && (
+                      <button type="button" className="nf-toolcall__stop" onClick={() => stopToolCall(m.toolCalls ?? [], i)}>
+                        ⏹ 停止
+                      </button>
+                    )}
                   </div>
-                ))}
+                  )
+                })}
+                {/* ticket 14 疲劳防护：同批 ≥2 低危文件操作待授权 → 合并授权（bash 高危永不合并——canMergeApprove 已保证） */}
+                {canMergeApprove((m.toolCalls ?? []).filter((c) => c.status === 'need-approval')) && (
+                  <button type="button" className="nf-toolcall__approveall" onClick={() => approveAllToolCalls(m.toolCalls ?? [])}>
+                    允许全部（L3 合并授权）
+                  </button>
+                )}
               </div>
             )}
           </div>

@@ -15,9 +15,16 @@ const DEMO_LOGS = [
   { t: '11:12', action: '写入：sales-merge.py（快照已建）', level: 'L3', ok: true }
 ]
 
-export default function TrustLadderPanel({ authorizedLogs }: { authorizedLogs?: string[] }) {
+export default function TrustLadderPanel({ authorizedLogs, delegateLowRisk, onDelegateChange }: {
+  authorizedLogs?: string[]
+  // ticket 14 执行引擎对接：委托规则受控（ConversationPanel 持有真实状态——localStorage 持久化；此处仅展示/切换）
+  delegateLowRisk?: boolean
+  onDelegateChange?: (v: boolean) => void
+}) {
   const [level, setLevel] = useState(1) // 当前信任等级（L1 起步，演示推进）
-  const [delegate, setDelegate] = useState(false)
+  const [internalDelegate, setInternalDelegate] = useState(false) // 无受控时内部兜底（demo 显示）
+  const delegate = delegateLowRisk ?? internalDelegate
+  const setDelegate = (v: boolean) => { setInternalDelegate(v); onDelegateChange?.(v) }
   // 授权记录：真实数据（06 问题快照 authorized——可回溯）优先；无则 demo 回退
   const [demoLogs, setDemoLogs] = useState(DEMO_LOGS)
   const realLogs = (authorizedLogs ?? []).map((a) => ({ t: '', action: a, level: 'L3', ok: true }))
@@ -65,7 +72,7 @@ export default function TrustLadderPanel({ authorizedLogs }: { authorizedLogs?: 
       <div className="nf-trust__controls">
         <label className="nf-trust__delegate">
           <input type="checkbox" checked={delegate} onChange={(e) => setDelegate(e.target.checked)} />
-          L4 委托：对「格式化类」建议可直接应用（可随时降级/撤销）
+          L4 委托：低危文件操作（write/edit）自动授权——写前备份可回滚，可随时降级/撤销（bash 命令始终单独确认）
         </label>
         <div className="nf-trust__btns">
           {level < 3 && <button type="button" className="nf-delivery__primary" onClick={upgrade}>提升信任等级</button>}
