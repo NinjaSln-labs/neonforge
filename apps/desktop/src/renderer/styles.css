@@ -1,4 +1,17 @@
 /* NeonForge 深色主题基础令牌（D3 design-tokens 映射，V1 仅深色） */
+/* 2026-08-03 品牌字体随包（OFL）：Space Grotesk Display / JetBrains Mono——离线可用，不引 CDN */
+@font-face {
+  font-family: 'Space Grotesk';
+  src: url('./assets/fonts/SpaceGrotesk.ttf') format('truetype');
+  font-weight: 300 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('./assets/fonts/JetBrainsMono.ttf') format('truetype');
+  font-weight: 100 800;
+  font-display: swap;
+}
 :root {
   color-scheme: dark; /* WIG：深色主题规范（滚动条/表单控件渲染） */
   --nf-bg: #120f1e;
@@ -20,8 +33,9 @@
   --nf-radius-md: 8px;
   --nf-font-sm: 12px;
   --nf-font-md: 14px;
-  --nf-font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --nf-font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --nf-text-tertiary: #6f6799;
+  --nf-font-display: "Space Grotesk", -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -34,6 +48,11 @@ body {
   color: var(--nf-text);
   background: var(--nf-bg);
   overflow: hidden;
+}
+
+/* 2026-08-03 品牌字体应用（visual-direction §二 字体）：Display 用于品牌/标题/步骤数字 */
+.nf-start__brand, .nf-config__title, .nf-flow__focus-step, .nf-flow__title {
+  font-family: var(--nf-font-display);
 }
 
 /* 2026-08-03 视觉审计：交互元素统一 150ms 过渡（hover/focus 平滑）+ 键盘可见焦点 */
@@ -176,6 +195,13 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   color: var(--nf-text-dim);
   font-size: var(--nf-font-sm);
 }
+/* 2026-08-03 状态灯 SVG 化：就绪绿点 / 思考中靛蓝呼吸点 */
+.nf-statusbar__dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  display: inline-block; margin-right: 6px; flex-shrink: 0;
+}
+.nf-statusbar__dot--ready { background: #22C55E; }
+.nf-statusbar__dot--working { background: var(--nf-accent); animation: nf-breath-blue 2s ease-in-out infinite; }
 
 /* 首次配置页（D0 §3.1） */
 .nf-app--config,
@@ -420,8 +446,18 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 /* 0-1 交付流（ticket 07）：阶段机 + 模型选择 + 分步推进 */
 .nf-flow { display: flex; flex-direction: column; gap: var(--nf-space-3); padding: var(--nf-space-3); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md); background: var(--nf-bg-elevated); }
 .nf-flow__head { display: flex; align-items: center; justify-content: space-between; }
-.nf-flow__title { color: var(--nf-text); font-weight: 600; font-size: var(--nf-font-sm); }
+.nf-flow__title { display: flex; align-items: center; gap: 6px; color: var(--nf-text); font-weight: 600; font-size: var(--nf-font-sm); }
+.nf-flow__title svg { color: var(--nf-accent); }
 .nf-flow__model { color: var(--nf-amber); font-size: var(--nf-font-sm); }
+
+/* 2026-08-03 面板层级区分（c12）：功能面板顶部渐变条 + 标题图标 accent */
+.nf-flow, .nf-digital, .nf-trust, .nf-dod, .nf-settings { position: relative; }
+.nf-flow::before, .nf-digital::before, .nf-trust::before, .nf-dod::before, .nf-settings::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, #6366f1, #a855f7, #ff8a00);
+  border-radius: var(--nf-radius-md) var(--nf-radius-md) 0 0;
+  opacity: 0.55;
+}
 .nf-flow__stages { display: flex; flex-wrap: wrap; gap: var(--nf-space-2); }
 .nf-flow__stage { font-size: var(--nf-font-sm); color: var(--nf-text-dim); padding: 2px var(--nf-space-2); border-radius: var(--nf-radius-sm); background: var(--nf-bg-panel); }
 .nf-flow__stage--done { color: #22C55E; }

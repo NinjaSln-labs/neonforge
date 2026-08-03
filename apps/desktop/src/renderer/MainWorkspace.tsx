@@ -244,9 +244,9 @@ function initProblems(): ProblemInstance[] {
 
       <footer className="nf-statusbar">
         {working ? (
-          <>🔵 搭档思考中…</>
+          <><span className="nf-statusbar__dot nf-statusbar__dot--working" />搭档思考中…</>
         ) : (
-          <>🟢 就绪</>
+          <><span className="nf-statusbar__dot nf-statusbar__dot--ready" />就绪</>
         )}
         {' │ '}{(rootPath ?? '从零开始').split(/[/\\]/).filter(Boolean).pop()} │ 待审核: 0
       </footer>
