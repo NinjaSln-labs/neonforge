@@ -7,6 +7,8 @@ import type { DeliveryPackage } from './types'
 import { loadSession, saveSession, serializeMessages } from './sessionStore'
 // ticket 14 信任阶梯：授权执行模型（等级/影响/合并判定——L4 委托 + 疲劳防护）
 import { buildAuthHint, canMergeApprove, toolRisk } from './authModel'
+// 2026-08-03 v33：思考过程内容清洗（reasoning 含 Markdown 标记 → 展示为可读纯文字）
+import { stripMarkdown } from './textClean'
 // 2026-08-03 视觉审计 P1-6：内联 SVG 图标（替换 emoji 图标）
 import {
   IconBrain, IconCheck, IconClock, IconDot, IconFile, IconFolder, IconLock,
@@ -225,7 +227,12 @@ export default function ConversationPanel({
     // 系统提示：引导直接 read（项目根相对路径）——避免 bash 全局搜索/工具循环（提速）
     // 2026-08-02：LSP 工具接入模型（HANDOFF §3 第一优先）——引导用 find_definition/find_references/get_type_info 查真实代码上下文
     // 2026-08-02：search 工具接入模型（Layer2 CodeRAG agentic 化——Claude Code grep 模式）
-    const sysHint = { role: 'system', content: `你是 NeonForge 搭档。当前项目根目录：${rootPath ?? '(未指定)'}。规则：① 读文件用 read 工具（路径用项目根下的相对路径，如 package.json）② 不要用 bash find 全局搜索（直接 read 目标文件）③ 工具一次调用一个，执行完看结果再决定 ④ 找不到文件就直接告诉用户 ⑤ 查符号定义/引用/类型用 LSP 工具：find_definition/find_references/get_type_info（传 path + symbol，如 {path: 'src/a.ts', symbol: 'greet'}）⑥ 查文件错误/import 用 get_diagnostics/get_imports ⑦ 不知道符号在哪个文件时用 search 工具（传 query 关键词，如 "greet"）——返回命中文件+行号+片段，再 read 或 LSP 定位。` }
+    // 2026-08-03 v33：回复语言跟随用户——检测最近用户消息语言（中文 → 中文回复；否则 → 同语言回复）
+    const lastUserMsg = [...msgs].reverse().find((m) => m.role === 'user')
+    const langRule = lastUserMsg && /[\u4e00-\u9fff]/.test(String(lastUserMsg.content ?? ''))
+      ? '⑧ 用中文回复用户（避免英文夹杂；工具名/代码/技术名词可保留原文）'
+      : '⑧ 用与用户消息相同的语言回复'
+    const sysHint = { role: 'system', content: `你是 NeonForge 搭档。当前项目根目录：${rootPath ?? '(未指定)'}。规则：① 读文件用 read 工具（路径用项目根下的相对路径，如 package.json）② 不要用 bash find 全局搜索（直接 read 目标文件）③ 工具一次调用一个，执行完看结果再决定 ④ 找不到文件就直接告诉用户 ⑤ 查符号定义/引用/类型用 LSP 工具：find_definition/find_references/get_type_info（传 path + symbol，如 {path: 'src/a.ts', symbol: 'greet'}）⑥ 查文件错误/import 用 get_diagnostics/get_imports ⑦ 不知道符号在哪个文件时用 search 工具（传 query 关键词，如 "greet"）——返回命中文件+行号+片段，再 read 或 LSP 定位。${langRule}` }
     try {
       const res = await window.neonforge.gateway.streamChat({
         apiKey: key,
@@ -469,9 +476,10 @@ export default function ConversationPanel({
             </div>
             {m.role === 'user' && <span className="nf-msg__sent"><IconCheck size={11} /> 已发送</span>}
             {m.reasoning && m.role === 'assistant' && m.status === 'done' && (
+              // 2026-08-03 v33：标签「推理」→「思考过程」（非技术语言）+ 内容 Markdown 清洗 + .nf-reasoning 约束（160px 滚动——修长文本撑开）
               <details className="nf-msg__reasoning">
-                <summary><IconBrain size={12} /> 推理</summary>
-                <p className="nf-meta">{m.reasoning}</p>
+                <summary><IconBrain size={12} /> 思考过程</summary>
+                <p className="nf-reasoning">{stripMarkdown(m.reasoning)}</p>
               </details>
             )}
             {m.toolCalls && m.toolCalls.length > 0 && (
