@@ -554,27 +554,6 @@ export default function ConversationPanel({
       </div>
 
       <div className="nf-chat__input">
-        {mentionOpen && (
-          // 2026-08-03 v31 A4 审计修复：@引用浮层语义（listbox + 输入框 aria 关联——读屏/键盘发现性）
-          <div id="nf-mention-list" className="nf-mention" role="listbox" aria-label="引用文件">
-            <span className="nf-mention__title">引用文件</span>
-            {recentFiles.map((f) => (
-              <button
-                key={f}
-                type="button"
-                role="option"
-                className="nf-mention__item"
-                onClick={() => {
-                  const before = input.replace(/@[^@]*$/, '')
-                  setInput(before + '@' + f + ' ')
-                  setMentionOpen(false)
-                }}
-              >
-                <IconFile size={12} /> {f}
-              </button>
-            ))}
-          </div>
-        )}
         <textarea
           value={input}
           placeholder="输入想法…（Enter 发送 · Shift+Enter 换行）"
@@ -611,6 +590,27 @@ export default function ConversationPanel({
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() }
           }}
         />
+        {/* 2026-08-03 v34：@引用浮层移到 textarea 之后（Tab 顺序 textarea→option→发送——修复键盘不可达；absolute 定位在输入框上方） */}
+        {mentionOpen && (
+          <div id="nf-mention-list" className="nf-mention" role="listbox" aria-label="引用文件">
+            <span className="nf-mention__title">引用文件</span>
+            {recentFiles.map((f) => (
+              <button
+                key={f}
+                type="button"
+                role="option"
+                className="nf-mention__item"
+                onClick={() => {
+                  const before = input.replace(/@[^@]*$/, '')
+                  setInput(before + '@' + f + ' ')
+                  setMentionOpen(false)
+                }}
+              >
+                <IconFile size={12} /> {f}
+              </button>
+            ))}
+          </div>
+        )}
         <button type="button" className="nf-config__cta" onClick={() => void send()} disabled={working || !input.trim()}>
           发送
         </button>
