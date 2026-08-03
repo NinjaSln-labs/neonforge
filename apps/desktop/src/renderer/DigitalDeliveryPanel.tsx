@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { DeliveryPackage } from './types'
+import { IconCheck, IconFolder, IconRotateCcw } from './icons'
 
 // 数字产物交付（ticket 13）：非技术主路径——文件整理/数据加工 → 变更预览 → L3 授权 → 交付
 const DEMO_FILES = ['发票/2026-07-10-淘宝.pdf', '发票/2026-07-15-京东.pdf', '发票/2026-07-22-美团.pdf', '合同/2026-07-18-服务协议.docx', '合同/2026-07-25-采购单.pdf', '重复/2026-07-10-淘宝-副本.pdf']
@@ -44,7 +45,7 @@ export default function DigitalDeliveryPanel({ onDeliver }: { onDeliver: (pkg: D
   return (
     <div className="nf-digital">
       <div className="nf-flow__head">
-        <span className="nf-flow__title">📁 数字产物交付</span>
+        <span className="nf-flow__title"><IconFolder size={14} /> 数字产物交付</span>
         <span className="nf-flow__model">{DEMO_FILES.length} 个文件 · 待处理</span>
       </div>
 
@@ -85,10 +86,10 @@ export default function DigitalDeliveryPanel({ onDeliver }: { onDeliver: (pkg: D
 
       {done && (
         <>
-          <div className="nf-flow__done">✅ 处理完成——交付包已在「产物」区，验收后确认关闭</div>
+          <div className="nf-flow__done"><IconCheck size={12} /> 处理完成——交付包已在「产物」区，验收后确认关闭</div>
           <div className="nf-digital__preview">
             <button type="button" className="nf-delivery__ghost" onClick={() => { setTask(null); setPreview(false); setDone(false) }}>
-              ↻ 继续处理其他任务
+              <IconRotateCcw size={12} /> 继续处理其他任务
             </button>
           </div>
         </>

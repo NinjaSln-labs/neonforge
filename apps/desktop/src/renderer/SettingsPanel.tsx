@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { IconSettings } from './icons'
 
 // 设置（ticket 08 / D0 §9 最小集）：语言 / 默认视图 / 主动提醒开关（原则 6：安静默认）
 export default function SettingsPanel() {
@@ -21,7 +22,7 @@ export default function SettingsPanel() {
   return (
     <div className="nf-settings">
       <div className="nf-flow__head">
-        <span className="nf-flow__title">⚙ 设置</span>
+        <span className="nf-flow__title"><IconSettings size={14} /> 设置</span>
         <span className="nf-flow__model">最小集（V1）</span>
       </div>
 

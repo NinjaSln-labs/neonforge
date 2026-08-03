@@ -7,6 +7,7 @@ import ConversationPanel from './ConversationPanel'
 import type { DeliveryPackage, ProblemInstance } from './types'
 import { createProblem, loadProblems, saveProblems, updateProblemSnapshot } from './problemStore'
 import { clearSession } from './sessionStore'
+import { IconSettings } from './icons'
 
 // 任务工作台（对话面板「任务」Tab，06 任务队列前为结构占位）
 function TaskPanel() {
@@ -213,7 +214,7 @@ function initProblems(): ProblemInstance[] {
             </button>
           </div>
           <div className="nf-chat__actions">
-            <button type="button" className="nf-session__new" onClick={() => setShowSettings((v) => !v)}>⚙ 设置</button>
+            <button type="button" className="nf-session__new" onClick={() => setShowSettings((v) => !v)}><IconSettings size={12} /> 设置</button>
             <button type="button" className="nf-session__new" onClick={onBackStart}>启动页</button>
           </div>
         </header>

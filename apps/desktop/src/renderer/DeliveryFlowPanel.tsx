@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { IconCheck } from './icons'
 
 // 0-1 交付流（ticket 07）：说需求 → 软件工程模型/敏捷 → 分步推进 → 交付部署
 // V2：阶段状态提升——onStageChange/onModelSelect 通知 MainWorkspace（注入对话阶段指引）
@@ -82,7 +83,7 @@ export default function DeliveryFlowPanel({
         </div>
       )}
       {model && stage === FLOW_STAGES.length - 1 && (
-        <div className="nf-flow__done">✅ 交付完成——产物在「产物」区，验收后确认关闭</div>
+        <div className="nf-flow__done"><IconCheck size={12} /> 交付完成——产物在「产物」区，验收后确认关闭</div>
       )}
     </div>
   )
