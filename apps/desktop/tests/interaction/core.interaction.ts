@@ -36,6 +36,7 @@ async function mockBridge(page: Page): Promise<void> {
       plugins: { list: async () => [], toggle: async () => true },
       preheat: { status: async () => ({ plan: { shouldPreheat: false, why: '', actions: [] }, cache: null }) },
       compaction: { compact: async () => ({ ok: false, error: '未达阈值' }) },
+      chatLog: { log: async () => {}, export: async () => ({ ok: true, path: '/tmp/nf-test-export.md' }) },
       demo: {
         delivery: {
           status: 'delivered',
@@ -118,6 +119,9 @@ test('快捷键：⌘, 打开/关闭设置 + 快捷键表完整（D0 §6）', as
   await expect(page.locator('.nf-settings')).toBeVisible()
   await expect(page.locator('.nf-settings')).toContainText('⌘ + N 新任务')
   await expect(page.locator('.nf-settings')).toContainText('⌘ + E @引用当前文件')
+  // 2026-08-04 对话日志/导出可用性：设置页「导出对话记录」→ 状态提示（成功路径显示产物路径）
+  await page.locator('.nf-settings__export').click()
+  await expect(page.locator('.nf-settings__export-msg')).toContainText('已导出：/tmp/nf-test-export.md')
   await page.keyboard.press('Meta+,')
   await expect(page.locator('.nf-settings')).toHaveCount(0)
 })
