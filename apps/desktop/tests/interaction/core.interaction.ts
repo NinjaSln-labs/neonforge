@@ -271,6 +271,7 @@ test('0-1 从零开始：确认推进按钮常驻可见（修复——不在滚�
 // 2026-08-04 回归：点「确认推进」→ 对话区出现「已进入【X】阶段」反馈消息（用户反馈「推进按钮没有实际功能」——原仅 UI 阶段机前进，对话无响应）
 test('0-1 从零开始：确认推进 → 对话区出现阶段推进反馈消息', async ({ page }) => {
   await page.addInitScript(() => {
+    window.__sentMsgs = []
     window.neonforge = {
       version: 'test',
       config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
@@ -282,7 +283,12 @@ test('0-1 从零开始：确认推进 → 对话区出现阶段推进反馈消�
         initProject: async () => ({ ok: true, path: '/test', title: 't' }),
         updateProjectTitle: async () => ({ ok: true })
       },
-      gateway: { validate: async () => ({ ok: true }), streamChat: async () => ({ ok: true }), onStreamChunk: () => () => {} },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        // 2026-08-04 方案 A 回归：捕获发给模型的 messages——验证需求卡确认摘要注入对话上下文
+        streamChat: async (opts: { messages: Array<{ role: string; content: string }> }) => { (window as unknown as { __sentMsgs: Array<{ role: string; content: string }> }).__sentMsgs = opts.messages; return { ok: true } },
+        onStreamChunk: () => () => {}
+      },
       tools: { execute: async () => ({ ok: true }), list: async () => [] },
       context: { resolve: async () => ({ fragments: [] }) },
       compaction: { compact: async () => ({ ok: false }) },
@@ -311,6 +317,11 @@ test('0-1 从零开始：确认推进 → 对话区出现阶段推进反馈消�
   await expect(feedback).toContainText('确认方案')
   // 阶段机同步前进（设计 = active）
   await expect(page.locator('.nf-flow__stage--active')).toContainText('设计')
+  // 2026-08-04 方案 A 回归：需求卡确认摘要注入模型上下文——advanceChat 内部指令含【需求确认】（模型按确认结果做设计，不再基于模糊原始消息）
+  await page.waitForTimeout(200)
+  const sent = await page.evaluate(() => (window as unknown as { __sentMsgs: Array<{ role: string; content: string }> }).__sentMsgs)
+  const userMsgs = sent.filter((m) => m.role === 'user')
+  expect(userMsgs.some((m) => m.content.includes('【需求确认】用户已通过需求确认卡确认需求：射击游戏：网页打开就能玩，发给朋友玩，先做个能玩的版本'))).toBe(true)
 })
 
 // 2026-08-04 回归：需求确认回写——模型输出【需求确认：xxx】→ 台账标题/快照 + 项目 README 更新（目录名不变；错别字/同音需求被校正）

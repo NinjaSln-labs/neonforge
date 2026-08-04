@@ -104,8 +104,9 @@ export default function MainWorkspace({
   const [requirementConfirmed, setRequirementConfirmed] = useState(false)
   const handleRequirementCardConfirm = (summary: string) => {
     handleRequirementConfirmed(summary)
-    // 推进到设计（stageAdvance → 对话区提示 + 搭档自动开始设计工作）
-    handleStageChange(1)
+    // 推进到设计（stageAdvance → 对话区提示 + 搭档自动开始设计工作）；summary 随 stageAdvance 注入对话上下文——
+    // 模型在设计阶段能拿到需求卡确认结果（2026-08-04 接手复验：原实现仅回写台账/README，模型看不到 4 项选择）
+    handleStageChange(1, summary)
   }
   const handleUserMessage = (text: string) => {
     lastPromptRef.current = text
@@ -199,10 +200,11 @@ function initProblems(): ProblemInstance[] {
     : undefined
   // 07 阶段产物编排：阶段推进 → 交付包验收项（阶段确认列表——确定性，不依赖模型）
   // 2026-08-04：推进反馈——seq 递增通知 ConversationPanel 追加「已进入【X】阶段」对话提示（用户反馈「推进按钮没有实际功能」）
-  const [stageAdvance, setStageAdvance] = useState<{ seq: number; stage: string; hint: string } | null>(null)
-  const handleStageChange = (stage: number) => {
+  const [stageAdvance, setStageAdvance] = useState<{ seq: number; stage: string; hint: string; requirement?: string } | null>(null)
+  // 2026-08-04 方案 A：requirement 可选——需求卡确认时携带确认摘要（注入对话上下文，模型按确认结果工作）
+  const handleStageChange = (stage: number, requirement?: string) => {
     setFlowStage(stage)
-    setStageAdvance((prev) => ({ seq: (prev?.seq ?? 0) + 1, stage: FLOW_STAGES[stage], hint: STAGE_HINT[FLOW_STAGES[stage]] }))
+    setStageAdvance((prev) => ({ seq: (prev?.seq ?? 0) + 1, stage: FLOW_STAGES[stage], hint: STAGE_HINT[FLOW_STAGES[stage]], requirement }))
     const acceptance = FLOW_STAGES.map((s, i) => ({
       label: i < stage ? `${s} 阶段已完成` : i === stage ? `${s} 阶段进行中` : `${s} 待开始`,
       done: i < stage
