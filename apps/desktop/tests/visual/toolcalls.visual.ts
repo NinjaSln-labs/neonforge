@@ -67,8 +67,9 @@ test('工具卡片（bash 需授权 🔒）', async ({ page }) => {
   await expect(page.locator('.nf-toolcall')).toContainText('需要授权')
   // 等授权卡完整渲染（need-approval → 「允许执行」按钮出现）再截图——消除过渡态时序抖动（基线固化为完整状态）
   await expect(page.locator('.nf-toolcall__approve')).toBeVisible()
-  // 等续聊链完全结束（working false → 状态栏就绪）再截图——对齐 read 测试加固，消除全量跑残余时序抖动（坑 18）
-  await expect(page.locator('.nf-statusbar')).toContainText('就绪')
+  // 等续聊链完全结束（working false）再截图——消除全量跑残余时序抖动（坑 18）
+  // 2026-08-04 D2：授权卡存在时状态栏显示「有操作待你批准」（非「就绪」）——语义变化同步断言
+  await expect(page.locator('.nf-statusbar')).toContainText('待你批准')
   await expect(page.locator('.nf-chat')).toHaveScreenshot('toolcall-bash-approval.png')
 })
 

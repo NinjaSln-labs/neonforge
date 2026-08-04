@@ -41,6 +41,7 @@ export default function ConversationPanel({
   onKeyExpired,
   onReasoning,
   onWorkingChange,
+  onApprovalChange,
   externalRequest,
   onExternalConsumed,
   onToolResult,
@@ -54,6 +55,7 @@ export default function ConversationPanel({
   onKeyExpired: () => void
   onReasoning?: (text: string) => void
   onWorkingChange?: (working: boolean) => void
+  onApprovalChange?: (pending: boolean) => void // 2026-08-04 审计修复（D2）：有待批准工具操作时上报（状态栏提示——键盘用户感知）
   externalRequest?: string | null
   onExternalConsumed?: () => void
   onToolResult?: (r: { name: string; file?: string; ok: boolean }) => void
@@ -65,6 +67,10 @@ export default function ConversationPanel({
   const [messages, setMessages] = useState<Msg[]>([])
   const messagesRef = useRef<Msg[]>([])
   useEffect(() => { messagesRef.current = messages }, [messages])
+  // 2026-08-04 审计修复（D2）：有待批准工具操作 → 上报状态栏提示（need-approval 出现/消失）
+  useEffect(() => {
+    onApprovalChange?.(messages.some((m) => m.toolCalls?.some((c) => c.status === 'need-approval')) ?? false)
+  }, [messages, onApprovalChange])
   // 断点续做（ticket 06/基线 §21）：挂载恢复上次会话（onNew 已 clearSession → 空）
   useEffect(() => {
     const stored = loadSession()
@@ -117,6 +123,8 @@ export default function ConversationPanel({
   }, [])
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef('')
+  // 2026-08-04 审计修复（A3）：textarea DOM ref——场景卡点击预填后聚焦输入框（原焦点停卡片，需再点输入框）
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   // 05 执行层 B：外部请求（复跑）——非空则预填输入框并发送
   const sendRef = useRef<() => Promise<void>>(async () => {})
   useEffect(() => {
@@ -131,9 +139,28 @@ export default function ConversationPanel({
   }, [externalRequest])
   const [mentionOpen, setMentionOpen] = useState(false)
   const [recentFiles, setRecentFiles] = useState<string[]>([])
+  // 2026-08-04 审计修复（A2）：浮层方向键高亮索引（-1=未高亮）——listbox 键盘语义落地（原仅 Tab 可达，Arrow 无反应）
+  const [mentionActive, setMentionActive] = useState(-1)
   const demoFiles = (recentFilesExternal && recentFilesExternal.length > 0)
     ? recentFilesExternal
     : (window.neonforge as unknown as { demo?: { recentFiles?: string[] } }).demo?.recentFiles ?? []
+  // 2026-08-04 审计修复（A2）：选择浮层项（输入框 @后插入文件名）——点击/Enter 共用
+  const pickMention = (idx: number) => {
+    const f = recentFiles[idx]
+    if (!f) return
+    const before = inputRef.current.replace(/@[^@]*$/, '')
+    const next = before + '@' + f + ' '
+    inputRef.current = next
+    setInput(next)
+    setMentionOpen(false)
+    setMentionActive(-1)
+    textareaRef.current?.focus()
+  }
+  // 2026-08-04 审计修复（A2）：浮层打开/内容变化时重置高亮
+  useEffect(() => {
+    if (!mentionOpen) setMentionActive(-1)
+    else setMentionActive(recentFiles.length > 0 ? 0 : -1)
+  }, [mentionOpen, recentFiles])
 
   // 处理单个流式事件（当前轮次——写入最后一条 assistant 消息）
   const applyChunk = (chunk: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => {
@@ -463,7 +490,7 @@ export default function ConversationPanel({
                   key={label}
                   type="button"
                   className="nf-scene"
-                  onClick={() => setInput(q)}
+                  onClick={() => { setInput(q); inputRef.current = q; textareaRef.current?.focus() }}
                 >
                   <span className="nf-scene__icon"><Icon size={20} /></span>
                   <span className="nf-scene__label">{label}</span>
@@ -568,6 +595,7 @@ export default function ConversationPanel({
 
       <div className="nf-chat__input">
         <textarea
+          ref={textareaRef}
           value={input}
           placeholder="输入想法…（Enter 发送 · Shift+Enter 换行）"
           aria-label="给搭档的消息"
@@ -598,6 +626,29 @@ export default function ConversationPanel({
               }
               return
             }
+            // 2026-08-04 审计修复（A2）：浮层打开时——方向键移动高亮 / Esc 关闭 / Enter 选择
+            if (mentionOpen) {
+              if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault()
+                const len = recentFiles.length
+                if (len === 0) return
+                setMentionActive((cur) => {
+                  if (cur === -1) return e.key === 'ArrowDown' ? 0 : len - 1
+                  return e.key === 'ArrowDown' ? (cur + 1) % len : (cur - 1 + len) % len
+                })
+                return
+              }
+              if (e.key === 'Escape') {
+                e.preventDefault()
+                setMentionOpen(false)
+                return
+              }
+              if (e.key === 'Enter' && !e.shiftKey && mentionActive >= 0) {
+                e.preventDefault()
+                pickMention(mentionActive)
+                return
+              }
+            }
             // 2026-08-03 A6 审计修复：Enter=发送（非技术用户直觉——V1 主受众）；Shift+Enter=换行；⌘/Ctrl+Enter 也发送（兼容旧习惯）
             // 注意：⌘+Enter 也命中 Enter 分支（metaKey 不排除）——发送；Shift+Enter 不拦截——textarea 默认换行
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send() }
@@ -607,17 +658,14 @@ export default function ConversationPanel({
         {mentionOpen && (
           <div id="nf-mention-list" className="nf-mention" role="listbox" aria-label="引用文件">
             <span className="nf-mention__title">引用文件</span>
-            {recentFiles.map((f) => (
+            {recentFiles.map((f, i) => (
               <button
                 key={f}
                 type="button"
                 role="option"
-                className="nf-mention__item"
-                onClick={() => {
-                  const before = input.replace(/@[^@]*$/, '')
-                  setInput(before + '@' + f + ' ')
-                  setMentionOpen(false)
-                }}
+                aria-selected={i === mentionActive}
+                className={`nf-mention__item${i === mentionActive ? ' nf-mention__item--active' : ''}`}
+                onClick={() => pickMention(i)}
               >
                 <IconFile size={12} /> {f}
               </button>
