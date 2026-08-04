@@ -49,7 +49,7 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
   it('read：只读无需授权（L1）', async () => {
     const file = path.join(TMP, 'd.txt')
     writeFileSync(file, 'hello', 'utf-8')
-    const r = await toolRegistry.execute('read', { path: file }, {})
+    const r = await toolRegistry.execute('read', { path: file }, { rootPath: TMP })
     expect(r.ok).toBe(true)
     expect(r.data).toBe('hello')
   })

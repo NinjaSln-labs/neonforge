@@ -10,6 +10,36 @@ import { codeRag } from './codeRag.js'
 
 export type ToolRisk = 'none' | 'low' | 'high'
 
+// 2026-08-04 授权架构 v4（竞品多源交叉验证共识——Claude/Codex/Cursor 统一 Tool(specifier) 格式）：
+// 规则引擎 deny > allow > ask；未匹配默认 ask（fail-closed）+ preApproval 只读自动
+export type RuleAction = 'allow' | 'deny' | 'ask'
+export interface PermissionRule {
+  action: RuleAction
+  tool: string
+  specifier: string // 参数前缀（路径/命令）——空 = 该工具全部
+}
+
+// 规则匹配参数：优先取路径类参数（path/filePath/file），命令类取 command/pattern
+function ruleArg(args: Record<string, unknown>): string {
+  return String(args.path ?? args.filePath ?? args.file ?? args.command ?? args.pattern ?? '')
+}
+export function matchesRule(tool: string, args: Record<string, unknown>, rule: PermissionRule): boolean {
+  if (rule.tool !== tool) return false
+  if (!rule.specifier) return true
+  return ruleArg(args).startsWith(rule.specifier)
+}
+
+// 沙箱判定：项目根内（0-1 创建的项目根 / 打开的项目根）——沙箱内外区分（Codex workspace-write 概念，软沙箱）
+export function isInSandbox(p: unknown, rootPath?: string): boolean {
+  const pStr = String(p ?? '')
+  if (!rootPath || !pStr) return false
+  const rp = path.resolve(rootPath)
+  // 与 readExecutor resolvePath 语义一致：真绝对路径（多段）直接用；相对/类绝对（单段 /package.json = 项目根下）join rootPath
+  const segments = pStr.split('/').filter(Boolean)
+  const target = path.isAbsolute(pStr) && segments.length > 1 ? path.resolve(pStr) : path.resolve(rp, pStr.replace(/^\/+/, ''))
+  return target === rp || target.startsWith(rp + path.sep)
+}
+
 export interface Tool {
   name: string
   source: 'core' | 'lsp'
@@ -18,7 +48,7 @@ export interface Tool {
   execute: (args: Record<string, unknown>, ctx: { rootPath?: string }) => Promise<unknown>
   // 2026-08-04 授权架构重构（用户授权疲劳）：执行前裁决——requiresApproval 工具若 preApproval 判定 auto=true → 免授权直接执行
   // （main 进程裁决——bash 只读命令自动；renderer 不判断，防绕过）
-  preApproval?: (args: Record<string, unknown>) => { auto: boolean; reason?: string }
+  preApproval?: (args: Record<string, unknown>, ctx?: { rootPath?: string }) => { auto: boolean; reason?: string }
 }
 
 export interface ToolResult {
@@ -29,9 +59,15 @@ export interface ToolResult {
 
 class ToolRegistry {
   private tools = new Map<string, Tool>()
+  // 2026-08-04 授权架构 v4：规则列表（deny > allow > ask；未匹配 ask + preApproval）
+  private rules: PermissionRule[] = []
 
   register(tool: Tool): void {
     this.tools.set(tool.name, tool)
+  }
+
+  setRules(rules: PermissionRule[]): void {
+    this.rules = rules
   }
 
   list(): Array<{ name: string; source: Tool['source']; requiresApproval: boolean; risk: ToolRisk }> {
@@ -46,9 +82,15 @@ class ToolRegistry {
     console.log('[tools] execute', name, 'rootPath=' + (opts.rootPath ?? 'NONE'))
     const tool = this.tools.get(name)
     if (!tool) return { ok: false, error: `未知工具：${name}` }
-    if (tool.requiresApproval && !opts.approved) {
+    // 2026-08-04 授权架构 v4：规则裁决 deny > allow > ask（fail-closed）——对齐 Claude/Codex/Cursor 共识
+    const rule = this.rules.find((r) => matchesRule(name, args, r))
+    if (rule?.action === 'deny') {
+      return { ok: false, error: `已阻止：${name}（deny 规则 ${rule.specifier || '全部'}）——如需执行请先调整授权规则` }
+    }
+    const ruleAllows = rule?.action === 'allow'
+    if (!ruleAllows && tool.requiresApproval && !opts.approved) {
       // 2026-08-04 授权架构重构：preApproval 裁决（如 bash 只读命令自动执行）——原一律 need-approval（授权疲劳根因：ls/cat 也弹卡）
-      const pre = tool.preApproval?.(args)
+      const pre = tool.preApproval?.(args, opts)
       if (!pre?.auto) {
         return { ok: false, error: `「${name}」需要授权（L3）——approved=true 后执行` }
       }
@@ -157,6 +199,7 @@ export const toolRegistry = new ToolRegistry()
 // 注册 4 核心工具 + search（Layer2 CodeRAG——2026-08-02 接入模型；6 LSP 随 12 ContextEngine 注册）
 export function initTools(): void {
   // risk（ticket 14）：none=L1 观察无需授权；low=L3 文件操作（写前快照可回滚）；high=L3 命令执行（高危单独确认）
+  // 2026-08-04 v4：read 一律自动（读是低风险——Cursor/Codex 共识「读文件默认不需批准」）；沙箱内外区分核心在 write/edit（沙箱外永不信任）
   toolRegistry.register({ name: 'read', source: 'core', requiresApproval: false, risk: 'none', execute: readExecutor })
   toolRegistry.register({ name: 'write', source: 'core', requiresApproval: true, risk: 'low', execute: writeExecutor })
   toolRegistry.register({ name: 'edit', source: 'core', requiresApproval: true, risk: 'low', execute: editExecutor })
