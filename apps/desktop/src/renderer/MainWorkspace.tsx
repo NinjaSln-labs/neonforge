@@ -259,16 +259,17 @@ function initProblems(): ProblemInstance[] {
         {/* 2026-08-04 UX 修复：0-1 交付流面板移出滚动容器——对话滚动时「模型选择/确认推进」常驻可见（原在 .nf-panel__body 内被对话内容滚出视口——用户找不到推进按钮） */}
         {zeroToOne && (
           <div className="nf-flow__dock">
-            <DeliveryFlowPanel onStageChange={handleStageChange} onModelSelect={setFlowModel} requirementConfirmed={requirementConfirmed} stageOverride={flowStage} />
-            {/* 2026-08-04 P2：需求确认卡——需求阶段未确认时显示（点选 4 项 → 确认 → 自动进设计；确定性收敛不依赖模型标记） */}
+            <DeliveryFlowPanel onStageChange={handleStageChange} onModelSelect={setFlowModel} requirementConfirmed={requirementConfirmed} artifactsReady={realChanges.length > 0} busy={working} stageOverride={flowStage} />
+            {/* 2026-08-04 P2：需求确认卡——需求阶段未确认时显示（点选 4 项 → 确认 → 自动进设计；确定性收敛不依赖模型标记）
+                2026-08-04 体验修复：initialPrompt 首句关键词预选「做什么」（用户已说过的类型不用重选） */}
             {flowStage === 0 && !requirementConfirmed && (
-              <RequirementCard onConfirm={handleRequirementCardConfirm} />
+              <RequirementCard onConfirm={handleRequirementCardConfirm} initialPrompt={initialPrompt} />
             )}
           </div>
         )}
         <div className="nf-panel__body">
           {chatTab === 'chat' ? (
-            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} onApprovalChange={setPendingApproval} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} onRequirementConfirmed={handleRequirementConfirmed} recentFilesExternal={projectFiles} stageHint={stageHint} stageAdvance={stageAdvance} prefillText={initialPrompt} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} />
+            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} onApprovalChange={setPendingApproval} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} onRequirementConfirmed={handleRequirementConfirmed} recentFilesExternal={projectFiles} stageHint={stageHint} stageAdvance={stageAdvance} initialPrompt={initialPrompt} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} />
           ) : (
             <TaskPanel />
           )}

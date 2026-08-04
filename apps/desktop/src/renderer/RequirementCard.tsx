@@ -1,6 +1,6 @@
 // 需求确认卡（2026-08-04 P2 重构——意图消歧 UI 化）：4 项候选 chips，点选 → 确认 → 自动进设计
 // 借鉴 workshop-facilitation 的「编号选项 + Other」交互模式：确定性收敛，不依赖模型输出【需求确认】标记
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { IconCheck } from './icons'
 
 interface FieldOption { v: string; d?: string }
@@ -42,10 +42,21 @@ const FIELDS: Field[] = [
   }
 ]
 
-export default function RequirementCard({ onConfirm }: { onConfirm: (summary: string) => void }) {
+export default function RequirementCard({ onConfirm, initialPrompt }: { onConfirm: (summary: string) => void; initialPrompt?: string }) {
   const [sel, setSel] = useState<Record<string, string>>({})
   const allPicked = FIELDS.every((f) => sel[f.key])
   const pick = (key: string, v: string) => setSel((s) => ({ ...s, [key]: v }))
+  // 2026-08-04 体验修复（用户实测：已说「3D射击」还要重选）：首句关键词预选「做什么」——用户已说过的类型不用重选
+  useEffect(() => {
+    if (!initialPrompt || sel.type) return
+    const t = initialPrompt.toLowerCase()
+    const match = /(射击|打枪|枪|打怪|对战|fps)/.test(t) ? '射击游戏'
+      : /(建造|搭建|世界|盖房子|创造)/.test(t) ? '建造游戏'
+      : /(解谜|闯关|动脑|谜题)/.test(t) ? '解谜/闯关游戏'
+      : null
+    if (match) setSel((s) => ({ ...s, type: match }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPrompt])
 
   return (
     <div className="nf-reqcard">
