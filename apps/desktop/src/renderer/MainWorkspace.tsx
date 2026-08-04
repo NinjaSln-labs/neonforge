@@ -78,10 +78,20 @@ export default function MainWorkspace({
   const [activeProblem, setActiveProblem] = useState<string | null>(null)
   // 13 交付包联动：真实工具执行（write/edit）成功 → 收集变更 → 生成真实交付包（覆盖 demo）
   const [realChanges, setRealChanges] = useState<Array<{ file: string; op: string }>>([])
+  // 2026-08-04 体验修复：真实文件变更 → 文件树/@mention 刷新（write 成功后用户看不到新文件的根因）
+  const [fileTreeRefreshKey, setFileTreeRefreshKey] = useState(0)
+  const refreshProjectFiles = () => {
+    if (!rootPath) return
+    void window.neonforge.workspace.listDir(rootPath).then((entries) =>
+      setProjectFiles(entries.filter((e) => e.kind === 'file').map((e) => e.name))
+    )
+  }
   const lastPromptRef = useRef<string | null>(null) // 最近用户输入——复跑 rerunPrompt 兜底
   const handleToolResult = (r: { name: string; file?: string; ok: boolean }) => {
     if (!r.ok || !r.file) return
     setRealChanges((prev) => (prev.some((c) => c.file === r.file) ? prev : [...prev, { file: r.file as string, op: r.name }]))
+    setFileTreeRefreshKey((k) => k + 1) // 文件变更 → 文件树重载
+    refreshProjectFiles() // @mention 列表同步
     // 06 断点续做深度（基线 §21）：授权操作记录到问题快照 authorized（跨会话可回溯）
     if (activeProblem) {
       setProblems((prev) => prev.map((p) => {
@@ -287,6 +297,7 @@ function initProblems(): ProblemInstance[] {
         onAdjustProblem={() => setChatTab('chat')} /* 2026-08-03 A2 审计修复：继续调整 → 切回对话 Tab（原空函数无反应） */
         onConfirmed={handleConfirmClosed}
         onRerun={(prompt) => setRerunRequest(prompt)}
+        fileTreeRefreshKey={fileTreeRefreshKey}
       />
 
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
