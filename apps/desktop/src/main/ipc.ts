@@ -98,7 +98,14 @@ export function registerIpc(): void {
   ipcMain.handle('workspace:read-file', (_e, filePath: string) => workspace.readFile(filePath))
   ipcMain.handle('workspace:read-notebook', (_e, rootPath: string | null) => workspace.readNotebook(rootPath))
   // ticket 07：0-1 项目初始化（从零开始 → 真实目录 + 骨架）
-  ipcMain.handle('workspace:init-project', (_e, title: string) => workspace.initProject(title))
+  // 2026-08-04 体验修复（用户「LSP 连接失败」）：0-1 项目也自动连接 LSP（原仅 open-folder 连接——从零开始项目 get_diagnostics 报「LSP 未连接」）
+  ipcMain.handle('workspace:init-project', async (_e, title: string) => {
+    const res = await workspace.initProject(title)
+    if (res.ok && res.path) {
+      void lsp.connect(res.path).catch((e) => console.log('[lsp] connect failed:', e instanceof Error ? e.message : String(e)))
+    }
+    return res
+  })
   // 2026-08-04：需求确认后回写项目标题（README + package.json name——目录名不变）
   ipcMain.handle('workspace:update-project-title', (_e, p: string, title: string) => workspace.updateProjectTitle(p, title))
   // 2026-08-04：对话日志（自动记录 + 导出——用户反馈时可提供完整对话给 AI）

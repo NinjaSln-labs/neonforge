@@ -217,6 +217,8 @@ export function initTools(): void {
   toolRegistry.register({ name: 'write', source: 'core', requiresApproval: true, risk: 'low', execute: writeExecutor })
   toolRegistry.register({ name: 'edit', source: 'core', requiresApproval: true, risk: 'low', execute: editExecutor })
   toolRegistry.register({ name: 'bash', source: 'core', requiresApproval: true, risk: 'high', execute: bashExecutor, preApproval: (args) => ({ auto: isReadOnlyBash(String(args.command ?? '')) }) })
+  // 2026-08-04 规划级授权：虚拟工具——不执行操作，renderer 收到后弹规划授权卡（用户批准后文件加入任务级信任，write/edit 自动放行）
+  toolRegistry.register({ name: 'plan_approval', source: 'core', requiresApproval: false, risk: 'none', execute: async () => ({ ok: true, data: { virtual: true } }) })
   // Layer2 CodeRAG：关键词检索兜底（Claude Code grep 模式——2026-08-02 调研：agentic 工具检索为行业共识，见 .scratch/neonforge-v1/layer2-retrieval-research.md）
   toolRegistry.register({
     name: 'search',

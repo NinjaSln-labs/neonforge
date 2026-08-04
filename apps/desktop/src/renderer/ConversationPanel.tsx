@@ -24,7 +24,7 @@ import { SCENES } from './scenes'
 export interface ToolCallMsg {
   name: string
   args: Record<string, unknown>
-  status: 'pending' | 'done' | 'need-approval' | 'error' | 'reverted'
+  status: 'pending' | 'done' | 'need-approval' | 'plan-approval' | 'error' | 'reverted'
   result?: string
   file?: string       // write/edit 成功写入的文件路径（回滚目标）
   canRevert?: boolean // 写前已快照——可回滚
@@ -263,12 +263,15 @@ export default function ConversationPanel({
         doneNotifierRef.current?.()
       }
       if (chunk.type === 'tool-call' && chunk.toolCall) {
-        next.toolCalls = [...(next.toolCalls ?? []), { name: chunk.toolCall.name, args: chunk.toolCall.args, status: 'pending' }]
+        // 2026-08-04 规划级授权：plan_approval 不执行（虚拟工具）——状态 plan-approval 弹规划授权卡（等用户批准文件清单）
+        const status = chunk.toolCall.name === 'plan_approval' ? ('plan-approval' as const) : ('pending' as const)
+        next.toolCalls = [...(next.toolCalls ?? []), { name: chunk.toolCall.name, args: chunk.toolCall.args, status }]
       }
       return [...prev.slice(0, -1), next]
     })
     // 工具执行副作用（移出 updater——StrictMode 双调会执行两次；真实工具写文件等不可重复）
-    if (chunk.type === 'tool-call' && chunk.toolCall) {
+    // 2026-08-04 规划级授权：plan_approval 跳过执行（虚拟工具——批准由 renderer approvePlan 处理）
+    if (chunk.type === 'tool-call' && chunk.toolCall && chunk.toolCall.name !== 'plan_approval') {
       const tc = chunk.toolCall
       // 2026-08-03 v35：workingStage 人类化（原「调用工具 bash…」技术腔——按工具名映射自然描述）
       const stageMap: Record<string, string> = {
@@ -316,7 +319,7 @@ export default function ConversationPanel({
       const lastMsg = latest[latest.length - 1]
       if (!lastMsg || !lastMsg.toolCalls || lastMsg.toolCalls.length === 0) return
       const pending = lastMsg.toolCalls.filter((c) => c.status === 'pending')
-      const needsApproval = lastMsg.toolCalls.some((c) => c.status === 'need-approval')
+      const needsApproval = lastMsg.toolCalls.some((c) => c.status === 'need-approval' || c.status === 'plan-approval')
       if (needsApproval) return // 有待授权——等用户点允许（approveToolCall 后触发续聊）
       if (pending.length === 0) {
         // 2026-08-04 重构：同工具重复检测（同一 name+args 连续 3 次 = 死循环——防模型空转不产出；跨调用累积——原局部变量每轮重置失效）
@@ -641,6 +644,13 @@ export default function ConversationPanel({
       approveToolCall(calls, idx, c)
     })
   }
+  // 2026-08-04 规划级授权（用户「规划好文件一次性要授权，减少逐个授权打断」）：批准计划文件清单 → 全部加入任务级信任 → 模型后续 write/edit 自动放行
+  const approvePlan = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg) => {
+    const files = (tc.args.files ?? []) as Array<{ path: string }>
+    files.forEach((f) => addTrust({ path: f.path }))
+    patchToolCall(idx, (c) => ({ ...c, status: 'done' as const, result: `已批准 ${files.length} 个文件（本次任务自动放行）` }), tc)
+    setTimeout(() => void maybeContinue(chatRef.current?.depth ?? 0, sessionRef.current), 150)
+  }
   // 真实执行安全闭环（基线 §10/§11）：write/edit 写前已快照——回滚恢复原样
   // 按 file 匹配更新（工具卡可能不在最后一条消息——maybeContinue 已追加新 streaming 消息）
   const revertToolCall = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg) => {
@@ -785,7 +795,7 @@ export default function ConversationPanel({
                   return (
                   <div key={i} className={`nf-toolcall nf-toolcall--${tc.status}`}>
                     <span className="nf-toolcall__icon">
-                      {tc.status === 'done' ? <IconCheck size={11} /> : tc.status === 'need-approval' ? <IconLock size={11} /> : tc.status === 'reverted' ? <IconRotateCcw size={11} /> : tc.status === 'error' ? <IconX size={11} /> : <IconClock size={11} />}
+                      {tc.status === 'done' ? <IconCheck size={11} /> : tc.status === 'need-approval' || tc.status === 'plan-approval' ? <IconLock size={11} /> : tc.status === 'reverted' ? <IconRotateCcw size={11} /> : tc.status === 'error' ? <IconX size={11} /> : <IconClock size={11} />}
                     </span>
                     <span className="nf-toolcall__name"><ToolIcon name={tc.name} size={12} /> {tc.name}</span>
                     <span className="nf-toolcall__args">{JSON.stringify(tc.args).slice(0, 80)}</span>
@@ -798,6 +808,29 @@ export default function ConversationPanel({
                       >
                         <IconRotateCcw size={12} /> 回滚
                       </button>
+                    )}
+                    {/* 2026-08-04 规划级授权（用户「一次性要授权」）：计划文件清单卡——模型动手前列出全部文件 → 一次批准整批（后续 write/edit 自动放行） */}
+                    {tc.status === 'plan-approval' && (
+                      <>
+                        <span className="nf-toolcall__approve-hint">本次任务计划修改 {((tc.args.files ?? []) as unknown[]).length} 个文件——批准后自动放行，不再逐个问</span>
+                        {typeof tc.args.summary === 'string' && <span className="nf-toolcall__note">{tc.args.summary}</span>}
+                        <div className="nf-plan__files">
+                          {((tc.args.files ?? []) as Array<{ path?: string; reason?: string }>).map((f, fi) => (
+                            <div key={fi} className="nf-plan__file">
+                              <span className="nf-plan__path">{f.path ?? ''}</span>
+                              <span className="nf-plan__reason">{f.reason ?? ''}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="nf-toolcall__actions">
+                          <button type="button" className="nf-toolcall__approve" onClick={() => approvePlan(m.toolCalls ?? [], i, tc)}>
+                            批准这批文件
+                          </button>
+                          <button type="button" className="nf-toolcall__reject" onClick={() => rejectToolCall(m.toolCalls ?? [], i)}>
+                            拒绝
+                          </button>
+                        </div>
+                      </>
                     )}
                     {tc.status === 'need-approval' && (
                       <>
