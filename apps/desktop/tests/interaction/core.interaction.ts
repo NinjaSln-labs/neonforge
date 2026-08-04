@@ -381,26 +381,98 @@ test('0-1 从零开始：模型需求确认 → 回写台账标题 + updateProje
   expect(calls[0].title).toBe('3D射击小游戏')
 })
 
-// 2026-08-04 启动页方案 A：启动页输入/点选问题 → 从零开始 → 工作区对话输入框预填（仅预填不自动发送——区别于复跑 externalRequest）
-test('启动页方案 A：输入问题 → 从零开始 → 对话输入框预填（不自动发送）', async ({ page }) => {
+// 2026-08-04 体验修复（用户实测：启动页输入句预填多余）：启动页输入 → 从零开始 → 自动发送（说了就直接开始，输入框不预填）
+test('启动页方案 A：输入问题 → 从零开始 → 自动发送（输入框不预填）', async ({ page }) => {
   await mockBridge(page)
   await page.goto('http://localhost:5174/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.locator('.nf-start__input').fill('我要做一个3D射击小游戏')
   await page.getByRole('button', { name: '从零开始' }).click()
-  // 工作区对话输入框已预填（prefillText 独立通道）
-  await expect(page.locator('.nf-chat__input textarea')).toHaveValue(/3D射击小游戏/)
-  // 不自动发送：等待后无用户消息（预填 ≠ 发送）
-  await page.waitForTimeout(400)
-  await expect(page.locator('.nf-msg--user')).toHaveCount(0)
+  // 自动发送：对话区出现用户消息（首句直接生效——不需要再打一遍）
+  await expect(page.locator('.nf-msg--user')).toContainText(/3D射击小游戏/)
+  // 输入框不预填（清空——那句话已作为首条消息发出）
+  await expect(page.locator('.nf-chat__input textarea')).toHaveValue('')
 })
 
-// 2026-08-04 重审修复：启动页输入后按 Enter = 从零开始（主路径——输入有明确反馈，原无反应）
-test('启动页方案 A：输入后按 Enter → 从零开始（主路径快捷）', async ({ page }) => {
+// 2026-08-04 体验修复：启动页输入后按 Enter = 从零开始并自动发送
+test('启动页方案 A：输入后按 Enter → 从零开始并自动发送', async ({ page }) => {
   await mockBridge(page)
   await page.goto('http://localhost:5174/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.locator('.nf-start__input').fill('帮我做个记账工具')
   await page.locator('.nf-start__input').press('Enter')
-  await expect(page.locator('.nf-chat__input textarea')).toHaveValue(/记账工具/)
+  await expect(page.locator('.nf-msg--user')).toContainText(/记账工具/)
+})
+
+// 2026-08-04 体验修复（用户实测：已说「3D射击」还要重选）：需求卡按首句关键词预选「做什么」
+test('需求卡：首句含「射击」→ 「做什么」自动预选射击游戏', async ({ page }) => {
+  await mockBridge(page)
+  await page.goto('http://localhost:5174/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.locator('.nf-start__input').fill('我要做一个3D射击小游戏')
+  await page.getByRole('button', { name: '从零开始' }).click()
+  // 自动发送后（mock 无模型回复）需求未确认 → 需求卡显示；「射击游戏」chip 已预选
+  await expect(page.locator('.nf-reqcard')).toBeVisible()
+  const chip = page.locator('.nf-reqcard__chip', { hasText: '射击游戏' })
+  await expect(chip).toHaveAttribute('aria-pressed', 'true')
+  // 预选后无需再选「做什么」——点其他 3 项即可确认
+  await page.locator('.nf-reqcard__chip', { hasText: '网页打开就能玩' }).click()
+  await page.locator('.nf-reqcard__chip', { hasText: '发给朋友玩' }).click()
+  await page.locator('.nf-reqcard__chip', { hasText: '先做个能玩的版本' }).click()
+  await expect(page.locator('.nf-reqcard__actions button')).toBeEnabled()
+})
+
+// 2026-08-04 体验修复（用户实测：开发阶段模型只问不产出、阶段空转）：开发产物门控——无真实文件产出不能推进到测试，产出后解锁
+test('开发产物门控：无文件产出推进禁用 → write 成功后解锁', async ({ page }) => {
+  await page.addInitScript(() => {
+    let streamCb: ((c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) | null = null
+    let chatCount = 0 // 第 1 次 = 需求卡确认后的设计 advanceChat（不产出）；第 2 次 = 开发 advanceChat（触发 write 产出）
+    const bridge = {
+      version: 'test',
+      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
+      workspace: { openFolder: async () => '/test', listDir: async () => [], readFile: async (p: string) => ({ ok: true, content: '// ' + p }), readNotebook: async () => null, initProject: async () => ({ ok: true, path: '/test', title: 't' }), updateProjectTitle: async () => ({ ok: true }) },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        streamChat: async () => {
+          chatCount++
+          setTimeout(() => {
+            if (chatCount >= 2) {
+              streamCb?.({ type: 'tool-call', toolCall: { name: 'write', args: { path: '/test/game.js', content: 'x' } } })
+            } else {
+              streamCb?.({ type: 'content', text: '设计阶段：方案已确认' })
+            }
+            streamCb?.({ type: 'done' })
+          }, 60)
+          return { ok: true }
+        },
+        onStreamChunk: (cb: (c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) => { streamCb = cb; return () => {} }
+      },
+      tools: { list: async () => [], execute: async () => ({ ok: true, data: { file: '/test/game.js', snapshot: true } }), revert: async () => ({ ok: true }) },
+      context: { resolve: async () => ({ fragments: [] }) },
+      compaction: { compact: async () => ({ ok: false }) },
+      plugins: { list: async () => [], toggle: async () => true },
+      chatLog: { log: async () => {}, export: async () => ({ ok: true, path: '/tmp/x.md' }) }
+    }
+    ;(window as unknown as { neonforge: unknown }).neonforge = bridge
+  })
+  await page.goto('http://localhost:5174/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.getByRole('button', { name: '从零开始' }).click()
+  await page.getByRole('button', { name: /快速迭代/ }).click()
+  // 需求卡确认（走需求卡 → 自动进设计）
+  await page.locator('.nf-reqcard__chip', { hasText: '射击游戏' }).click()
+  await page.locator('.nf-reqcard__chip', { hasText: '网页打开就能玩' }).click()
+  await page.locator('.nf-reqcard__chip', { hasText: '发给朋友玩' }).click()
+  await page.locator('.nf-reqcard__chip', { hasText: '先做个能玩的版本' }).click()
+  await page.locator('.nf-reqcard__actions button').click()
+  // 设计阶段推进 → 开发阶段（设计→开发无门控）
+  const advance = page.locator('.nf-flow__advance button')
+  await expect(advance).toBeEnabled()
+  await advance.click()
+  await expect(page.locator('.nf-flow__stage--active')).toContainText('开发')
+  // 开发阶段：此时 write 工具已执行成功（streamChat 触发）→ realChanges 有产物 → 推进解锁
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(1)
+  await expect(advance).toBeEnabled()
+  await advance.click()
+  await expect(page.locator('.nf-flow__stage--active')).toContainText('测试')
 })
