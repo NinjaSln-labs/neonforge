@@ -537,3 +537,50 @@ test('0-1 对话确认需求：用户发「确认推进」→ 自动确认 + 推
   await expect(page.locator('.nf-flow__stage--active')).toContainText('设计')
   await expect(page.locator('.nf-flow__advance button')).toBeEnabled()
 })
+
+// 2026-08-04 体验修复（根因 A）：工具链 depth 2 → 8——连续 3 轮工具（read→read→read）不被掐断，最终回复正常
+test('0-1 工具链自主推进：连续 3 轮 read → 自动续聊 → 最终回复（不被 depth 限制掐断）', async ({ page }) => {
+  await page.addInitScript(() => {
+    let streamCb: ((c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) | null = null
+    let chatCount = 0
+    window.neonforge = {
+      version: 'test',
+      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
+      workspace: { openFolder: async () => null, listDir: async () => [{ name: 'a.ts', path: '/test/a.ts', kind: 'file' }], readFile: async () => ({ ok: true, content: 'x' }), readNotebook: async () => null, initProject: async () => ({ ok: true, path: '/test', title: 't' }), updateProjectTitle: async () => ({ ok: true }) },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        streamChat: async () => {
+          chatCount++
+          setTimeout(() => {
+            if (chatCount <= 3) {
+              streamCb?.({ type: 'tool-call', toolCall: { name: 'read', args: { path: '/test/a.ts' } } })
+            } else {
+              streamCb?.({ type: 'content', text: '设计完成，方案定了。' })
+            }
+            streamCb?.({ type: 'done' })
+          }, 30)
+          return { ok: true }
+        },
+        onStreamChunk: (cb: (c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) => { streamCb = cb; return () => {} }
+      },
+      tools: { execute: async () => ({ ok: true, data: 'file content' }), list: async () => [] },
+      context: { resolve: async () => ({ fragments: [] }) },
+      compaction: { compact: async () => ({ ok: false }) },
+      plugins: { list: async () => [], toggle: async () => true }
+    }
+    ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
+  })
+  await page.goto('http://localhost:5174/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.getByRole('button', { name: '从零开始' }).click()
+  await page.getByRole('button', { name: /快速迭代/ }).click()
+  // 启动页无输入 → 需求卡不显示——直接对话发需求 + 确认推进
+  await page.locator('.nf-chat__input textarea').fill('帮我做个网页游戏')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  await page.waitForTimeout(600)
+  await page.locator('.nf-chat__input textarea').fill('确认推进')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  // 设计阶段 advanceChat → 3 轮 read 工具链自动续聊 → 最终回复
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(3, { timeout: 15000 })
+  await expect(page.locator('.nf-chat__list .nf-msg--assistant').filter({ hasText: '设计完成，方案定了。' })).toHaveCount(1, { timeout: 15000 })
+})
