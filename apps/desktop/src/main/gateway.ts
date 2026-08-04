@@ -181,14 +181,15 @@ export class DeepSeekGateway {
               if (fn.name) toolAcc[idx].name += fn.name
               if (fn.arguments) toolAcc[idx].arguments += fn.arguments
             }
-            // 模型已决定调工具——等 arguments 完整后截断（分片到达——半截 JSON 会解析失败）
-            // 上限 5s：收到第一个工具调用后 5s 内强制截断（防流式挂起）
+            // 模型已决定调工具——等 arguments 完整后发出（分片到达——半截 JSON 会解析失败）
+            // 2026-08-04 体验修复：原 5s 超时对大 content write（几千字符 arguments 流式传输）误判截断 → 写入内容不完整（「代码被截断打散」根因）；提到 30s 且完整即发
             const named = toolAcc.filter((x) => x && x.name)
             if (named.length > 0) {
               if (toolStart === 0) toolStart = Date.now()
               const allComplete = named.every((x) => { try { JSON.parse(x.arguments); return true } catch { return false } })
-              if (allComplete || Date.now() - toolStart > 5000) {
-                console.log('[gateway] tool-call 完整（或超时）——截断')
+              if (allComplete) break
+              if (Date.now() - toolStart > 30000) {
+                console.log('[gateway] tool-call 超时截断（30s 防挂起）')
                 break
               }
             }

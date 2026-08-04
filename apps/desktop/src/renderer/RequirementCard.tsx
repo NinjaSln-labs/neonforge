@@ -60,7 +60,11 @@ export default function RequirementCard({ onConfirm, initialPrompt }: { onConfir
 
   return (
     <div className="nf-reqcard">
-      <div className="nf-reqcard__head"><IconCheck size={13} /> 快速确认需求——点选即可（想细说直接打字，搭档会接着聊）</div>
+      <div className="nf-reqcard__head">
+        <IconCheck size={16} />
+        <span className="nf-reqcard__title">快速确认需求</span>
+        <span className="nf-reqcard__sub">点选下面 4 项，10 秒搞定——不用一句句跟搭档聊</span>
+      </div>
       {FIELDS.map((f) => (
         <div key={f.key} className="nf-reqcard__field">
           <span className="nf-reqcard__label">{f.label}</span>
