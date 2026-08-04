@@ -66,15 +66,28 @@ export default function OutputPanel({
         </div>
       </header>
       {/* 双渲染 + 隐藏切换（保持组件状态——打勾/已关闭不因切 Tab 丢失） */}
+      {/* 2026-08-04 授权架构重构：工程 tab 内查看文件——点击文件留在工程 tab 右侧看内容（原跳产物区——用户无法看真实文件内容根因） */}
       <div style={{ display: tab === 'project' ? 'flex' : 'none', flex: 1, minHeight: 0 }}>
         <FileTree
           rootPath={rootPath}
           selectedPath={activePath}
-          onOpenFile={(p) => { onOpenFile(p); setTab('output') }}
+          onOpenFile={onOpenFile}
           collapsed={treeCollapsed}
           onToggle={() => setTreeCollapsed((v) => !v)}
           refreshKey={fileTreeRefreshKey}
         />
+        {activePath && (
+          <div className="nf-project__viewer">
+            <Editor
+              height="100%"
+              path={activePath}
+              language="typescript"
+              value={content}
+              theme="vs-dark"
+              options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13 }}
+            />
+          </div>
+        )}
       </div>
       <div className="nf-output__body" style={{ display: tab === 'output' ? 'flex' : 'none', padding: 0 }}>
         {deliveryPkg ? (

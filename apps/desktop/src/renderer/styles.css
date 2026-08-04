@@ -158,6 +158,8 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   transition: width 0.2s ease;
   overflow: hidden;
 }
+/* 2026-08-04 授权架构重构：工程 tab 内文件查看器（点击文件右侧看内容——不跳产物区） */
+.nf-project__viewer { flex: 1; min-width: 0; display: flex; background: var(--nf-bg); }
 .nf-filetree--collapsed { width: 36px; }
 
 .nf-filetree__header {
@@ -672,6 +674,8 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-toolcall__hint { color: var(--nf-amber); }
 .nf-toolcall__impact { color: var(--nf-text); font-family: var(--nf-font-mono); }
 .nf-toolcall__note { color: var(--nf-text-dim); font-size: 11px; }
+/* 2026-08-04 授权架构重构：授权卡改动预览（write 内容 / edit 前后对比——用户看清再批） */
+.nf-toolcall__preview { width: 100%; max-height: 140px; overflow: auto; margin: 2px 0; padding: 6px 8px; background: var(--nf-bg); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-sm); font-family: var(--nf-font-mono); font-size: 11px; line-height: 1.5; color: var(--nf-text); white-space: pre-wrap; word-break: break-all; }
 .nf-toolcall__stop { background: none; border: 1px solid var(--nf-border); color: var(--nf-text-dim); border-radius: 4px; padding: 2px 10px; font-size: 12px; cursor: pointer; }
 .nf-toolcall__stop:hover { border-color: rgba(239, 68, 68, 0.6); color: #ef4444; }
 .nf-toolcall__approveall { background: var(--nf-accent-strong); color: #fff; border: none; border-radius: 4px; padding: 3px 12px; font-size: 12px; cursor: pointer; align-self: flex-start; }

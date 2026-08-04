@@ -16,6 +16,9 @@ export interface Tool {
   requiresApproval: boolean
   risk: ToolRisk
   execute: (args: Record<string, unknown>, ctx: { rootPath?: string }) => Promise<unknown>
+  // 2026-08-04 授权架构重构（用户授权疲劳）：执行前裁决——requiresApproval 工具若 preApproval 判定 auto=true → 免授权直接执行
+  // （main 进程裁决——bash 只读命令自动；renderer 不判断，防绕过）
+  preApproval?: (args: Record<string, unknown>) => { auto: boolean; reason?: string }
 }
 
 export interface ToolResult {
@@ -44,7 +47,11 @@ class ToolRegistry {
     const tool = this.tools.get(name)
     if (!tool) return { ok: false, error: `未知工具：${name}` }
     if (tool.requiresApproval && !opts.approved) {
-      return { ok: false, error: `「${name}」需要授权（L3）——approved=true 后执行` }
+      // 2026-08-04 授权架构重构：preApproval 裁决（如 bash 只读命令自动执行）——原一律 need-approval（授权疲劳根因：ls/cat 也弹卡）
+      const pre = tool.preApproval?.(args)
+      if (!pre?.auto) {
+        return { ok: false, error: `「${name}」需要授权（L3）——approved=true 后执行` }
+      }
     }
     try {
       const data = await tool.execute(args, { rootPath: opts.rootPath })
@@ -131,6 +138,20 @@ export function cancelActiveCommand(): { ok: true } | { ok: false; error: string
   return { ok: true }
 }
 
+// 2026-08-04 授权架构重构（用户授权疲劳）：bash 只读命令检测——ls/cat/grep 等查看类自动执行（零打断）；
+// 写命令（rm/mv/cp/npm/git/python/node/重定向）保持授权（main 进程裁决，renderer 不判断防绕过）
+const BASH_READONLY_HEAD = new Set(['ls', 'cat', 'head', 'tail', 'grep', 'wc', 'pwd', 'echo', 'which', 'find', 'sed', 'awk', 'cd', 'stat', 'file', 'du', 'df', 'sort', 'uniq'])
+export function isReadOnlyBash(cmd: string): boolean {
+  const c = (cmd ?? '').trim()
+  if (!c) return false
+  // 含写副作用标记（重定向 / 写命令 / 可执行任意代码的解释器）→ 非只读
+  if (/>\s*[^|]*$/m.test(c)) return false // 重定向到文件（echo x > f / cat a > b）
+  if (/[;&|]\s*(rm|mv|cp|mkdir|touch|npm|pnpm|yarn|git|curl|wget|python|python3|node|write|install|unlink|ln|chmod|chown)/.test(c)) return false
+  // 首命令在白名单 → 只读（cd "dir" && ls 也覆盖——head 取 cd）
+  const head = c.split(/[;&|]/)[0].trim().split(/\s+/)[0]?.replace(/^sudo\s+/, '') ?? ''
+  return BASH_READONLY_HEAD.has(head)
+}
+
 export const toolRegistry = new ToolRegistry()
 
 // 注册 4 核心工具 + search（Layer2 CodeRAG——2026-08-02 接入模型；6 LSP 随 12 ContextEngine 注册）
@@ -139,7 +160,7 @@ export function initTools(): void {
   toolRegistry.register({ name: 'read', source: 'core', requiresApproval: false, risk: 'none', execute: readExecutor })
   toolRegistry.register({ name: 'write', source: 'core', requiresApproval: true, risk: 'low', execute: writeExecutor })
   toolRegistry.register({ name: 'edit', source: 'core', requiresApproval: true, risk: 'low', execute: editExecutor })
-  toolRegistry.register({ name: 'bash', source: 'core', requiresApproval: true, risk: 'high', execute: bashExecutor })
+  toolRegistry.register({ name: 'bash', source: 'core', requiresApproval: true, risk: 'high', execute: bashExecutor, preApproval: (args) => ({ auto: isReadOnlyBash(String(args.command ?? '')) }) })
   // Layer2 CodeRAG：关键词检索兜底（Claude Code grep 模式——2026-08-02 调研：agentic 工具检索为行业共识，见 .scratch/neonforge-v1/layer2-retrieval-research.md）
   toolRegistry.register({
     name: 'search',
