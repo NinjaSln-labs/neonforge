@@ -447,10 +447,11 @@ test('开发产物门控：无文件产出推进禁用 → write 成功后解锁
         streamChat: async () => {
           chatCount++
           setTimeout(() => {
-            if (chatCount >= 2) {
+            // 2026-08-04 重构适配：开发阶段只发 1 次 write（原 `>= 2` 无限发 write——靠旧 depth 上限意外截断；自然停止后 mock 需自己收尾）
+            if (chatCount === 2) {
               streamCb?.({ type: 'tool-call', toolCall: { name: 'write', args: { path: '/test/game.js', content: 'x' } } })
             } else {
-              streamCb?.({ type: 'content', text: '设计阶段：方案已确认' })
+              streamCb?.({ type: 'content', text: '开发阶段：第一个文件已写好' })
             }
             streamCb?.({ type: 'done' })
           }, 60)
@@ -552,8 +553,13 @@ test('0-1 工具链自主推进：连续 3 轮 read → 自动续聊 → 最终�
         streamChat: async () => {
           chatCount++
           setTimeout(() => {
-            if (chatCount <= 3) {
+            // 2026-08-04 重构适配：3 轮 read 用不同文件（真实模型不会重复读同一文件——死循环检测按同 name+args 判 3 次停）
+            if (chatCount === 1) {
               streamCb?.({ type: 'tool-call', toolCall: { name: 'read', args: { path: '/test/a.ts' } } })
+            } else if (chatCount === 2) {
+              streamCb?.({ type: 'tool-call', toolCall: { name: 'read', args: { path: '/test/b.ts' } } })
+            } else if (chatCount === 3) {
+              streamCb?.({ type: 'tool-call', toolCall: { name: 'read', args: { path: '/test/c.ts' } } })
             } else {
               streamCb?.({ type: 'content', text: '设计完成，方案定了。' })
             }
