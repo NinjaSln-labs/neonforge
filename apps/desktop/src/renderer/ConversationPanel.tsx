@@ -12,9 +12,11 @@ import { buildAuthHint, canMergeApprove, toolRisk } from './authModel'
 import { cleanContent, stripMarkdown } from './textClean'
 // 2026-08-03 视觉审计 P1-6：内联 SVG 图标（替换 emoji 图标）
 import {
-  IconBrain, IconCheck, IconClock, IconDot, IconFile, IconFolder, IconGamepad,
-  IconLock, IconRotateCcw, IconRocket, IconSparkles, IconSquare, IconWrench, IconX, ToolIcon
+  IconBrain, IconCheck, IconClock, IconDot, IconFile,
+  IconLock, IconRotateCcw, IconSquare, IconX, ToolIcon
 } from './icons'
+// 2026-08-04 启动页方案 A：场景卡数据共享（启动页 + 对话空态共用）
+import { SCENES } from './scenes'
 
 // ticket 04：对话最小闭环（D0 §2/§3.4）——输入发送 → Gateway 流式 → 消息/呼吸光条/推理展示
 // 消费 02：streamChat（四档 basic）+ ModelRouter（默认 Flash）；错误分支：Key 失效内嵌更新 / 服务故障提示
@@ -51,7 +53,8 @@ export default function ConversationPanel({
   recentFilesExternal,
   stageHint,
   stageAdvance,
-  activeAuthorizedLogs
+  activeAuthorizedLogs,
+  prefillText
 }: {
   rootPath?: string | null
   currentFile?: string | null // 08 快捷键 Cmd+E：当前选中文件（@引用——D0 §6）
@@ -70,6 +73,8 @@ export default function ConversationPanel({
   // 2026-08-04：阶段推进反馈——用户点「确认推进」后对话区出现「已进入【X】阶段」提示（本地生成，确定性无杂音；顺带作为上下文让模型知道阶段切换）
   // 2026-08-04 方案 A：requirement 可选——需求卡确认摘要（注入对话上下文，模型按确认结果工作）
   stageAdvance?: { seq: number; stage: string; hint: string; requirement?: string } | null
+  // 2026-08-04 启动页方案 A：进入工作区预填对话输入框（仅预填不发送——区别于 externalRequest「预填+自动发送」复跑语义）
+  prefillText?: string
   activeAuthorizedLogs?: string[] // 06/14 授权记录可回溯：当前问题快照 authorized（TrustLadder 展示）
 }) {
   const [messages, setMessages] = useState<Msg[]>([])
@@ -133,6 +138,15 @@ export default function ConversationPanel({
   const inputRef = useRef('')
   // 2026-08-04 审计修复（A3）：textarea DOM ref——场景卡点击预填后聚焦输入框（原焦点停卡片，需再点输入框）
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  // 2026-08-04 启动页方案 A：进入工作区预填对话输入框（仅预填不发送——区别于 externalRequest「预填+自动发送」复跑语义；用户点发送才发）
+  useEffect(() => {
+    if (prefillText) {
+      inputRef.current = prefillText
+      setInput(prefillText)
+      textareaRef.current?.focus()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   // 05 执行层 B：外部请求（复跑）——非空则预填输入框并发送
   const sendRef = useRef<() => Promise<void>>(async () => {})
   useEffect(() => {
@@ -566,13 +580,7 @@ export default function ConversationPanel({
           <div className="nf-scenes">
             <p className="nf-placeholder">想解决什么？直接说，或从这些开始：</p>
             <div className="nf-scenes__grid">
-              {[
-                { icon: IconFolder, label: '整理文件', q: '把 Downloads 里的发票和合同分类整理' },
-                { icon: IconWrench, label: '做小工具', q: '帮我做一个每周记账的小工具' },
-                { icon: IconSparkles, label: '修系统', q: 'X 系统今天出异常了，帮我看看' },
-                { icon: IconGamepad, label: '做游戏', q: '我要做一个3D射击小游戏（第一人称，科幻风格）' },
-                { icon: IconRocket, label: '做新项目', q: '我要做一个能发给朋友的旅行手册网页' }
-              ].map(({ icon: Icon, label, q }) => (
+              {SCENES.map(({ icon: Icon, label, q }) => (
                 <button
                   key={label}
                   type="button"
