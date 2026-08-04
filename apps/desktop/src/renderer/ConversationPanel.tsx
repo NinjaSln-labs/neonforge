@@ -13,7 +13,7 @@ import { cleanContent, stripMarkdown } from './textClean'
 // 2026-08-03 视觉审计 P1-6：内联 SVG 图标（替换 emoji 图标）
 import {
   IconBrain, IconCheck, IconClock, IconDot, IconFile,
-  IconLock, IconRotateCcw, IconSquare, IconX, ToolIcon
+  IconLock, IconRotateCcw, IconShield, IconSquare, IconX, ToolIcon
 } from './icons'
 // 2026-08-04 启动页方案 A：场景卡数据共享（启动页 + 对话空态共用）
 import { SCENES } from './scenes'
@@ -177,6 +177,8 @@ export default function ConversationPanel({
   // 2026-08-04：阶段推进反馈——用户点「确认推进」→ 对话区追加本地阶段提示（确定性无杂音；作为历史上下文模型也知道阶段切换）
   // + 自动触发搭档按新阶段工作（advanceChat——流程真正走完）
   const handledStageRef = useRef(0)
+  // 2026-08-04 授权架构 v4：任务边界 = 阶段推进（确认推进 = 新任务）——清除任务级信任（授权自动收回）
+  useEffect(() => { clearTrust() }, [stageAdvance?.seq])
   useEffect(() => {
     if (!stageAdvance || stageAdvance.seq === handledStageRef.current) return
     handledStageRef.current = stageAdvance.seq
@@ -273,7 +275,8 @@ export default function ConversationPanel({
       }
       setWorkingStage(stageMap[tc.name] ?? (tc.name.startsWith('find_') || tc.name.startsWith('get_') ? '正在查代码…' : '正在处理…'))
       // ticket 14 L4 委托：低危文件操作（write/edit）命中委托规则 → 免确认直接执行（仍快照可回滚）；bash 高危永远单独授权
-      const autoApproved = tc.name === 'read' || (delegateLowRisk && toolRisk(tc.name) === 'low')
+      // 2026-08-04 授权架构 v4：任务级信任——「允许并记住」的文件 write/edit 自动（沙箱内）；read/bash 只读由 main preApproval 裁决（沙箱内自动/沙箱外 ask）
+      const autoApproved = (delegateLowRisk && toolRisk(tc.name) === 'low') || isTrusted(tc.args)
       void (window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: autoApproved, rootPath: rootPath ?? undefined }) ?? Promise.resolve({ ok: false, error: 'tools 通道未就绪' })).then((r) => {
         const data = r.data as { file?: string; snapshot?: boolean } | undefined
         // 13 交付包联动：真实文件操作成功（write/edit 返回 file）→ 上报变更（产物区展示）
@@ -408,6 +411,28 @@ export default function ConversationPanel({
   const pendingAdvanceRef = useRef<{ stage: string; hint: string; requirement?: string } | null>(null)
   // 2026-08-04 重构：工具链死循环检测——同工具（name+args）连续 3 次停止（跨 maybeContinue 调用累积——原局部变量每轮重置失效）
   const chainRepeatRef = useRef<{ sid: number; sig: string; count: number }>({ sid: -1, sig: '', count: 0 })
+  // 2026-08-04 授权架构 v4：任务级信任集合——「允许并记住」的文件（沙箱内 write/edit 自动）；阶段推进（确认推进=新任务）自动清除
+  const [taskTrust, setTaskTrust] = useState<string[]>([])
+  const taskTrustRef = useRef<string[]>([])
+  const trustPath = (p: unknown): string => {
+    const s = String(p ?? '')
+    if (s.startsWith('/')) return s
+    return rootPath ? `${rootPath}/${s.replace(/^\/+/, '')}` : s
+  }
+  const isTrusted = (args: Record<string, unknown>): boolean =>
+    taskTrustRef.current.includes(trustPath(args.path ?? args.filePath ?? ''))
+  const addTrust = (args: Record<string, unknown>): void => {
+    const p = trustPath(args.path ?? args.filePath ?? '')
+    if (!p || taskTrustRef.current.includes(p)) return
+    // 2026-08-04 授权架构 v4：只信任沙箱内（项目根内）——沙箱外 write/edit 永不进入信任集合（每次弹卡——安全底线）
+    if (!rootPath || !p.startsWith(rootPath)) return
+    taskTrustRef.current = [...taskTrustRef.current, p]
+    setTaskTrust(taskTrustRef.current)
+  }
+  const clearTrust = (): void => {
+    taskTrustRef.current = []
+    setTaskTrust([])
+  }
   // 2026-08-04 修复（用户「游戏成的3是D」错位）：流式链互斥——一次只跑一条链（send/advanceChat/授权续聊），其他链排队；
   // 原并发流（approveToolCall 续聊 + pendingAdvance 补发）chunk 交错写入同一消息 → 文本字符级错位
   const chainLockRef = useRef<Promise<void>>(Promise.resolve())
@@ -592,6 +617,20 @@ export default function ConversationPanel({
       return [...prev.slice(0, -1), { ...last, toolCalls: updated }]
     })
   }
+  // 2026-08-04 授权架构 v4：允许并记住（本次任务内此文件 write/edit 自动）——用户授权疲劳核心解法
+  const rememberAndApprove = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg) => {
+    addTrust(tc.args)
+    approveToolCall(calls, idx, tc)
+  }
+  // 2026-08-04 授权架构 v4：批量「全部允许并记住」——一条消息内多个待授权文件一次批准整批（fix bug 场景：改 3 文件 1 次点击）
+  const approveAllRemember = (calls: ToolCallMsg[]) => {
+    const pending = calls.filter((c) => c.status === 'need-approval')
+    pending.forEach((c) => addTrust(c.args))
+    pending.forEach((c) => {
+      const idx = calls.indexOf(c)
+      approveToolCall(calls, idx, c)
+    })
+  }
   // 真实执行安全闭环（基线 §10/§11）：write/edit 写前已快照——回滚恢复原样
   // 按 file 匹配更新（工具卡可能不在最后一条消息——maybeContinue 已追加新 streaming 消息）
   const revertToolCall = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg) => {
@@ -695,6 +734,14 @@ export default function ConversationPanel({
             </div>
           </div>
         )}
+        {/* 2026-08-04 授权架构 v4：授权记录条——任务级信任集合展示 + 手动清除（对齐 /permissions 管理入口） */}
+        {taskTrust.length > 0 && (
+          <div className="nf-trustbar">
+            <IconShield size={12} />
+            <span>本次任务已记住：{taskTrust.map((p) => p.split('/').pop()).join('、')}</span>
+            <button type="button" className="nf-trustbar__clear" onClick={clearTrust}>清除</button>
+          </div>
+        )}
         {messages.map((m, i) => (
           <div key={i} className={`nf-msg nf-msg--${m.role}`}>
             {m.role === 'assistant' && m.status === 'streaming' && (
@@ -720,6 +767,15 @@ export default function ConversationPanel({
             )}
             {m.toolCalls && m.toolCalls.length > 0 && (
               <div className="nf-toolcalls">
+                {/* 2026-08-04 授权架构 v4：批量授权条——一条消息多个待授权文件（fix bug 场景）→ 一次批准整批 + 记住 */}
+                {m.toolCalls.filter((c) => c.status === 'need-approval').length > 1 && (
+                  <div className="nf-toolcall__batch">
+                    <span>有 {m.toolCalls.filter((c) => c.status === 'need-approval').length} 个文件待批准</span>
+                    <button type="button" className="nf-toolcall__batch-approve" onClick={() => approveAllRemember(m.toolCalls ?? [])}>
+                      全部允许并记住（本次任务）
+                    </button>
+                  </div>
+                )}
                 {m.toolCalls.map((tc, i) => {
                   // ticket 14：授权卡风险明示——等级 + 影响（写哪个文件/执行什么命令）+ 快照提示
                   const hint = buildAuthHint(tc.name, tc.args)
@@ -761,6 +817,14 @@ export default function ConversationPanel({
                             onClick={() => approveToolCall(m.toolCalls ?? [], i, tc)}
                           >
                             允许执行
+                          </button>
+                          {/* 2026-08-04 授权架构 v4：允许并记住（本次任务内此文件自动）——授权疲劳核心解法 */}
+                          <button
+                            type="button"
+                            className="nf-toolcall__remember"
+                            onClick={() => rememberAndApprove(m.toolCalls ?? [], i, tc)}
+                          >
+                            允许并记住
                           </button>
                           <button
                             type="button"
