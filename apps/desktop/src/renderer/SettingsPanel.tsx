@@ -3,6 +3,10 @@ import { IconSettings } from './icons'
 
 // 设置（ticket 08 / D0 §9 最小集）——2026-08-03 A1 审计修复：移除不生效的假设置（语言/默认视图/主动提醒无消费方——诚实性优先）
 // 保留真实内容：内置插件（真实 IPC 注册表）+ 快捷键表（真实已实现）
+// 2026-08-04：L4 委托开关产品入口（原只在 demo TrustLadderPanel——产品运行时不可达）；与 ConversationPanel 同 localStorage key + 事件联动
+const DELEGATE_KEY = 'nf-delegate-lowrisk'
+const readDelegate = () => { try { return localStorage.getItem(DELEGATE_KEY) === '1' } catch { return false } }
+
 export default function SettingsPanel() {
   // 08 内置插件：真实注册表状态（mock/无通道 → null → 静态占位）
   const [plugins, setPlugins] = useState<Array<{ name: string; active: boolean }> | null>(null)
@@ -15,6 +19,14 @@ export default function SettingsPanel() {
     void window.neonforge.plugins?.toggle?.(name, active).then((ok) => {
       if (ok) setPlugins((prev) => prev?.map((p) => (p.name === name ? { ...p, active } : p)) ?? null)
     })
+  }
+
+  // L4 委托（ticket 14）：低危 write/edit 自动授权免确认——产品入口（对话授权行为实时联动）
+  const [delegate, setDelegate] = useState(readDelegate)
+  const handleDelegate = (v: boolean) => {
+    setDelegate(v)
+    try { localStorage.setItem(DELEGATE_KEY, v ? '1' : '0') } catch { /* 存储不可用——本次会话仍生效 */ }
+    window.dispatchEvent(new Event('nf-delegate-changed'))
   }
 
   return (
@@ -40,6 +52,19 @@ export default function SettingsPanel() {
             </span>
           ))}
         </div>
+      </div>
+
+      {/* 2026-08-04：L4 委托开关（真实——与对话授权联动；原仅 demo TrustLadderPanel 可开，产品无入口） */}
+      <div className="nf-settings__row">
+        <span>低风险文件操作自动授权 <em>写入/修改文件不再每次确认——会先备份、可随时关闭；执行命令始终单独确认</em></span>
+        <label className="nf-settings__row--switch">
+          <input
+            type="checkbox"
+            checked={delegate}
+            onChange={(e) => handleDelegate(e.target.checked)}
+            aria-label="低风险文件操作自动授权"
+          />
+        </label>
       </div>
 
       <div className="nf-settings__shortcuts">
