@@ -54,7 +54,7 @@ export default function ConversationPanel({
   stageHint,
   stageAdvance,
   activeAuthorizedLogs,
-  prefillText
+  initialPrompt
 }: {
   rootPath?: string | null
   currentFile?: string | null // 08 快捷键 Cmd+E：当前选中文件（@引用——D0 §6）
@@ -73,8 +73,8 @@ export default function ConversationPanel({
   // 2026-08-04：阶段推进反馈——用户点「确认推进」后对话区出现「已进入【X】阶段」提示（本地生成，确定性无杂音；顺带作为上下文让模型知道阶段切换）
   // 2026-08-04 方案 A：requirement 可选——需求卡确认摘要（注入对话上下文，模型按确认结果工作）
   stageAdvance?: { seq: number; stage: string; hint: string; requirement?: string } | null
-  // 2026-08-04 启动页方案 A：进入工作区预填对话输入框（仅预填不发送——区别于 externalRequest「预填+自动发送」复跑语义）
-  prefillText?: string
+  // 2026-08-04 体验修复：启动页首句 → 进入工作区自动发送（说了就直接开始；输入框不预填）
+  initialPrompt?: string
   activeAuthorizedLogs?: string[] // 06/14 授权记录可回溯：当前问题快照 authorized（TrustLadder 展示）
 }) {
   const [messages, setMessages] = useState<Msg[]>([])
@@ -138,17 +138,18 @@ export default function ConversationPanel({
   const inputRef = useRef('')
   // 2026-08-04 审计修复（A3）：textarea DOM ref——场景卡点击预填后聚焦输入框（原焦点停卡片，需再点输入框）
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  // 2026-08-04 启动页方案 A：进入工作区预填对话输入框（仅预填不发送——区别于 externalRequest「预填+自动发送」复跑语义；用户点发送才发）
+  // 2026-08-04 体验修复（用户实测：启动页输入句预填多余）：initialPrompt 进入工作区自动发送——说了就直接开始
+  // （区别于 externalRequest「预填+自动发送」复跑语义；initialPrompt 只用于启动页首句）
+  const sendRef = useRef<() => Promise<void>>(async () => {})
   useEffect(() => {
-    if (prefillText) {
-      inputRef.current = prefillText
-      setInput(prefillText)
-      textareaRef.current?.focus()
+    if (initialPrompt && initialPrompt.trim()) {
+      inputRef.current = initialPrompt.trim()
+      setInput('')
+      // 下一 tick 发送（等 sendRef 同步——send 读 inputRef 已就绪）
+      setTimeout(() => void sendRef.current(), 50)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  // 05 执行层 B：外部请求（复跑）——非空则预填输入框并发送
-  const sendRef = useRef<() => Promise<void>>(async () => {})
   useEffect(() => {
     if (externalRequest && typeof externalRequest === 'string' && externalRequest.trim()) {
       const text = externalRequest.trim()
@@ -448,7 +449,7 @@ export default function ConversationPanel({
     const history = buildHistory(messagesRef.current)
     const msgs: Array<{ role: 'user' | 'system'; content: string }> = [{
       role: 'user',
-      content: `${requirement ? `【需求确认】用户已通过需求确认卡确认需求：${requirement}——请基于此需求进行本阶段工作。` : ''}【阶段推进】已进入「${stage}」阶段。${hint}。请开始本阶段工作：先用简洁口语向用户说明本阶段要做什么、需要用户提供什么；本阶段完成时提示用户点「确认推进」。${stage === '开发' ? '本阶段开始产出真实文件（用 write/edit 工具，写前先读现有文件再修改）。' : '本阶段不要写代码。'}`
+      content: `${requirement ? `【需求确认】用户已通过需求确认卡确认需求：${requirement}——请基于此需求进行本阶段工作。` : ''}【阶段推进】已进入「${stage}」阶段。${hint}。请开始本阶段工作：先用简洁口语向用户说明本阶段要做什么、需要用户提供什么；本阶段完成时提示用户点「确认推进」。${stage === '开发' ? '本阶段直接动手产出真实文件（用 write/edit 工具，写前先读现有文件再修改；先写出第一版能跑的文件，产出后再问需要用户决策的问题，一次只问一个——不要只提问不产出）。' : '本阶段不要写代码。'}`
     }]
     if (stageHint) msgs.unshift({ role: 'system', content: stageHint })
     // 追加 streaming 占位——模型回复直接流式显示（内部指令不显示为用户消息）
@@ -569,8 +570,8 @@ export default function ConversationPanel({
 
   return (
     <div className="nf-chat">
-      {/* 2026-08-04 P0：demo 通道跳过门控（展示完整流程——产品主流程在 MainWorkspace flow dock 带门控） */}
-      {demoFlow && <DeliveryFlowPanel requirementConfirmed />}
+      {/* 2026-08-04 P0：demo 通道跳过门控（展示完整流程——产品主流程在 MainWorkspace flow dock 带门控）；artifactsReady 同步跳过开发门控 */}
+      {demoFlow && <DeliveryFlowPanel requirementConfirmed artifactsReady />}
       {demoDigital && <DigitalDeliveryPanel onDeliver={onDeliver} />}
       {demoTrust && <TrustLadderPanel authorizedLogs={activeAuthorizedLogs} delegateLowRisk={delegateLowRisk} onDelegateChange={handleDelegateChange} />}
       {demoDod && <DoDAlignPanel />}
