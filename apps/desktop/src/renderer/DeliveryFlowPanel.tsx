@@ -89,11 +89,15 @@ export default function DeliveryFlowPanel({
         </div>
       )}
 
-      {/* 分步推进（2026-08-04：按钮文案统一为「确认推进」——与模型阶段指引提示一致；P0 门控：需求阶段未确认需求 → 禁用提示） */}
-      {model && stage < FLOW_STAGES.length - 1 && (
+      {/* 分步推进（2026-08-04：按钮文案统一为「确认推进」——与模型阶段指引提示一致；P0 门控：需求阶段未确认需求 → 禁用提示）
+          2026-08-04 体验修复：未选模型也常驻显示（模型说「点确认推进」时用户能看到按钮——灰 + 提示先选方式） */}
+      {stage < FLOW_STAGES.length - 1 && (
         <div className="nf-flow__advance">
           <span className="nf-flow__stage-label">当前阶段：{FLOW_STAGES[stage]}——完成就点「确认推进」</span>
-          {stage === 0 && !requirementConfirmed && (
+          {!model && (
+            <span className="nf-flow__gate-hint">先在上方选一种做项目的方式（稳扎稳打 / 快速迭代），再开始推进</span>
+          )}
+          {stage === 0 && model && !requirementConfirmed && (
             <span className="nf-flow__gate-hint">需求还没确认——先在对话里和搭档确认，或在上方需求卡点选</span>
           )}
           {/* 2026-08-04 体验修复：开发阶段门控——必须有真实文件产出（write/edit 成功）才能推进到测试（防阶段空转） */}
@@ -107,10 +111,10 @@ export default function DeliveryFlowPanel({
           <button
             type="button"
             className="nf-delivery__primary"
-            disabled={(stage === 0 && !requirementConfirmed) || (stage === 2 && !artifactsReady) || busy}
+            disabled={!model || (stage === 0 && !requirementConfirmed) || (stage === 2 && !artifactsReady) || busy}
             onClick={advance}
           >
-            {busy ? '搭档处理中…' : stage === 0 && !requirementConfirmed ? '确认需求后可推进' : stage === 2 && !artifactsReady ? '等开发产出文件后可推进' : '确认推进 →'}
+            {!model ? '先选做项目的方式' : busy ? '搭档处理中…' : stage === 0 && !requirementConfirmed ? '确认需求后可推进' : stage === 2 && !artifactsReady ? '等开发产出文件后可推进' : '确认推进 →'}
           </button>
         </div>
       )}

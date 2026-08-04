@@ -9,6 +9,7 @@ export interface ChatLogEntry {
   role: 'user' | 'assistant'
   content?: string
   toolCalls?: Array<{ name: string; status: string }>
+  error?: string // 2026-08-04：错误状态标记（key-invalid/service/unknown——原仅 done 记录，错误消息无法追溯）
 }
 
 export function logDir(base: string): string {
@@ -44,7 +45,7 @@ export function exportChatLog(base: string): { ok: boolean; path?: string; error
     entries.sort((a, b) => a.ts.localeCompare(b.ts))
     if (entries.length === 0) return { ok: false, error: '还没有对话记录' }
     const md = entries
-      .map((e) => `${e.role === 'user' ? '我' : '搭档'}（${e.ts.slice(11, 19)}）：\`${e.content ?? ''}\`${e.toolCalls && e.toolCalls.length > 0 ? `\n\n工具调用：${e.toolCalls.map((t) => `${t.name}（${t.status}）`).join('、')}` : ''}`)
+      .map((e) => `${e.role === 'user' ? '我' : '搭档'}（${e.ts.slice(11, 19)}）：\`${e.content ?? ''}\`${e.error ? ` [${e.error}]` : ''}${e.toolCalls && e.toolCalls.length > 0 ? `\n\n工具调用：${e.toolCalls.map((t) => `${t.name}（${t.status}）`).join('、')}` : ''}`)
       .join('\n\n')
     const out = path.join(os.homedir(), 'Downloads', `neonforge-chat-${new Date().toISOString().slice(0, 10)}.md`)
     // 2026-08-04 接手复验：确保输出目录存在（Downloads 缺失时 writeFileSync ENOENT——产品环境 macOS 默认存在未暴露）

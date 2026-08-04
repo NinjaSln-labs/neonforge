@@ -107,12 +107,15 @@ export function registerIpc(): void {
 }
   // ticket 10：ToolRegistry（工具清单 + 执行分发——write/edit/bash 需 approved）
   ipcMain.handle('tools:list', () => toolRegistry.list())
-  ipcMain.handle('tools:execute', (_e, opts: { name: string; args: Record<string, unknown>; approved?: boolean; rootPath?: string }) =>
-    toolRegistry.execute(opts.name, opts.args ?? {}, {
+  ipcMain.handle('tools:execute', async (_e, opts: { name: string; args: Record<string, unknown>; approved?: boolean; rootPath?: string }) => {
+    const res = await toolRegistry.execute(opts.name, opts.args ?? {}, {
       approved: opts.approved ?? false,
       rootPath: opts.rootPath ?? workspace.getCurrentRoot() ?? undefined
     })
-  )
+    // 2026-08-04 诊断日志（用户反馈「刚才出错了」无法追溯——工具执行结果落日志；定位后清理或降噪保留）
+    console.log(`[ipc:tools] ${opts.name} approved=${opts.approved ?? false} →`, JSON.stringify(res).slice(0, 400))
+    return res
+  })
   // 工具写文件回滚（write/edit 写前已快照 .nf-bak——回滚恢复原样）
   ipcMain.handle('tools:revert', (_e, opts: { path: string }) => revertToolFile(opts.path))
   // ticket 14 可撤销：任何时刻停止当前操作（bash 高危——cancelActiveCommand kill；无活动命令返回错误）
