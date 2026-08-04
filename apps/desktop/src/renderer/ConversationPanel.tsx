@@ -648,6 +648,8 @@ export default function ConversationPanel({
   const approvePlan = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg) => {
     const files = (tc.args.files ?? []) as Array<{ path: string }>
     files.forEach((f) => addTrust({ path: f.path }))
+    // 2026-08-04 规划强制：通知 main（planApproved=true——write/edit 放行）
+    void window.neonforge.tools?.planApproved?.()
     patchToolCall(idx, (c) => ({ ...c, status: 'done' as const, result: `已批准 ${files.length} 个文件（本次任务自动放行）` }), tc)
     setTimeout(() => void maybeContinue(chatRef.current?.depth ?? 0, sessionRef.current), 150)
   }

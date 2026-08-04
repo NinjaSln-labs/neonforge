@@ -51,7 +51,9 @@ contextBridge.exposeInMainWorld('neonforge', {
     revert: (filePath: string) =>
       ipcRenderer.invoke('tools:revert', { path: filePath }) as Promise<{ ok: boolean; error?: string }>,
     // ticket 14 可撤销：停止当前活动命令（bash 高危——任何时刻可停）
-    cancel: () => ipcRenderer.invoke('tools:cancel') as Promise<{ ok: boolean; error?: string }>
+    cancel: () => ipcRenderer.invoke('tools:cancel') as Promise<{ ok: boolean; error?: string }>,
+    // 2026-08-04 规划级授权强制：plan_approval 批准后通知 main（write/edit 放行）
+    planApproved: () => ipcRenderer.invoke('tools:plan-approved') as Promise<{ ok: boolean }>
   },
   context: {
     resolve: (files: string[]) =>
