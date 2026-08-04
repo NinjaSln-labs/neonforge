@@ -255,6 +255,8 @@ export default function ConversationPanel({
         if (!next.content && !(next.toolCalls && next.toolCalls.length > 0)) {
           next.error = 'empty-response'
         }
+        // 2026-08-04 体验修复：流式完成 → 通知 runChat 尾部立即返回（working 及时释放——用户快速「确认推进」不被拦截）
+        doneNotifierRef.current?.()
       }
       if (chunk.type === 'tool-call' && chunk.toolCall) {
         next.toolCalls = [...(next.toolCalls ?? []), { name: chunk.toolCall.name, args: chunk.toolCall.args, status: 'pending' }]
@@ -360,7 +362,12 @@ export default function ConversationPanel({
 
     // 记录本轮上下文 → 由 maybeContinue 轮询工具完成（自动执行）→ 续聊
     chatRef.current = { msgs, depth }
-    await new Promise((r) => setTimeout(r, 1000))
+    // 2026-08-04 体验修复：等流式 done（模型回复完成 → working 立即释放——原固定等 1000ms+轮询，用户快速「确认推进」被 working 守卫拦截）；
+    // 800ms 超时兜底（流式异常未发 done 时防挂起）
+    await new Promise<void>((r) => {
+      const t = setTimeout(() => { doneNotifierRef.current = null; r() }, 800)
+      doneNotifierRef.current = () => { clearTimeout(t); doneNotifierRef.current = null; r() }
+    })
     await maybeContinue(depth, sid)
   }
 
@@ -379,6 +386,8 @@ export default function ConversationPanel({
     })
   const workingRef = useRef(false)
   useEffect(() => { workingRef.current = working }, [working])
+  // 2026-08-04 体验修复：流式 done 通知——runChat 尾部等 done（working 及时释放，用户快速「确认推进」不被拦）
+  const doneNotifierRef = useRef<(() => void) | null>(null)
 
   const send = async () => {
     const text = inputRef.current.trim()
