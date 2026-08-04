@@ -68,7 +68,8 @@ export default function ConversationPanel({
   recentFilesExternal?: string[]
   stageHint?: string // 0-1 交付阶段指引（ticket 07——注入对话引导模型按阶段产出）
   // 2026-08-04：阶段推进反馈——用户点「确认推进」后对话区出现「已进入【X】阶段」提示（本地生成，确定性无杂音；顺带作为上下文让模型知道阶段切换）
-  stageAdvance?: { seq: number; stage: string; hint: string } | null
+  // 2026-08-04 方案 A：requirement 可选——需求卡确认摘要（注入对话上下文，模型按确认结果工作）
+  stageAdvance?: { seq: number; stage: string; hint: string; requirement?: string } | null
   activeAuthorizedLogs?: string[] // 06/14 授权记录可回溯：当前问题快照 authorized（TrustLadder 展示）
 }) {
   const [messages, setMessages] = useState<Msg[]>([])
@@ -155,7 +156,7 @@ export default function ConversationPanel({
       content: `已进入【${stageAdvance.stage}】阶段\n${stageAdvance.hint}\n（在对话里告诉搭档你的想法，搭档会继续推进）`,
       status: 'done'
     }])
-    void advanceChatRef.current(stageAdvance.stage, stageAdvance.hint)
+    void advanceChatRef.current(stageAdvance.stage, stageAdvance.hint, stageAdvance.requirement)
   }, [stageAdvance])
   const [mentionOpen, setMentionOpen] = useState(false)
   const [recentFiles, setRecentFiles] = useState<string[]>([])
@@ -422,7 +423,8 @@ export default function ConversationPanel({
 
   // 2026-08-04：阶段推进自动触发——点「确认推进」→ 搭档主动按新阶段工作（用户反馈「推进后无反馈/流程走不完」）
   // 内部指令作为 user 消息发给模型但不显示在对话区（本地提示消息已展示阶段切换）；模型流式回复 = 推进后的实际反馈
-  const advanceChat = async (stage: string, hint: string) => {
+  // 2026-08-04 方案 A：requirement 可选——需求卡确认摘要附带在内部指令里（模型按确认结果工作；不显示在对话区）
+  const advanceChat = async (stage: string, hint: string, requirement?: string) => {
     if (workingRef.current) return // 搭档处理中——跳过自动触发（本地提示已给出，用户可稍后说话）
     streamingRef.current = { content: '', toolCalls: [] } // 新轮次重置流式累积
     setWorking(true)
@@ -432,7 +434,7 @@ export default function ConversationPanel({
     const history = buildHistory(messagesRef.current)
     const msgs: Array<{ role: 'user' | 'system'; content: string }> = [{
       role: 'user',
-      content: `【阶段推进】已进入「${stage}」阶段。${hint}。请开始本阶段工作：先用简洁口语向用户说明本阶段要做什么、需要用户提供什么；本阶段完成时提示用户点「确认推进」。${stage === '开发' ? '本阶段开始产出真实文件（用 write/edit 工具，写前先读现有文件再修改）。' : '本阶段不要写代码。'}`
+      content: `${requirement ? `【需求确认】用户已通过需求确认卡确认需求：${requirement}——请基于此需求进行本阶段工作。` : ''}【阶段推进】已进入「${stage}」阶段。${hint}。请开始本阶段工作：先用简洁口语向用户说明本阶段要做什么、需要用户提供什么；本阶段完成时提示用户点「确认推进」。${stage === '开发' ? '本阶段开始产出真实文件（用 write/edit 工具，写前先读现有文件再修改）。' : '本阶段不要写代码。'}`
     }]
     if (stageHint) msgs.unshift({ role: 'system', content: stageHint })
     // 追加 streaming 占位——模型回复直接流式显示（内部指令不显示为用户消息）
