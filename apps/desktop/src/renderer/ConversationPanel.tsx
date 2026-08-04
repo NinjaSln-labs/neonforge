@@ -107,6 +107,14 @@ export default function ConversationPanel({
     setDelegateLowRisk(v)
     try { localStorage.setItem('nf-delegate-lowrisk', v ? '1' : '0') } catch { /* 存储不可用——内存态仍工作 */ }
   }
+  // 2026-08-04：设置面板 L4 委托开关 → 对话授权实时联动（同 localStorage key + 自定义事件）
+  useEffect(() => {
+    const onDelegateChanged = () => {
+      try { setDelegateLowRisk(localStorage.getItem('nf-delegate-lowrisk') === '1') } catch { /* 读不到保持现状 */ }
+    }
+    window.addEventListener('nf-delegate-changed', onDelegateChanged)
+    return () => window.removeEventListener('nf-delegate-changed', onDelegateChanged)
+  }, [])
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef('')
   // 05 执行层 B：外部请求（复跑）——非空则预填输入框并发送
