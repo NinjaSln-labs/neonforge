@@ -789,3 +789,9 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   .nf-toolcall--done .nf-toolcall__icon,
   .nf-statusbar__dot--approval { animation: none; }
 }
+
+/* 2026-08-04 规划级授权：计划文件清单卡（模型动手前一次性请求批准） */
+.nf-plan__files { width: 100%; display: flex; flex-direction: column; gap: 2px; margin: 2px 0; padding: 4px 8px; background: var(--nf-bg); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-sm); max-height: 140px; overflow: auto; }
+.nf-plan__file { display: flex; gap: 8px; font-size: 11px; line-height: 1.4; }
+.nf-plan__path { font-family: var(--nf-font-mono); color: var(--nf-accent); flex-shrink: 0; }
+.nf-plan__reason { color: var(--nf-text-dim); }
