@@ -105,6 +105,7 @@ test('0-1 阶段指引注入（选模型 → 发送 → streamChat 含阶段提�
 
 test('阶段推进 → 交付包阶段验收项（07 编排）', async ({ page }) => {
   await page.addInitScript(() => {
+    let streamCb: ((c: { type: string; text?: string }) => void) | null = null
     window.neonforge = {
       version: 'test',
       config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
@@ -112,10 +113,22 @@ test('阶段推进 → 交付包阶段验收项（07 编排）', async ({ page }
         openFolder: async () => null,
         listDir: async () => [],
         readFile: async () => ({ ok: true, content: '// x' }),
-        initProject: async () => ({ ok: true, path: '/tmp/nf-proj/demo-site', title: 'demo' })
+        readNotebook: async () => null,
+        initProject: async () => ({ ok: true, path: '/tmp/nf-proj/demo-site', title: 'demo' }),
+        updateProjectTitle: async () => ({ ok: true })
       },
-      gateway: { validate: async () => ({ ok: true }), streamChat: async () => ({ ok: true }), onStreamChunk: () => () => {} }
+      gateway: {
+        validate: async () => ({ ok: true }),
+        // 2026-08-04 P0：需求阶段模型输出【需求确认】→ 解锁推进门控
+        streamChat: async () => { setTimeout(() => { streamCb?.({ type: 'content', text: '好的，做记账工具。【需求确认：记账工具】' }); streamCb?.({ type: 'done' }) }, 30); return { ok: true } },
+        onStreamChunk: (cb: (c: { type: string; text?: string }) => void) => { streamCb = cb; return () => {} }
+      },
+      tools: { execute: async () => ({ ok: true }), list: async () => [] },
+      context: { resolve: async () => ({ fragments: [] }) },
+      compaction: { compact: async () => ({ ok: false }) },
+      plugins: { list: async () => [], toggle: async () => true }
     }
+    ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
   })
   await page.goto('http://localhost:5174/')
   await expect(page.locator('.nf-start')).toBeVisible()
@@ -124,7 +137,8 @@ test('阶段推进 → 交付包阶段验收项（07 编排）', async ({ page }
   await page.locator('.nf-chat__input textarea').fill('做一个记账工具')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
   await page.waitForTimeout(600)
-  // 推进 2 阶段（确认需求 → 确认设计）
+  // 需求已确认（模型【需求确认】）→ 推进按钮解锁 → 推进 2 阶段（确认需求 → 确认设计）
+  await expect(page.locator('.nf-flow__advance button')).toBeEnabled()
   await page.locator('.nf-flow__advance button').click()
   await page.waitForTimeout(200)
   await page.locator('.nf-flow__advance button').click()

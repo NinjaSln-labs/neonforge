@@ -36,11 +36,27 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
     window.dispatchEvent(new Event('nf-delegate-changed'))
   }
 
+  // 2026-08-04：导出对话记录（用户反馈时可提供完整对话给 AI 看实际）
+  const [exportMsg, setExportMsg] = useState<string | null>(null)
+  const handleExport = () => {
+    setExportMsg(null)
+    void window.neonforge.chatLog?.export?.().then((r) => {
+      setExportMsg(r.ok ? `已导出：${r.path ?? ''}` : (r.error ?? '导出失败'))
+    })
+  }
+
   return (
     <div className="nf-settings">
       <div className="nf-flow__head">
         <span className="nf-flow__title"><IconSettings size={14} /> 设置</span>
       </div>
+
+      {/* 2026-08-04：对话记录导出（自动记录对话日志——可导出 .md 发给 AI 反馈） */}
+      <div className="nf-settings__row">
+        <span>导出对话记录 <em>把最近对话导出为 .md 文件（保存到 下载 文件夹），方便反馈时发给搭档看实际情况</em></span>
+        <button type="button" className="nf-settings__export" onClick={handleExport}>导出</button>
+      </div>
+      {exportMsg && <p className="nf-settings__export-msg">{exportMsg}</p>}
 
       <div className="nf-settings__plugins">
         <span className="nf-settings__plugins-title">内置插件（暂不支持安装新插件）</span>
