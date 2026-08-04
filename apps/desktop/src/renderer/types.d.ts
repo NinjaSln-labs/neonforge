@@ -31,7 +31,7 @@ export interface NeonForgeBridge {
     updateProjectTitle: (path: string, title: string) => Promise<{ ok: boolean; error?: string }>
   }
   chatLog: {
-    log: (entry: { ts: string; role: 'user' | 'assistant'; content?: string; toolCalls?: Array<{ name: string; status: string }> }) => Promise<void>
+    log: (entry: { ts: string; role: 'user' | 'assistant'; content?: string; toolCalls?: Array<{ name: string; status: string }>; error?: string }) => Promise<void>
     export: () => Promise<{ ok: boolean; path?: string; error?: string }>
   }
   tools: NeonForgeTools
