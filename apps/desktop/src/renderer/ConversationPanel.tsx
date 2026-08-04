@@ -460,7 +460,7 @@ export default function ConversationPanel({
     const history = buildHistory(messagesRef.current)
     const msgs: Array<{ role: 'user' | 'system'; content: string }> = [{
       role: 'user',
-      content: `${requirement ? `【需求确认】用户已通过需求确认卡确认需求：${requirement}——请基于此需求进行本阶段工作。` : ''}【阶段推进】已进入「${stage}」阶段。${hint}。请开始本阶段工作：先用简洁口语向用户说明本阶段要做什么、需要用户提供什么；本阶段完成时提示用户点「确认推进」。${stage === '开发' ? '本阶段直接动手产出真实文件（用 write/edit 工具，写前先读现有文件再修改；先写出第一版能跑的文件，产出后再问需要用户决策的问题，一次只问一个——不要只提问不产出）。' : '本阶段不要写代码。'}`
+      content: `${requirement ? `【需求确认】用户已通过需求确认卡确认需求：${requirement}——请基于此需求进行本阶段工作。` : ''}【阶段推进】已进入「${stage}」阶段。${hint}。请开始本阶段工作：先用简洁口语向用户说明本阶段要做什么、需要用户提供什么；本阶段完成时提示用户点「确认推进」。${stage === '开发' ? '本阶段直接动手产出真实文件（用 write/edit 工具，写前先读现有文件再修改；先写出第一版能跑的文件，产出后再问需要用户决策的问题，一次只问一个——不要只提问不产出）。铁律：本条回复必须以实际行动收尾——说「开始」后立刻调用工具（read/ls 看目录或 write 写文件），不要以「开始动手了」结束回复等用户。' : '本阶段不要写代码。'}`
     }]
     if (stageHint) msgs.unshift({ role: 'system', content: stageHint })
     // 追加 streaming 占位——模型回复直接流式显示（内部指令不显示为用户消息）
