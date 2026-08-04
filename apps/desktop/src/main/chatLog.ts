@@ -47,7 +47,8 @@ export function exportChatLog(base: string): { ok: boolean; path?: string; error
     const md = entries
       .map((e) => `${e.role === 'user' ? '我' : '搭档'}（${e.ts.slice(11, 19)}）：\`${e.content ?? ''}\`${e.error ? ` [${e.error}]` : ''}${e.toolCalls && e.toolCalls.length > 0 ? `\n\n工具调用：${e.toolCalls.map((t) => `${t.name}（${t.status}）`).join('、')}` : ''}`)
       .join('\n\n')
-    const out = path.join(os.homedir(), 'Downloads', `neonforge-chat-${new Date().toISOString().slice(0, 10)}.md`)
+    // 2026-08-04 体验修复：固定文件名每次覆盖（用户「不用保留之前的内容」——原来带日期跨天堆积多个文件）
+    const out = path.join(os.homedir(), 'Downloads', 'neonforge-chat.md')
     // 2026-08-04 接手复验：确保输出目录存在（Downloads 缺失时 writeFileSync ENOENT——产品环境 macOS 默认存在未暴露）
     mkdirSync(path.dirname(out), { recursive: true })
     writeFileSync(out, `# NeonForge 对话记录\n\n${md}\n`, 'utf-8')
