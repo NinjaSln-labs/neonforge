@@ -590,3 +590,86 @@ test('0-1 工具链自主推进：连续 3 轮 read → 自动续聊 → 最终�
   await expect(page.locator('.nf-toolcall--done')).toHaveCount(3, { timeout: 15000 })
   await expect(page.locator('.nf-chat__list .nf-msg--assistant').filter({ hasText: '设计完成，方案定了。' })).toHaveCount(1, { timeout: 15000 })
 })
+
+// 2026-08-04 授权架构 v4 用户路径实测：记住后同文件自动 → 阶段推进清除 → 重新弹授权
+test('0-1 授权 v4 完整路径：允许并记住 → 同文件自动 → 确认推进清除信任 → 再写重新弹授权', async ({ page }) => {
+  await page.addInitScript(() => {
+    let streamCb: ((c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) | null = null
+    let chatCount = 0
+    const writes: Array<{ path: string; content: string }> = [
+      { path: '/test/index.html', content: '<div id="app"></div>' },
+      { path: '/test/index.html', content: '<div id="app">v2</div>' },
+      { path: '/test/index.html', content: '<div id="app">v3</div>' },
+    ]
+    window.neonforge = {
+      version: 'test',
+      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
+      workspace: { openFolder: async () => null, listDir: async () => [{ name: 'index.html', path: '/test/index.html', kind: 'file' }], readFile: async () => ({ ok: true, content: 'x' }), readNotebook: async () => null, initProject: async () => ({ ok: true, path: '/test', title: 't' }), updateProjectTitle: async () => ({ ok: true }) },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        streamChat: async () => {
+          chatCount++
+          setTimeout(() => {
+            // chatCount：1=需求消息、2=确认推进 send、3=设计 advanceChat（都回 content）；4-6=开发 advanceChat 的 3 次 write；7=收尾 content
+            if (chatCount <= 3) {
+              streamCb?.({ type: 'content', text: chatCount === 3 ? '设计完成，方案定了。' : '收到，继续。' })
+            } else if (chatCount >= 4 && chatCount <= 6) {
+              const w = writes[chatCount - 4]
+              streamCb?.({ type: 'tool-call', toolCall: { name: 'write', args: { path: w.path, content: w.content } } })
+            } else {
+              streamCb?.({ type: 'content', text: '开发完成，文件写好了。' })
+            }
+            streamCb?.({ type: 'done' })
+          }, 30)
+          return { ok: true }
+        },
+        onStreamChunk: (cb: (c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) => { streamCb = cb; return () => {} }
+      },
+      tools: {
+        execute: async (_n: string, args: Record<string, unknown>, opts?: { approved?: boolean }) => {
+          // 模拟 main preApproval：write 需授权（approved=false → need-approval）；approved=true → 执行成功
+          if (!opts?.approved) return { ok: false, error: '「write」需要授权（L3）——approved=true 后执行' }
+          return { ok: true, data: { file: String(args.path), snapshot: true } }
+        },
+        list: async () => []
+      },
+      context: { resolve: async () => ({ fragments: [] }) },
+      compaction: { compact: async () => ({ ok: false }) },
+      plugins: { list: async () => [], toggle: async () => true }
+    }
+    ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
+  })
+  await page.goto('http://localhost:5174/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.getByRole('button', { name: '从零开始' }).click()
+  await page.getByRole('button', { name: /快速迭代/ }).click()
+  // 对话发需求 + 确认推进 → 自动进设计
+  await page.locator('.nf-chat__input textarea').fill('做个网页游戏')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  await page.waitForTimeout(600)
+  await page.locator('.nf-chat__input textarea').fill('确认推进')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  await page.waitForTimeout(600)
+  // 设计推进到开发（无门控）——开发 advanceChat 触发 write
+  const advance = page.locator('.nf-flow__advance button')
+  await expect(advance).toBeEnabled({ timeout: 8000 })
+  await advance.click()
+  await expect(page.locator('.nf-flow__stage--active')).toContainText('开发')
+  // 第一个 write（chatCount 2）→ 授权卡出现（含「允许并记住」）
+  await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(1, { timeout: 8000 })
+  await expect(page.getByRole('button', { name: '允许并记住' })).toBeVisible()
+  await page.getByRole('button', { name: '允许并记住' }).click()
+  // 记住后：第二个 write（chatCount 3）同文件 → 自动 done（无授权卡）
+  await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(0, { timeout: 8000 })
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(2, { timeout: 8000 })
+  // 信任条显示已记住文件
+  await expect(page.locator('.nf-trustbar')).toContainText('index.html')
+  // 第三个 write（chatCount 4）同文件 → 仍自动 done（信任未清除）
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(3, { timeout: 8000 })
+  // 确认推进（开发→测试）→ 阶段推进 = 任务边界 → 信任清除
+  await page.waitForTimeout(500)
+  await advance.click()
+  await expect(page.locator('.nf-flow__stage--active')).toContainText('测试')
+  // 信任条消失（已清除）
+  await expect(page.locator('.nf-trustbar')).toHaveCount(0)
+})
