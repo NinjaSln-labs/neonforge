@@ -126,9 +126,22 @@ export default function MainWorkspace({
   const reqTextRef = useRef('')
   const handleUserMessage = (text: string) => {
     lastPromptRef.current = text
-    // 2026-08-04 体验修复（用户实测「确认了需求但上面还停在需求确认」）：需求阶段用户说「确认推进/确认」→ 自动确认需求 + 推进到设计——
-    // 模型可能只说「需求已确认」不带【需求确认：】标记（UI 识别不到）；用户明确确认 → 确定性收敛（不创建新问题）
-    if (flowStage === 0 && !requirementConfirmed && /确认推进|确认|可以|没问题|就按/.test(text)) {
+    // 2026-08-04 体验修复（用户「设计完该开发了上面还停设计」）：任何阶段的「确认推进」都推进阶段机——
+    // 原仅需求阶段自动推进，设计/开发/测试阶段用户确认只当普通消息（模型口头说进下一阶段、UI 不动）
+    if (/确认推进/.test(text)) {
+      if (flowStage === 0 && !requirementConfirmed) {
+        // 需求阶段：确认需求 + 推进到设计
+        const reqText = reqTextRef.current || text
+        handleRequirementConfirmed(reqText)
+        handleStageChange(1, reqText)
+      } else if (flowStage < FLOW_STAGES.length - 1) {
+        // 其他阶段：推进到下一阶段（设计→开发 / 开发→测试 / 测试→部署 / 部署→交付）
+        handleStageChange(flowStage + 1)
+      }
+      return
+    }
+    // 2026-08-04 体验修复（用户实测「确认了需求但上面还停在需求确认」）：需求阶段用户说「确认/可以」→ 自动确认需求 + 推进到设计
+    if (flowStage === 0 && !requirementConfirmed && /确认|可以|没问题|就按/.test(text)) {
       const reqText = reqTextRef.current || text
       handleRequirementConfirmed(reqText)
       handleStageChange(1, reqText)
