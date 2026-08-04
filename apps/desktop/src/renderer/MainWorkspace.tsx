@@ -122,8 +122,19 @@ export default function MainWorkspace({
     // 模型在设计阶段能拿到需求卡确认结果（2026-08-04 接手复验：原实现仅回写台账/README，模型看不到 4 项选择）
     handleStageChange(1, summary)
   }
+  // 2026-08-04 体验修复：需求阶段用户需求文本暂存（「确认推进」自动确认时回写/注入用——不依赖模型【需求确认：】标记）
+  const reqTextRef = useRef('')
   const handleUserMessage = (text: string) => {
     lastPromptRef.current = text
+    // 2026-08-04 体验修复（用户实测「确认了需求但上面还停在需求确认」）：需求阶段用户说「确认推进/确认」→ 自动确认需求 + 推进到设计——
+    // 模型可能只说「需求已确认」不带【需求确认：】标记（UI 识别不到）；用户明确确认 → 确定性收敛（不创建新问题）
+    if (flowStage === 0 && !requirementConfirmed && /确认推进|确认|可以|没问题|就按/.test(text)) {
+      const reqText = reqTextRef.current || text
+      handleRequirementConfirmed(reqText)
+      handleStageChange(1, reqText)
+      return
+    }
+    if (flowStage === 0 && !requirementConfirmed) reqTextRef.current = text // 需求阶段用户说的话即需求描述
     // ticket 07：从零开始 → 首条消息创建真实项目目录（0-1 交付真实执行地基——后续阶段模型在真实项目内 write/read）
     if (!rootPath && onProjectCreated) {
       void window.neonforge.workspace.initProject(text).then((r) => {
