@@ -32,7 +32,7 @@ async function mockBridge(page: import('@playwright/test').Page, demoDelivery: b
 
 test('交付包视图（产物 Tab 渲染）', async ({ page }) => {
   await mockBridge(page, true)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.getByRole('button', { name: '产物' }).click()
@@ -44,7 +44,7 @@ test('交付包视图（产物 Tab 渲染）', async ({ page }) => {
 
 test('验收交互：打勾 → 确认问题关闭', async ({ page }) => {
   await mockBridge(page, true)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.getByRole('button', { name: '产物' }).click()
@@ -61,7 +61,7 @@ test('验收交互：打勾 → 确认问题关闭', async ({ page }) => {
 
 test('交付包空态（无交付时）', async ({ page }) => {
   await mockBridge(page, false)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.getByRole('button', { name: '产物' }).click()
@@ -91,7 +91,7 @@ test('真实执行 → 产物区交付包联动（write 授权后）', async ({ 
       }
     }
   })
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.locator('.nf-chat__input textarea').fill('帮我写一个 notes 文件')

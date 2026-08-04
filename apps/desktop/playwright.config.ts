@@ -13,12 +13,12 @@ export default defineConfig({
   workers: 1, // 截图确定性
   retries: 0, // 视觉回归不重试（重试会覆盖 diff 产物）
   webServer: {
-    command: 'npx vite --config vite.config.ts --port 5174 --strictPort',
-    url: 'http://localhost:5174',
+    command: 'npx vite --config vite.config.ts --port 5175 --strictPort',
+    url: 'http://localhost:5175',
     reuseExistingServer: true
   },
   use: {
-    baseURL: 'http://localhost:5174',
+    baseURL: 'http://localhost:5175',
     browserName: 'chromium',
     viewport: { width: 1280, height: 800 },
     expect: {

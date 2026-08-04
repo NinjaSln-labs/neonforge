@@ -16,7 +16,7 @@ async function mockBridge(page: import('@playwright/test').Page) {
 
 test('启动页（方案 A：输入框 + 5 场景卡 + 二选一芯片）', async ({ page }) => {
   await mockBridge(page)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start__brand')).toBeVisible()
   await expect(page.locator('.nf-start__input')).toBeVisible()
   await expect(page.locator('.nf-start__scene')).toHaveCount(5)
@@ -30,7 +30,7 @@ test('启动页（方案 A：输入框 + 5 场景卡 + 二选一芯片）', asyn
 
 test('启动页场景卡点击 → 预填输入框', async ({ page }) => {
   await mockBridge(page)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.locator('.nf-start__scene', { hasText: '做小工具' }).click()
   await expect(page.locator('.nf-start__input')).toHaveValue(/每周记账/)

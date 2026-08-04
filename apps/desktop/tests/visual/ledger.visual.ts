@@ -23,7 +23,7 @@ async function mockBridge(page: import('@playwright/test').Page, withProblems: b
 
 test('问题台账（多状态渲染）', async ({ page }) => {
   await mockBridge(page, true)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await expect(page.locator('.nf-ledger__item')).toHaveCount(4)
@@ -35,7 +35,7 @@ test('问题台账（多状态渲染）', async ({ page }) => {
 
 test('选中问题高亮', async ({ page }) => {
   await mockBridge(page, true)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.getByRole('button', { name: /把销售表合并出月度图表/ }).click()
@@ -45,7 +45,7 @@ test('选中问题高亮', async ({ page }) => {
 
 test('台账空态（无问题）', async ({ page }) => {
   await mockBridge(page, false)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await expect(page.locator('.nf-session')).toContainText('还没有问题')
@@ -54,7 +54,7 @@ test('台账空态（无问题）', async ({ page }) => {
 
 test('发送问题 → 台账创建实例（问题 = 一等公民）', async ({ page }) => {
   await mockBridge(page, false)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await expect(page.locator('.nf-session')).toContainText('还没有问题')
@@ -69,7 +69,7 @@ test('发送问题 → 台账创建实例（问题 = 一等公民）', async ({ 
 
 test('closed 问题复开 → 复跑（上次那个再跑一遍）', async ({ page }) => {
   await mockBridge(page, true)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await expect(page.locator('.nf-ledger__item')).toHaveCount(4)

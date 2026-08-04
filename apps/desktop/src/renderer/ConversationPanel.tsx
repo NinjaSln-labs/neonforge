@@ -119,12 +119,14 @@ export default function ConversationPanel({
   }, [messages])
   const chatRef = useRef<{ msgs: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; reasoning_content?: string }>; depth: number } | null>(null)
   const sessionRef = useRef(0) // 会话隔离：每次发送递增——旧会话事件/续聊失效
+  const streamingSidRef = useRef(0) // 2026-08-04：当前活跃流 sid——停止（sid++）后旧流 chunk 忽略（applyChunk 只处理活跃流）
   const applyChunkRef = useRef<((c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) | null>(null)
   useEffect(() => { applyChunkRef.current = applyChunk }) // 每次渲染同步最新 applyChunk
   useEffect(() => {
     // 永久 listener：不随 runChat off（off 竞争会导致 done 事件丢失——invoke resolve 与 stream-chunk 投递顺序）
+    // 2026-08-04 修复（用户「按停止没反应」）：streamingSidRef 检查——只处理当前活跃流的 chunk（停止 sid++ 后旧流 chunk 忽略）
     const off = window.neonforge.gateway.onStreamChunk((chunk) => {
-      if (sessionRef.current === 0) return // 无活跃会话——忽略
+      if (sessionRef.current === 0 || streamingSidRef.current !== sessionRef.current) return // 无活跃会话 / 旧流（已停止）——忽略
       applyChunkRef.current?.(chunk)
     })
     return off
@@ -354,6 +356,8 @@ export default function ConversationPanel({
 
   // 多轮工具循环：模型返回 tool_call → 执行 → 结果回填 → 续聊（2026-08-04 重构：自然停止——模型不调工具/待授权/死循环检测；40 轮总兜底）
   const runChat = async (msgs: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; reasoning_content?: string }>, depth: number, sid: number) => {
+    // 2026-08-04：当前活跃流 = 本 sid（停止后旧流 chunk 不再更新 UI）
+    streamingSidRef.current = sid
     // 2026-08-04 重构（用户：「定多少才不卡」根因——原 `depth > 4` 硬上限，开发工具链 5+ 轮必断）：40 轮总兜底（防死循环由 maybeContinue 重复检测承担）
     if (depth > 40) return
     const key = await window.neonforge.config.getKey()
@@ -651,24 +655,25 @@ export default function ConversationPanel({
     })
   }
 
-  // ticket 14 可撤销：任何时刻停止当前操作（bash 高危——cancelActiveCommand kill；卡标记已停止，续聊回填让模型知道被停止）
+  // ticket 14 可撤销：任何时刻停止当前操作（bash 高危——cancelActiveCommand kill；卡标记已停止）
+  // 2026-08-04 修复（用户「按停止没反应」）：停止 = 中止整条链——原只 kill bash 子进程，流式链/续聊继续跑（模型还在输出）
   const stopToolCall = (calls: ToolCallMsg[], idx: number) => {
-    void (window.neonforge.tools?.cancel?.() ?? Promise.resolve({ ok: false, error: 'cancel 通道未就绪' }))
-    setMessages((prev) => {
-      const last = prev[prev.length - 1]
-      if (!last || last.role !== 'assistant') return prev
-      const updated = (last.toolCalls ?? []).map((c, i) => i === idx ? { ...c, status: 'error' as const, result: '已停止——未继续执行' } : c)
-      return [...prev.slice(0, -1), { ...last, toolCalls: updated }]
-    })
-    // 2026-08-04 修复（流式链互斥）：回滚后续聊也占锁排队
-    setTimeout(async () => {
-      const release = await acquireChain()
-      try {
-        await maybeContinue(chatRef.current?.depth ?? 0, sessionRef.current)
-      } finally {
-        release()
-      }
-    }, 150)
+    void (window.neonforge.tools?.cancel?.() ?? Promise.resolve({ ok: false }))
+    // 中止当前流式链：sid++ + streamingSid=0 → 旧流 chunk 忽略（applyChunk sid 检查）+ 旧链 maybeContinue 失效
+    sessionRef.current++
+    streamingSidRef.current = 0
+    streamingRef.current = { content: '', toolCalls: [] }
+    setWorking(false)
+    onWorkingChange?.(false)
+    setWorkingStage('')
+    // 标记所有待执行/待授权工具卡为已停止
+    setMessages((prev) => prev.map((m) => {
+      if (!m.toolCalls || m.toolCalls.length === 0) return m
+      return { ...m, toolCalls: m.toolCalls.map((c) =>
+        c.status === 'pending' || c.status === 'need-approval'
+          ? { ...c, status: 'error' as const, result: '已停止——未继续执行' }
+          : c) }
+    }))
   }
   // ticket 14 疲劳防护：同批多个低危文件操作合并授权（bash 高危永远单独确认——canMergeApprove 已保证全 low）
   const approveAllToolCalls = (calls: ToolCallMsg[]) => {
@@ -732,14 +737,6 @@ export default function ConversationPanel({
                 </button>
               ))}
             </div>
-          </div>
-        )}
-        {/* 2026-08-04 授权架构 v4：授权记录条——任务级信任集合展示 + 手动清除（对齐 /permissions 管理入口） */}
-        {taskTrust.length > 0 && (
-          <div className="nf-trustbar">
-            <IconShield size={12} />
-            <span>本次任务已记住：{taskTrust.map((p) => p.split('/').pop()).join('、')}</span>
-            <button type="button" className="nf-trustbar__clear" onClick={clearTrust}>清除</button>
           </div>
         )}
         {messages.map((m, i) => (
@@ -862,6 +859,14 @@ export default function ConversationPanel({
         )}
       </div>
 
+      {/* 2026-08-04 授权架构 v4：授权记录条——固定在输入框上方（用户随时可见/清除；原在消息列表顶部——会话长滚出视野看不到） */}
+      {taskTrust.length > 0 && (
+        <div className="nf-trustbar">
+          <IconShield size={12} />
+          <span>本次任务已记住：{taskTrust.map((p) => p.split('/').pop()).join('、')}</span>
+          <button type="button" className="nf-trustbar__clear" onClick={clearTrust}>清除</button>
+        </div>
+      )}
       <div className="nf-chat__input">
         <textarea
           ref={textareaRef}

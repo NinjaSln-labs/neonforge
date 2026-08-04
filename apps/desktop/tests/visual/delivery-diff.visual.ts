@@ -31,7 +31,7 @@ async function mockBridge(page: import('@playwright/test').Page) {
 
 test('diff 审核视图（待审核态）', async ({ page }) => {
   await mockBridge(page)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.waitForSelector('.nf-chat__input textarea', { timeout: 8000 })
@@ -50,7 +50,7 @@ test('diff 审核视图（待审核态）', async ({ page }) => {
 
 test('diff 审核视图（接受→确认→已应用）', async ({ page }) => {
   await mockBridge(page)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.waitForSelector('.nf-chat__input textarea', { timeout: 8000 })
   await page.getByRole('button', { name: '产物' }).click()
@@ -65,7 +65,7 @@ test('diff 审核视图（接受→确认→已应用）', async ({ page }) => {
 
 test('非技术视图主路径：全部接受并写入（D0 §3.8——批量应用所有 diff）', async ({ page }) => {
   await mockBridge(page)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.waitForSelector('.nf-chat__input textarea', { timeout: 8000 })
   await page.getByRole('button', { name: '产物' }).click()

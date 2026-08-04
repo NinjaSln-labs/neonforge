@@ -57,7 +57,7 @@ test('断点续做：发送 → reload → 会话恢复', async ({ page }) => {
       }
     }
   })
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   const textarea = page.locator('.nf-chat__input textarea')
@@ -99,7 +99,7 @@ test('搭档须知 .neonforge 注入（项目级指令——08d 消费）', asyn
       }
     }
   })
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.locator('.nf-chat__input textarea').fill('开始任务')

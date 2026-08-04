@@ -55,7 +55,7 @@ async function mockBridge(page: Page): Promise<void> {
 }
 
 async function enterWorkspace(page: Page): Promise<void> {
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.waitForSelector('.nf-chat__input textarea', { timeout: 8000 })
@@ -162,7 +162,7 @@ test('信任阶梯：授权记录接真实数据（06 问题快照 authorized—
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = bridge
   })
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.waitForSelector('.nf-chat__input textarea', { timeout: 8000 })
   // 选中问题（activeProblem 生效 → 快照 authorized 传给 TrustLadder）
@@ -207,7 +207,7 @@ test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 1
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = bridge
   })
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.locator('.nf-chat__input textarea').fill('批量整理文件')
@@ -252,7 +252,7 @@ test('0-1 从零开始：确认推进按钮常驻可见（修复——不在滚�
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
   })
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
   // 选模型 → 出现「确认推进」按钮（文案与模型阶段指引提示一致）
@@ -301,7 +301,7 @@ test('0-1 从零开始：确认推进 → 对话区出现阶段推进反馈消�
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
   })
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   // 2026-08-04 体验修复：空输入不显示需求卡（用户「没输入你怎么知道我要做什么」）——启动页输入需求（方案 A）→ initialPrompt 非空 → 需求卡出现（注意：避开「射击」等预选关键词，4 项需全点选）
   await page.locator('.nf-start__input').fill('帮我做个网页游戏')
@@ -374,7 +374,7 @@ test('0-1 从零开始：模型需求确认 → 回写台账标题 + updateProje
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
   })
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
   await page.getByRole('button', { name: /快速迭代/ }).click()
@@ -395,7 +395,7 @@ test('0-1 从零开始：模型需求确认 → 回写台账标题 + updateProje
 // 2026-08-04 体验修复（用户实测：启动页输入句预填多余）：启动页输入 → 从零开始 → 自动发送（说了就直接开始，输入框不预填）
 test('启动页方案 A：输入问题 → 从零开始 → 自动发送（输入框不预填）', async ({ page }) => {
   await mockBridge(page)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.locator('.nf-start__input').fill('我要做一个3D射击小游戏')
   await page.getByRole('button', { name: '从零开始' }).click()
@@ -408,7 +408,7 @@ test('启动页方案 A：输入问题 → 从零开始 → 自动发送（输�
 // 2026-08-04 体验修复：启动页输入后按 Enter = 从零开始并自动发送
 test('启动页方案 A：输入后按 Enter → 从零开始并自动发送', async ({ page }) => {
   await mockBridge(page)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.locator('.nf-start__input').fill('帮我做个记账工具')
   await page.locator('.nf-start__input').press('Enter')
@@ -418,7 +418,7 @@ test('启动页方案 A：输入后按 Enter → 从零开始并自动发送', a
 // 2026-08-04 体验修复（用户实测：已说「3D射击」还要重选）：需求卡按首句关键词预选「做什么」
 test('需求卡：首句含「射击」→ 「做什么」自动预选射击游戏', async ({ page }) => {
   await mockBridge(page)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.locator('.nf-start__input').fill('我要做一个3D射击小游戏')
   await page.getByRole('button', { name: '从零开始' }).click()
@@ -467,7 +467,7 @@ test('开发产物门控：无文件产出推进禁用 → write 成功后解锁
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = bridge
   })
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   // 2026-08-04 体验修复：空输入不显示需求卡——启动页输入需求（方案 A）→ initialPrompt 非空 → 需求卡出现
   await page.locator('.nf-start__input').fill('做个射击游戏')
@@ -522,7 +522,7 @@ test('0-1 对话确认需求：用户发「确认推进」→ 自动确认 + 推
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
   })
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
   await page.getByRole('button', { name: /快速迭代/ }).click()
@@ -576,7 +576,7 @@ test('0-1 工具链自主推进：连续 3 轮 read → 自动续聊 → 最终�
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
   })
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
   await page.getByRole('button', { name: /快速迭代/ }).click()
@@ -639,7 +639,7 @@ test('0-1 授权 v4 完整路径：允许并记住 → 同文件自动 → 确�
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
   })
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
   await page.getByRole('button', { name: /快速迭代/ }).click()
