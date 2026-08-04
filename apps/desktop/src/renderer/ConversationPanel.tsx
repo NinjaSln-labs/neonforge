@@ -299,9 +299,10 @@ export default function ConversationPanel({
   }, [messages, working])
 
   // 工具完成后触发续聊：轮询等工具执行（自动/授权）完成，全 done → 回填模型继续
+  // 2026-08-04 体验修复（根因 A）：depth 上限 2 → 8——原 2 轮工具链（read→bash→read）被掐断（导出实证 13:37 卡住）；正常开发需 3-5+ 轮，8 轮兜底防死循环
   const maybeContinue = async (depth: number, sid: number) => {
     const ctx = chatRef.current
-    if (!ctx || depth >= 2 || sessionRef.current !== sid) return
+    if (!ctx || depth >= 8 || sessionRef.current !== sid) return
     // 等待自动执行（pending）完成——最多 8s；待授权（need-approval）立即停止（等用户点允许）
     for (let i = 0; i < 16; i++) {
       await new Promise((r) => setTimeout(r, 500))
@@ -335,7 +336,7 @@ export default function ConversationPanel({
     await runChat(toolMsgs, depth + 1, sid)
   }
 
-  // 多轮工具循环：模型返回 tool_call → 执行 → 结果回填 → 续聊（最多 4 轮）
+  // 多轮工具循环：模型返回 tool_call → 执行 → 结果回填 → 续聊（最多 8 轮——2026-08-04 原 2 轮被掐断根因，放宽）
   const runChat = async (msgs: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; reasoning_content?: string }>, depth: number, sid: number) => {
     if (depth > 4) return
     const key = await window.neonforge.config.getKey()
@@ -388,6 +389,9 @@ export default function ConversationPanel({
   useEffect(() => { workingRef.current = working }, [working])
   // 2026-08-04 体验修复：流式 done 通知——runChat 尾部等 done（working 及时释放，用户快速「确认推进」不被拦）
   const doneNotifierRef = useRef<(() => void) | null>(null)
+  // 2026-08-04 体验修复：阶段推进排队——working 时 advanceChat 不直接跳过（告知丢失：UI 进设计但模型不知道）
+  // 存 pending，流式/工具链结束（send/advanceChat finally）后自动补发
+  const pendingAdvanceRef = useRef<{ stage: string; hint: string; requirement?: string } | null>(null)
 
   const send = async () => {
     const text = inputRef.current.trim()
@@ -454,6 +458,12 @@ export default function ConversationPanel({
     } finally {
       setWorking(false)
       onWorkingChange?.(false)
+      // 2026-08-04 体验修复：用户消息流式结束后补发排队中的阶段推进（「确认推进」→ working 时 advanceChat 排队 → 这里补发）
+      const pending = pendingAdvanceRef.current
+      if (pending) {
+        pendingAdvanceRef.current = null
+        void advanceChatRef.current(pending.stage, pending.hint, pending.requirement)
+      }
     }
   }
   // 05 B：sendRef 同步最新 send（externalRequest 触发用）
@@ -463,7 +473,12 @@ export default function ConversationPanel({
   // 内部指令作为 user 消息发给模型但不显示在对话区（本地提示消息已展示阶段切换）；模型流式回复 = 推进后的实际反馈
   // 2026-08-04 方案 A：requirement 可选——需求卡确认摘要附带在内部指令里（模型按确认结果工作；不显示在对话区）
   const advanceChat = async (stage: string, hint: string, requirement?: string) => {
-    if (workingRef.current) return // 搭档处理中——跳过自动触发（本地提示已给出，用户可稍后说话）
+    // 2026-08-04 体验修复（根因 B）：working 时排队（用户「确认推进」刚发消息→流式中）——流式结束后自动补发；
+    // 原直接 return = 模型收不到「已进入设计」指令 → 按旧阶段回复混乱（导出实证 13:36:50 乱码）
+    if (workingRef.current) {
+      pendingAdvanceRef.current = { stage, hint, requirement }
+      return
+    }
     streamingRef.current = { content: '', toolCalls: [] } // 新轮次重置流式累积
     setWorking(true)
     onWorkingChange?.(true)
@@ -484,6 +499,12 @@ export default function ConversationPanel({
     } finally {
       setWorking(false)
       onWorkingChange?.(false)
+      // 2026-08-04 体验修复：本流式结束后补发排队中的阶段推进（链式推进不丢失）
+      const pending = pendingAdvanceRef.current
+      if (pending) {
+        pendingAdvanceRef.current = null
+        void advanceChatRef.current(pending.stage, pending.hint, pending.requirement)
+      }
     }
   }
   const advanceChatRef = useRef<typeof advanceChat>(async () => {})
