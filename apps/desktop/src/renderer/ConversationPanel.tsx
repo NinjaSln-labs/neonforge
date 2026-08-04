@@ -408,6 +408,15 @@ export default function ConversationPanel({
   const pendingAdvanceRef = useRef<{ stage: string; hint: string; requirement?: string } | null>(null)
   // 2026-08-04 重构：工具链死循环检测——同工具（name+args）连续 3 次停止（跨 maybeContinue 调用累积——原局部变量每轮重置失效）
   const chainRepeatRef = useRef<{ sid: number; sig: string; count: number }>({ sid: -1, sig: '', count: 0 })
+  // 2026-08-04 修复（用户「游戏成的3是D」错位）：流式链互斥——一次只跑一条链（send/advanceChat/授权续聊），其他链排队；
+  // 原并发流（approveToolCall 续聊 + pendingAdvance 补发）chunk 交错写入同一消息 → 文本字符级错位
+  const chainLockRef = useRef<Promise<void>>(Promise.resolve())
+  const acquireChain = () => {
+    const prev = chainLockRef.current
+    let release!: () => void
+    chainLockRef.current = new Promise<void>((r) => { release = r })
+    return prev.then(() => release)
+  }
 
   const send = async () => {
     const text = inputRef.current.trim()
@@ -468,7 +477,13 @@ export default function ConversationPanel({
       } catch { /* 压缩失败 → 全量发送（降级不阻塞） */ }
     }
     try {
-      await runChat([...chatHistory, ...msgs], 0, sid)
+      // 2026-08-04 修复（流式链互斥）：send 链占锁——其他链（授权续聊/阶段补发）排队，防 chunk 交错
+      const release = await acquireChain()
+      try {
+        await runChat([...chatHistory, ...msgs], 0, sid)
+      } finally {
+        release()
+      }
     } catch {
       finishError('network')
     } finally {
@@ -509,7 +524,13 @@ export default function ConversationPanel({
     // 追加 streaming 占位——模型回复直接流式显示（内部指令不显示为用户消息）
     setMessages((p) => [...p, { role: 'assistant', content: '', reasoning: '', status: 'streaming' }])
     try {
-      await runChat([...history, ...msgs], 0, sid)
+      // 2026-08-04 修复（流式链互斥）：advanceChat 链占锁——防与授权续聊并发（chunk 交错）
+      const release = await acquireChain()
+      try {
+        await runChat([...history, ...msgs], 0, sid)
+      } finally {
+        release()
+      }
     } catch {
       finishError('network')
     } finally {
@@ -552,7 +573,15 @@ export default function ConversationPanel({
       patchToolCall(idx, (c) => (r.ok
         ? { ...c, status: 'done' as const, result: fmtToolResult(r), file: data?.file, canRevert: !!(data?.file && data.snapshot) }
         : { ...c, status: 'error' as const, result: r.error }), tc)
-      setTimeout(() => void maybeContinue(chatRef.current?.depth ?? 0, sessionRef.current), 150)
+      // 2026-08-04 修复（流式链互斥）：授权续聊也占锁排队——防与 send/advanceChat 链并发（chunk 交错「游戏成的3是D」）
+      setTimeout(async () => {
+        const release = await acquireChain()
+        try {
+          await maybeContinue(chatRef.current?.depth ?? 0, sessionRef.current)
+        } finally {
+          release()
+        }
+      }, 150)
     })
   }
   const rejectToolCall = (calls: ToolCallMsg[], idx: number) => {
@@ -592,7 +621,15 @@ export default function ConversationPanel({
       const updated = (last.toolCalls ?? []).map((c, i) => i === idx ? { ...c, status: 'error' as const, result: '已停止——未继续执行' } : c)
       return [...prev.slice(0, -1), { ...last, toolCalls: updated }]
     })
-    setTimeout(() => void maybeContinue(chatRef.current?.depth ?? 0, sessionRef.current), 150)
+    // 2026-08-04 修复（流式链互斥）：回滚后续聊也占锁排队
+    setTimeout(async () => {
+      const release = await acquireChain()
+      try {
+        await maybeContinue(chatRef.current?.depth ?? 0, sessionRef.current)
+      } finally {
+        release()
+      }
+    }, 150)
   }
   // ticket 14 疲劳防护：同批多个低危文件操作合并授权（bash 高危永远单独确认——canMergeApprove 已保证全 low）
   const approveAllToolCalls = (calls: ToolCallMsg[]) => {
