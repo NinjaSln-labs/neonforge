@@ -747,6 +747,13 @@ export default function ConversationPanel({
                         <span className="nf-toolcall__hint">{hint.level}</span>
                         {hint.impact && <span className="nf-toolcall__impact">→ {hint.impact}</span>}
                         {hint.note && <span className="nf-toolcall__note">{hint.note}</span>}
+                        {/* 2026-08-04 授权架构重构（用户授权疲劳→机械批准）：授权卡展示改动内容——用户看清再批（恢复授权意义） */}
+                        {tc.name === 'write' && typeof tc.args.content === 'string' && (
+                          <pre className="nf-toolcall__preview" dir="ltr">将写入：{String(tc.args.path ?? '')}\n{tc.args.content.slice(0, 300)}{tc.args.content.length > 300 ? '…' : ''}</pre>
+                        )}
+                        {tc.name === 'edit' && (
+                          <pre className="nf-toolcall__preview" dir="ltr">将修改 {String(tc.args.filePath ?? '')}：\n- {String(tc.args.oldText ?? '').slice(0, 120)}\n+ {String(tc.args.newText ?? '').slice(0, 120)}</pre>
+                        )}
                         <div className="nf-toolcall__actions">
                           <button
                             type="button"
