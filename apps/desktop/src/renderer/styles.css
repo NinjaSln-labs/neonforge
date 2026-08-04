@@ -277,10 +277,11 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-config__why { color: var(--nf-text-dim); font-size: var(--nf-font-sm); cursor: pointer; }
 .nf-config__why-text { padding: var(--nf-space-2) 0; color: var(--nf-text-dim); }
 
-/* 启动页（D5 屏幕1）——2026-08-03 品牌化：渐变品牌 + 双 CTA（移除 readOnly 误导输入框） */
+/* 启动页（D5 屏幕1）——2026-08-03 品牌化：渐变品牌 + 双 CTA
+   2026-08-04 方案 A：真实输入框（占位轮播）+ 场景卡（点击预填）+ 二选一芯片（D0 §3.2/屏幕1） */
 .nf-start {
   display: flex; flex-direction: column; align-items: center;
-  width: 560px; max-width: 90vw;
+  width: 640px; max-width: 92vw;
 }
 .nf-start__brand {
   font-size: 44px; font-weight: 700; letter-spacing: -1px;
@@ -292,10 +293,25 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   margin-top: 6px; font-size: 15px; font-weight: 500;
   color: var(--nf-text-dim);
 }
-.nf-start__prompt {
-  margin-top: 40px; font-size: 18px; color: var(--nf-text); font-weight: 400;
+/* 方案 A：输入框 + 场景快捷卡（占位轮播——展示能做什么） */
+.nf-start__compose { width: 100%; margin-top: 36px; display: flex; flex-direction: column; gap: var(--nf-space-3); }
+.nf-start__input {
+  width: 100%; resize: none; border-radius: 12px; padding: 12px 14px;
+  background: var(--nf-bg-panel); border: 1px solid var(--nf-border);
+  color: var(--nf-text); font-size: 15px; line-height: 1.5; font-family: inherit;
 }
-.nf-start__actions { margin-top: 32px; display: flex; gap: 14px; }
+.nf-start__input:focus { outline: none; border-color: var(--nf-accent); box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.22); }
+.nf-start__input::placeholder { color: var(--nf-text-tertiary); }
+.nf-start__scenes { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.nf-start__scene {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: 999px; cursor: pointer;
+  background: var(--nf-bg-elevated); border: 1px solid var(--nf-border);
+  color: var(--nf-text-dim); font-size: var(--nf-font-sm);
+}
+.nf-start__scene:hover { border-color: var(--nf-accent); color: var(--nf-accent); }
+.nf-start__scene svg { color: var(--nf-accent); }
+.nf-start__actions { margin-top: 28px; display: flex; gap: 14px; }
 .nf-start__cta {
   border-radius: 10px; padding: 12px 32px;
   font-size: 15px; font-weight: 600; cursor: pointer;
@@ -312,7 +328,7 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 }
 .nf-start__cta--ghost:hover { border-color: var(--nf-accent); color: var(--nf-accent); }
 .nf-start__hint {
-  margin-top: 40px; font-size: var(--nf-font-md); color: var(--nf-text-dim); text-align: center;
+  margin-top: 36px; font-size: var(--nf-font-md); color: var(--nf-text-dim); text-align: center;
 }
 
 /* ticket 04：对话闭环（搭档面板） */

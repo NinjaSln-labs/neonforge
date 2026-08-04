@@ -38,13 +38,15 @@ export default function MainWorkspace({
   onBackStart,
   onKeyExpired,
   onProjectCreated,
-  zeroToOneMode = false
+  zeroToOneMode = false,
+  initialPrompt
 }: {
   rootPath: string | null
   onBackStart: () => void
   onKeyExpired: () => void
   onProjectCreated?: (path: string) => void
   zeroToOneMode?: boolean
+  initialPrompt?: string // 2026-08-04 启动页方案 A：进入工作区预填对话输入框（不自动发送）
 }) {
   const [chatTab, setChatTab] = useState<'chat' | 'tasks'>('chat')
   const [activePath, setActivePath] = useState<string | null>(null)
@@ -266,7 +268,7 @@ function initProblems(): ProblemInstance[] {
         )}
         <div className="nf-panel__body">
           {chatTab === 'chat' ? (
-            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} onApprovalChange={setPendingApproval} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} onRequirementConfirmed={handleRequirementConfirmed} recentFilesExternal={projectFiles} stageHint={stageHint} stageAdvance={stageAdvance} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} />
+            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} onApprovalChange={setPendingApproval} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} onRequirementConfirmed={handleRequirementConfirmed} recentFilesExternal={projectFiles} stageHint={stageHint} stageAdvance={stageAdvance} prefillText={initialPrompt} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} />
           ) : (
             <TaskPanel />
           )}
