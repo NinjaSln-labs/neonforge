@@ -214,7 +214,8 @@ export default function DeliveryPanel({
         <section className="nf-delivery__block">
           <h4>下一步 / 指导</h4>
           <ul className="nf-delivery__steps">
-            {pkg.nextSteps.map((s, i) => <li key={i}>→ {s}</li>)}
+            {/* 2026-08-04 重审：`→` 移出文本节点 → CSS ::before（读屏不读伪元素——符号清零 + 无障碍） */}
+            {pkg.nextSteps.map((s, i) => <li key={i}>{s}</li>)}
           </ul>
         </section>
       )}

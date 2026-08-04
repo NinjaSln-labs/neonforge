@@ -394,3 +394,13 @@ test('启动页方案 A：输入问题 → 从零开始 → 对话输入框预�
   await page.waitForTimeout(400)
   await expect(page.locator('.nf-msg--user')).toHaveCount(0)
 })
+
+// 2026-08-04 重审修复：启动页输入后按 Enter = 从零开始（主路径——输入有明确反馈，原无反应）
+test('启动页方案 A：输入后按 Enter → 从零开始（主路径快捷）', async ({ page }) => {
+  await mockBridge(page)
+  await page.goto('http://localhost:5174/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.locator('.nf-start__input').fill('帮我做个记账工具')
+  await page.locator('.nf-start__input').press('Enter')
+  await expect(page.locator('.nf-chat__input textarea')).toHaveValue(/记账工具/)
+})
