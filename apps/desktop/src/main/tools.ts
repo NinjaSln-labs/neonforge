@@ -72,7 +72,12 @@ function resolvePath(p: unknown, ctx: { rootPath?: string }): string {
 }
 
 function readExecutor(args: Record<string, unknown>, ctx: { rootPath?: string }): Promise<unknown> {
-  return fs.readFile(resolvePath(args.path, ctx), 'utf-8')
+  const filePath = resolvePath(args.path, ctx)
+  // 2026-08-04 体验修复：read 目录给友好提示（原 fs.readFile 目录 EISDIR 原始错误——模型开发阶段「看目录」时暴露；引导用 bash ls）
+  return fs.stat(filePath).then((st) => {
+    if (st.isDirectory()) return `这是目录（${filePath}）——要列出内容请用 bash 执行 ls 命令`
+    return fs.readFile(filePath, 'utf-8')
+  })
 }
 
 async function writeExecutor(args: Record<string, unknown>, ctx: { rootPath?: string }): Promise<unknown> {

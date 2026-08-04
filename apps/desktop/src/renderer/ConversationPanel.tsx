@@ -538,21 +538,21 @@ export default function ConversationPanel({
   }
 
   const finishError = (err: string) => {
+    // 2026-08-04 体验修复：错误分类 + 日志记录在 updater 外（坑 32——StrictMode updater 双调；原仅 done 记录错误无法追溯）
+    let errorType: 'key-invalid' | 'service' | 'unknown' = 'unknown'
+    let content = '刚才出错了，请再试一次。'
+    if (err === 'key-invalid' || String(err).includes('401')) {
+      errorType = 'key-invalid'
+      content = 'API Key 好像失效了，换个 Key 试试。'
+    } else if (String(err).includes('5') || err === 'timeout' || err === 'network' || String(err).includes('gateway')) {
+      errorType = 'service'
+      content = '服务暂时不可用，稍后再试。'
+    }
+    window.neonforge.chatLog?.log?.({ ts: new Date().toISOString(), role: 'assistant', content, error: errorType })
     setMessages((p) => {
       const last = p[p.length - 1]
       if (!last || last.role !== 'assistant') return p
-      const next: Msg = { ...last, status: 'error' }
-      if (err === 'key-invalid' || String(err).includes('401')) {
-        next.error = 'key-invalid'
-        next.content = 'API Key 好像失效了，换个 Key 试试。'
-      } else if (String(err).includes('5') || err === 'timeout' || err === 'network' || String(err).includes('gateway')) {
-        next.error = 'service'
-        next.content = '服务暂时不可用，稍后再试。'
-      } else {
-        next.error = 'unknown'
-        next.content = '刚才出错了，请再试一次。'
-      }
-      return [...p.slice(0, -1), next]
+      return [...p.slice(0, -1), { ...last, status: 'error', error: errorType, content }]
     })
   }
 

@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, Menu } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync } from 'node:fs'
@@ -69,6 +69,8 @@ if (!gotTheLock) {
   }
 
   app.whenReady().then(() => {
+    // 2026-08-04 体验修复：隐藏默认应用菜单（全屏时顶部不再显示「Electron」菜单栏——产品化；Cmd+Q/Cmd+C 等系统快捷键仍由窗口/系统兜底）
+    Menu.setApplicationMenu(null)
     registerIpc()
     createWindow()
     app.on('activate', () => {
