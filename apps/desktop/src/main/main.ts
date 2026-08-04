@@ -30,6 +30,9 @@ if (!gotTheLock) {
     const win = new BrowserWindow({
       width: 1280,
       height: 800,
+      // 2026-08-04 审计修复（D1）：三栏布局（240+1fr+380）最小可用宽度——窄窗中栏被挤压至 278px 不可用（实测 900×600）
+      minWidth: 1080,
+      minHeight: 680,
       show: false, // 等 ready-to-show 再显示——避免启动闪烁（默认最大化）
       title: 'NeonForge',
       backgroundColor: '#1a1b1e', // D3 tokens: 深色主题背景
