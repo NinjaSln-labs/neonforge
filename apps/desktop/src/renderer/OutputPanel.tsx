@@ -27,7 +27,8 @@ export default function OutputPanel({
   onCloseProblem,
   onAdjustProblem,
   onConfirmed,
-  onRerun
+  onRerun,
+  fileTreeRefreshKey
 }: {
   rootPath: string
   activePath: string | null
@@ -38,6 +39,7 @@ export default function OutputPanel({
   onAdjustProblem: () => void
   onConfirmed?: () => void // 2026-08-03 A5：交付包确认关闭 → 上层同步台账
   onRerun: (prompt: string) => void
+  fileTreeRefreshKey?: number // 2026-08-04 体验修复：真实文件变更（write/edit）后递增 → 文件树重载（用户只看到 README 根因）
 }) {
   const [tab, setTab] = useState<'project' | 'output'>('project')
   // 2026-08-04 UX 修复：文件树折叠真实化（原 onToggle 空函数——折叠按钮可见但无效）
@@ -71,6 +73,7 @@ export default function OutputPanel({
           onOpenFile={(p) => { onOpenFile(p); setTab('output') }}
           collapsed={treeCollapsed}
           onToggle={() => setTreeCollapsed((v) => !v)}
+          refreshKey={fileTreeRefreshKey}
         />
       </div>
       <div className="nf-output__body" style={{ display: tab === 'output' ? 'flex' : 'none', padding: 0 }}>

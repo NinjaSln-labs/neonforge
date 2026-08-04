@@ -7,24 +7,26 @@ function TreeNode({
   entry,
   depth,
   selectedPath,
-  onOpenFile
+  onOpenFile,
+  refreshKey
 }: {
   entry: DirEntry
   depth: number
   selectedPath: string | null
   onOpenFile: (path: string) => void
+  refreshKey?: number // 2026-08-04 体验修复：真实文件变更后递增 → 目录重新加载（原 children 缓存不刷新）
 }) {
   const [open, setOpen] = useState(depth === 0)
   const [children, setChildren] = useState<DirEntry[] | null>(null)
 
   useEffect(() => {
-    if (entry.kind !== 'dir' || !open || children !== null) return
+    if (entry.kind !== 'dir' || !open) return
     let alive = true
     void window.neonforge.workspace.listDir(entry.path).then((list) => {
       if (alive) setChildren(list)
     })
     return () => { alive = false }
-  }, [entry.kind, entry.path, open, children])
+  }, [entry.kind, entry.path, open, refreshKey])
 
   if (entry.kind === 'file') {
     return (
@@ -58,6 +60,7 @@ function TreeNode({
           depth={depth + 1}
           selectedPath={selectedPath}
           onOpenFile={onOpenFile}
+          refreshKey={refreshKey}
         />
       ))}
     </div>
@@ -69,13 +72,15 @@ export default function FileTree({
   selectedPath,
   onOpenFile,
   collapsed,
-  onToggle
+  onToggle,
+  refreshKey
 }: {
   rootPath: string
   selectedPath: string | null
   onOpenFile: (path: string) => void
   collapsed: boolean
   onToggle: () => void
+  refreshKey?: number // 2026-08-04 体验修复：真实文件变更后递增 → 文件树重载
 }) {
   const rootName = rootPath.split(/[/\\]/).filter(Boolean).pop() ?? rootPath
   const rootEntry: DirEntry = { name: rootName, path: rootPath, kind: 'dir' }
@@ -96,7 +101,7 @@ export default function FileTree({
           {rootPath && <p className="nf-filetree__path" title={rootPath}>{rootPath}</p>}
           {/* 2026-08-04 审计修复（A1）：空 rootPath（从零开始未创建项目）显示占位——原渲染空名目录按钮（axe button-name critical） */}
           {rootPath ? (
-            <TreeNode entry={rootEntry} depth={0} selectedPath={selectedPath} onOpenFile={onOpenFile} />
+            <TreeNode entry={rootEntry} depth={0} selectedPath={selectedPath} onOpenFile={onOpenFile} refreshKey={refreshKey} />
           ) : (
             <p className="nf-placeholder">项目创建后显示文件</p>
           )}

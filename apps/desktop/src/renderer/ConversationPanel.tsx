@@ -38,6 +38,17 @@ interface Msg {
   toolCalls?: ToolCallMsg[]
 }
 
+// 2026-08-04 体验修复：工具结果展示清洗——bash 只显示 stdout（原 JSON.stringify 显示 {stdout:...} 括号输出）；write/edit 显示路径
+function fmtToolResult(r: { ok: boolean; data?: unknown }): string {
+  if (typeof r.data === 'string') return r.data.slice(0, 400)
+  const d = r.data as Record<string, unknown> | undefined
+  if (d && typeof d === 'object') {
+    if ('stdout' in d) return String(d.stdout ?? '').slice(0, 400)
+    if ('file' in d) return `已写入：${String(d.file)}`
+  }
+  return JSON.stringify(r.data).slice(0, 400)
+}
+
 export default function ConversationPanel({
   rootPath,
   currentFile,
@@ -269,7 +280,7 @@ export default function ConversationPanel({
           const calls = (last.toolCalls ?? []).map((c) => {
             if (c.name !== tc.name || c.status !== 'pending') return c
             return r.ok
-              ? { ...c, status: 'done' as const, result: typeof r.data === 'string' ? r.data.slice(0, 400) : JSON.stringify(r.data).slice(0, 400), file: data?.file, canRevert: !!(data?.file && data.snapshot) }
+              ? { ...c, status: 'done' as const, result: fmtToolResult(r), file: data?.file, canRevert: !!(data?.file && data.snapshot) }
               : { ...c, status: (r.error ?? '').includes('授权') ? ('need-approval' as const) : ('error' as const), result: r.error }
           })
           return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
@@ -485,7 +496,7 @@ export default function ConversationPanel({
         const calls = (last.toolCalls ?? []).map((c, i) => {
           if (i !== idx) return c
           return r.ok
-            ? { ...c, status: 'done' as const, result: typeof r.data === 'string' ? r.data.slice(0, 400) : JSON.stringify(r.data).slice(0, 400), file: data?.file, canRevert: !!(data?.file && data.snapshot) }
+            ? { ...c, status: 'done' as const, result: fmtToolResult(r), file: data?.file, canRevert: !!(data?.file && data.snapshot) }
             : { ...c, status: 'error' as const, result: r.error }
         })
         return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
@@ -643,6 +654,8 @@ export default function ConversationPanel({
                     )}
                     {tc.status === 'need-approval' && (
                       <>
+                        {/* 2026-08-04 体验修复：醒目标题——用户不知道「先写文件」后要批准（等授权无提示的根因） */}
+                        <span className="nf-toolcall__approve-hint">需要你批准——点「允许执行」继续</span>
                         <span className="nf-toolcall__hint">{hint.level}</span>
                         {hint.impact && <span className="nf-toolcall__impact">→ {hint.impact}</span>}
                         {hint.note && <span className="nf-toolcall__note">{hint.note}</span>}
