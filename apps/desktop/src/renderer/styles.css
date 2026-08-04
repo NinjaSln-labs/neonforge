@@ -428,6 +428,8 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-delivery__artifacts, .nf-delivery__steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .nf-delivery__artifacts li, .nf-delivery__steps li { font-size: var(--nf-font-sm); color: var(--nf-text); padding: 2px 0; }
 .nf-delivery__steps li { color: var(--nf-text-dim); }
+/* 2026-08-04 重审：步骤引导箭头用 CSS 伪元素（读屏不读——符号清零 + 无障碍；视觉保留引导） */
+.nf-delivery__steps li::before { content: '→'; margin-right: 6px; color: var(--nf-accent); }
 .nf-delivery__acceptance { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .nf-delivery__acceptance li { display: flex; align-items: center; gap: var(--nf-space-2); font-size: var(--nf-font-sm); color: var(--nf-text); }
 .nf-check {
