@@ -23,7 +23,7 @@ function TaskPanel() {
       <p className="nf-placeholder">任务队列：即将支持——暂时没有进行中的任务</p>
       <p className="nf-placeholder">待审核变更：无（审核在「产物」区）</p>
       <details>
-        <summary>▸ 本轮用量</summary>
+        <summary>本轮用量</summary>
         <p className="nf-meta">{preheatInfo?.cache ? `前缀缓存 ${hitRate}% 命中（hash ${preheatInfo.cache.hash}）` : '—'}</p>
       </details>
     </div>
@@ -49,6 +49,8 @@ export default function MainWorkspace({
   const [activePath, setActivePath] = useState<string | null>(null)
   const [content, setContent] = useState<string>('')
   const [working, setWorking] = useState(false)
+  // 2026-08-04 审计修复（D2）：有待批准工具操作（授权卡）——状态栏提示（键盘用户感知，Shift+Tab 可回退到授权卡）
+  const [pendingApproval, setPendingApproval] = useState(false)
   const [chatKey, setChatKey] = useState(0)
   const [rerunRequest, setRerunRequest] = useState<string | null>(null) // 05 B：复跑请求
   const [showSettings, setShowSettings] = useState(false)
@@ -235,7 +237,7 @@ function initProblems(): ProblemInstance[] {
         )}
         <div className="nf-panel__body">
           {chatTab === 'chat' ? (
-            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} recentFilesExternal={projectFiles} stageHint={stageHint} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} />
+            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} onApprovalChange={setPendingApproval} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} recentFilesExternal={projectFiles} stageHint={stageHint} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} />
           ) : (
             <TaskPanel />
           )}
@@ -255,12 +257,15 @@ function initProblems(): ProblemInstance[] {
         onRerun={(prompt) => setRerunRequest(prompt)}
       />
 
-      {showSettings && <SettingsPanel />}
+      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
 
-      {/* 2026-08-03 A4/C3 审计修复：移除硬编码假数据「待审核: 0」+ 状态栏 aria-live（处理中/就绪变化播报） */}
+      {/* 2026-08-03 A4/C3 审计修复：移除硬编码假数据「待审核: 0」+ 状态栏 aria-live（处理中/就绪变化播报）
+          2026-08-04 D2：待批准工具操作（授权卡）——状态栏 amber 提示（键盘用户感知） */}
       <footer className="nf-statusbar" role="status" aria-live="polite">
         {working ? (
           <><span className="nf-statusbar__dot nf-statusbar__dot--working" />搭档处理中…</>
+        ) : pendingApproval ? (
+          <><span className="nf-statusbar__dot nf-statusbar__dot--approval" />有操作待你批准（对话区授权卡）</>
         ) : (
           <><span className="nf-statusbar__dot nf-statusbar__dot--ready" />就绪</>
         )}

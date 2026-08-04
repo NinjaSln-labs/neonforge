@@ -92,7 +92,12 @@ export default function FileTree({
       </header>
       {!collapsed && (
         <div className="nf-filetree__body">
-          <TreeNode entry={rootEntry} depth={0} selectedPath={selectedPath} onOpenFile={onOpenFile} />
+          {/* 2026-08-04 审计修复（A1）：空 rootPath（从零开始未创建项目）显示占位——原渲染空名目录按钮（axe button-name critical） */}
+          {rootPath ? (
+            <TreeNode entry={rootEntry} depth={0} selectedPath={selectedPath} onOpenFile={onOpenFile} />
+          ) : (
+            <p className="nf-placeholder">项目创建后显示文件</p>
+          )}
         </div>
       )}
     </aside>

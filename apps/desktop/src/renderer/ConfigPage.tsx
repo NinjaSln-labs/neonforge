@@ -60,13 +60,13 @@ export default function ConfigPage({ onDone }: { onDone: () => void }) {
 
       {/* 2026-08-03 v31 B3 审计修复：非技术用户首个障碍——「怎么获取 Key」操作引导（原只有「为什么需要」） */}
       <details className="nf-config__why">
-        <summary>▸ 怎么获取 DeepSeek API Key？</summary>
+        <summary>怎么获取 DeepSeek API Key？</summary>
         <p className="nf-config__why-text">
           ① 打开 platform.deepseek.com 注册/登录 → ② 左侧「API Keys」→ 新建 → ③ 复制 <em>sk-</em> 开头的 Key 粘贴到上方输入框。
         </p>
       </details>
       <details className="nf-config__why">
-        <summary>▸ 为什么需要？</summary>
+        <summary>为什么需要？</summary>
         <p className="nf-config__why-text">
           NeonForge 通过 DeepSeek API 提供 AI 能力，Key 存储在你本地（系统加密），仅用于请求 DeepSeek API。
         </p>

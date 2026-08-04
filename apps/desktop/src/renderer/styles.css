@@ -75,13 +75,17 @@ button, a, input, textarea, select,
 .nf-tree__row, .nf-session__item, .nf-ledger__item, .nf-scene,
 .nf-flow__model-btn, .nf-trust__level, .nf-settings__seg-btn, .nf-mention__item {
   transition: background-color 150ms ease, border-color 150ms ease,
-              color 150ms ease, box-shadow 150ms ease;
+              color 150ms ease, box-shadow 150ms ease, transform 160ms ease-out;
 }
+/* 2026-08-04 审计修复（A4）：按钮按压反馈——界面「听到」点击（ui-animation 规范：pressable scale 0.95-0.98，160ms ease-out） */
+button:active { transform: scale(0.97); }
 button:focus-visible, a:focus-visible, input:focus-visible,
 textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   outline: 2px solid var(--nf-accent);
   outline-offset: 1px;
 }
+/* 2026-08-04 审计修复（A2）：@mention 浮层方向键高亮（aria-selected 视觉态） */
+.nf-mention__item--active { background: var(--nf-accent-soft); color: var(--nf-accent); }
 
 /* 布局（v3）：左会话区 | 中对话（主，1fr 最大）| 右产物区 + 底部状态栏 */
 .nf-app {
@@ -112,7 +116,7 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-panel__fold {
   margin-left: auto;
   background: none; border: none; color: var(--nf-text-dim);
-  cursor: pointer; font-size: var(--nf-font-sm); padding: 2px 6px;
+  cursor: pointer; font-size: var(--nf-font-sm); padding: 4px 8px;
 }
 .nf-panel__fold:hover { color: var(--nf-accent); }
 
@@ -167,7 +171,7 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 }
 .nf-filetree__fold {
   background: none; border: none; color: var(--nf-text-dim);
-  cursor: pointer; font-size: var(--nf-font-sm); padding: 2px 6px;
+  cursor: pointer; font-size: var(--nf-font-sm); padding: 4px 8px;
 }
 .nf-filetree__fold:hover { color: var(--nf-accent); }
 .nf-filetree__body { overflow: auto; flex: 1; padding: var(--nf-space-1) 0; }
@@ -217,6 +221,8 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 }
 .nf-statusbar__dot--ready { background: #22C55E; }
 .nf-statusbar__dot--working { background: var(--nf-accent); animation: nf-breath-blue 2s ease-in-out infinite; }
+/* 2026-08-04 审计修复（D2）：待批准（授权卡）状态灯——amber 脉动（与授权卡视觉一致） */
+.nf-statusbar__dot--approval { background: var(--nf-amber); animation: nf-ember-pulse 1.6s ease-out infinite; }
 
 /* 首次配置页（D0 §3.1） */
 .nf-app--config,
@@ -325,16 +331,18 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 }
 .nf-chat__input textarea:focus { border-color: var(--nf-accent); }
 
-/* WIG：prefers-reduced-motion 降级（呼吸光条动效） */
+/* WIG：prefers-reduced-motion 降级（呼吸光条动效 + 按钮按压位移） */
 @media (prefers-reduced-motion: reduce) {
   .nf-breath { animation: none; opacity: 1; }
+  /* 2026-08-04 审计修复（A4）：reduced-motion 下禁用按压位移（保留颜色过渡） */
+  button:active { transform: none; }
 }
 
 /* P2：右面板 Tabs（对话/任务）+ 任务工作台 */
 .nf-tabs { display: flex; gap: var(--nf-space-1); flex: 1; }
 .nf-tabs__item {
   background: none; border: none; color: var(--nf-text-dim);
-  padding: 2px var(--nf-space-3); font-size: var(--nf-font-sm);
+  padding: 4px var(--nf-space-3); font-size: var(--nf-font-sm);
   cursor: pointer; border-radius: var(--nf-radius-sm);
 }
 .nf-tabs__item--active { background: var(--nf-bg-elevated); color: var(--nf-text); }
@@ -367,7 +375,7 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 
 /* 会话区（左） */
 .nf-session__header { display: flex; align-items: center; padding: var(--nf-space-2) var(--nf-space-3); border-bottom: 1px solid var(--nf-border); font-size: var(--nf-font-sm); color: var(--nf-text-dim); flex-shrink: 0; }
-.nf-session__new { background: var(--nf-accent-soft); color: var(--nf-accent-text); border: none; border-radius: var(--nf-radius-sm); padding: 2px var(--nf-space-3); font-size: var(--nf-font-sm); cursor: pointer; margin-left: auto; }
+.nf-session__new { background: var(--nf-accent-soft); color: var(--nf-accent-text); border: none; border-radius: var(--nf-radius-sm); padding: 4px var(--nf-space-3); font-size: var(--nf-font-sm); cursor: pointer; margin-left: auto; }
 .nf-session__list { flex: 1; overflow-y: auto; padding: var(--nf-space-2); display: flex; flex-direction: column; gap: 2px; }
 .nf-session__item { color: var(--nf-text-dim); font-size: var(--nf-font-sm); padding: var(--nf-space-2) var(--nf-space-3); border-radius: var(--nf-radius-sm); cursor: pointer; }
 .nf-session__item:hover { background: var(--nf-bg-elevated); color: var(--nf-text); }
@@ -430,7 +438,7 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-ledger__item--active { background: var(--nf-accent-soft); color: var(--nf-text); }
 /* 06 断点续做深度：选中问题会话快照（基线 §21——已授权/待办唤醒） */
 .nf-ledger__wrap--active { background: var(--nf-bg-elevated); border-radius: var(--nf-radius-sm); }
-.nf-ledger__snapshot { padding: 0 var(--nf-space-3) var(--nf-space-2); font-size: 11px; color: var(--nf-text-dim); display: flex; flex-direction: column; gap: 2px; }
+.nf-ledger__snapshot { padding: 0 var(--nf-space-3) var(--nf-space-2); font-size: 12px; color: var(--nf-text-dim); display: flex; flex-direction: column; gap: 2px; }
 .nf-ledger__snap-row { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nf-ledger__dot { font-size: var(--nf-font-sm); width: 14px; text-align: center; }
 .nf-ledger__dot--understanding { color: var(--nf-accent); }
@@ -441,7 +449,7 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-ledger__dot--closed { color: #22C55E; }
 .nf-ledger__dot--failed-recoverable { color: #EF4444; }
 .nf-ledger__title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nf-ledger__meta { font-size: 11px; color: var(--nf-text-dim); flex-shrink: 0; }
+.nf-ledger__meta { font-size: 12px; color: var(--nf-text-dim); flex-shrink: 0; }
 
 /* 场景卡片（ticket 15：可发现性——对话空态零学习成本入口） */
 .nf-scenes { display: flex; flex-direction: column; gap: var(--nf-space-3); }
@@ -535,7 +543,7 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 /* 设置（ticket 08）：语言/默认视图/提醒开关 */
 .nf-settings { display: flex; flex-direction: column; gap: var(--nf-space-3); padding: var(--nf-space-3); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md); background: var(--nf-bg-elevated); }
 .nf-settings__row { display: flex; align-items: center; justify-content: space-between; gap: var(--nf-space-3); font-size: var(--nf-font-sm); color: var(--nf-text); }
-.nf-settings__row em { color: var(--nf-text-dim); font-style: normal; font-size: 11px; }
+.nf-settings__row em { color: var(--nf-text-dim); font-style: normal; font-size: 12px; }
 .nf-settings__row--switch input { accent-color: var(--nf-accent); }
 .nf-settings__seg { display: flex; gap: 4px; }
 .nf-settings__seg-btn { background: none; border: 1px solid var(--nf-border); color: var(--nf-text-dim); border-radius: var(--nf-radius-sm); padding: 2px var(--nf-space-3); font-size: 12px; cursor: pointer; }
@@ -550,14 +558,14 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   max-height: 140px; overflow-y: auto;
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.35);
 }
-.nf-mention__title { font-size: 11px; color: var(--nf-text-dim); padding: 0 var(--nf-space-2); }
+.nf-mention__title { font-size: 12px; color: var(--nf-text-dim); padding: 0 var(--nf-space-2); }
 .nf-mention__item { text-align: left; background: none; border: none; color: var(--nf-text-dim); font-size: var(--nf-font-sm); padding: 3px var(--nf-space-2); border-radius: var(--nf-radius-sm); cursor: pointer; }
 .nf-mention__item:hover { background: var(--nf-accent-soft); color: var(--nf-accent); }
 .nf-settings__plugins { display: flex; flex-direction: column; gap: 4px; }
-.nf-settings__plugins-title { font-size: 11px; color: var(--nf-text-dim); }
+.nf-settings__plugins-title { font-size: 12px; color: var(--nf-text-dim); }
 .nf-settings__plugins-list { display: flex; flex-wrap: wrap; gap: 4px; }
 .nf-settings__plugin { font-size: 11px; color: var(--nf-text-dim); background: var(--nf-bg-panel); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-sm); padding: 2px 6px; }
-.nf-settings__plugin em { color: #22C55E; font-style: normal; }
+.nf-settings__plugin em { color: #22C55E; font-style: normal; display: inline-flex; vertical-align: -2px; }
 .nf-compact { font-size: 12px; color: var(--nf-text-dim); background: var(--nf-bg-elevated); border: 1px dashed var(--nf-border); border-radius: var(--nf-radius-sm); padding: 4px var(--nf-space-3); }
 
 /* 0-1 交付流 v2：当前步骤聚焦卡 */
@@ -705,5 +713,6 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .nf-toolcall--need-approval .nf-toolcall__icon,
   .nf-toolcall--pending .nf-toolcall__icon,
-  .nf-toolcall--done .nf-toolcall__icon { animation: none; }
+  .nf-toolcall--done .nf-toolcall__icon,
+  .nf-statusbar__dot--approval { animation: none; }
 }

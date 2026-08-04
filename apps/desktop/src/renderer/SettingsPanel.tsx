@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { IconSettings } from './icons'
+import { IconCheck, IconDot, IconSettings } from './icons'
 
 // 设置（ticket 08 / D0 §9 最小集）——2026-08-03 A1 审计修复：移除不生效的假设置（语言/默认视图/主动提醒无消费方——诚实性优先）
 // 保留真实内容：内置插件（真实 IPC 注册表）+ 快捷键表（真实已实现）
@@ -7,7 +7,14 @@ import { IconSettings } from './icons'
 const DELEGATE_KEY = 'nf-delegate-lowrisk'
 const readDelegate = () => { try { return localStorage.getItem(DELEGATE_KEY) === '1' } catch { return false } }
 
-export default function SettingsPanel() {
+export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
+  // 2026-08-04 审计修复（D3）：Esc 关闭设置（页内面板——键盘用户退出路径；点击外部关闭留给后续）
+  useEffect(() => {
+    if (!onClose) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
   // 08 内置插件：真实注册表状态（mock/无通道 → null → 静态占位）
   const [plugins, setPlugins] = useState<Array<{ name: string; active: boolean }> | null>(null)
   useEffect(() => {
@@ -40,7 +47,7 @@ export default function SettingsPanel() {
         <div className="nf-settings__plugins-list">
           {pluginList.map((p) => (
             <span key={p.name} className="nf-settings__plugin">
-              {p.name} <em>{p.active ? '✓' : '○'}</em>
+              {p.name} <em>{p.active ? <IconCheck size={11} /> : <IconDot size={11} />}</em>
               <button
                 type="button"
                 className="nf-settings__plugin-toggle"
