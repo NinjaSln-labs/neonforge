@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import SessionPanel from './SessionPanel'
 import SettingsPanel from './SettingsPanel'
-import DeliveryFlowPanel, { FLOW_STAGES, STAGE_HINT } from './DeliveryFlowPanel'
+import DeliveryFlowPanel, { FLOW_STAGES, STAGE_HINT, inferFlowModel } from './DeliveryFlowPanel'
 import RequirementCard from './RequirementCard'
 import OutputPanel from './OutputPanel'
 import ConversationPanel from './ConversationPanel'
@@ -105,6 +105,8 @@ export default function MainWorkspace({
   // 2026-08-04：需求确认回写——模型【需求确认：xxx】→ 更新台账标题/快照 goal + 项目 README（目录名不变）
   const handleRequirementConfirmed = (title: string) => {
     setRequirementConfirmed(true) // P0 门控：需求已确认 → 解锁推进
+    // 2026-08-04 体验修复：模型风格自动推导（用户不用手选——从需求文本判断，已选则不覆盖）
+    setFlowModel((cur) => cur ?? inferFlowModel(title))
     if (activeProblem) {
       setProblems((prev) => prev.map((p) => p.id === activeProblem
         ? { ...updateProblemSnapshot(p, { goal: title }), title: title.length > 20 ? title.slice(0, 20) + '…' : title }

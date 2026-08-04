@@ -15,6 +15,16 @@ export const STAGE_HINT: Record<string, string> = {
   交付: '交付包 + 验收对照，确认后关闭'
 }
 
+// 2026-08-04 体验修复：模型风格自动推导——从需求文本判断（用户不用手选「稳扎稳打/快速迭代」）
+// 快速迭代：探索/先看效果/雏形/能玩就行；稳扎稳打：完整/正式/质量要求高；默认快速迭代（NeonForge 用户多为探索型）
+export function inferFlowModel(reqText: string): 'traditional' | 'agile' {
+  const t = reqText ?? ''
+  const agile = /(能玩的版本|先看效果|雏形|最快|试试|练手|自娱|先做|原型|快速|简单|小样|探索|先跑起来|先能玩|玩着爽|粗糙)/.test(t)
+  const traditional = /(完整|正式|功能齐全|重要|安全|生产|给别人用|商用|上线|复杂|稳定|规范|认真做|做完整)/.test(t)
+  if (traditional && !agile) return 'traditional'
+  return 'agile'
+}
+
 export default function DeliveryFlowPanel({
   onStageChange,
   onModelSelect,
