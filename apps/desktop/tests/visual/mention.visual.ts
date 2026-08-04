@@ -16,7 +16,7 @@ async function mockBridge(page: import('@playwright/test').Page) {
 
 test('@ 引用（输入 @ → 浮层 → 点击插入）', async ({ page }) => {
   await mockBridge(page)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   const textarea = page.locator('.nf-chat__input textarea')
@@ -50,7 +50,7 @@ test('@引用注入（ContextEngine：@文件 → 精准上下文注入 streamCh
       context: { resolve: async (files: string[]) => ({ fragments: [{ path: '/test/' + files[0], content: 'export const x = 1', truncated: false }] }) }
     }
   })
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   const textarea = page.locator('.nf-chat__input textarea')

@@ -16,7 +16,7 @@ async function mockBridge(page: import('@playwright/test').Page, history: number
 
 test('压缩提示（历史超阈值显示）', async ({ page }) => {
   await mockBridge(page, 30)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await expect(page.locator('.nf-compact')).toBeVisible()
@@ -26,7 +26,7 @@ test('压缩提示（历史超阈值显示）', async ({ page }) => {
 
 test('压缩提示（历史未超阈值不显示）', async ({ page }) => {
   await mockBridge(page, 10)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await expect(page.locator('.nf-compact')).toHaveCount(0)

@@ -15,7 +15,7 @@ async function mockBridge(page: import('@playwright/test').Page) {
 
 test('场景卡片渲染（对话空态）', async ({ page }) => {
   await mockBridge(page)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await expect(page.locator('.nf-scene')).toHaveCount(5)
@@ -28,7 +28,7 @@ test('场景卡片渲染（对话空态）', async ({ page }) => {
 
 test('点击场景卡片预填输入框', async ({ page }) => {
   await mockBridge(page)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.getByRole('button', { name: /整理文件/ }).click()
