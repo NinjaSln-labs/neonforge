@@ -530,7 +530,7 @@ test('0-1 对话确认需求：用户发「确认推进」→ 自动确认 + 推
   await page.locator('.nf-chat__input textarea').fill('我想做一个网页3D射击游戏')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
   await expect(page.locator('.nf-chat__list .nf-msg--assistant')).toHaveCount(1)
-  await page.waitForTimeout(500) // 等 working 释放（流式 done + runChat 尾部 300ms——不足则「确认推进」被 working 守卫拦截）
+  await page.waitForTimeout(1000) // 等 working 释放（mock 需求链 ≈530ms——不足则「确认推进」被 working 守卫拦截）
   // 用户打字「确认推进」→ 自动确认需求 + 推进到设计（不依赖模型【需求确认：】标记）
   await page.locator('.nf-chat__input textarea').fill('确认推进')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
