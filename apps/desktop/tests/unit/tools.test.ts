@@ -1,12 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { initTools, toolRegistry, revertToolFile, cancelActiveCommand } from '../../src/main/tools'
+import { initTools, toolRegistry, revertToolFile, cancelActiveCommand, markPlanApproved } from '../../src/main/tools'
 
 const TMP = '/tmp/nf-unit-tools'
 
 describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 回滚）', () => {
   beforeEach(() => {
+    markPlanApproved() // 2026-08-04 规划强制适配：write/edit 测试默认已规划（规划机制本身有独立行为）
     if (!existsSync(TMP)) mkdirSync(TMP, { recursive: true })
     initTools()
   })
