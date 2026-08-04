@@ -4,7 +4,7 @@ import { parseUnifiedDiff, applyDiffToFile, snapshot, revert } from './applyDiff
 import { gateway } from './gateway.js'
 import { configStore } from './configStore.js'
 import { workspace } from './workspace.js'
-import { initTools, toolRegistry, revertToolFile, cancelActiveCommand } from './tools.js'
+import { initTools, toolRegistry, revertToolFile, cancelActiveCommand, markPlanApproved } from './tools.js'
 import { registerLspTools, lsp } from './lsp.js'
 import { context } from './context.js'
 import { codeRag } from './codeRag.js'
@@ -114,6 +114,8 @@ export function registerIpc(): void {
 }
   // ticket 10：ToolRegistry（工具清单 + 执行分发——write/edit/bash 需 approved）
   ipcMain.handle('tools:list', () => toolRegistry.list())
+  // 2026-08-04 规划级授权强制：renderer 批准 plan_approval 后通知 main（write/edit 放行）
+  ipcMain.handle('tools:plan-approved', () => { markPlanApproved(); return { ok: true } })
   ipcMain.handle('tools:execute', async (_e, opts: { name: string; args: Record<string, unknown>; approved?: boolean; rootPath?: string }) => {
     const res = await toolRegistry.execute(opts.name, opts.args ?? {}, {
       approved: opts.approved ?? false,
