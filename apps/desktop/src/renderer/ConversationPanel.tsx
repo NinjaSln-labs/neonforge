@@ -299,10 +299,11 @@ export default function ConversationPanel({
   }, [messages, working])
 
   // 工具完成后触发续聊：轮询等工具执行（自动/授权）完成，全 done → 回填模型继续
-  // 2026-08-04 体验修复（根因 A）：depth 上限 2 → 8——原 2 轮工具链（read→bash→read）被掐断（导出实证 13:37 卡住）；正常开发需 3-5+ 轮，8 轮兜底防死循环
+  // 2026-08-04 重构（用户：「定多少才不会卡」）：死上限（2/8）→ 自然停止 + 兜底——只要模型还在调工具就继续（开发正常 10-20+ 轮）；
+  // 停止条件：模型不调工具（toolCalls 空）/ 待授权 / 同工具重复 3 次（死循环）/ 40 轮总兜底
   const maybeContinue = async (depth: number, sid: number) => {
     const ctx = chatRef.current
-    if (!ctx || depth >= 8 || sessionRef.current !== sid) return
+    if (!ctx || depth >= 40 || sessionRef.current !== sid) return
     // 等待自动执行（pending）完成——最多 8s；待授权（need-approval）立即停止（等用户点允许）
     for (let i = 0; i < 16; i++) {
       await new Promise((r) => setTimeout(r, 500))
@@ -312,7 +313,19 @@ export default function ConversationPanel({
       const pending = lastMsg.toolCalls.filter((c) => c.status === 'pending')
       const needsApproval = lastMsg.toolCalls.some((c) => c.status === 'need-approval')
       if (needsApproval) return // 有待授权——等用户点允许（approveToolCall 后触发续聊）
-      if (pending.length === 0) break // 全部执行完成
+      if (pending.length === 0) {
+        // 2026-08-04 重构：同工具重复检测（同一 name+args 连续 3 次 = 死循环——防模型空转不产出；跨调用累积——原局部变量每轮重置失效）
+        const sig = lastMsg.toolCalls.map((c) => `${c.name}:${JSON.stringify(c.args ?? {})}`).join('|')
+        const chain = chainRepeatRef.current
+        if (chain.sid !== sid) { chain.sid = sid; chain.sig = ''; chain.count = 0 }
+        chain.count = sig === chain.sig ? chain.count + 1 : 1
+        chain.sig = sig
+        if (chain.count >= 3) {
+          console.log('[conversation] 工具循环疑似死循环（同工具重复 3 次）——停止续聊')
+          return
+        }
+        break // 全部执行完成
+      }
     }
     const latest = messagesRef.current
     const lastMsg = latest[latest.length - 1]
@@ -336,9 +349,10 @@ export default function ConversationPanel({
     await runChat(toolMsgs, depth + 1, sid)
   }
 
-  // 多轮工具循环：模型返回 tool_call → 执行 → 结果回填 → 续聊（最多 8 轮——2026-08-04 原 2 轮被掐断根因，放宽）
+  // 多轮工具循环：模型返回 tool_call → 执行 → 结果回填 → 续聊（2026-08-04 重构：自然停止——模型不调工具/待授权/死循环检测；40 轮总兜底）
   const runChat = async (msgs: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; reasoning_content?: string }>, depth: number, sid: number) => {
-    if (depth > 4) return
+    // 2026-08-04 重构（用户：「定多少才不卡」根因——原 `depth > 4` 硬上限，开发工具链 5+ 轮必断）：40 轮总兜底（防死循环由 maybeContinue 重复检测承担）
+    if (depth > 40) return
     const key = await window.neonforge.config.getKey()
     if (!key) { finishError('key-invalid'); return }
     // 系统提示：引导直接 read（项目根相对路径）——避免 bash 全局搜索/工具循环（提速）
@@ -392,6 +406,8 @@ export default function ConversationPanel({
   // 2026-08-04 体验修复：阶段推进排队——working 时 advanceChat 不直接跳过（告知丢失：UI 进设计但模型不知道）
   // 存 pending，流式/工具链结束（send/advanceChat finally）后自动补发
   const pendingAdvanceRef = useRef<{ stage: string; hint: string; requirement?: string } | null>(null)
+  // 2026-08-04 重构：工具链死循环检测——同工具（name+args）连续 3 次停止（跨 maybeContinue 调用累积——原局部变量每轮重置失效）
+  const chainRepeatRef = useRef<{ sid: number; sig: string; count: number }>({ sid: -1, sig: '', count: 0 })
 
   const send = async () => {
     const text = inputRef.current.trim()
@@ -511,29 +527,31 @@ export default function ConversationPanel({
   useEffect(() => { advanceChatRef.current = advanceChat }, [advanceChat])
 
   // L3 授权：允许执行（approved=true）/ 拒绝（标记拒绝）
-  const approveToolCall = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg) => {
+  // 2026-08-04 重构（用户：「搭档处理中」卡住根因）：按消息定位工具卡更新——原固定更新最后一条消息，
+  // 续聊已追加新 streaming 消息时错位（工具结果回填错位 → maybeContinue 看不到 done → 链中断 + working 卡）
+  const patchToolCall = (idx: number, patch: (c: ToolCallMsg) => ToolCallMsg, msg: ToolCallMsg) => {
     setMessages((prev) => {
-      const last = prev[prev.length - 1]
-      if (!last || last.role !== 'assistant') return prev
-      const updated = (last.toolCalls ?? []).map((c, i) => i === idx ? { ...c, status: 'pending' as const } : c)
-      return [...prev.slice(0, -1), { ...last, toolCalls: updated }]
+      for (let mi = prev.length - 1; mi >= 0; mi--) {
+        const m = prev[mi]
+        if (m.role !== 'assistant' || !m.toolCalls) continue
+        const c = m.toolCalls[idx]
+        if (c && c.name === msg.name) {
+          const updated = m.toolCalls.map((x, i) => (i === idx ? patch(x) : x))
+          return [...prev.slice(0, mi), { ...m, toolCalls: updated }, ...prev.slice(mi + 1)]
+        }
+      }
+      return prev
     })
+  }
+  const approveToolCall = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg) => {
+    patchToolCall(idx, (c) => ({ ...c, status: 'pending' as const }), tc)
     void window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: true, rootPath: rootPath ?? undefined }).then((r) => {
       const data = r.data as { file?: string; snapshot?: boolean } | undefined
       // 13 交付包联动：授权后真实写入成功 → 上报变更
       if (r.ok && data?.file) onToolResult?.({ name: tc.name, file: data.file, ok: true })
-      setMessages((prev) => {
-        if (prev.length === 0) return prev
-        const last = prev[prev.length - 1]
-        if (!last || last.role !== 'assistant') return prev
-        const calls = (last.toolCalls ?? []).map((c, i) => {
-          if (i !== idx) return c
-          return r.ok
-            ? { ...c, status: 'done' as const, result: fmtToolResult(r), file: data?.file, canRevert: !!(data?.file && data.snapshot) }
-            : { ...c, status: 'error' as const, result: r.error }
-        })
-        return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
-      })
+      patchToolCall(idx, (c) => (r.ok
+        ? { ...c, status: 'done' as const, result: fmtToolResult(r), file: data?.file, canRevert: !!(data?.file && data.snapshot) }
+        : { ...c, status: 'error' as const, result: r.error }), tc)
       setTimeout(() => void maybeContinue(chatRef.current?.depth ?? 0, sessionRef.current), 150)
     })
   }
