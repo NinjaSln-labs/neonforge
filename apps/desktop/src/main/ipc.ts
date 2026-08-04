@@ -1,5 +1,5 @@
 // IPC handlers：renderer 经 preload → 主进程 gateway/configStore/workspace
-import { BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import { parseUnifiedDiff, applyDiffToFile, snapshot, revert } from './applyDiff.js'
 import { gateway } from './gateway.js'
 import { configStore } from './configStore.js'
@@ -11,6 +11,7 @@ import { codeRag } from './codeRag.js'
 import { buildStandardPrefix, planPreheat, prefixCache, preheating } from './preheat.js'
 import { initPlugins, pluginRegistry } from './pluginSystem.js'
 import { compaction } from './compact.js'
+import { appendChatLog, exportChatLog } from './chatLog.js'
 
 export function registerIpc(): void {
   initTools()
@@ -98,6 +99,11 @@ export function registerIpc(): void {
   ipcMain.handle('workspace:read-notebook', (_e, rootPath: string | null) => workspace.readNotebook(rootPath))
   // ticket 07：0-1 项目初始化（从零开始 → 真实目录 + 骨架）
   ipcMain.handle('workspace:init-project', (_e, title: string) => workspace.initProject(title))
+  // 2026-08-04：需求确认后回写项目标题（README + package.json name——目录名不变）
+  ipcMain.handle('workspace:update-project-title', (_e, p: string, title: string) => workspace.updateProjectTitle(p, title))
+  // 2026-08-04：对话日志（自动记录 + 导出——用户反馈时可提供完整对话给 AI）
+  ipcMain.handle('chat:log', (_e, entry: Parameters<typeof appendChatLog>[1]) => appendChatLog(app.getPath('userData'), entry))
+  ipcMain.handle('chat:export', () => exportChatLog(app.getPath('userData')))
 }
   // ticket 10：ToolRegistry（工具清单 + 执行分发——write/edit/bash 需 approved）
   ipcMain.handle('tools:list', () => toolRegistry.list())

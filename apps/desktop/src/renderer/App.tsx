@@ -3,6 +3,7 @@ import ConfigPage from './ConfigPage'
 import StartPage from './StartPage'
 import MainWorkspace from './MainWorkspace'
 import { clearSession } from './sessionStore'
+import { saveProblems } from './problemStore'
 
 // ticket 01：骨架；ticket 02：配置页；ticket 03：启动页 + 打开项目 + 文件树
 
@@ -52,7 +53,7 @@ export default function App() {
       <div className="nf-app nf-app--start">
         <StartPage
           onOpenProject={() => { void openExisting() }}
-          onNewProject={() => { clearSession(); setRootPath(null); setZeroToOne(true); setScreen('workspace') }}
+          onNewProject={() => { clearSession(); saveProblems([]); setRootPath(null); setZeroToOne(true); setScreen('workspace') }}
         />
       </div>
     )

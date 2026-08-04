@@ -8,11 +8,12 @@ import { loadSession, saveSession, serializeMessages } from './sessionStore'
 // ticket 14 信任阶梯：授权执行模型（等级/影响/合并判定——L4 委托 + 疲劳防护）
 import { buildAuthHint, canMergeApprove, toolRisk } from './authModel'
 // 2026-08-03 v33：思考过程内容清洗（reasoning 含 Markdown 标记 → 展示为可读纯文字）
-import { stripMarkdown } from './textClean'
+// 2026-08-04：cleanContent 回复正文展示清洗（字面转义/连续换行杂音）
+import { cleanContent, stripMarkdown } from './textClean'
 // 2026-08-03 视觉审计 P1-6：内联 SVG 图标（替换 emoji 图标）
 import {
-  IconBrain, IconCheck, IconClock, IconDot, IconFile, IconFolder, IconLock,
-  IconRotateCcw, IconRocket, IconSparkles, IconSquare, IconWrench, IconX, ToolIcon
+  IconBrain, IconCheck, IconClock, IconDot, IconFile, IconFolder, IconGamepad,
+  IconLock, IconRotateCcw, IconRocket, IconSparkles, IconSquare, IconWrench, IconX, ToolIcon
 } from './icons'
 
 // ticket 04：对话最小闭环（D0 §2/§3.4）——输入发送 → Gateway 流式 → 消息/呼吸光条/推理展示
@@ -46,8 +47,10 @@ export default function ConversationPanel({
   onExternalConsumed,
   onToolResult,
   onUserMessage,
+  onRequirementConfirmed,
   recentFilesExternal,
   stageHint,
+  stageAdvance,
   activeAuthorizedLogs
 }: {
   rootPath?: string | null
@@ -60,8 +63,12 @@ export default function ConversationPanel({
   onExternalConsumed?: () => void
   onToolResult?: (r: { name: string; file?: string; ok: boolean }) => void
   onUserMessage?: (text: string) => void
+  // 2026-08-04：需求确认回写——模型输出【需求确认：xxx】→ 上报 MainWorkspace（更新台账标题/快照 + 项目 README）
+  onRequirementConfirmed?: (title: string) => void
   recentFilesExternal?: string[]
   stageHint?: string // 0-1 交付阶段指引（ticket 07——注入对话引导模型按阶段产出）
+  // 2026-08-04：阶段推进反馈——用户点「确认推进」后对话区出现「已进入【X】阶段」提示（本地生成，确定性无杂音；顺带作为上下文让模型知道阶段切换）
+  stageAdvance?: { seq: number; stage: string; hint: string } | null
   activeAuthorizedLogs?: string[] // 06/14 授权记录可回溯：当前问题快照 authorized（TrustLadder 展示）
 }) {
   const [messages, setMessages] = useState<Msg[]>([])
@@ -137,6 +144,19 @@ export default function ConversationPanel({
       setTimeout(() => void sendRef.current(), 50)
     }
   }, [externalRequest])
+  // 2026-08-04：阶段推进反馈——用户点「确认推进」→ 对话区追加本地阶段提示（确定性无杂音；作为历史上下文模型也知道阶段切换）
+  // + 自动触发搭档按新阶段工作（advanceChat——流程真正走完）
+  const handledStageRef = useRef(0)
+  useEffect(() => {
+    if (!stageAdvance || stageAdvance.seq === handledStageRef.current) return
+    handledStageRef.current = stageAdvance.seq
+    setMessages((prev) => [...prev, {
+      role: 'assistant',
+      content: `已进入【${stageAdvance.stage}】阶段\n${stageAdvance.hint}\n（在对话里告诉搭档你的想法，搭档会继续推进）`,
+      status: 'done'
+    }])
+    void advanceChatRef.current(stageAdvance.stage, stageAdvance.hint)
+  }, [stageAdvance])
   const [mentionOpen, setMentionOpen] = useState(false)
   const [recentFiles, setRecentFiles] = useState<string[]>([])
   // 2026-08-04 审计修复（A2）：浮层方向键高亮索引（-1=未高亮）——listbox 键盘语义落地（原仅 Tab 可达，Arrow 无反应）
@@ -163,9 +183,30 @@ export default function ConversationPanel({
   }, [mentionOpen, recentFiles])
 
   // 处理单个流式事件（当前轮次——写入最后一条 assistant 消息）
+  // 2026-08-04：流式累积（事件层）——React StrictMode 会双调 setMessages updater，副作用（日志/工具执行）放 updater 内会重复执行（实测对话日志每条记录两次）
+  const streamingRef = useRef<{ content: string; toolCalls: ToolCallMsg[] }>({ content: '', toolCalls: [] })
   const applyChunk = (chunk: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => {
     console.log('[conv] chunk', chunk.type)
+    // 事件层累积（每事件一次——双调安全）
+    if (chunk.type === 'content') streamingRef.current.content += chunk.text ?? ''
+    if (chunk.type === 'tool-call' && chunk.toolCall) {
+      streamingRef.current.toolCalls.push({ name: chunk.toolCall.name, args: chunk.toolCall.args, status: 'pending' })
+    }
+    if (chunk.type === 'done') {
+      // 副作用移出 updater：需求确认回写 + 对话日志（updater 双调会重复记录）
+      const content = streamingRef.current.content
+      const confirm = content?.match(/【需求确认[:：]\s*([^】]+)/)
+      if (confirm?.[1]) onRequirementConfirmed?.(confirm[1].trim())
+      window.neonforge.chatLog?.log?.({
+        ts: new Date().toISOString(),
+        role: 'assistant',
+        content,
+        toolCalls: streamingRef.current.toolCalls.map((t) => ({ name: t.name, status: t.status }))
+      })
+      streamingRef.current = { content: '', toolCalls: [] }
+    }
     setMessages((prev) => {
+      // 纯 UI 更新（无副作用——StrictMode 双调安全）
       const last = prev[prev.length - 1]
       if (!last || last.role !== 'assistant') return prev
       if (chunk.type !== 'tool-call' && last.status !== 'streaming') return prev
@@ -186,36 +227,39 @@ export default function ConversationPanel({
         }
       }
       if (chunk.type === 'tool-call' && chunk.toolCall) {
-        const tc = chunk.toolCall
-        // 2026-08-03 v35：workingStage 人类化（原「调用工具 bash…」技术腔——按工具名映射自然描述）
-        const stageMap: Record<string, string> = {
-          read: '正在读取文件…', write: '正在写入文件…', edit: '正在修改文件…',
-          bash: '正在执行命令…', search: '正在搜索…'
-        }
-        setWorkingStage(stageMap[tc.name] ?? (tc.name.startsWith('find_') || tc.name.startsWith('get_') ? '正在查代码…' : '正在处理…'))
-        next.toolCalls = [...(next.toolCalls ?? []), { name: tc.name, args: tc.args, status: 'pending' }]
-        // ticket 14 L4 委托：低危文件操作（write/edit）命中委托规则 → 免确认直接执行（仍快照可回滚）；bash 高危永远单独授权
-        const autoApproved = tc.name === 'read' || (delegateLowRisk && toolRisk(tc.name) === 'low')
-        void (window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: autoApproved, rootPath: rootPath ?? undefined }) ?? Promise.resolve({ ok: false, error: 'tools 通道未就绪' })).then((r) => {
-          const data = r.data as { file?: string; snapshot?: boolean } | undefined
-          // 13 交付包联动：真实文件操作成功（write/edit 返回 file）→ 上报变更（产物区展示）
-          if (r.ok && data?.file) onToolResult?.({ name: tc.name, file: data.file, ok: true })
-          setMessages((prev) => {
-            if (prev.length === 0) return prev
-            const last = prev[prev.length - 1]
-            if (!last || last.role !== 'assistant') return prev
-            const calls = (last.toolCalls ?? []).map((c) => {
-              if (c.name !== tc.name || c.status !== 'pending') return c
-              return r.ok
-                ? { ...c, status: 'done' as const, result: typeof r.data === 'string' ? r.data.slice(0, 400) : JSON.stringify(r.data).slice(0, 400), file: data?.file, canRevert: !!(data?.file && data.snapshot) }
-                : { ...c, status: (r.error ?? '').includes('授权') ? ('need-approval' as const) : ('error' as const), result: r.error }
-            })
-            return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
-          })
-        })
+        next.toolCalls = [...(next.toolCalls ?? []), { name: chunk.toolCall.name, args: chunk.toolCall.args, status: 'pending' }]
       }
       return [...prev.slice(0, -1), next]
     })
+    // 工具执行副作用（移出 updater——StrictMode 双调会执行两次；真实工具写文件等不可重复）
+    if (chunk.type === 'tool-call' && chunk.toolCall) {
+      const tc = chunk.toolCall
+      // 2026-08-03 v35：workingStage 人类化（原「调用工具 bash…」技术腔——按工具名映射自然描述）
+      const stageMap: Record<string, string> = {
+        read: '正在读取文件…', write: '正在写入文件…', edit: '正在修改文件…',
+        bash: '正在执行命令…', search: '正在搜索…'
+      }
+      setWorkingStage(stageMap[tc.name] ?? (tc.name.startsWith('find_') || tc.name.startsWith('get_') ? '正在查代码…' : '正在处理…'))
+      // ticket 14 L4 委托：低危文件操作（write/edit）命中委托规则 → 免确认直接执行（仍快照可回滚）；bash 高危永远单独授权
+      const autoApproved = tc.name === 'read' || (delegateLowRisk && toolRisk(tc.name) === 'low')
+      void (window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: autoApproved, rootPath: rootPath ?? undefined }) ?? Promise.resolve({ ok: false, error: 'tools 通道未就绪' })).then((r) => {
+        const data = r.data as { file?: string; snapshot?: boolean } | undefined
+        // 13 交付包联动：真实文件操作成功（write/edit 返回 file）→ 上报变更（产物区展示）
+        if (r.ok && data?.file) onToolResult?.({ name: tc.name, file: data.file, ok: true })
+        setMessages((prev) => {
+          if (prev.length === 0) return prev
+          const last = prev[prev.length - 1]
+          if (!last || last.role !== 'assistant') return prev
+          const calls = (last.toolCalls ?? []).map((c) => {
+            if (c.name !== tc.name || c.status !== 'pending') return c
+            return r.ok
+              ? { ...c, status: 'done' as const, result: typeof r.data === 'string' ? r.data.slice(0, 400) : JSON.stringify(r.data).slice(0, 400), file: data?.file, canRevert: !!(data?.file && data.snapshot) }
+              : { ...c, status: (r.error ?? '').includes('授权') ? ('need-approval' as const) : ('error' as const), result: r.error }
+          })
+          return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
+        })
+      })
+    }
   }
 
   useEffect(() => {
@@ -268,11 +312,12 @@ export default function ConversationPanel({
     // 2026-08-02：LSP 工具接入模型（HANDOFF §3 第一优先）——引导用 find_definition/find_references/get_type_info 查真实代码上下文
     // 2026-08-02：search 工具接入模型（Layer2 CodeRAG agentic 化——Claude Code grep 模式）
     // 2026-08-03 v33：回复语言跟随用户——检测最近用户消息语言（中文 → 中文回复；否则 → 同语言回复）
+    // 2026-08-04：回复风格约束——用户反馈「太技术化/杂音多」——面向非技术用户：简洁口语化 + 无 Markdown 重符号/少括号/少空行
     const lastUserMsg = [...msgs].reverse().find((m) => m.role === 'user')
     const langRule = lastUserMsg && /[\u4e00-\u9fff]/.test(String(lastUserMsg.content ?? ''))
       ? '⑧ 用中文回复用户（避免英文夹杂；工具名/代码/技术名词可保留原文）'
       : '⑧ 用与用户消息相同的语言回复'
-    const sysHint = { role: 'system', content: `你是 NeonForge 搭档。当前项目根目录：${rootPath ?? '(未指定)'}。规则：① 读文件用 read 工具（路径用项目根下的相对路径，如 package.json）② 不要用 bash find 全局搜索（直接 read 目标文件）③ 工具一次调用一个，执行完看结果再决定 ④ 找不到文件就直接告诉用户 ⑤ 查符号定义/引用/类型用 LSP 工具：find_definition/find_references/get_type_info（传 path + symbol，如 {path: 'src/a.ts', symbol: 'greet'}）⑥ 查文件错误/import 用 get_diagnostics/get_imports ⑦ 不知道符号在哪个文件时用 search 工具（传 query 关键词，如 "greet"）——返回命中文件+行号+片段，再 read 或 LSP 定位。${langRule}` }
+    const sysHint = { role: 'system', content: `你是 NeonForge 搭档。当前项目根目录：${rootPath ?? '(未指定)'}。规则：① 读文件用 read 工具（路径用项目根下的相对路径，如 package.json）② 不要用 bash find 全局搜索（直接 read 目标文件）③ 工具一次调用一个，执行完看结果再决定 ④ 找不到文件就直接告诉用户 ⑤ 查符号定义/引用/类型用 LSP 工具：find_definition/find_references/get_type_info（传 path + symbol，如 {path: 'src/a.ts', symbol: 'greet'}）⑥ 查文件错误/import 用 get_diagnostics/get_imports ⑦ 不知道符号在哪个文件时用 search 工具（传 query 关键词，如 "greet"）——返回命中文件+行号+片段，再 read 或 LSP 定位。${langRule}⑨ 用户可能不懂技术——回答简洁口语化：优先短句，少用术语；必须提术语时用一句大白话解释；不要堆砌要点清单。⑩ 回复正文不要用 Markdown 标记（不要 #、**、反引号、- 列表、代码块框）；少用括号补充说明；段落之间最多空一行，不要连续空行。` }
     try {
       const res = await window.neonforge.gateway.streamChat({
         apiKey: key,
@@ -289,6 +334,22 @@ export default function ConversationPanel({
     await maybeContinue(depth, sid)
   }
 
+  // 2026-08-04：对话历史构造（send 与阶段推进自动触发共用——工具轮转文本摘要保留上下文，DeepSeek 要求 tool 消息带 reasoning_content）
+  const buildHistory = (msgs: Msg[]) => msgs
+    .filter((m) => m.role === 'user' || (m.role === 'assistant' && m.status === 'done'))
+    .map((m) => {
+      if (m.role === 'assistant' && !m.content && m.toolCalls && m.toolCalls.length > 0) {
+        // 工具轮（无文本）——转文本摘要保留上下文
+        const summary = m.toolCalls
+          .map((c) => `[${c.name}] ${JSON.stringify(c.args).slice(0, 60)} → ${(c.result ?? c.status).toString().slice(0, 100)}`)
+          .join('; ')
+        return { role: 'assistant', content: `（工具调用：${summary}）` }
+      }
+      return { role: m.role, content: m.content }
+    })
+  const workingRef = useRef(false)
+  useEffect(() => { workingRef.current = working }, [working])
+
   const send = async () => {
     const text = inputRef.current.trim()
     if (!text || working) return
@@ -296,21 +357,14 @@ export default function ConversationPanel({
     setInput('')
     // 13 复跑入口：上报用户输入（真实交付包 rerunPrompt 用）
     onUserMessage?.(text)
+    // 2026-08-04：对话日志（自动记录用户消息——与 assistant done 互补成完整对话）
+    window.neonforge.chatLog?.log?.({ ts: new Date().toISOString(), role: 'user', content: text })
+    // 2026-08-04：新轮次——重置流式累积（防上轮异常残留）
+    streamingRef.current = { content: '', toolCalls: [] }
     setWorking(true)
     onWorkingChange?.(true)
     const sid = ++sessionRef.current // 新会话——旧会话事件/续聊失效
-    const history = messages
-      .filter((m) => m.role === 'user' || (m.role === 'assistant' && m.status === 'done'))
-      .map((m) => {
-        if (m.role === 'assistant' && !m.content && m.toolCalls && m.toolCalls.length > 0) {
-          // 工具轮（无文本）——转文本摘要保留上下文（DeepSeek 要求 tool 消息带 reasoning_content——直接转文本避免 400）
-          const summary = m.toolCalls
-            .map((c) => `[${c.name}] ${JSON.stringify(c.args).slice(0, 60)} → ${(c.result ?? c.status).toString().slice(0, 100)}`)
-            .join('; ')
-          return { role: 'assistant', content: `（工具调用：${summary}）` }
-        }
-        return { role: m.role, content: m.content }
-      })
+    const history = buildHistory(messages)
     setMessages((p) => [...p, { role: 'user', content: text, status: 'done' }])
     setMessages((p) => [...p, { role: 'assistant', content: '', reasoning: '', status: 'streaming' }])
     setWorkingStage('已发送，等待搭档…')
@@ -365,6 +419,35 @@ export default function ConversationPanel({
   }
   // 05 B：sendRef 同步最新 send（externalRequest 触发用）
   useEffect(() => { sendRef.current = send }, [send])
+
+  // 2026-08-04：阶段推进自动触发——点「确认推进」→ 搭档主动按新阶段工作（用户反馈「推进后无反馈/流程走不完」）
+  // 内部指令作为 user 消息发给模型但不显示在对话区（本地提示消息已展示阶段切换）；模型流式回复 = 推进后的实际反馈
+  const advanceChat = async (stage: string, hint: string) => {
+    if (workingRef.current) return // 搭档处理中——跳过自动触发（本地提示已给出，用户可稍后说话）
+    streamingRef.current = { content: '', toolCalls: [] } // 新轮次重置流式累积
+    setWorking(true)
+    onWorkingChange?.(true)
+    setWorkingStage(`进入${stage}阶段…`)
+    const sid = ++sessionRef.current // 新会话——旧会话事件/续聊失效
+    const history = buildHistory(messagesRef.current)
+    const msgs: Array<{ role: 'user' | 'system'; content: string }> = [{
+      role: 'user',
+      content: `【阶段推进】已进入「${stage}」阶段。${hint}。请开始本阶段工作：先用简洁口语向用户说明本阶段要做什么、需要用户提供什么；本阶段完成时提示用户点「确认推进」。${stage === '开发' ? '本阶段开始产出真实文件（用 write/edit 工具，写前先读现有文件再修改）。' : '本阶段不要写代码。'}`
+    }]
+    if (stageHint) msgs.unshift({ role: 'system', content: stageHint })
+    // 追加 streaming 占位——模型回复直接流式显示（内部指令不显示为用户消息）
+    setMessages((p) => [...p, { role: 'assistant', content: '', reasoning: '', status: 'streaming' }])
+    try {
+      await runChat([...history, ...msgs], 0, sid)
+    } catch {
+      finishError('network')
+    } finally {
+      setWorking(false)
+      onWorkingChange?.(false)
+    }
+  }
+  const advanceChatRef = useRef<typeof advanceChat>(async () => {})
+  useEffect(() => { advanceChatRef.current = advanceChat }, [advanceChat])
 
   // L3 授权：允许执行（approved=true）/ 拒绝（标记拒绝）
   const approveToolCall = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg) => {
@@ -470,7 +553,8 @@ export default function ConversationPanel({
 
   return (
     <div className="nf-chat">
-      {demoFlow && <DeliveryFlowPanel />}
+      {/* 2026-08-04 P0：demo 通道跳过门控（展示完整流程——产品主流程在 MainWorkspace flow dock 带门控） */}
+      {demoFlow && <DeliveryFlowPanel requirementConfirmed />}
       {demoDigital && <DigitalDeliveryPanel onDeliver={onDeliver} />}
       {demoTrust && <TrustLadderPanel authorizedLogs={activeAuthorizedLogs} delegateLowRisk={delegateLowRisk} onDelegateChange={handleDelegateChange} />}
       {demoDod && <DoDAlignPanel />}
@@ -484,6 +568,7 @@ export default function ConversationPanel({
                 { icon: IconFolder, label: '整理文件', q: '把 Downloads 里的发票和合同分类整理' },
                 { icon: IconWrench, label: '做小工具', q: '帮我做一个每周记账的小工具' },
                 { icon: IconSparkles, label: '修系统', q: 'X 系统今天出异常了，帮我看看' },
+                { icon: IconGamepad, label: '做游戏', q: '我要做一个3D射击小游戏（第一人称，科幻风格）' },
                 { icon: IconRocket, label: '做新项目', q: '我要做一个能发给朋友的旅行手册网页' }
               ].map(({ icon: Icon, label, q }) => (
                 <button
@@ -507,7 +592,8 @@ export default function ConversationPanel({
             )}
             {m.role === 'user' && <span className="nf-msg__role">你</span>}
             <div className={`nf-msg__body${m.role === 'assistant' && m.status === 'streaming' && !m.content ? ' nf-msg__body--thinking' : ''}`}>
-              {m.content || (m.status === 'streaming' ? '搭档处理中…' : m.error === 'empty-response' ? '搭档没有返回内容——请重试或换个说法' : m.status === 'error' ? '处理失败' : '')}
+              {/* 2026-08-04：展示前 cleanContent 清洗（字面转义/连续换行/行尾空白）——只影响展示，API 发送原文 */}
+              {m.content ? cleanContent(m.content) : (m.status === 'streaming' ? '搭档处理中…' : m.error === 'empty-response' ? '搭档没有返回内容——请重试或换个说法' : m.status === 'error' ? '处理失败' : '')}
               {m.error === 'key-invalid' && (
                 <button type="button" className="nf-config__link" onClick={onKeyExpired}>
                   要不要更新一下？

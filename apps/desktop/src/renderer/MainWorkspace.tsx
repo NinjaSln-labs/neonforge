@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import SessionPanel from './SessionPanel'
 import SettingsPanel from './SettingsPanel'
 import DeliveryFlowPanel, { FLOW_STAGES, STAGE_HINT } from './DeliveryFlowPanel'
+import RequirementCard from './RequirementCard'
 import OutputPanel from './OutputPanel'
 import ConversationPanel from './ConversationPanel'
 import type { DeliveryPackage, ProblemInstance } from './types'
@@ -89,6 +90,23 @@ export default function MainWorkspace({
       }))
     }
   }
+  // 2026-08-04：需求确认回写——模型【需求确认：xxx】→ 更新台账标题/快照 goal + 项目 README（目录名不变）
+  const handleRequirementConfirmed = (title: string) => {
+    setRequirementConfirmed(true) // P0 门控：需求已确认 → 解锁推进
+    if (activeProblem) {
+      setProblems((prev) => prev.map((p) => p.id === activeProblem
+        ? { ...updateProblemSnapshot(p, { goal: title }), title: title.length > 20 ? title.slice(0, 20) + '…' : title }
+        : p))
+    }
+    if (rootPath) void window.neonforge.workspace.updateProjectTitle(rootPath, title)
+  }
+  // 2026-08-04 P2：需求确认卡确认 → 回写 + 自动推进到设计（确定性收敛，不依赖模型标记）
+  const [requirementConfirmed, setRequirementConfirmed] = useState(false)
+  const handleRequirementCardConfirm = (summary: string) => {
+    handleRequirementConfirmed(summary)
+    // 推进到设计（stageAdvance → 对话区提示 + 搭档自动开始设计工作）
+    handleStageChange(1)
+  }
   const handleUserMessage = (text: string) => {
     lastPromptRef.current = text
     // ticket 07：从零开始 → 首条消息创建真实项目目录（0-1 交付真实执行地基——后续阶段模型在真实项目内 write/read）
@@ -98,19 +116,19 @@ export default function MainWorkspace({
       })
     }
     // 06 问题台账：发送 → 创建问题实例（持久化——断点续做基础；同标题复跑 → 更新状态不新增）
+    // 2026-08-04 修复：setActiveProblem 移出 setProblems updater（React 严格模式 updater 双调 + updater 内 setState 反模式——activeProblem 设置不可靠，导致需求确认回写台账失败）
+    const inst = createProblem(text)
+    const dup = problems.find((x) => x.title === inst.title)
+    setActiveProblem(dup ? dup.id : inst.id)
     setProblems((prev) => {
-      const inst = createProblem(text)
-      const dup = prev.find((x) => x.title === inst.title)
       if (dup) {
         // 复跑/续做：保留快照（目标更新 + 记录待办）
         const snap = updateProblemSnapshot(dup, {
           goal: text,
           pending: [...(dup.snapshot?.pending ?? []).filter((x) => x !== text).slice(-4), text]
         })
-        setActiveProblem(dup.id)
         return [{ ...snap, updatedAt: inst.updatedAt, status: 'executing' as const }, ...prev.filter((x) => x.id !== dup.id)]
       }
-      setActiveProblem(inst.id)
       return [inst, ...prev]
     })
   }
@@ -171,15 +189,20 @@ function initProblems(): ProblemInstance[] {
 
   const zeroToOne = zeroToOneMode
   // ticket 07 阶段机：阶段/模型状态提升——注入对话阶段指引（模型按阶段产出）
+  // 2026-08-04 修复：flowModel 未选时也注入阶段提示（talk.txt 实测——用户未选模型 → stageHint undefined → 需求澄清强规则丢失，模型自由发挥没按 4 点澄清/没往同音词猜）
   const [flowStage, setFlowStage] = useState(0)
   const [flowModel, setFlowModel] = useState<'traditional' | 'agile' | null>(null)
   const stageName = FLOW_STAGES[flowStage]
-  const stageHint = flowModel
-    ? `【0-1 交付 · ${flowModel === 'agile' ? '敏捷（迭代）' : '传统软件工程'} · ${stageName} 阶段】${STAGE_HINT[stageName]}——按本阶段工作；阶段完成请提示用户点「确认推进」。`
+  // 0-1 模式才注入阶段指引（非 0-1 对话不污染）；flowModel 未选也注入（需求阶段澄清强规则——talk.txt 实测缺失根因）
+  const stageHint = zeroToOne
+    ? `【0-1 交付 · ${flowModel ? (flowModel === 'agile' ? '敏捷（迭代）' : '传统软件工程') + ' · ' : ''}${stageName} 阶段】${STAGE_HINT[stageName]}——按本阶段工作；阶段完成请提示用户点「确认推进」。`
     : undefined
   // 07 阶段产物编排：阶段推进 → 交付包验收项（阶段确认列表——确定性，不依赖模型）
+  // 2026-08-04：推进反馈——seq 递增通知 ConversationPanel 追加「已进入【X】阶段」对话提示（用户反馈「推进按钮没有实际功能」）
+  const [stageAdvance, setStageAdvance] = useState<{ seq: number; stage: string; hint: string } | null>(null)
   const handleStageChange = (stage: number) => {
     setFlowStage(stage)
+    setStageAdvance((prev) => ({ seq: (prev?.seq ?? 0) + 1, stage: FLOW_STAGES[stage], hint: STAGE_HINT[FLOW_STAGES[stage]] }))
     const acceptance = FLOW_STAGES.map((s, i) => ({
       label: i < stage ? `${s} 阶段已完成` : i === stage ? `${s} 阶段进行中` : `${s} 待开始`,
       done: i < stage
@@ -232,12 +255,16 @@ function initProblems(): ProblemInstance[] {
         {/* 2026-08-04 UX 修复：0-1 交付流面板移出滚动容器——对话滚动时「模型选择/确认推进」常驻可见（原在 .nf-panel__body 内被对话内容滚出视口——用户找不到推进按钮） */}
         {zeroToOne && (
           <div className="nf-flow__dock">
-            <DeliveryFlowPanel onStageChange={handleStageChange} onModelSelect={setFlowModel} />
+            <DeliveryFlowPanel onStageChange={handleStageChange} onModelSelect={setFlowModel} requirementConfirmed={requirementConfirmed} stageOverride={flowStage} />
+            {/* 2026-08-04 P2：需求确认卡——需求阶段未确认时显示（点选 4 项 → 确认 → 自动进设计；确定性收敛不依赖模型标记） */}
+            {flowStage === 0 && !requirementConfirmed && (
+              <RequirementCard onConfirm={handleRequirementCardConfirm} />
+            )}
           </div>
         )}
         <div className="nf-panel__body">
           {chatTab === 'chat' ? (
-            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} onApprovalChange={setPendingApproval} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} recentFilesExternal={projectFiles} stageHint={stageHint} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} />
+            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} onApprovalChange={setPendingApproval} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} onRequirementConfirmed={handleRequirementConfirmed} recentFilesExternal={projectFiles} stageHint={stageHint} stageAdvance={stageAdvance} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} />
           ) : (
             <TaskPanel />
           )}

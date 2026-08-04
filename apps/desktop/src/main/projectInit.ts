@@ -1,16 +1,28 @@
 // 0-1 项目初始化（ticket 07 真实执行地基）：从零开始 → 创建真实项目目录 + 骨架
 // 纯逻辑模块（无 electron 依赖——可独立测试）；workspace 调用
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 
-// 标题 → 目录 slug（小写/非字母数字转 -/限 30 字符；中文保留）
+// 需求标题常见开头语气词（2026-08-04：从零开始整句需求 → 目录名去口语前缀——目录名应简洁可识别；长词在前优先匹配）
+const PHRASE_PREFIXES = [
+  '我想做一个', '我想做个', '我想做', '我要做一个', '我要做个', '我要做',
+  '请帮我做一个', '请帮我做个', '请帮我做', '请帮我', '帮我做一个', '帮我做个', '帮我做', '帮我',
+  '做一个', '做个', '做', '请'
+]
+
+// 标题 → 目录 slug（小写/非字母数字转 -/限 20 字符；中文保留；去口语前缀——目录名简洁可识别）
 export function slugify(title: string): string {
-  const s = String(title ?? '')
+  let s = String(title ?? '')
+  // 去开头语气词（长优先——「我想做一个」先于「我想做」匹配）
+  for (const p of PHRASE_PREFIXES) {
+    if (s.startsWith(p)) { s = s.slice(p.length); break }
+  }
+  s = s
     .toLowerCase()
     .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 30)
+    .slice(0, 20)
   return s || 'untitled'
 }
 
@@ -19,11 +31,23 @@ export function projectBaseDir(): string {
   return path.join(os.homedir(), 'Documents', 'NeonForge')
 }
 
-// 创建项目目录 + 基础骨架（README/package.json/src/index.ts）
+// 创建项目目录 + 基础骨架（README 仅标记项目存在——2026-08-04 用户反馈：需求/技术栈未定时不应创建 package.json/src 等工程文件）
 export function initProjectFiles(dir: string, title: string): void {
   mkdirSync(dir, { recursive: true })
-  writeFileSync(path.join(dir, 'README.md'), `# ${title}\n\n> NeonForge 0-1 项目——需求驱动交付\n`, 'utf-8')
-  writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: slugify(title), version: '0.1.0', private: true }, null, 2) + '\n', 'utf-8')
-  mkdirSync(path.join(dir, 'src'), { recursive: true })
-  writeFileSync(path.join(dir, 'src', 'index.ts'), `// ${title}\n// NeonForge 生成的骨架——从这里开始\n`, 'utf-8')
+  writeFileSync(path.join(dir, 'README.md'), `# ${title}\n\n> NeonForge 0-1 项目——需求驱动交付\n> 需求确认、技术栈确定后，搭档会在这里创建工程文件\n`, 'utf-8')
+}
+
+// 2026-08-04：需求确认后回写项目标题（README 首行 + package.json name）——目录名保持稳定（防路径断裂），标题跟随澄清结果
+// 纯逻辑模块——workspace 调用（读现有 README 保留其余内容）
+export function updateProjectTitle(dir: string, title: string): void {
+  const readmePath = path.join(dir, 'README.md')
+  const pkgPath = path.join(dir, 'package.json')
+  const readme = readFileSync(readmePath, 'utf-8')
+  // 替换首行 # 标题（保留后续正文）
+  const nextReadme = readme.replace(/^# .+$/m, `# ${title}`) || `# ${title}\n`
+  writeFileSync(readmePath, nextReadme, 'utf-8')
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { name?: string }
+    writeFileSync(pkgPath, JSON.stringify({ ...pkg, name: slugify(title) }, null, 2) + '\n', 'utf-8')
+  } catch { /* package.json 缺失/损坏——README 已更新，忽略 */ }
 }

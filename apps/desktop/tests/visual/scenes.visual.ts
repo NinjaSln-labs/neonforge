@@ -18,9 +18,11 @@ test('场景卡片渲染（对话空态）', async ({ page }) => {
   await page.goto('http://localhost:5174/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
-  await expect(page.locator('.nf-scene')).toHaveCount(4)
+  await expect(page.locator('.nf-scene')).toHaveCount(5)
   await expect(page.locator('.nf-scene').first()).toHaveText(/整理文件/)
-  await expect(page.locator('.nf-scene').nth(3)).toHaveText(/做新项目/)
+  // 2026-08-04：新增「做游戏」场景卡（引导精确需求——类型/风格）
+  await expect(page.locator('.nf-scene').nth(3)).toHaveText(/做游戏/)
+  await expect(page.locator('.nf-scene').nth(4)).toHaveText(/做新项目/)
   await expect(page.locator('.nf-chat')).toHaveScreenshot('scenes-empty.png')
 })
 

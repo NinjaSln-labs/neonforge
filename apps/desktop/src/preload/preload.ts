@@ -34,7 +34,15 @@ contextBridge.exposeInMainWorld('neonforge', {
     readNotebook: (rootPath: string | null) =>
       ipcRenderer.invoke('workspace:read-notebook', rootPath) as Promise<{ ok: true; content: string } | { ok: false; error: string } | null>,
     initProject: (title: string) =>
-      ipcRenderer.invoke('workspace:init-project', title) as Promise<{ ok: true; path: string; title: string } | { ok: false; error: string }>
+      ipcRenderer.invoke('workspace:init-project', title) as Promise<{ ok: true; path: string; title: string } | { ok: false; error: string }>,
+    updateProjectTitle: (path: string, title: string) =>
+      ipcRenderer.invoke('workspace:update-project-title', path, title) as Promise<{ ok: boolean; error?: string }>
+  },
+  // 2026-08-04：对话日志（自动记录 + 导出）
+  chatLog: {
+    log: (entry: { ts: string; role: 'user' | 'assistant'; content?: string; toolCalls?: Array<{ name: string; status: string }> }) =>
+      ipcRenderer.invoke('chat:log', entry) as Promise<void>,
+    export: () => ipcRenderer.invoke('chat:export') as Promise<{ ok: boolean; path?: string; error?: string }>
   },
   tools: {
     list: () => ipcRenderer.invoke('tools:list') as Promise<Array<{ name: string; source: 'core' | 'lsp'; requiresApproval: boolean; risk: 'none' | 'low' | 'high' }>>,
