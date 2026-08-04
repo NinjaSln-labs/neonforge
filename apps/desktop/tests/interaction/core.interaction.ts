@@ -490,3 +490,50 @@ test('开发产物门控：无文件产出推进禁用 → write 成功后解锁
   await advance.click()
   await expect(page.locator('.nf-flow__stage--active')).toContainText('测试')
 })
+
+// 2026-08-04 体验修复（用户实测「确认了需求但上面还停在需求确认」）：需求阶段用户打字「确认推进」→ 自动确认需求 + 推进到设计——
+// 模型可能只说「需求已确认」不带【需求确认：】标记（UI 识别不到）——用户明确确认 → 确定性收敛，不依赖模型标记
+test('0-1 对话确认需求：用户发「确认推进」→ 自动确认 + 推进到设计（不依赖模型标记）', async ({ page }) => {
+  await page.addInitScript(() => {
+    let streamCb: ((c: { type: string; text?: string }) => void) | null = null
+    let chatCount = 0
+    window.neonforge = {
+      version: 'test',
+      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
+      workspace: { openFolder: async () => null, listDir: async () => [], readFile: async (p: string) => ({ ok: true, content: '// ' + p }), readNotebook: async () => null, initProject: async () => ({ ok: true, path: '/test', title: 't' }), updateProjectTitle: async () => ({ ok: true }) },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        streamChat: async () => {
+          chatCount++
+          setTimeout(() => {
+            if (chatCount === 1) streamCb?.({ type: 'content', text: '明白：网页版 3D 射击游戏。确认没问题就回复「确认推进」。' })
+            else streamCb?.({ type: 'content', text: '设计阶段：确认技术方案。' })
+            streamCb?.({ type: 'done' })
+          }, 30)
+          return { ok: true }
+        },
+        onStreamChunk: (cb: (c: { type: string; text?: string }) => void) => { streamCb = cb; return () => {} }
+      },
+      tools: { execute: async () => ({ ok: true }), list: async () => [] },
+      context: { resolve: async () => ({ fragments: [] }) },
+      compaction: { compact: async () => ({ ok: false }) },
+      plugins: { list: async () => [], toggle: async () => true }
+    }
+    ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
+  })
+  await page.goto('http://localhost:5174/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.getByRole('button', { name: '从零开始' }).click()
+  await page.getByRole('button', { name: /快速迭代/ }).click()
+  // 需求阶段：对话输入需求（不走需求卡——initialPrompt 空则不显示）
+  await page.locator('.nf-chat__input textarea').fill('我想做一个网页3D射击游戏')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  await expect(page.locator('.nf-chat__list .nf-msg--assistant')).toHaveCount(1)
+  await page.waitForTimeout(500) // 等 working 释放（流式 done + runChat 尾部 300ms——不足则「确认推进」被 working 守卫拦截）
+  // 用户打字「确认推进」→ 自动确认需求 + 推进到设计（不依赖模型【需求确认：】标记）
+  await page.locator('.nf-chat__input textarea').fill('确认推进')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  // 需求已确认：阶段机到设计 + 推进按钮解锁（不再卡在「需求确认」）
+  await expect(page.locator('.nf-flow__stage--active')).toContainText('设计')
+  await expect(page.locator('.nf-flow__advance button')).toBeEnabled()
+})
