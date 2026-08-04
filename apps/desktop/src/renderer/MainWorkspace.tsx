@@ -271,10 +271,11 @@ function initProblems(): ProblemInstance[] {
         {/* 2026-08-04 UX 修复：0-1 交付流面板移出滚动容器——对话滚动时「模型选择/确认推进」常驻可见（原在 .nf-panel__body 内被对话内容滚出视口——用户找不到推进按钮） */}
         {zeroToOne && (
           <div className="nf-flow__dock">
-            <DeliveryFlowPanel onStageChange={handleStageChange} onModelSelect={setFlowModel} requirementConfirmed={requirementConfirmed} artifactsReady={realChanges.length > 0} busy={working} stageOverride={flowStage} />
+            <DeliveryFlowPanel onStageChange={handleStageChange} onModelSelect={setFlowModel} model={flowModel} requirementConfirmed={requirementConfirmed} artifactsReady={realChanges.length > 0} busy={working} stageOverride={flowStage} />
             {/* 2026-08-04 P2：需求确认卡——需求阶段未确认时显示（点选 4 项 → 确认 → 自动进设计；确定性收敛不依赖模型标记）
-                2026-08-04 体验修复：initialPrompt 首句关键词预选「做什么」（用户已说过的类型不用重选） */}
-            {flowStage === 0 && !requirementConfirmed && (
+                2026-08-04 体验修复：initialPrompt 首句关键词预选「做什么」（用户已说过的类型不用重选）
+                2026-08-04 体验修复：无输入（initialPrompt 空——用户空 Enter 进入）不显示需求卡——没说过需求，卡片选项对用户没意义（用户困惑「你怎么知道我要做什么」），让对话引导 */}
+            {flowStage === 0 && !requirementConfirmed && initialPrompt && (
               <RequirementCard onConfirm={handleRequirementCardConfirm} initialPrompt={initialPrompt} />
             )}
           </div>

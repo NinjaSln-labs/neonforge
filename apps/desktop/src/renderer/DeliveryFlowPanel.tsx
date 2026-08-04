@@ -28,6 +28,7 @@ export function inferFlowModel(reqText: string): 'traditional' | 'agile' {
 export default function DeliveryFlowPanel({
   onStageChange,
   onModelSelect,
+  model: modelProp,
   requirementConfirmed = false,
   artifactsReady = false,
   busy = false,
@@ -35,13 +36,16 @@ export default function DeliveryFlowPanel({
 }: {
   onStageChange?: (stage: number) => void
   onModelSelect?: (model: 'traditional' | 'agile') => void
+  model?: 'traditional' | 'agile' | null // 2026-08-04 体验修复：受控——来自 MainWorkspace flowModel（自动推导/手选）；不传时非受控（demo 通道）用内部 state
   requirementConfirmed?: boolean // 2026-08-04 P0：需求已确认（对话【需求确认】或确认卡）→ 解锁从需求推进
   artifactsReady?: boolean // 2026-08-04 体验修复：开发阶段已有真实文件产出（write/edit 成功）→ 解锁推进到测试（防阶段空转）
   busy?: boolean // 2026-08-04 体验修复：搭档处理中禁止推进（防 advanceChat 被 working 守卫跳过——阶段前进但模型不知道）
   stageOverride?: number // 2026-08-04：外部推进（需求确认卡）同步本地阶段机——本地 stage 与 MainWorkspace flowStage 双状态对齐
 }) {
   const [stage, setStage] = useState(0) // 当前进行阶段（index）
-  const [model, setModel] = useState<'traditional' | 'agile' | null>(null)
+  // 2026-08-04：受控/非受控双模式——主流程传 model（受控）；demo 通道不传（非受控，内部维护）——修复受控化破坏 demo 选择
+  const [innerModel, setInnerModel] = useState<'traditional' | 'agile' | null>(null)
+  const model = modelProp === undefined ? innerModel : modelProp
   // 外部推进（需求确认卡 handleStageChange）→ 本地阶段机跟随（只前进，不倒退）
   useEffect(() => {
     if (typeof stageOverride === 'number' && stageOverride > stage) setStage(stageOverride)
@@ -56,8 +60,8 @@ export default function DeliveryFlowPanel({
   }
 
   const pickModel = (m: 'traditional' | 'agile') => {
-    setModel(m)
     onModelSelect?.(m)
+    if (modelProp === undefined) setInnerModel(m) // 非受控（demo）——内部维护
   }
 
   return (
