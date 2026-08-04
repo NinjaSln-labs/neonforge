@@ -16,7 +16,7 @@ async function mockBridge(page: import('@playwright/test').Page) {
 
 test('0-1 交付流（阶段机 + 模型选择）', async ({ page }) => {
   await mockBridge(page)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await expect(page.locator('.nf-flow')).toBeVisible()
@@ -27,7 +27,7 @@ test('0-1 交付流（阶段机 + 模型选择）', async ({ page }) => {
 
 test('选敏捷 → 分步推进到交付', async ({ page }) => {
   await mockBridge(page)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.getByRole('button', { name: /快速迭代/ }).click()
@@ -55,7 +55,7 @@ test('0-1 从零开始 → 发送需求 → 创建真实项目（ticket 07 执�
       gateway: { validate: async () => ({ ok: true }), streamChat: async () => ({ ok: true }), onStreamChunk: () => () => {} }
     }
   })
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
   // 0-1 模式：交付流面板 + 状态栏「从零开始」
@@ -88,7 +88,7 @@ test('0-1 阶段指引注入（选模型 → 发送 → streamChat 含阶段提�
       }
     }
   })
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
   // 选敏捷 → 发送需求 → streamChat messages 含阶段指引（需求阶段）
@@ -130,7 +130,7 @@ test('阶段推进 → 交付包阶段验收项（07 编排）', async ({ page }
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
   })
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
   await page.getByRole('button', { name: /快速迭代/ }).click()

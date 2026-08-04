@@ -35,7 +35,7 @@ async function mockBridge(page: import('@playwright/test').Page) {
 
 test('复跑：点复跑 → 输入框预填 + 发送原始需求', async ({ page }) => {
   await mockBridge(page)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.waitForSelector('.nf-chat__input textarea', { timeout: 8000 })

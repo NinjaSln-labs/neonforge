@@ -16,7 +16,7 @@ async function mockBridge(page: import('@playwright/test').Page) {
 
 test('设置面板（打开 + 插件列表 + 快捷键表）', async ({ page }) => {
   await mockBridge(page)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   // 默认隐藏
@@ -31,7 +31,7 @@ test('设置面板（打开 + 插件列表 + 快捷键表）', async ({ page }) 
 
 test('快捷键 ⌘, 打开/关闭设置（D0 §6）', async ({ page }) => {
   await mockBridge(page)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await expect(page.locator('.nf-settings')).toHaveCount(0)
@@ -45,7 +45,7 @@ test('快捷键 ⌘, 打开/关闭设置（D0 §6）', async ({ page }) => {
 
 test('快捷键表完整（D0 §6——只列已实现：⌘, / Enter / ⌘N / ⌘E）', async ({ page }) => {
   await mockBridge(page)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.getByRole('button', { name: '设置' }).click()
   await expect(page.locator('.nf-settings')).toBeVisible()

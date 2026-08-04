@@ -28,7 +28,7 @@ async function mockBridge(page: import('@playwright/test').Page) {
 
 test('工具卡片（read 自动执行 ✅）', async ({ page }) => {
   await mockBridge(page)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.locator('.nf-chat__input textarea').fill('读取 package.json')
@@ -50,7 +50,7 @@ test('工具卡片（read 自动执行 ✅）', async ({ page }) => {
 
 test('工具卡片（bash 需授权 🔒）', async ({ page }) => {
   await mockBridge(page)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.locator('.nf-chat__input textarea').fill('看看当前目录')
@@ -75,7 +75,7 @@ test('工具卡片（bash 需授权 🔒）', async ({ page }) => {
 
 test('工具卡片（write 授权执行 → 可回滚 ↩️ → 已回滚）', async ({ page }) => {
   await mockBridge(page)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.locator('.nf-chat__input textarea').fill('帮我写一个 notes 文件')

@@ -16,7 +16,7 @@ async function mockBridge(page: import('@playwright/test').Page) {
 
 test('数字交付（文件清单 + 任务选择 + 变更预览）', async ({ page }) => {
   await mockBridge(page)
-  await page.goto('http://localhost:5174/')
+  await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await expect(page.locator('.nf-digital')).toBeVisible()
