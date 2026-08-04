@@ -153,12 +153,25 @@ async function editExecutor(args: Record<string, unknown>, ctx: { rootPath?: str
 // 当前活动 bash 子进程（ticket 14 可撤销：任何时刻停止当前操作——cancelActiveCommand kill）
 let activeProc: { proc: import('child_process').ChildProcess; cmd: string } | null = null
 
+// 2026-08-04 端口冲突防护（用户实测：模型 npm run dev 抢占 NeonForge 5173/5174——dev server 无端口检测）：
+// NeonForge 保留端口：5173（dev）/ 5175（自动化测试）——模型起的项目 dev server 必须避开
+const RESERVED_PORTS = new Set([5173, 5175])
+const DEV_SERVER_RE = /(npm|pnpm|yarn) run (dev|start|serve|preview)|vite( |$)|next dev|react-scripts start|node .*(server|listen)/
+
 async function bashExecutor(args: Record<string, unknown>, ctx: { rootPath?: string }): Promise<unknown> {
   // V1 真实执行：授权（approved=true）后执行命令（child_process）——在项目根目录执行
   // 风险标注（ticket 14）：high 风险——本机进程执行；授权即同意本机执行；可随时停止（cancelActiveCommand）
   const { exec } = await import('child_process')
   const cmd = String(args.command ?? '')
   if (!cmd.trim()) throw new Error('bash: 缺少 command')
+  // 2026-08-04 端口冲突检测：服务类命令显式指定保留端口 → 友好错误（防静默撞车——NeonForge 5173/5175 被抢占）
+  if (DEV_SERVER_RE.test(cmd)) {
+    const m = cmd.match(/--port[= ](\d+)|PORT=(\d+)/)
+    const port = m ? Number(m[1] ?? m[2]) : null
+    if (port && RESERVED_PORTS.has(port)) {
+      throw new Error(`端口 ${port} 被 NeonForge 占用（开发/测试端口）——请改用其他端口：--port 5176（或 5176-5199 之间任意空闲端口）`)
+    }
+  }
   return new Promise((resolve, reject) => {
     const child = exec(cmd, { cwd: ctx.rootPath ?? undefined, timeout: 30000, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
       if (activeProc?.proc === child) activeProc = null
