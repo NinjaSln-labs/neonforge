@@ -534,11 +534,13 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-reqcard {
   margin-top: var(--nf-space-2);
   padding: var(--nf-space-2) var(--nf-space-3);
-  border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md);
+  /* 2026-08-04 体验修复：需求卡醒目化——accent 边框 + 光晕（用户聊了几轮才发现「快速确认」的根因） */
+  border: 1px solid var(--nf-accent); border-radius: var(--nf-radius-md);
   background: var(--nf-bg-elevated);
+  box-shadow: 0 0 16px rgba(99, 102, 241, 0.18);
   display: flex; flex-direction: column; gap: var(--nf-space-2);
 }
-.nf-reqcard__head { font-size: var(--nf-font-sm); color: var(--nf-text-dim); display: flex; align-items: center; gap: 6px; }
+.nf-reqcard__head { font-size: var(--nf-font-sm); font-weight: 600; color: var(--nf-accent); display: flex; align-items: center; gap: 6px; }
 .nf-reqcard__head svg { color: var(--nf-accent); }
 .nf-reqcard__field { display: flex; align-items: flex-start; gap: var(--nf-space-2); }
 .nf-reqcard__label { flex-shrink: 0; width: 64px; font-size: 12px; color: var(--nf-text); padding-top: 3px; }
@@ -663,6 +665,8 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-toolcall__name { color: var(--nf-text); font-weight: 600; }
 .nf-toolcall__args { color: var(--nf-text-dim); font-family: var(--nf-font-mono); }
 .nf-toolcall__result { color: var(--nf-text-dim); white-space: pre-wrap; max-width: 100%; }
+/* 2026-08-04 体验修复：授权卡醒目标题——模型消息停在「先写文件」后用户不知道要批准（等授权无提示的根因） */
+.nf-toolcall__approve-hint { color: var(--nf-amber); font-weight: 600; font-size: 12px; }
 .nf-toolcall__hint { color: var(--nf-amber); }
 .nf-toolcall__impact { color: var(--nf-text); font-family: var(--nf-font-mono); }
 .nf-toolcall__note { color: var(--nf-text-dim); font-size: 11px; }
