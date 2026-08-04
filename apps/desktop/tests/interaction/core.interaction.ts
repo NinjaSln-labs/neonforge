@@ -276,6 +276,7 @@ test('0-1 从零开始：确认推进按钮常驻可见（修复——不在滚�
 test('0-1 从零开始：确认推进 → 对话区出现阶段推进反馈消息', async ({ page }) => {
   await page.addInitScript(() => {
     window.__sentMsgs = []
+    let streamCb: ((c: { type: string }) => void) | null = null
     window.neonforge = {
       version: 'test',
       config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
@@ -289,9 +290,9 @@ test('0-1 从零开始：确认推进 → 对话区出现阶段推进反馈消�
       },
       gateway: {
         validate: async () => ({ ok: true }),
-        // 2026-08-04 方案 A 回归：捕获发给模型的 messages——验证需求卡确认摘要注入对话上下文
-        streamChat: async (opts: { messages: Array<{ role: string; content: string }> }) => { (window as unknown as { __sentMsgs: Array<{ role: string; content: string }> }).__sentMsgs = opts.messages; return { ok: true } },
-        onStreamChunk: () => () => {}
+        // 2026-08-04 方案 A 回归：捕获发给模型的 messages——验证需求卡确认摘要注入对话上下文；补 done 回调（否则 working 卡 true，后续 advanceChat 被守卫跳过）
+        streamChat: async (opts: { messages: Array<{ role: string; content: string }> }) => { (window as unknown as { __streamCount: number }).__streamCount = ((window as unknown as { __streamCount?: number }).__streamCount ?? 0) + 1; (window as unknown as { __sentMsgs: Array<{ role: string; content: string }> }).__sentMsgs = opts.messages; setTimeout(() => streamCb?.({ type: 'done' }), 10); return { ok: true } },
+        onStreamChunk: (cb: (c: { type: string }) => void) => { streamCb = cb; return () => {} }
       },
       tools: { execute: async () => ({ ok: true }), list: async () => [] },
       context: { resolve: async () => ({ fragments: [] }) },
@@ -302,12 +303,17 @@ test('0-1 从零开始：确认推进 → 对话区出现阶段推进反馈消�
   })
   await page.goto('http://localhost:5174/')
   await expect(page.locator('.nf-start')).toBeVisible()
-  await page.getByRole('button', { name: '从零开始' }).click()
+  // 2026-08-04 体验修复：空输入不显示需求卡（用户「没输入你怎么知道我要做什么」）——启动页输入需求（方案 A）→ initialPrompt 非空 → 需求卡出现（注意：避开「射击」等预选关键词，4 项需全点选）
+  await page.locator('.nf-start__input').fill('帮我做个网页游戏')
+  await page.locator('.nf-start__input').press('Enter')
   await page.getByRole('button', { name: /快速迭代/ }).click()
   // P0 门控：需求未确认 → 推进按钮禁用（文案「确认需求后可推进」）
   const advance = page.locator('.nf-flow__advance button')
   await expect(advance).toBeDisabled()
-  // P2 需求卡：点选 4 项 → 确认 → 自动推进到设计（对话区出现「已进入【设计】阶段」）
+  // 2026-08-04：等自动发送的 working 结束（runChat 尾部等 1s）——否则需求卡确认后的 advanceChat 被 working 守卫跳过（streamChat 不调用）
+  await page.waitForTimeout(1200)
+  // P2 需求卡：输入后出现（initialPrompt 非空）→ 点选 4 项 → 确认 → 自动推进到设计（对话区出现「已进入【设计】阶段」）
+  await expect(page.locator('.nf-reqcard')).toBeVisible()
   await page.locator('.nf-reqcard__chip', { hasText: '射击游戏' }).click()
   await page.locator('.nf-reqcard__chip', { hasText: '网页打开就能玩' }).click()
   await page.locator('.nf-reqcard__chip', { hasText: '发给朋友玩' }).click()
@@ -324,8 +330,13 @@ test('0-1 从零开始：确认推进 → 对话区出现阶段推进反馈消�
   // 2026-08-04 方案 A 回归：需求卡确认摘要注入模型上下文——advanceChat 内部指令含【需求确认】（模型按确认结果做设计，不再基于模糊原始消息）
   await page.waitForTimeout(200)
   const sent = await page.evaluate(() => (window as unknown as { __sentMsgs: Array<{ role: string; content: string }> }).__sentMsgs)
+  const streamCount = await page.evaluate(() => (window as unknown as { __streamCount?: number }).__streamCount ?? 0)
+  expect(streamCount, 'streamChat 应调用 2 次（自动发送 + 需求卡确认后的 advanceChat）；实际 ' + streamCount).toBe(2)
   const userMsgs = sent.filter((m) => m.role === 'user')
-  expect(userMsgs.some((m) => m.content.includes('【需求确认】用户已通过需求确认卡确认需求：射击游戏：网页打开就能玩，发给朋友玩，先做个能玩的版本'))).toBe(true)
+  expect(
+    userMsgs.some((m) => m.content.includes('【需求确认】用户已通过需求确认卡确认需求：射击游戏：网页打开就能玩，发给朋友玩，先做个能玩的版本')),
+    '实际 user 消息：' + JSON.stringify(userMsgs.map((m) => m.content.slice(0, 150)), null, 2)
+  ).toBe(true)
 })
 
 // 2026-08-04 回归：需求确认回写——模型输出【需求确认：xxx】→ 台账标题/快照 + 项目 README 更新（目录名不变；错别字/同音需求被校正）
@@ -457,9 +468,12 @@ test('开发产物门控：无文件产出推进禁用 → write 成功后解锁
   })
   await page.goto('http://localhost:5174/')
   await expect(page.locator('.nf-start')).toBeVisible()
-  await page.getByRole('button', { name: '从零开始' }).click()
+  // 2026-08-04 体验修复：空输入不显示需求卡——启动页输入需求（方案 A）→ initialPrompt 非空 → 需求卡出现
+  await page.locator('.nf-start__input').fill('做个射击游戏')
+  await page.locator('.nf-start__input').press('Enter')
   await page.getByRole('button', { name: /快速迭代/ }).click()
-  // 需求卡确认（走需求卡 → 自动进设计）
+  // 需求卡确认（输入后出现 → 走需求卡 → 自动进设计）
+  await expect(page.locator('.nf-reqcard')).toBeVisible()
   await page.locator('.nf-reqcard__chip', { hasText: '射击游戏' }).click()
   await page.locator('.nf-reqcard__chip', { hasText: '网页打开就能玩' }).click()
   await page.locator('.nf-reqcard__chip', { hasText: '发给朋友玩' }).click()
