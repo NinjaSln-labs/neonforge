@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { SCENES } from './scenes'
 
-// 占位轮播（每 3s 换一个示例问题——展示「能做什么」，输入即停）
+// 占位轮播（每 5s 换一个示例问题——展示「能做什么」，输入即停）
 const PLACEHOLDERS = [
   '想解决什么？直接说，剩下的交给搭档',
   '把 Downloads 里的发票和合同分类整理',
@@ -42,6 +42,13 @@ export default function StartPage({
           placeholder={PLACEHOLDERS[phIdx]}
           aria-label="想解决的问题"
           onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            // 2026-08-04 重审修复：Enter = 从零开始（主路径）——输入后按 Enter 有明确反馈（原无反应）
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault()
+              onNewProject(value)
+            }
+          }}
         />
         <div className="nf-start__scenes">
           {SCENES.map(({ icon: Icon, label, q }) => (
