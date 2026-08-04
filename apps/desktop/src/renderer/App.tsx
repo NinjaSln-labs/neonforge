@@ -13,6 +13,8 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>('boot')
   const [rootPath, setRootPath] = useState<string | null>(null)
   const [zeroToOne, setZeroToOne] = useState(false) // 0-1 交付模式（从零开始——创建项目后仍保持流程）
+  // 2026-08-04 启动页方案 A：启动页输入/点选的问题 → 进入工作区后预填对话输入框（不自动发送）
+  const [prefillPrompt, setPrefillPrompt] = useState('')
 
   useEffect(() => {
     let mounted = true
@@ -52,8 +54,8 @@ export default function App() {
     return (
       <div className="nf-app nf-app--start">
         <StartPage
-          onOpenProject={() => { void openExisting() }}
-          onNewProject={() => { clearSession(); saveProblems([]); setRootPath(null); setZeroToOne(true); setScreen('workspace') }}
+          onOpenProject={(prefill) => { setPrefillPrompt(prefill); void openExisting() }}
+          onNewProject={(prefill) => { setPrefillPrompt(prefill); clearSession(); saveProblems([]); setRootPath(null); setZeroToOne(true); setScreen('workspace') }}
         />
       </div>
     )
@@ -67,6 +69,7 @@ export default function App() {
         onKeyExpired={() => setScreen('config')}
         onProjectCreated={(p) => setRootPath(p)}
         zeroToOneMode={zeroToOne}
+        initialPrompt={prefillPrompt}
       />
     )
   }

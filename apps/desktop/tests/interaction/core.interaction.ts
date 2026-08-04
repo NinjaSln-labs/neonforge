@@ -380,3 +380,17 @@ test('0-1 从零开始：模型需求确认 → 回写台账标题 + updateProje
   expect(calls.length).toBeGreaterThan(0)
   expect(calls[0].title).toBe('3D射击小游戏')
 })
+
+// 2026-08-04 启动页方案 A：启动页输入/点选问题 → 从零开始 → 工作区对话输入框预填（仅预填不自动发送——区别于复跑 externalRequest）
+test('启动页方案 A：输入问题 → 从零开始 → 对话输入框预填（不自动发送）', async ({ page }) => {
+  await mockBridge(page)
+  await page.goto('http://localhost:5174/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.locator('.nf-start__input').fill('我要做一个3D射击小游戏')
+  await page.getByRole('button', { name: '从零开始' }).click()
+  // 工作区对话输入框已预填（prefillText 独立通道）
+  await expect(page.locator('.nf-chat__input textarea')).toHaveValue(/3D射击小游戏/)
+  // 不自动发送：等待后无用户消息（预填 ≠ 发送）
+  await page.waitForTimeout(400)
+  await expect(page.locator('.nf-msg--user')).toHaveCount(0)
+})

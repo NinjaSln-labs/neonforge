@@ -24,7 +24,10 @@ test('@ 引用（输入 @ → 浮层 → 点击插入）', async ({ page }) => {
   await textarea.fill('帮我看看 @')
   await expect(page.locator('.nf-mention')).toBeVisible()
   await expect(page.locator('.nf-mention__item')).toHaveCount(3)
-  await expect(page.locator('.nf-chat')).toHaveScreenshot('mention-open.png')
+  // 坑 27 缓解（2026-08-04）：mask 浮层标题「引用文件」——常量文本对 App 组件树微小变化敏感（启动页改动后全量负载字形分叉 y=576-588），mask 掉消除基线抖动；标题非测试验证点
+  await expect(page.locator('.nf-chat')).toHaveScreenshot('mention-open.png', {
+    mask: [page.locator('.nf-mention__title')]
+  })
   // 点击文件 → 插入标签
   await page.getByRole('option', { name: /gateway.ts/ }).click()
   await expect(textarea).toHaveValue(/@src\/main\/gateway\.ts /)
