@@ -38,9 +38,12 @@ interface Msg {
   toolCalls?: ToolCallMsg[]
 }
 
-// 2026-08-04 体验修复：工具结果展示清洗——bash 只显示 stdout（原 JSON.stringify 显示 {stdout:...} 括号输出）；write/edit 显示路径
+// 2026-08-04 体验修复：工具结果展示清洗——bash 只显示 stdout（原 JSON.stringify 显示 {stdout:...} 括号输出）；write/edit 显示路径；read 长内容摘要化（用户不想看整篇文件）
 function fmtToolResult(r: { ok: boolean; data?: unknown }): string {
-  if (typeof r.data === 'string') return r.data.slice(0, 400)
+  if (typeof r.data === 'string') {
+    const s = r.data
+    return s.length > 300 ? `已读取 ${s.length} 字符：\n${s.slice(0, 200)}…` : s
+  }
   const d = r.data as Record<string, unknown> | undefined
   if (d && typeof d === 'object') {
     if ('stdout' in d) return String(d.stdout ?? '').slice(0, 400)
@@ -344,7 +347,7 @@ export default function ConversationPanel({
     const langRule = lastUserMsg && /[\u4e00-\u9fff]/.test(String(lastUserMsg.content ?? ''))
       ? '⑧ 用中文回复用户（避免英文夹杂；工具名/代码/技术名词可保留原文）'
       : '⑧ 用与用户消息相同的语言回复'
-    const sysHint = { role: 'system', content: `你是 NeonForge 搭档。当前项目根目录：${rootPath ?? '(未指定)'}。规则：① 读文件用 read 工具（路径用项目根下的相对路径，如 package.json）② 不要用 bash find 全局搜索（直接 read 目标文件）③ 工具一次调用一个，执行完看结果再决定 ④ 找不到文件就直接告诉用户 ⑤ 查符号定义/引用/类型用 LSP 工具：find_definition/find_references/get_type_info（传 path + symbol，如 {path: 'src/a.ts', symbol: 'greet'}）⑥ 查文件错误/import 用 get_diagnostics/get_imports ⑦ 不知道符号在哪个文件时用 search 工具（传 query 关键词，如 "greet"）——返回命中文件+行号+片段，再 read 或 LSP 定位。${langRule}⑨ 用户可能不懂技术——回答简洁口语化：优先短句，少用术语；必须提术语时用一句大白话解释；不要堆砌要点清单。⑩ 回复正文不要用 Markdown 标记（不要 #、**、反引号、- 列表、代码块框）；少用括号补充说明；段落之间最多空一行，不要连续空行。` }
+    const sysHint = { role: 'system', content: `你是 NeonForge 搭档。当前项目根目录：${rootPath ?? '(未指定)'}。规则：① 读文件用 read 工具（路径用项目根下的相对路径，如 package.json）② 不要用 bash find 全局搜索（直接 read 目标文件）③ 工具一次调用一个，执行完看结果再决定 ④ 找不到文件就直接告诉用户 ⑤ 查符号定义/引用/类型用 LSP 工具：find_definition/find_references/get_type_info（传 path + symbol，如 {path: 'src/a.ts', symbol: 'greet'}）⑥ 查文件错误/import 用 get_diagnostics/get_imports ⑦ 不知道符号在哪个文件时用 search 工具（传 query 关键词，如 "greet"）——返回命中文件+行号+片段，再 read 或 LSP 定位。${langRule}⑨ 用户可能不懂技术——回答简洁口语化：优先短句，少用术语；必须提术语时用一句大白话解释；不要堆砌要点清单。⑩ 回复正文不要用 Markdown 标记（不要 #、**、反引号、- 列表、代码块框）；少用括号补充说明；段落之间最多空一行，不要连续空行。⑪（2026-08-04 防文本模拟）执行工具必须通过真正的函数调用（tool-call）发出——对话历史里的「（工具调用：…）」只是执行记录，绝不能模仿成文本写在回复正文里，文本写的调用不会被执行；要调工具就在这条回复里发出真实函数调用，工具执行完会自动继续。` }
     try {
       const res = await window.neonforge.gateway.streamChat({
         apiKey: key,
@@ -366,11 +369,11 @@ export default function ConversationPanel({
     .filter((m) => m.role === 'user' || (m.role === 'assistant' && m.status === 'done'))
     .map((m) => {
       if (m.role === 'assistant' && !m.content && m.toolCalls && m.toolCalls.length > 0) {
-        // 工具轮（无文本）——转文本摘要保留上下文
+        // 工具轮（无文本）——转文本摘要保留上下文（2026-08-04：措辞避免模型误当调用方式——用「上一步执行」不用「调用」）
         const summary = m.toolCalls
           .map((c) => `[${c.name}] ${JSON.stringify(c.args).slice(0, 60)} → ${(c.result ?? c.status).toString().slice(0, 100)}`)
           .join('; ')
-        return { role: 'assistant', content: `（工具调用：${summary}）` }
+        return { role: 'assistant', content: `（上一步执行：${summary}）` }
       }
       return { role: m.role, content: m.content }
     })
