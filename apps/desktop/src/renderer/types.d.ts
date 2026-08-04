@@ -28,6 +28,11 @@ export interface NeonForgeBridge {
     readFile: (filePath: string) => Promise<{ ok: true; content: string } | { ok: false; error: string }>
     readNotebook: (rootPath: string | null) => Promise<{ ok: true; content: string } | { ok: false; error: string } | null>
     initProject: (title: string) => Promise<{ ok: true; path: string; title: string } | { ok: false; error: string }>
+    updateProjectTitle: (path: string, title: string) => Promise<{ ok: boolean; error?: string }>
+  }
+  chatLog: {
+    log: (entry: { ts: string; role: 'user' | 'assistant'; content?: string; toolCalls?: Array<{ name: string; status: string }> }) => Promise<void>
+    export: () => Promise<{ ok: boolean; path?: string; error?: string }>
   }
   tools: NeonForgeTools
   context: {

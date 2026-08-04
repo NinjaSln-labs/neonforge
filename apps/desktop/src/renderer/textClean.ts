@@ -21,3 +21,19 @@ export function stripMarkdown(text: string): string {
     .replace(/^\s*```\s*$/gm, '')
     .trim()
 }
+
+// 2026-08-04：模型回复正文展示清洗——去掉用户可见的杂音（字面转义残留/连续换行/行尾空白/CRLF）
+// 只影响渲染展示；API 发送保留原文（不破坏模型上下文语义）
+export function cleanContent(text: string): string {
+  return text
+    // 字面 \n / \t（模型偶发把换行/制表符当字面量输出——用户看到「转译」杂音）
+    .replace(/\\n/g, '\n')
+    .replace(/\\t/g, ' ')
+    // CRLF 归一
+    .replace(/\r\n/g, '\n')
+    // 行尾空白
+    .replace(/[ \t]+\n/g, '\n')
+    // 连续空行压缩（段落间隔最多保留一个空行）
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}

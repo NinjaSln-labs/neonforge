@@ -175,6 +175,14 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 }
 .nf-filetree__fold:hover { color: var(--nf-accent); }
 .nf-filetree__body { overflow: auto; flex: 1; padding: var(--nf-space-1) 0; }
+/* 2026-08-04 用户反馈：文件树完整路径（当前项目目录——消除「不知道是哪个目录」） */
+.nf-filetree__path {
+  margin: 0; padding: 4px 8px 6px;
+  font-size: 11px; line-height: 1.4;
+  color: var(--nf-text-tertiary);
+  word-break: break-all; user-select: text;
+  border-bottom: 1px solid var(--nf-border);
+}
 
 .nf-tree__row {
   display: flex; align-items: center; gap: 4px;
@@ -499,9 +507,33 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 }
 .nf-flow__model-btn:hover { border-color: var(--nf-accent); box-shadow: 0 0 10px rgba(99, 102, 241, 0.2); }
 .nf-flow__hint { color: var(--nf-text-dim); font-size: 11px; }
-.nf-flow__advance { display: flex; align-items: center; gap: var(--nf-space-3); }
+.nf-flow__advance { display: flex; align-items: center; gap: var(--nf-space-3); flex-wrap: wrap; }
 .nf-flow__stage-label { font-size: var(--nf-font-sm); color: var(--nf-text-dim); }
+.nf-flow__gate-hint { font-size: 11px; color: var(--nf-accent); }
 .nf-flow__done { color: #22C55E; font-size: var(--nf-font-sm); font-weight: 600; }
+
+/* 2026-08-04 P2：需求确认卡（候选 chips 点选——意图消歧确定性收敛） */
+.nf-reqcard {
+  margin-top: var(--nf-space-2);
+  padding: var(--nf-space-2) var(--nf-space-3);
+  border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md);
+  background: var(--nf-bg-elevated);
+  display: flex; flex-direction: column; gap: var(--nf-space-2);
+}
+.nf-reqcard__head { font-size: var(--nf-font-sm); color: var(--nf-text-dim); display: flex; align-items: center; gap: 6px; }
+.nf-reqcard__head svg { color: var(--nf-accent); }
+.nf-reqcard__field { display: flex; align-items: flex-start; gap: var(--nf-space-2); }
+.nf-reqcard__label { flex-shrink: 0; width: 64px; font-size: 12px; color: var(--nf-text); padding-top: 3px; }
+.nf-reqcard__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.nf-reqcard__chip {
+  background: none; border: 1px solid var(--nf-border); color: var(--nf-text-dim);
+  border-radius: var(--nf-radius-sm); padding: 3px var(--nf-space-2); font-size: 12px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.nf-reqcard__chip em { font-style: normal; font-size: 11px; color: var(--nf-text-tertiary); }
+.nf-reqcard__chip:hover { border-color: var(--nf-accent); color: var(--nf-accent); }
+.nf-reqcard__chip--on { background: var(--nf-accent-soft); border-color: var(--nf-accent); color: var(--nf-accent); }
+.nf-reqcard__actions { display: flex; justify-content: flex-end; }
 
 /* 数字产物交付（ticket 13）：文件清单 + 任务选择 + 变更预览 */
 .nf-digital { display: flex; flex-direction: column; gap: var(--nf-space-3); padding: var(--nf-space-3); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md); background: var(--nf-bg-elevated); }
@@ -545,6 +577,10 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-settings__row { display: flex; align-items: center; justify-content: space-between; gap: var(--nf-space-3); font-size: var(--nf-font-sm); color: var(--nf-text); }
 .nf-settings__row em { color: var(--nf-text-dim); font-style: normal; font-size: 12px; }
 .nf-settings__row--switch input { accent-color: var(--nf-accent); }
+/* 2026-08-04：对话记录导出 */
+.nf-settings__export { background: none; border: 1px solid var(--nf-border); color: var(--nf-accent); border-radius: var(--nf-radius-sm); padding: 2px var(--nf-space-3); font-size: 12px; cursor: pointer; flex-shrink: 0; }
+.nf-settings__export:hover { border-color: var(--nf-accent); }
+.nf-settings__export-msg { margin: var(--nf-space-1) 0 0; font-size: 12px; color: var(--nf-text-dim); word-break: break-all; }
 .nf-settings__seg { display: flex; gap: 4px; }
 .nf-settings__seg-btn { background: none; border: 1px solid var(--nf-border); color: var(--nf-text-dim); border-radius: var(--nf-radius-sm); padding: 2px var(--nf-space-3); font-size: 12px; cursor: pointer; }
 .nf-settings__seg-btn--on { background: var(--nf-accent-soft); border-color: var(--nf-accent); color: var(--nf-accent); }

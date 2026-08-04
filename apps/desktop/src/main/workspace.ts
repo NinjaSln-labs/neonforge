@@ -3,7 +3,7 @@ import { dialog, BrowserWindow } from 'electron'
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import path from 'node:path'
-import { slugify, projectBaseDir, initProjectFiles } from './projectInit.js'
+import { slugify, projectBaseDir, initProjectFiles, updateProjectTitle } from './projectInit.js'
 
 const IGNORE = new Set([
   'node_modules', '.git', 'dist', 'out', 'build', 'coverage',
@@ -88,15 +88,33 @@ export class WorkspaceService {
   }
 
   // ticket 07：0-1 项目初始化——从零开始 → 创建真实项目目录 + 骨架（Documents/NeonForge/<slug>）
+  // 2026-08-04：同名目录已存在 → 自动加序号（slug-2、slug-3…）——绝不覆盖已有项目（用户反馈「会不会改已有目录」）
   initProject(title: string): { ok: true; path: string; title: string } | { ok: false; error: string } {
     try {
-      const slug = slugify(title)
-      const dir = join(projectBaseDir(), slug)
+      const base = slugify(title)
+      let slug = base
+      let dir = join(projectBaseDir(), slug)
+      let n = 2
+      while (existsSync(dir)) {
+        slug = `${base}-${n}`
+        dir = join(projectBaseDir(), slug)
+        n++
+      }
       initProjectFiles(dir, title)
       this.currentRoot = dir
       return { ok: true, path: dir, title }
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : 'init-project-failed' }
+    }
+  }
+
+  // 2026-08-04：需求确认后回写项目标题（README 首行 + package.json name——目录名不变，防路径断裂）
+  updateProjectTitle(p: string, title: string): { ok: boolean; error?: string } {
+    try {
+      updateProjectTitle(p, title)
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : 'update-project-title-failed' }
     }
   }
 }

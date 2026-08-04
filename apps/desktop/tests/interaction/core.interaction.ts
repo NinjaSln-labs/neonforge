@@ -255,7 +255,9 @@ test('0-1 从零开始：确认推进按钮常驻可见（修复——不在滚�
   await page.getByRole('button', { name: /快速迭代/ }).click()
   const advance = page.locator('.nf-flow__advance button')
   await expect(advance).toBeVisible()
-  await expect(advance).toContainText('确认推进')
+  // 2026-08-04 P0：需求未确认 → 按钮禁用（文案「确认需求后可推进」）——可见性 + 门控文案
+  await expect(advance).toContainText(/确认.*推进/)
+  await expect(advance).toBeDisabled()
   // 修复验证：推进按钮不在 .nf-panel__body（滚动容器）内——对话滚动不隐藏
   const inScrollBody = await advance.evaluate((el) => !!el.closest('.nf-panel__body'))
   expect(inScrollBody).toBe(false)
@@ -264,4 +266,102 @@ test('0-1 从零开始：确认推进按钮常驻可见（修复——不在滚�
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
   await page.waitForTimeout(300)
   await expect(advance).toBeVisible()
+})
+
+// 2026-08-04 回归：点「确认推进」→ 对话区出现「已进入【X】阶段」反馈消息（用户反馈「推进按钮没有实际功能」——原仅 UI 阶段机前进，对话无响应）
+test('0-1 从零开始：确认推进 → 对话区出现阶段推进反馈消息', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.neonforge = {
+      version: 'test',
+      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
+      workspace: {
+        openFolder: async () => null,
+        listDir: async () => [{ name: 'a.ts', path: '/test/a.ts', kind: 'file' }],
+        readFile: async (p: string) => ({ ok: true, content: '// ' + p }),
+        readNotebook: async () => null,
+        initProject: async () => ({ ok: true, path: '/test', title: 't' }),
+        updateProjectTitle: async () => ({ ok: true })
+      },
+      gateway: { validate: async () => ({ ok: true }), streamChat: async () => ({ ok: true }), onStreamChunk: () => () => {} },
+      tools: { execute: async () => ({ ok: true }), list: async () => [] },
+      context: { resolve: async () => ({ fragments: [] }) },
+      compaction: { compact: async () => ({ ok: false }) },
+      plugins: { list: async () => [], toggle: async () => true }
+    }
+    ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
+  })
+  await page.goto('http://localhost:5174/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.getByRole('button', { name: '从零开始' }).click()
+  await page.getByRole('button', { name: /快速迭代/ }).click()
+  // P0 门控：需求未确认 → 推进按钮禁用（文案「确认需求后可推进」）
+  const advance = page.locator('.nf-flow__advance button')
+  await expect(advance).toBeDisabled()
+  // P2 需求卡：点选 4 项 → 确认 → 自动推进到设计（对话区出现「已进入【设计】阶段」）
+  await page.locator('.nf-reqcard__chip', { hasText: '射击游戏' }).click()
+  await page.locator('.nf-reqcard__chip', { hasText: '网页打开就能玩' }).click()
+  await page.locator('.nf-reqcard__chip', { hasText: '发给朋友玩' }).click()
+  await page.locator('.nf-reqcard__chip', { hasText: '先做个能玩的版本' }).click()
+  await page.locator('.nf-reqcard__actions button').click()
+  // 需求确认后：卡片消失 + 推进按钮解锁 + 对话区「已进入【设计】阶段」（handleStageChange(1) → stageAdvance → advanceChat）
+  await expect(page.locator('.nf-reqcard')).toHaveCount(0)
+  await expect(advance).toBeEnabled()
+  const feedback = page.locator('.nf-chat__list .nf-msg--assistant').filter({ hasText: '已进入【设计】阶段' })
+  await expect(feedback).toHaveCount(1)
+  await expect(feedback).toContainText('确认方案')
+  // 阶段机同步前进（设计 = active）
+  await expect(page.locator('.nf-flow__stage--active')).toContainText('设计')
+})
+
+// 2026-08-04 回归：需求确认回写——模型输出【需求确认：xxx】→ 台账标题/快照 + 项目 README 更新（目录名不变；错别字/同音需求被校正）
+test('0-1 从零开始：模型需求确认 → 回写台账标题 + updateProjectTitle', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__titleCalls = []
+    let streamCb: ((c: { type: string; text?: string }) => void) | null = null
+    window.neonforge = {
+      version: 'test',
+      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
+      workspace: {
+        openFolder: async () => null,
+        listDir: async () => [{ name: 'a.ts', path: '/test/a.ts', kind: 'file' }],
+        readFile: async (p: string) => ({ ok: true, content: '// ' + p }),
+        readNotebook: async () => null,
+        initProject: async () => ({ ok: true, path: '/test/proj', title: 't' }),
+        updateProjectTitle: async (p: string, title: string) => { (window as unknown as { __titleCalls: Array<{ p: string; title: string }> }).__titleCalls.push({ p, title }); return { ok: true } }
+      },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        streamChat: async () => {
+          // 延迟触发流式（等 initProject 完成——rootPath 就绪后需求确认才能回写 README）
+          setTimeout(() => {
+            streamCb?.({ type: 'content', text: '你指的是 3D 射击小游戏，对吧？【需求确认：3D射击小游戏】' })
+            streamCb?.({ type: 'done' })
+          }, 50)
+          return { ok: true }
+        },
+        onStreamChunk: (cb: (c: { type: string; text?: string }) => void) => { streamCb = cb; return () => {} }
+      },
+      tools: { execute: async () => ({ ok: true }), list: async () => [] },
+      context: { resolve: async () => ({ fragments: [] }) },
+      compaction: { compact: async () => ({ ok: false }) },
+      plugins: { list: async () => [], toggle: async () => true }
+    }
+    ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
+  })
+  await page.goto('http://localhost:5174/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.getByRole('button', { name: '从零开始' }).click()
+  await page.getByRole('button', { name: /快速迭代/ }).click()
+  // 输入模糊需求（「3d设计」——可能是输入法/错别字，实际想要 3D 射击）
+  await page.locator('.nf-chat__input textarea').fill('我想做一个3d设计小游戏')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  // 等流式 done → 需求确认回写
+  await expect(page.locator('.nf-chat__list .nf-msg--assistant')).toHaveCount(1)
+  await page.waitForTimeout(400)
+  // 台账标题被校正为确认后的需求
+  await expect(page.locator('.nf-ledger__item').first()).toContainText('3D射击小游戏')
+  // updateProjectTitle 被调用（项目 README 回写——目录名不变）
+  const calls = await page.evaluate(() => (window as unknown as { __titleCalls: Array<{ p: string; title: string }> }).__titleCalls)
+  expect(calls.length).toBeGreaterThan(0)
+  expect(calls[0].title).toBe('3D射击小游戏')
 })

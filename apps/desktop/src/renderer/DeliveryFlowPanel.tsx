@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { IconCheck, IconDot, IconRocket } from './icons'
 
 // 0-1 交付流（ticket 07）：说需求 → 软件工程模型/敏捷 → 分步推进 → 交付部署
@@ -6,9 +6,10 @@ import { IconCheck, IconDot, IconRocket } from './icons'
 // v3：当前步骤聚焦——对话区内嵌（固定布局），当前阶段大卡片突出
 export const FLOW_STAGES = ['需求', '设计', '开发', '测试', '部署', '交付']
 export const STAGE_HINT: Record<string, string> = {
-  需求: '说清楚要做什么、给谁用、做成什么样算完',
-  设计: '确认方案、技术选型、页面/结构设计',
-  开发: '我写代码/生成内容，分步给你看',
+  // 2026-08-04 P1 重构（意图消歧）：一次一问 + 候选选项 + 强制同音/近义候选——用户「3D设计游戏」实测：模型顺着词面理解，没猜「射击」（同音）
+  需求: '需求阶段只做一件事：把用户真正想要的问清楚。规则：① 一次只问一个问题（从「做什么」开始），不要一次抛多个问题。② 先复述你的理解，然后对需求里的关键词列出 2-3 个候选理解（必须包含同音/近义/模糊词的猜测——如用户说「设计游戏」，「设计」可能打错/听成「射击」「解谜」「建造」，用 ① ② ③ 编号+一句说明列出），让用户选或补充。③ 用户选定「做什么」后，再逐个问「给谁玩」「在哪儿玩（网页/电脑/手机）」「做成什么样算完」。④ 用户确认需求后，输出【需求确认：一句话准确需求】。本阶段禁止写代码或给技术方案。',
+  设计: '确认方案、技术选型、页面/结构设计——先定方案，不要急着写代码',
+  开发: '我写代码/生成内容，分步给你看——产出真实可运行的东西',
   测试: '验证能跑、按验收标准逐项核对',
   部署: '发布/上线（超出数字能力→给指导）',
   交付: '交付包 + 验收对照，确认后关闭'
@@ -16,13 +17,21 @@ export const STAGE_HINT: Record<string, string> = {
 
 export default function DeliveryFlowPanel({
   onStageChange,
-  onModelSelect
+  onModelSelect,
+  requirementConfirmed = false,
+  stageOverride
 }: {
   onStageChange?: (stage: number) => void
   onModelSelect?: (model: 'traditional' | 'agile') => void
+  requirementConfirmed?: boolean // 2026-08-04 P0：需求已确认（对话【需求确认】或确认卡）→ 解锁从需求推进
+  stageOverride?: number // 2026-08-04：外部推进（需求确认卡）同步本地阶段机——本地 stage 与 MainWorkspace flowStage 双状态对齐
 }) {
   const [stage, setStage] = useState(0) // 当前进行阶段（index）
   const [model, setModel] = useState<'traditional' | 'agile' | null>(null)
+  // 外部推进（需求确认卡 handleStageChange）→ 本地阶段机跟随（只前进，不倒退）
+  useEffect(() => {
+    if (typeof stageOverride === 'number' && stageOverride > stage) setStage(stageOverride)
+  }, [stageOverride, stage])
 
   const advance = () => {
     if (stage < FLOW_STAGES.length - 1) {
@@ -76,12 +85,20 @@ export default function DeliveryFlowPanel({
         </div>
       )}
 
-      {/* 分步推进（2026-08-04：按钮文案统一为「确认推进」——与模型阶段指引提示一致，用户按提示找按钮） */}
+      {/* 分步推进（2026-08-04：按钮文案统一为「确认推进」——与模型阶段指引提示一致；P0 门控：需求阶段未确认需求 → 禁用提示） */}
       {model && stage < FLOW_STAGES.length - 1 && (
         <div className="nf-flow__advance">
           <span className="nf-flow__stage-label">当前阶段：{FLOW_STAGES[stage]}——完成就点「确认推进」</span>
-          <button type="button" className="nf-delivery__primary" onClick={advance}>
-            确认推进 →
+          {stage === 0 && !requirementConfirmed && (
+            <span className="nf-flow__gate-hint">需求还没确认——先在对话里和搭档确认，或在上方需求卡点选</span>
+          )}
+          <button
+            type="button"
+            className="nf-delivery__primary"
+            disabled={stage === 0 && !requirementConfirmed}
+            onClick={advance}
+          >
+            {stage === 0 && !requirementConfirmed ? '确认需求后可推进' : '确认推进 →'}
           </button>
         </div>
       )}

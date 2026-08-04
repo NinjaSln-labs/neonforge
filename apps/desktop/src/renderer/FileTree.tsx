@@ -92,6 +92,8 @@ export default function FileTree({
       </header>
       {!collapsed && (
         <div className="nf-filetree__body">
+          {/* 2026-08-04 用户反馈：文件树不显示完整路径——用户不知道当前是哪个目录；小字路径行（可截断，hover 看全） */}
+          {rootPath && <p className="nf-filetree__path" title={rootPath}>{rootPath}</p>}
           {/* 2026-08-04 审计修复（A1）：空 rootPath（从零开始未创建项目）显示占位——原渲染空名目录按钮（axe button-name critical） */}
           {rootPath ? (
             <TreeNode entry={rootEntry} depth={0} selectedPath={selectedPath} onOpenFile={onOpenFile} />

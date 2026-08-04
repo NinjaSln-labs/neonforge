@@ -50,6 +50,10 @@ class ToolRegistry {
       const data = await tool.execute(args, { rootPath: opts.rootPath })
       return { ok: true, data }
     } catch (e) {
+      // 2026-08-04：ENOENT 友好化——原始报错（含完整路径）透传给非技术用户不可读（talk.txt 实测）；提示用相对路径或先看工程文件
+      if (e instanceof Error && (e as NodeJS.ErrnoException).code === 'ENOENT') {
+        return { ok: false, error: '找不到这个文件或目录——试试用相对路径（如 package.json），或先看右侧工程文件列表' }
+      }
       return { ok: false, error: e instanceof Error ? e.message : String(e) }
     }
   }
@@ -59,12 +63,11 @@ class ToolRegistry {
 function resolvePath(p: unknown, ctx: { rootPath?: string }): string {
   const pStr = String(p ?? '')
   if (!pStr) throw new Error('缺少路径参数')
-  // ① 已是 rootPath 内或真实存在的绝对路径 → 直接用（用户显式路径/项目内路径）
-  // 2026-08-03 v37 修复：existsSync 仅对绝对路径放行——相对路径（如 package.json）在 main cwd 存在会误命中（读到应用自身文件而非项目文件）
-  if (ctx.rootPath && (pStr.startsWith(ctx.rootPath) || (path.isAbsolute(pStr) && existsSync(pStr)))) return pStr
-  // ② 以 rootPath 为基准（模型返回的相对/类绝对路径如 /package.json → 项目根下）
+  // ① 真绝对路径（多段，如 /Users/… 或 /tmp/…）→ 永远不 join——直接用（存在则读，不存在则报不存在；2026-08-04 修复：原实现绝对路径不存在时走 join 分支，拼出 rootPath+绝对路径 的荒谬路径——talk.txt 实测）
+  const segments = pStr.split('/').filter(Boolean)
+  if (path.isAbsolute(pStr) && segments.length > 1) return pStr
+  // ② 相对/类绝对（如 package.json 或 /package.json——单段根下文件名，模型相对语义）→ 以 rootPath 为基准，项目根下
   if (ctx.rootPath) return path.join(ctx.rootPath, pStr.replace(/^\/+/, ''))
-  if (path.isAbsolute(pStr)) return pStr
   throw new Error('路径需为绝对路径或提供 rootPath')
 }
 
