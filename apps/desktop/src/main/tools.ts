@@ -230,20 +230,33 @@ async function bashExecutor(args: Record<string, unknown>, ctx: { rootPath?: str
       // （&/nohup 后台进程：shell 退出（close）但后代仍在进程组——close 时删记录 → 后台进程失联残留）
       if (activeProc?.proc === child) activeProc = null
     }
-    child.stdout?.on('data', (d: Buffer) => { stdout += d.toString(); if (stdout.length > 4000) stdout = stdout.slice(-2000) })
-    child.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); if (stderr.length > 2000) stderr = stderr.slice(-1000) })
+    child.stdout?.on('data', (d: Buffer) => { stdout += d.toString(); if (stdout.length > 32000) stdout = stdout.slice(-16000) })
+    child.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); if (stderr.length > 4000) stderr = stderr.slice(-2000) })
     child.on('error', (err) => { cleanup(); reject(new Error(`bash 启动失败: ${err.message}`)) })
     child.on('close', (code, signal) => {
       cleanup()
       // 被信号终止（SIGKILL——cancel/超时）→ 「已停止」（对齐原 exec 语义：err.killed → 已停止）
       if (signal || code === null) reject(new Error('已停止（命令被中断）'))
       else if (code !== 0) reject(new Error(stderr ? `exit-${code}: ${stderr.slice(0, 500)}` : `exit-${code}`))
-      else resolve({ stdout: stdout.slice(0, 2000), stderr: stderr.slice(0, 500) })
+      else {
+        // 2026-08-05 ServiceState（轻量服务记忆）：起服务类命令且 stdout 含实际地址 → 结果注一条（模型跨轮记得，不用重新探查端口）
+        // 竞品对照：Claude/Codex 不主动记忆——工具结果回填是最轻方案；不注入全量（~30 token）
+        let note = ''
+        if (DEV_SERVER_RE.test(cmd)) {
+          const m = (stdout + stderr).match(/https?:\/\/localhost:\d+|https?:\/\/127\.0\.0\.1:\d+|Local:\s*http:\/\/[^\s]+/)
+          if (m) note = `【服务状态】已启动 ${m[0].replace(/^Local:\s*/, '')}（本命令已返回，服务在后台运行）`
+          else if (/localhost:\d+/.test(cmd)) note = '【服务状态】命令含端口启动（以实际输出/浏览器为准）'
+        }
+        resolve({ stdout: stdout.slice(0, 2000), stderr: stderr.slice(0, 500), note })
+      }
     })
-    // 30s 超时（非长驻命令防挂死）；dev server（& 后台）shell 立即退出不算超时——后台进程留组内待 app 退出清理
+    // 超时（防挂死）：安装类命令（npm/pnpm/yarn/pip install——网络慢常超 30s）放宽到 120s；其他 30s
+    // 2026-08-05 e2e 实测：npm install 30s 被杀 → 模型重试 → 体验卡（用户 11:32 起服务反复的同族问题）
+    const INSTALL_RE = /(npm|pnpm|yarn|bun) (i|install|add)( |$)|pip install|go mod download|brew install/
+    const timeoutMs = INSTALL_RE.test(cmd) ? 120000 : 30000
     timer = setTimeout(() => {
       try { process.kill(-(child.pid ?? 0), 'SIGKILL') } catch { /* 已退出 */ }
-    }, 30000)
+    }, timeoutMs)
   })
 }
 

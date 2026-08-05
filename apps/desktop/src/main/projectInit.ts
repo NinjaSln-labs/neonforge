@@ -1,6 +1,6 @@
 // 0-1 项目初始化（ticket 07 真实执行地基）：从零开始 → 创建真实项目目录 + 骨架
 // 纯逻辑模块（无 electron 依赖——可独立测试）；workspace 调用
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 
@@ -35,6 +35,12 @@ export function projectBaseDir(): string {
 export function initProjectFiles(dir: string, title: string): void {
   mkdirSync(dir, { recursive: true })
   writeFileSync(path.join(dir, 'README.md'), `# ${title}\n\n> NeonForge 0-1 项目——需求驱动交付\n> 需求确认、技术栈确定后，搭档会在这里创建工程文件\n`, 'utf-8')
+  // 2026-08-05 项目上下文（竞品共识：CLAUDE.md/AGENTS.md 启动注入精炼项目规则——不塞文件清单，避免上下文滥用）：
+  // .neonforge 骨架——通用精炼规则（用户可编辑；send 时 readNotebook 注入）；不写文件清单/具体结构（让模型 search 定位）
+  const nfPath = path.join(dir, '.neonforge')
+  if (!existsSync(nfPath)) {
+    writeFileSync(nfPath, `# NeonForge 搭档须知（项目规则——可编辑）\n\n## 常用命令\n- 依赖安装：npm install（或 pnpm/yarn）\n- 开发服务器：npm run dev / vite（**端口不固定**——vite 自动递增，以工具输出里的实际地址为准）\n\n## 开发约定\n- 排查问题：先 search/LSP 定位到文件和行号，再 read 目标（不盲读）\n- 用户明确要求操作（打开/起服务/继续）：立即调工具执行，不只说「我去做」\n`, 'utf-8')
+  }
 }
 
 // 2026-08-04：需求确认后回写项目标题（README 首行 + package.json name）——目录名保持稳定（防路径断裂），标题跟随澄清结果
