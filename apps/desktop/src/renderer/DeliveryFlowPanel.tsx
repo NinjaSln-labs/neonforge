@@ -5,6 +5,15 @@ import { IconCheck, IconDot, IconRocket } from './icons'
 // V2：阶段状态提升——onStageChange/onModelSelect 通知 MainWorkspace（注入对话阶段指引）
 // v3：当前步骤聚焦——对话区内嵌（固定布局），当前阶段大卡片突出
 export const FLOW_STAGES = ['需求', '设计', '开发', '测试', '部署', '交付']
+// 2026-08-05 体验反馈（用户「页卡内容太多冗余 + 出现标签」）：UI 阶段卡展示用户版一句话摘要——STAGE_HINT 是给模型的完整系统提示（含 <candidates> 示例/规则长文），不得直接显示给用户
+export const USER_STAGE_HINT: Record<string, string> = {
+  需求: '确认你到底想要什么——搭档会问你几个问题，也可用上方「快速确认需求」点选',
+  设计: '搭档在定方案（技术/界面/结构）——看完完整方案点「确认推进」进入开发',
+  开发: '搭档在写真实代码文件——写完会告诉你进展和需要你定的事',
+  测试: '搭档在验证能跑、对照目标逐项核对',
+  部署: '发布/上线准备',
+  交付: '交付包 + 验收对照，确认后关闭'
+}
 export const STAGE_HINT: Record<string, string> = {
   // 2026-08-04 P1 重构（意图消歧）：一次一问 + 候选选项 + 强制同音/近义候选——用户「3D设计游戏」实测：模型顺着词面理解，没猜「射击」（同音）
   // 2026-08-05 方案 3（候选按钮）：候选必须用 <candidates> 标记块包裹（每行一个选项，行首 - ），UI 会渲染成可点击按钮——用户点选发送的是选项文本，不是序号；
@@ -78,7 +87,7 @@ export default function DeliveryFlowPanel({
         <div className="nf-flow__focus">
           <span className="nf-flow__focus-tag">当前阶段</span>
           <span className="nf-flow__focus-step">{FLOW_STAGES[stage]}</span>
-          <span className="nf-flow__focus-hint">{STAGE_HINT[FLOW_STAGES[stage]]}</span>
+          <span className="nf-flow__focus-hint">{USER_STAGE_HINT[FLOW_STAGES[stage]] ?? STAGE_HINT[FLOW_STAGES[stage]]}</span>
         </div>
       )}
 

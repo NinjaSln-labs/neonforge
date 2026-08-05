@@ -42,17 +42,46 @@ interface Msg {
 }
 
 // 2026-08-04 体验修复：工具结果展示清洗——bash 只显示 stdout（原 JSON.stringify 显示 {stdout:...} 括号输出）；write/edit 显示路径；read 长内容摘要化（用户不想看整篇文件）
+// 2026-08-05 体验反馈（用户「工具输出太偏代码，冗余不想看」）：工具结果精简为人类可读一句话——详细输出在工具卡 details 折叠查看（rawResult）
 function fmtToolResult(r: { ok: boolean; data?: unknown }): string {
   if (typeof r.data === 'string') {
-    const s = r.data
-    return s.length > 300 ? `已读取 ${s.length} 字符：\n${s.slice(0, 200)}…` : s
+    return `已读取（${r.data.length} 字符）`
   }
   const d = r.data as Record<string, unknown> | undefined
   if (d && typeof d === 'object') {
-    if ('stdout' in d) return String(d.stdout ?? '').slice(0, 400)
+    if ('stdout' in d) {
+      const lines = String(d.stdout ?? '').split('\n').filter((l) => l.trim()).length
+      return `执行完成（输出 ${lines} 行）`
+    }
     if ('file' in d) return `已写入：${String(d.file)}`
   }
-  return JSON.stringify(r.data).slice(0, 400)
+  return '完成'
+}
+
+// 2026-08-05：工具卡参数人类化（原 JSON.stringify(args) 技术化——普通用户看不懂）——「读取 xxx / 执行 xxx」
+function fmtToolArgs(tc: { name: string; args: Record<string, unknown> }): string {
+  const a = tc.args
+  switch (tc.name) {
+    case 'read': return a.path ? `读取 ${String(a.path)}` : '读取文件'
+    case 'write': return a.path ? `写入 ${String(a.path)}` : '写入文件'
+    case 'edit': return a.path ? `修改 ${String(a.path)}` : '修改文件'
+    case 'bash': return a.command ? `执行 ${String(a.command).slice(0, 60)}` : '执行命令'
+    case 'search': return a.query ? `搜索 ${String(a.query)}` : '搜索代码'
+    case 'plan_approval': return `规划 ${((a.files ?? []) as unknown[]).length} 个文件`
+    default: return tc.name
+  }
+}
+
+// 2026-08-05 体验反馈（用户「最后一条像卡住」——模型承诺行动但没调工具，如「我先打开服务端看看再动手」后停住）：
+// 检测开发阶段模型回复「承诺要做事但没实际调工具」→ 对话区提示用户可回复「继续」（非卡死——working 已释放，只是模型停住等指令）
+export function isActionPromise(content: string): boolean {
+  if (!content) return false
+  const t = content.trim()
+  if (!t) return false
+  if (/[?？]$/.test(t) || /吗$|呢$|吧$|可以吗|行不行/.test(t)) return false // 问句/征求同意——不是承诺
+  const promise = /(我先|我来|接着|这就|准备|马上|让我|我会|要先|先读|先看|先写|先建|先改|直接|开始|继续(做|写|加|改|调|检查|启动))/.test(t)
+  const action = /(写|做|加|改|读|看|查|建|装|启|跑|执行|调整|清理|检查|修复|实现|看结构|打开)/.test(t)
+  return promise && action
 }
 
 export default function ConversationPanel({
@@ -244,6 +273,15 @@ export default function ConversationPanel({
         content,
         toolCalls: streamingRef.current.toolCalls.map((t) => ({ name: t.name, status: t.status }))
       })
+      // 2026-08-05 体验反馈（用户「最后一条像卡住」）：开发阶段模型承诺行动（「我先…再…」）但没调工具 → 提示用户可回复「继续」
+      // （非卡死——working 已释放；判定收紧：问句/征求同意不触发，避免打扰正常决策等待）
+      if ((flowStage ?? 0) >= 2 && streamingRef.current.toolCalls.length === 0 && isActionPromise(content)) {
+        setMessages((prev) => [...prev, {
+          role: 'assistant',
+          content: '搭档说要做但还没动手——回复「继续」，它会接着做。',
+          status: 'done'
+        }])
+      }
       streamingRef.current = { content: '', toolCalls: [] }
     }
     setMessages((prev) => {
@@ -849,8 +887,15 @@ export default function ConversationPanel({
                       {tc.status === 'done' ? <IconCheck size={11} /> : tc.status === 'need-approval' || tc.status === 'plan-approval' ? <IconLock size={11} /> : tc.status === 'reverted' ? <IconRotateCcw size={11} /> : tc.status === 'error' ? <IconX size={11} /> : <IconClock size={11} />}
                     </span>
                     <span className="nf-toolcall__name"><ToolIcon name={tc.name} size={12} /> {tc.name}</span>
-                    <span className="nf-toolcall__args">{JSON.stringify(tc.args).slice(0, 80)}</span>
+                    <span className="nf-toolcall__args">{fmtToolArgs(tc)}</span>
                     {tc.result && <span className="nf-toolcall__result">{tc.result}</span>}
+                    {/* 2026-08-05 体验反馈：详细输出折叠（默认不展示代码——需要时展开查看） */}
+                    {tc.status === 'done' && tc.rawResult && (
+                      <details className="nf-toolcall__detail">
+                        <summary>查看详情</summary>
+                        <pre className="nf-toolcall__detail-pre">{tc.rawResult.slice(0, 1500)}</pre>
+                      </details>
+                    )}
                     {tc.status === 'done' && tc.canRevert && (
                       <button
                         type="button"
