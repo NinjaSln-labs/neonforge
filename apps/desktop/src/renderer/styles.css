@@ -682,6 +682,10 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-toolcall__name { color: var(--nf-text); font-weight: 600; }
 .nf-toolcall__args { color: var(--nf-text-dim); font-family: var(--nf-font-mono); }
 .nf-toolcall__result { color: var(--nf-text-dim); white-space: pre-wrap; max-width: 100%; }
+/* 2026-08-05 体验反馈：工具详细输出折叠（默认不展示代码——需要时展开） */
+.nf-toolcall__detail { margin-top: 4px; width: 100%; }
+.nf-toolcall__detail summary { color: var(--nf-accent-text); font-size: 11px; cursor: pointer; }
+.nf-toolcall__detail-pre { max-height: 180px; overflow: auto; font-size: 11px; color: var(--nf-text-dim); background: var(--nf-bg); border: 1px solid var(--nf-border); border-radius: 4px; padding: 6px; white-space: pre-wrap; margin-top: 4px; }
 /* 2026-08-04 体验修复：授权卡醒目标题——模型消息停在「先写文件」后用户不知道要批准（等授权无提示的根因） */
 .nf-toolcall__approve-hint { color: var(--nf-amber); font-weight: 600; font-size: 12px; }
 .nf-toolcall__hint { color: var(--nf-amber); }

@@ -42,7 +42,8 @@ test('工具卡片（read 自动执行 ✅）', async ({ page }) => {
   await page.waitForTimeout(800)
   await expect(page.locator('.nf-toolcall')).toHaveCount(1)
   await expect(page.locator('.nf-toolcall')).toContainText('read')
-  await expect(page.locator('.nf-toolcall')).toContainText('neonforge-desktop')
+  // 2026-08-05 体验反馈：read 结果精简为「已读取（N 字符）」（原展示代码内容——用户不想看）
+  await expect(page.locator('.nf-toolcall')).toContainText('已读取')
   // 等续聊链完全结束（working false）再截图——消除全量跑的时序抖动
   await expect(page.locator('.nf-statusbar')).toContainText('就绪')
   await expect(page.locator('.nf-chat')).toHaveScreenshot('toolcall-read.png')
