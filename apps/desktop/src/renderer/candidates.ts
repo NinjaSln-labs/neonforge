@@ -30,3 +30,12 @@ export function stripCandidates(content: string): string {
   // 流式未闭合：<candidates> 出现后（到闭合前的残留/结尾）移除
   return closed.replace(/<candidates>[\s\S]*$/gi, '').replace(/\n{2,}/g, '\n').trim()
 }
+
+// 2026-08-05：通用去标签（展示层兜底）——模型会自发发明尖括号标签（实测 <one-question>，模仿 <candidates> 模式）
+// 策略：去标签本身、保留内容（<one-question>问题</one-question> → 问题）；不处理 <candidates>（已被 stripCandidates 前置移除/转按钮）
+export function stripTags(content: string): string {
+  return content
+    .replace(/<\/?[a-z][a-z0-9-]*>/gi, '')
+    .replace(/\n{2,}/g, '\n')
+    .trim()
+}
