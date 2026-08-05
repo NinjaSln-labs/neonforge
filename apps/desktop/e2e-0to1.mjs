@@ -96,7 +96,8 @@ class UserAgent {
       return { action: 'continue', understanding: '模型说要做但没动手', reason: '回复「继续」让它接着干' }
     }
     const qClass = this.classify(c)
-    if (qClass !== Q.UNKNOWN && /[?？]|再问|接着问|下[一1个]问题|先问/.test(c)) {
+    // 无候选但模型在问（疑问语义——问号/哪个/什么/确认/理解/意思/想法）→ 打字回答（模型偶尔不出候选块直接问）
+    if (qClass !== Q.UNKNOWN && (/[?？]|哪个|哪几种|哪一种|什么|吗$|呢$|确认|理解|意思|想法|看看你|你觉得/.test(c))) {
       const answer = this.typeAnswer(qClass)
       return { action: 'type', text: answer, understanding: `模型在问「${qClass}」`, reason: `打字回答：${answer.slice(0, 15)}` }
     }
@@ -194,12 +195,13 @@ class SessionDriver {
   async waitSettled(timeoutMs = 120000) {
     const deadline = Date.now() + timeoutMs
     let last = null
+    let sb = '' // 循环外定义——超时 throw 引用
     while (Date.now() < deadline) {
       await this.page.waitForTimeout(1500)
       const t = await this.readTranscript()
       const msgs = t.filter((m) => m.content.trim())
       const lastMsg = msgs[msgs.length - 1]
-      const sb = await this.page.locator('.nf-statusbar').innerText().catch(() => '')
+      sb = await this.page.locator('.nf-statusbar').innerText().catch(() => '')
       const working = await this.page.locator('.nf-statusbar__dot--working').count().catch(() => 0)
       const msgChanged = last && lastMsg && lastMsg.content !== last.content
       // 授权卡待批（「有操作待你批准」）——模型在等用户批准（maybeContinue 已停），不是没回复——返回让上层处理授权
@@ -287,9 +289,11 @@ class SessionDriver {
     const p = this.page
     const plan = p.locator('.nf-toolcall__approve', { hasText: '批准这批文件' })
     if (await plan.count() > 0) {
+      // 提取文件清单（路径 + 原因）——真实用户批准前会看清单
       const files = await p.locator('.nf-plan__file').allInnerTexts().catch(() => [])
+      const paths = await p.locator('.nf-plan__path').allInnerTexts().catch(() => [])
       await plan.first().click()
-      return { label: '批准这批文件', detail: `文件清单：${files.slice(0, 6).map((f) => f.replace(/\n/g, ' ').slice(0, 35)).join(' | ')}` }
+      return { label: '批准这批文件', detail: `文件清单(${files.length})：${files.slice(0, 6).map((f) => f.replace(/\n/g, ' ').slice(0, 35)).join(' | ')}`, planFiles: paths.map((s) => s.trim()).filter(Boolean) }
     }
     const batch = p.locator('.nf-toolcall__batch-approve')
     if (await batch.count() > 0) { await batch.first().click(); return { label: '全部允许并记住', detail: '' } }
@@ -311,6 +315,35 @@ class SessionDriver {
   async fileTree() {
     return (await this.page.locator('.nf-filetree span, [class*="filetree"] span').allInnerTexts().catch(() => []))
       .map((s) => s.trim()).filter(Boolean)
+  }
+
+  // 是否有未完成的工具卡（running/pending——bash 长任务如 npm install 执行中）
+  async toolsRunning() {
+    return await this.page.locator('.nf-toolcall--running, .nf-toolcall--pending').count().catch(() => 0)
+  }
+
+  // 项目根目录（状态栏「│ 目录名」→ Documents/NeonForge/目录名）
+  async projectDir() {
+    const sb = await this.statusbar()
+    const name = (sb.match(/│\s*(.+)$/) ?? [])[1]?.trim() ?? ''
+    if (!name) return null
+    return path.join(os.homedir(), 'Documents/NeonForge', name)
+  }
+
+  // 真实文件系统检查（比 UI 文件树可靠——文件树可能折叠/缓存）——递归列出项目内文件（相对路径）
+  async realFiles() {
+    const dir = await this.projectDir()
+    if (!dir || !fs.existsSync(dir)) return []
+    const out = []
+    const walk = (d) => {
+      for (const f of fs.readdirSync(d, { withFileTypes: true })) {
+        const fp = path.join(d, f.name)
+        if (f.isDirectory() && !f.name.startsWith('.') && f.name !== 'node_modules') walk(fp)
+        else if (f.isFile()) out.push(fp.replace(dir + path.sep, ''))
+      }
+    }
+    walk(dir)
+    return out
   }
 
   async statusbar() {
@@ -411,82 +444,206 @@ class StageMachine {
     throw new Error('需求阶段 20 轮未收敛（模型持续提问/循环）')
   }
 
-  // ---- 设计阶段 ----
+  // ---- 设计阶段：真实用户——模型输出方案（可能还有设计选择题要问）→ 答选择题 → 模型明确「方案完整/确认推进」→ 才推进 ----
   async design() {
-    const msg = await this.driver.waitSettled(150000)
-    printModel(msg)
-    const okLen = msg.content.length >= 60
-    const okKw = /(方案|技术|用|结构|界面|页面|模块|整体)/.test(msg.content)
-    this.verdicts.push({ stage: '设计', okLen, okKw, len: msg.content.length })
-    console.log(`   📐 设计验证：${msg.content.length} 字${okLen ? ' ✓' : ' ⚠️偏短'}${okKw ? ' 含方案要素 ✓' : ' ⚠️无方案关键词'}`)
-    if (!okLen) throw new Error(`设计阶段模型输出过短（${msg.content.length} 字）`)
-    console.log(`   🧑 方案我看过了，没问题——点「确认推进」进入开发`)
-    await this.driver.clickAdvance('开发')
-  }
-
-  // ---- 开发阶段 ----
-  async development() {
-    await this.driver.waitSettled(180000)
-    const d = Date.now() + 240000
-    const btn = this.driver.page.locator('.nf-flow__advance button')
-    let doneCards = 0
-    while (Date.now() < d) {
+    let lastProcessed = ''
+    const deadline = Date.now() + 240000
+    while (Date.now() < deadline) {
+      const msg = await this.driver.waitSettled(60000)
+      if (msg.content === lastProcessed) { await this.driver.page.waitForTimeout(3000); continue }
+      lastProcessed = msg.content
+      // 授权卡（设计阶段模型可能违规调 read/bash——正常批准）
       const ap = await this.driver.approvePending()
-      if (ap) console.log(`   🔓 授权：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`)
-      doneCards = await this.driver.page.locator('.nf-toolcall--done').count()
-      if (doneCards > 0 && await btn.isEnabled().catch(() => false)) break
+      if (ap) { console.log(`   🔓 授权：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`); continue }
+      if (/说要做但还没动手|回复.*继续/.test(msg.content)) {
+        console.log(`   🧑 模型说要做但没动手——回复「继续」让它干完`)
+        await this.driver.send('继续')
+        continue
+      }
+      printModel(msg)
+      // 模型在问设计选择题（候选/问句）→ 像需求阶段一样语义回答
+      const decision = this.agent.decide(msg)
+      if (decision.action === 'click-option') {
+        console.log(`   🧑 设计选择：${decision.reason}「${decision.text}」`)
+        await this.driver.clickCandidate(decision.text)
+        const next = await this.driver.waitNew(msg.content)
+        this.verdicts.push({ stage: '设计', answered: decision.text, reply: next.content.slice(0, 50) })
+        console.log(`   ✅ 模型回复：「${next.content.slice(0, 50).replace(/\n/g, ' ')}」\n`)
+        lastProcessed = next.content
+        continue
+      }
+      if (decision.action === 'type') {
+        console.log(`   🧑 设计回答：${decision.reason}「${decision.text}」`)
+        await this.driver.send(decision.text)
+        const next = await this.driver.waitNew(msg.content)
+        this.verdicts.push({ stage: '设计', answered: decision.text, reply: next.content.slice(0, 50) })
+        console.log(`   ✅ 模型回复：「${next.content.slice(0, 50).replace(/\n/g, ' ')}」\n`)
+        lastProcessed = next.content
+        continue
+      }
+      // 模型说方案完整/确认推进（明确完成设计）→ 推进
+      const okLen = msg.content.length >= 60
+      const okKw = /(方案|技术|用|结构|界面|页面|模块|整体)/.test(msg.content)
+      const confirmed = /(方案.*(完整|没问题|确认|定了)|确认.*方案|没问题.*确认推进|你确认|确认推进|就这样|可以了|没问题)/.test(msg.content)
+      if (okLen && okKw && confirmed) {
+        this.verdicts.push({ stage: '设计', okLen, okKw, len: msg.content.length })
+        console.log(`   📐 设计验证：${msg.content.length} 字 ✓ 含方案要素 ✓ 模型确认完整`)
+        console.log(`   🧑 方案我看过了，没问题——点「确认推进」进入开发`)
+        await this.driver.clickAdvance('开发')
+        return
+      }
+      // 模型还在输出方案（没说完整/没问问题）→ 等下一轮
+      if (okLen && okKw) {
+        console.log(`   ⏳ 模型还在补设计方案（${msg.content.length} 字）——等它说完\n`)
+      }
       await this.driver.page.waitForTimeout(1500)
     }
-    const t = await this.driver.readTranscript()
-    const writes = t.flatMap((m) => m.tools).filter((x) => /写入|修改/.test(x))
-    const tree = await this.driver.fileTree()
-    const realFiles = [...new Set(tree.filter((f) => /package|\.(js|ts|html|css|json|md)$/.test(f)))]
-    this.verdicts.push({ stage: '开发', doneCards, writes: writes.length, realFiles: realFiles.length })
-    console.log(`   🛠 开发验证：工具卡 done=${doneCards}，写入 ${writes.length} 条，真实文件：${realFiles.slice(0, 6).join(', ') || '(读文件树)'}`)
-    if (doneCards === 0) throw new Error('开发阶段无工具执行完成（write 未产出）')
-    if (realFiles.length === 0) throw new Error('开发阶段文件树无真实文件（产物缺失——假阳性）')
-    console.log(`   🧑 文件都写好了——点「确认推进」进入测试`)
-    await this.driver.clickAdvance('测试')
+    throw new Error('设计阶段超时（模型未明确「方案完整/确认推进」）')
   }
 
-  // ---- 测试阶段 ----
-  async test() {
-    const msg = await this.driver.waitSettled(150000)
-    printModel(msg)
-    if (/(回复.*继续|说要做但还没动手)/.test(msg.content)) {
-      console.log(`   🧑 模型说要做但没动手——回复「继续」让它干完`)
-      await this.driver.send('继续')
-      const done = await this.driver.waitSettled(180000)
-      const okKw = /(验证|跑|启动|检查|测试|打开|运行|确认|试|写|建|改|装|完成)/.test(done.content)
-      this.verdicts.push({ stage: '测试', okKw, len: done.content.length, continued: true })
-      console.log(`   🧪 测试：「${done.content.slice(0, 70).replace(/\n/g, ' ')}…」${okKw ? ' ✓含动作' : ' ⚠️'}`)
-    } else {
-      const okKw = /(验证|跑|启动|检查|测试|打开|运行|确认|试)/.test(msg.content)
-      this.verdicts.push({ stage: '测试', okKw, len: msg.content.length })
-      console.log(`   🧪 测试：「${msg.content.slice(0, 70).replace(/\n/g, ' ')}…」${okKw ? ' ✓含验证动作' : ' ⚠️'}`)
+  // ---- 开发阶段：真实用户——批准清单 → 看着模型逐个写 → 模型说完成 → 检查文件齐全 → 缺则补齐 → 推进 ----
+  async development() {
+    let planned = [] // 批准的文件清单（plan_approval）
+    let lastProcessed = '' // 已处理消息（防同一条重复打印/处理）
+    const deadline = Date.now() + 300000
+    while (Date.now() < deadline) {
+      const msg = await this.driver.waitSettled(60000)
+      if (msg.content === lastProcessed) { await this.driver.page.waitForTimeout(3000); continue }
+      lastProcessed = msg.content
+      // 授权卡（plan_approval/bash/单卡）——批准并记录清单
+      const ap = await this.driver.approvePending()
+      if (ap) {
+        console.log(`   🔓 授权：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`)
+        if (ap.planFiles && ap.planFiles.length > 0) {
+          planned = ap.planFiles
+          console.log(`      📋 已批准文件清单（${planned.length} 个）：${planned.join(', ')}`)
+        }
+        continue
+      }
+      // 模型请求批准文件清单（二次 plan_approval 被 UI 幂等处理不弹卡——模型以为在等批准）→ 显式放行
+      if (/(请求你批准|请批准|等你批准|需要你批准|请求批准)/.test(msg.content)) {
+        printModel(msg)
+        console.log(`   🧑 模型请求批准（UI 幂等无新卡）——显式放行「批准，继续写」`)
+        await this.driver.send('批准，继续写')
+        continue
+      }
+      // isActionPromise 提示（模型说要做但没动手）→ 回复「继续」
+      if (/说要做但还没动手|回复.*继续/.test(msg.content)) {
+        console.log(`   🧑 模型说要做但没动手——回复「继续」让它干完`)
+        await this.driver.send('继续')
+        continue
+      }
+      // 模型在写文件/说明进度（工具卡在动）→ 展示模型说什么，继续等
+      const have = await this.driver.realFiles()
+      printModel(msg)
+      // 模型明确说「写完/完成」？→ 检查清单是否齐全（真实文件系统）
+      if (/(写完了|都写好了|全部完成|都完成了|搞定|写好了|做完了|完成.*确认推进)/.test(msg.content)) {
+        const missing = planned.filter((pf) => !have.some((h) => h === pf || h.endsWith(pf) || pf.endsWith(h)))
+        console.log(`   📦 已完成文件：${have.slice(0, 10).join(', ') || '(空)'}`)
+        if (missing.length > 0) {
+          // 真实用户：模型说写完但清单缺文件 → 指出并让补齐
+          console.log(`   ⚠️ 模型说写完了，但清单里还缺：${missing.join(', ')}`)
+          console.log(`   🧑 我检查发现缺文件——提醒模型补齐`)
+          await this.driver.send(`清单里的 ${missing.slice(0, 3).join('、')} 还没看到，补一下再确认`)
+          continue
+        }
+        // 清单齐全 → 推进（不强制等工具全部 done——dev server 常驻进程工具卡会一直 pending，属正常；只看模型说完成 + 清单齐全）
+        this.verdicts.push({ stage: '开发', planned: planned.length, have: have.length })
+        console.log(`   ✅ 开发完成（清单 ${planned.length}/${planned.length} 文件齐全）——点「确认推进」进入测试`)
+        await this.driver.clickAdvance('测试')
+        return
+      }
+      // 模型还在做（没说完成）→ 等下一轮
+      await this.driver.page.waitForTimeout(1500)
     }
-    console.log(`   🧑 测试 OK——点「确认推进」进入部署`)
-    await this.driver.clickAdvance('部署')
+    throw new Error('开发阶段超时（模型未完成——清单文件未全部产出）')
   }
 
-  // ---- 部署阶段 ----
+  // ---- 测试阶段：真实用户——模型必须实际调工具验证（跑起来/检查）并说通过，才能推进 ----
+  async test() {
+    let lastProcessed = '' // 已处理消息（防同一条重复打印/处理）
+    const deadline = Date.now() + 300000
+    while (Date.now() < deadline) {
+      const msg = await this.driver.waitSettled(60000)
+      if (msg.content === lastProcessed) { await this.driver.page.waitForTimeout(3000); continue }
+      lastProcessed = msg.content
+      const ap = await this.driver.approvePending()
+      if (ap) { console.log(`   🔓 授权：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`); continue }
+      printModel(msg)
+      if (/说要做但还没动手|回复.*继续/.test(msg.content)) {
+        console.log(`   🧑 模型说要做但没动手——回复「继续」让它干完`)
+        await this.driver.send('继续')
+        continue
+      }
+      // 真实验证：模型实际调了工具（bash 跑/检查/启动）+ 明确说验证通过
+      const t = await this.driver.readTranscript()
+      const hasBashRun = t.some((m) => m.tools.some((x) => /(npm|vite|serve|启动|运行|执行|检查|ls|测试|验证|test)/.test(x)))
+      const saidPass = /(验证通过|测试通过|能跑|正常运行|没问题|跑起来了|启动成功|检查通过|测试完成)/.test(msg.content)
+      if (saidPass && hasBashRun) {
+        this.verdicts.push({ stage: '测试', hasBashRun, saidPass })
+        console.log(`   ✅ 测试验证通过（有实际运行/检查动作 + 模型确认）——点「确认推进」进入部署`)
+        await this.driver.clickAdvance('部署')
+        return
+      }
+      if (saidPass && !hasBashRun) {
+        // 模型说通过但没实际跑 → 真实用户会要求实际验证
+        console.log(`   ⚠️ 模型说通过，但没看到实际运行/检查动作`)
+        console.log(`   🧑 要求实际验证：「实际跑起来验证一下，确认能打开」`)
+        await this.driver.send('实际跑起来验证一下，确认能打开再确认完成')
+        continue
+      }
+      // 模型还在验证/写东西 → 等
+      await this.driver.page.waitForTimeout(1500)
+    }
+    throw new Error('测试阶段无真实验证（模型没实际运行/检查就要求推进）')
+  }
+
+  // ---- 部署阶段：真实用户——先查产物完整（核心文件在），再让模型给出可执行部署/实际部署 ----
   async deploy() {
-    let msg = await this.driver.waitSettled(150000)
-    printModel(msg)
-    if (/(还没有|没有|缺|还没|未完成|只有|回复.*继续|说要做但还没动手)/.test(msg.content) && /(回复.*继续|说要做)/.test(msg.content)) {
-      console.log(`   🧑 模型发现没做完——回复「继续」补齐`)
-      await this.driver.send('继续')
+    // ① 检查产物完整性（部署前真实用户会确认「能部署的东西在不在」——真实文件系统）
+    const tree = await this.driver.realFiles()
+    const core = ['index.html', 'package.json']
+    const missingCore = core.filter((c) => !tree.some((t) => t.endsWith(c)))
+    let msg = null
+    if (missingCore.length > 0) {
+      console.log(`   ⚠️ 部署前检查：核心产物缺失 ${missingCore.join(', ')}——先让模型补齐`)
+      await this.driver.send(`${missingCore.join('、')} 还没写，补齐了再谈部署`)
       msg = await this.driver.waitSettled(180000)
       printModel(msg, '✅')
+      // 补齐后再查一次
+      const tree2 = await this.driver.realFiles()
+      const missing2 = core.filter((c) => !tree2.some((t) => t.endsWith(c)))
+      if (missing2.length > 0) throw new Error(`部署阶段产物补齐失败（仍缺 ${missing2.join(', ')}）`)
+      console.log(`   ✅ 产物已补齐（${core.join(', ')} 在）`)
+    } else {
+      console.log(`   📦 产物检查：${core.join(', ')} 都在 ✓`)
     }
-    const okKw = /(完成|上线|部署|链接|端口|地址|交付|可以玩|打开|浏览器|写好|做好了)/.test(msg.content)
-    this.verdicts.push({ stage: '部署', okKw, len: msg.content.length })
-    console.log(`   🚀 部署：「${msg.content.slice(0, 70).replace(/\n/g, ' ')}…」${okKw ? ' ✓含交付' : ' ⚠️'}`)
+    // ② 等模型给出可执行部署方案（或实际部署）
+    const deadline = Date.now() + 180000
+    while (Date.now() < deadline) {
+      msg = await this.driver.waitSettled(60000)
+      const ap = await this.driver.approvePending()
+      if (ap) { console.log(`   🔓 授权：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`); continue }
+      if (/说要做但还没动手|回复.*继续/.test(msg.content)) {
+        console.log(`   🧑 模型说要做但没动手——回复「继续」让它干完`)
+        await this.driver.send('继续')
+        continue
+      }
+      printModel(msg)
+      // 可执行部署：给了命令/平台/链接/实际部署动作
+      const actionable = /(npm run|vercel|部署|上线|链接|地址|端口|localhost|npm i|npm install|访问|打开.*玩|部署好了|可以玩)/.test(msg.content)
+      if (actionable) {
+        this.verdicts.push({ stage: '部署', actionable })
+        console.log(`   ✅ 部署方案可执行（${msg.content.slice(0, 40)}…）`)
+        break
+      }
+      await this.driver.page.waitForTimeout(1500)
+    }
     const done = await this.driver.page.locator('.nf-flow__done').count()
     const sb = await this.driver.statusbar()
     const rootHint = (sb.match(/│\s*(.+)$/) ?? [])[1]?.trim() ?? ''
-    const tree = await this.driver.fileTree()
-    const hasFiles = tree.some((f) => /package|\.(js|ts|html|css|json)$/.test(f))
+    const treeF = await this.driver.realFiles()
+    const hasFiles = treeF.some((f) => /package|\.(js|ts|html|css|json)$/.test(f))
     this.verdicts.push({ stage: '产物', rootHint, hasFiles })
     console.log(`   📦 产物：项目=${rootHint}，${hasFiles ? '✓ 有真实文件' : '✗ 无产物'}，到达阶段=${await this.driver.currentStage()}${done ? '（交付完成）' : ''}`)
     return { rootHint, hasFiles, done, stage: await this.driver.currentStage() }
