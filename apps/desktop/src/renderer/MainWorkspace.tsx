@@ -241,6 +241,11 @@ function initProblems(): ProblemInstance[] {
   const [stageAdvance, setStageAdvance] = useState<{ seq: number; stage: string; hint: string; requirement?: string } | null>(null)
   // 2026-08-04 方案 A：requirement 可选——需求卡确认时携带确认摘要（注入对话上下文，模型按确认结果工作）
   const handleStageChange = (stage: number, requirement?: string) => {
+    // 2026-08-05 第六轮修复：需求阶段推进 = 用户显式确认需求（按钮已解锁——不依赖模型【需求确认】标记；
+    // 模型没输出标记时原按钮禁用 = 死锁：模型提示「点确认推进」却点不了）——点击即确认（reqTextRef 暂存的需求文本/卡确认摘要）
+    if (stage > 0 && flowStage === 0 && !requirementConfirmed) {
+      handleRequirementConfirmed(reqTextRef.current || requirement || '需求已确认')
+    }
     setFlowStage(stage)
     setStageAdvance((prev) => ({ seq: (prev?.seq ?? 0) + 1, stage: FLOW_STAGES[stage], hint: STAGE_HINT[FLOW_STAGES[stage]], requirement }))
     const acceptance = FLOW_STAGES.map((s, i) => ({
