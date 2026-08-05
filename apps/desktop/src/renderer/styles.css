@@ -559,6 +559,16 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-reqcard__chip--on { background: var(--nf-accent-soft); border-color: var(--nf-accent); color: var(--nf-accent); }
 .nf-reqcard__actions { display: flex; justify-content: flex-end; }
 
+/* 2026-08-05 方案 3：结构化候选按钮——模型 <candidates> 块渲染为可点击选项（点选发送文本，不走序号解析） */
+.nf-candidates { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 2px; }
+.nf-candidates__btn {
+  background: none; border: 1px solid var(--nf-accent); color: var(--nf-accent-text);
+  border-radius: var(--nf-radius-sm); padding: 4px var(--nf-space-2); font-size: 12px; cursor: pointer;
+  transition: background 150ms ease, transform 150ms ease;
+}
+.nf-candidates__btn:hover { background: var(--nf-accent-soft); color: var(--nf-accent); }
+.nf-candidates__btn:active { transform: scale(0.97); }
+
 /* 数字产物交付（ticket 13）：文件清单 + 任务选择 + 变更预览 */
 .nf-digital { display: flex; flex-direction: column; gap: var(--nf-space-3); padding: var(--nf-space-3); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md); background: var(--nf-bg-elevated); }
 .nf-digital__files { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 140px; overflow-y: auto; }

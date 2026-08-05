@@ -673,3 +673,55 @@ test('0-1 授权 v4 完整路径：允许并记住 → 同文件自动 → 确�
   // 信任条消失（已清除）
   await expect(page.locator('.nf-trustbar')).toHaveCount(0)
 })
+
+// 2026-08-05 方案 3：结构化候选按钮——模型 <candidates> 块 → 可点击按钮；点选发送选项文本（不走序号解析）
+// 实测根因：模型列 1射击/2解谜/3建造，用户回 1 却被理解成建造——序号映射漂移 → 点选文本彻底规避
+test('结构化候选：<candidates> 渲染为按钮 + 点选发送选项文本', async ({ page }) => {
+  await page.addInitScript(() => {
+    let streamCb: ((c: { type: string; text?: string }) => void) | null = null
+    window.neonforge = {
+      version: 'test',
+      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
+      workspace: {
+        openFolder: async () => '/test',
+        listDir: async () => [],
+        readFile: async () => ({ ok: true, content: '' }),
+        readNotebook: async () => null,
+        initProject: async () => ({ ok: true, path: '/test', title: 't' })
+      },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        streamChat: async () => {
+          setTimeout(() => {
+            streamCb?.({ type: 'content', text: '你对「设计」的理解，点选或回复：\n<candidates>\n- 射击游戏（打敌人那种）\n- 解谜游戏（动脑过关）\n- 建造游戏（搭积木）\n</candidates>\n选好咱们继续。' })
+            streamCb?.({ type: 'done' })
+          }, 50)
+          return { ok: true }
+        },
+        onStreamChunk: (cb: (c: { type: string; text?: string }) => void) => { streamCb = cb; return () => {} }
+      },
+      tools: { execute: async () => ({ ok: true }), list: async () => [] },
+      context: { resolve: async () => ({ fragments: [] }) },
+      compaction: { compact: async () => ({ ok: false }) },
+      plugins: { list: async () => [], toggle: async () => true },
+      chatLog: { log: async () => {}, export: async () => ({ ok: true, path: '/tmp/x.md' }) }
+    }
+    ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
+  })
+  await page.goto('http://localhost:5175/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.getByRole('button', { name: '打开已有项目' }).click()
+  await page.waitForSelector('.nf-chat__input textarea', { timeout: 8000 })
+  await page.locator('.nf-chat__input textarea').fill('我想做一个3d设计游戏')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  // 候选渲染为 3 个按钮（done 后出现）
+  await expect(page.locator('.nf-candidates__btn')).toHaveCount(3, { timeout: 8000 })
+  await expect(page.locator('.nf-candidates__btn').first()).toContainText('射击游戏（打敌人那种）')
+  // 正文剥离 <candidates> 标记（不露标记杂音）
+  await expect(page.locator('.nf-msg--assistant .nf-msg__body')).not.toContainText('<candidates>')
+  // 等 working 释放（done 渲染与 setWorking(false) 是不同 state 提交——按钮刚出现瞬间 send 守卫 working 仍 true 会拦截）
+  await expect(page.locator('.nf-statusbar')).toContainText('就绪', { timeout: 8000 })
+  // 点选第一个按钮 → 发送的是选项文本（不是序号——模型直接按文本理解，无序号可错位）
+  await page.locator('.nf-candidates__btn').first().click()
+  await expect(page.locator('.nf-msg--user').last()).toContainText('射击游戏（打敌人那种）')
+})
