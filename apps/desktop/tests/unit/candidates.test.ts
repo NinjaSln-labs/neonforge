@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseCandidates, stripCandidates } from '../../src/renderer/candidates'
+import { parseCandidates, stripCandidates, stripTags } from '../../src/renderer/candidates'
 
 // 2026-08-05 方案 3：结构化候选按钮——模型候选 <candidates> 块解析/剥离纯函数
 // 核心：候选从「序号解析」改为「文本点选」——消除模型对「序号→选项」的映射漂移（实测：选 1=射击被理解成建造）
@@ -56,5 +56,21 @@ describe('stripCandidates（候选块剥离——展示层）', () => {
 
   it('只剥离候选块，正文不动', () => {
     expect(stripCandidates('正文 <candidates>\n- x\n</candidates> 还有正文')).toBe('正文  还有正文')
+  })
+})
+
+describe('stripTags（通用去标签——展示层兜底）', () => {
+  it('去掉模型自发尖括号标签、保留内容（<one-question> 实测）', () => {
+    const c = '我发现有个事需要你确认：\n<one-question>\n现在用的是「鼠标拖动看视角」，你更想要哪种？\n</one-question>\n你回一个就行。'
+    expect(stripTags(c)).toBe('我发现有个事需要你确认：\n现在用的是「鼠标拖动看视角」，你更想要哪种？\n你回一个就行。')
+  })
+
+  it('无标签 → 原样返回', () => {
+    expect(stripTags('普通回复没有标签')).toBe('普通回复没有标签')
+  })
+
+  it('候选块已被前置移除时，剩余标签也能清（组合链路 stripCandidates + stripTags）', () => {
+    const c = '选一个：\n<candidates>\n- 射击\n</candidates>\n<one-question>\n确认一下：是射击吗？\n</one-question>'
+    expect(stripTags(stripCandidates(c))).toBe('选一个：\n确认一下：是射击吗？')
   })
 })

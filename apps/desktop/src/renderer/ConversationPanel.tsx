@@ -11,7 +11,7 @@ import { buildAuthHint, canMergeApprove, toolRisk } from './authModel'
 // 2026-08-04：cleanContent 回复正文展示清洗（字面转义/连续换行杂音）
 import { cleanContent, stripMarkdown } from './textClean'
 // 2026-08-05 方案 3：结构化候选按钮——<candidates> 块解析/剥离（点选文本替代序号，消除模型序号解析漂移）
-import { parseCandidates, stripCandidates } from './candidates'
+import { parseCandidates, stripCandidates, stripTags } from './candidates'
 // 2026-08-03 视觉审计 P1-6：内联 SVG 图标（替换 emoji 图标）
 import {
   IconBrain, IconCheck, IconClock, IconDot, IconFile,
@@ -387,7 +387,7 @@ export default function ConversationPanel({
     const langRule = lastUserMsg && /[\u4e00-\u9fff]/.test(String(lastUserMsg.content ?? ''))
       ? '⑧ 用中文回复用户（避免英文夹杂；工具名/代码/技术名词可保留原文）'
       : '⑧ 用与用户消息相同的语言回复'
-    const sysHint = { role: 'system', content: `你是 NeonForge 搭档。当前项目根目录：${rootPath ?? '(未指定)'}。规则：① 读文件用 read 工具（路径用项目根下的相对路径，如 package.json）② 不要用 bash find 全局搜索（直接 read 目标文件）③ 工具一次调用一个，执行完看结果再决定 ④ 找不到文件就直接告诉用户 ⑤ 查符号定义/引用/类型用 LSP 工具：find_definition/find_references/get_type_info（传 path + symbol，如 {path: 'src/a.ts', symbol: 'greet'}）⑥ 查文件错误/import 用 get_diagnostics/get_imports ⑦ 不知道符号在哪个文件时用 search 工具（传 query 关键词，如 "greet"）——返回命中文件+行号+片段，再 read 或 LSP 定位。${langRule}⑨ 用户可能不懂技术——回答简洁口语化：优先短句，少用术语；必须提术语时用一句大白话解释；不要堆砌要点清单。⑩ 回复正文不要用 Markdown 标记（不要 #、**、反引号、- 列表、代码块框）；少用括号补充说明；段落之间最多空一行，不要连续空行。⑪（2026-08-04 防文本模拟）执行工具必须通过真正的函数调用（tool-call）发出——对话历史里的「（工具调用：…）」只是执行记录，绝不能模仿成文本写在回复正文里，文本写的调用不会被执行；要调工具就在这条回复里发出真实函数调用，工具执行完会自动继续。` }
+    const sysHint = { role: 'system', content: `你是 NeonForge 搭档。当前项目根目录：${rootPath ?? '(未指定)'}。规则：① 读文件用 read 工具（路径用项目根下的相对路径，如 package.json）② 不要用 bash find 全局搜索（直接 read 目标文件）③ 工具一次调用一个，执行完看结果再决定 ④ 找不到文件就直接告诉用户 ⑤ 查符号定义/引用/类型用 LSP 工具：find_definition/find_references/get_type_info（传 path + symbol，如 {path: 'src/a.ts', symbol: 'greet'}）⑥ 查文件错误/import 用 get_diagnostics/get_imports ⑦ 不知道符号在哪个文件时用 search 工具（传 query 关键词，如 "greet"）——返回命中文件+行号+片段，再 read 或 LSP 定位。${langRule}⑨ 用户可能不懂技术——回答简洁口语化：优先短句，少用术语；必须提术语时用一句大白话解释；不要堆砌要点清单。⑩ 回复正文不要用 Markdown 标记（不要 #、**、反引号、- 列表、代码块框）；少用括号补充说明；段落之间最多空一行，不要连续空行；**也不要使用任何尖括号标签**（如 <one-question>——会原样显示给用户；除 <candidates> 候选块外）。⑪（2026-08-04 防文本模拟）执行工具必须通过真正的函数调用（tool-call）发出——对话历史里的「（工具调用：…）」只是执行记录，绝不能模仿成文本写在回复正文里，文本写的调用不会被执行；要调工具就在这条回复里发出真实函数调用，工具执行完会自动继续。` }
     try {
       const res = await window.neonforge.gateway.streamChat({
         apiKey: key,
@@ -772,8 +772,8 @@ export default function ConversationPanel({
             {m.role === 'user' && <span className="nf-msg__role">你</span>}
             <div className={`nf-msg__body${m.role === 'assistant' && m.status === 'streaming' && !m.content ? ' nf-msg__body--thinking' : ''}`}>
               {/* 2026-08-04：展示前 cleanContent 清洗（字面转义/连续换行/行尾空白）——只影响展示，API 发送原文
-                  2026-08-05：stripCandidates 先剥离 <candidates> 候选块（不露标记；候选渲染为按钮组） */}
-              {m.content ? cleanContent(stripCandidates(m.content)) : (m.status === 'streaming' ? '搭档处理中…' : m.error === 'empty-response' ? '搭档没有返回内容——请重试或换个说法' : m.status === 'error' ? '处理失败' : '')}
+                  2026-08-05：stripCandidates 剥离 <candidates> 候选块（不露标记；候选渲染为按钮组）+ stripTags 去模型自发尖括号标签（实测 <one-question>，去标签留内容） */}
+              {m.content ? cleanContent(stripTags(stripCandidates(m.content))) : (m.status === 'streaming' ? '搭档处理中…' : m.error === 'empty-response' ? '搭档没有返回内容——请重试或换个说法' : m.status === 'error' ? '处理失败' : '')}
               {m.error === 'key-invalid' && (
                 <button type="button" className="nf-config__link" onClick={onKeyExpired}>
                   要不要更新一下？
