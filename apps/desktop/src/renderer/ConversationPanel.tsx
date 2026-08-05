@@ -69,6 +69,7 @@ export default function ConversationPanel({
   onRequirementConfirmed,
   recentFilesExternal,
   stageHint,
+  flowStage,
   stageAdvance,
   activeAuthorizedLogs,
   initialPrompt
@@ -87,6 +88,7 @@ export default function ConversationPanel({
   onRequirementConfirmed?: (title: string) => void
   recentFilesExternal?: string[]
   stageHint?: string // 0-1 交付阶段指引（ticket 07——注入对话引导模型按阶段产出）
+  flowStage?: number // 2026-08-05：当前阶段序号（plan_approval 阶段门控——设计阶段未确认不弹规划授权卡）
   // 2026-08-04：阶段推进反馈——用户点「确认推进」后对话区出现「已进入【X】阶段」提示（本地生成，确定性无杂音；顺带作为上下文让模型知道阶段切换）
   // 2026-08-04 方案 A：requirement 可选——需求卡确认摘要（注入对话上下文，模型按确认结果工作）
   stageAdvance?: { seq: number; stage: string; hint: string; requirement?: string } | null
@@ -160,6 +162,8 @@ export default function ConversationPanel({
   // 2026-08-04 体验修复（用户实测：启动页输入句预填多余）：initialPrompt 进入工作区自动发送——说了就直接开始
   // （区别于 externalRequest「预填+自动发送」复跑语义；initialPrompt 只用于启动页首句）
   const sendRef = useRef<() => Promise<void>>(async () => {})
+  // 2026-08-05：renderer 侧「已规划」标记——approvePlan 置 true（幂等：本任务内再调 plan_approval 不弹卡）；阶段推进（clearTrust）重置
+  const planApprovedRef = useRef(false)
   useEffect(() => {
     if (initialPrompt && initialPrompt.trim()) {
       inputRef.current = initialPrompt.trim()
@@ -267,8 +271,19 @@ export default function ConversationPanel({
       }
       if (chunk.type === 'tool-call' && chunk.toolCall) {
         // 2026-08-04 规划级授权：plan_approval 不执行（虚拟工具）——状态 plan-approval 弹规划授权卡（等用户批准文件清单）
-        const status = chunk.toolCall.name === 'plan_approval' ? ('plan-approval' as const) : ('pending' as const)
-        next.toolCalls = [...(next.toolCalls ?? []), { name: chunk.toolCall.name, args: chunk.toolCall.args, status }]
+        // 2026-08-05 体验反馈（用户实测「规划授权出来两次」+「设计阶段没找我确认」）：① 幂等——本任务已批准过不再弹卡 ② 阶段门控——设计阶段（flowStage<2 设计未确认）不弹卡，模型误调无害
+        let status: 'pending' | 'done' | 'plan-approval' = 'pending'
+        if (chunk.toolCall.name === 'plan_approval') {
+          status = (planApprovedRef.current || (flowStage ?? 0) < 2) ? 'done' : 'plan-approval'
+        }
+        next.toolCalls = [...(next.toolCalls ?? []), {
+          name: chunk.toolCall.name,
+          args: chunk.toolCall.args,
+          status,
+          result: status === 'done' && chunk.toolCall.name === 'plan_approval'
+            ? (planApprovedRef.current ? '规划已批准（本任务不重复授权）' : '设计确认后进入开发阶段再规划')
+            : undefined
+        }]
       }
       return [...prev.slice(0, -1), next]
     })
@@ -452,6 +467,8 @@ export default function ConversationPanel({
   const clearTrust = (): void => {
     taskTrustRef.current = []
     setTaskTrust([])
+    // 2026-08-05：阶段推进 = 任务边界——plan_approval 幂等标记同步重置（新阶段需重新规划授权）
+    planApprovedRef.current = false
   }
   // 2026-08-04 修复（用户「游戏成的3是D」错位）：流式链互斥——一次只跑一条链（send/advanceChat/授权续聊），其他链排队；
   // 原并发流（approveToolCall 续聊 + pendingAdvance 补发）chunk 交错写入同一消息 → 文本字符级错位
@@ -655,6 +672,8 @@ export default function ConversationPanel({
   const approvePlan = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg) => {
     const files = (tc.args.files ?? []) as Array<{ path: string }>
     files.forEach((f) => addTrust({ path: f.path }))
+    // 2026-08-05：幂等标记——本任务内再调 plan_approval 不再弹卡
+    planApprovedRef.current = true
     // 2026-08-04 规划强制：通知 main（planApproved=true——write/edit 放行）
     void window.neonforge.tools?.planApproved?.()
     patchToolCall(idx, (c) => ({ ...c, status: 'done' as const, result: `已批准 ${files.length} 个文件（本次任务自动放行）` }), tc)
@@ -744,7 +763,7 @@ export default function ConversationPanel({
       {demoTrust && <TrustLadderPanel authorizedLogs={activeAuthorizedLogs} delegateLowRisk={delegateLowRisk} onDelegateChange={handleDelegateChange} />}
       {demoDod && <DoDAlignPanel />}
       {compactNote && <div className="nf-compact"><IconClock size={12} /> {compactNote}</div>}
-      <div className="nf-chat__list" ref={listRef} aria-live="polite" aria-relevant="additions text">
+      <div className="nf-chat__list" ref={listRef} aria-live="polite" aria-relevant="additions text" tabIndex={0} aria-label="对话消息列表">
         {messages.length === 0 && (
           <div className="nf-scenes">
             <p className="nf-placeholder">想解决什么？直接说，或从这些开始：</p>

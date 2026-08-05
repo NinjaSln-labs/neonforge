@@ -529,7 +529,7 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-flow__hint { color: var(--nf-text-dim); font-size: 11px; }
 .nf-flow__advance { display: flex; align-items: center; gap: var(--nf-space-3); flex-wrap: wrap; }
 .nf-flow__stage-label { font-size: var(--nf-font-sm); color: var(--nf-text-dim); }
-.nf-flow__gate-hint { font-size: 11px; color: var(--nf-accent); }
+.nf-flow__gate-hint { font-size: 11px; color: var(--nf-accent-text); }
 .nf-flow__done { color: #22C55E; font-size: var(--nf-font-sm); font-weight: 600; }
 
 /* 2026-08-04 P2：需求确认卡（候选 chips 点选——意图消歧确定性收敛） */
@@ -543,7 +543,7 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   display: flex; flex-direction: column; gap: var(--nf-space-2);
 }
 .nf-reqcard__head { font-size: var(--nf-font-sm); font-weight: 600; color: var(--nf-accent); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.nf-reqcard__title { font-size: 15px; font-weight: 700; color: var(--nf-accent); }
+.nf-reqcard__title { font-size: 15px; font-weight: 700; color: var(--nf-accent-text); }
 .nf-reqcard__sub { font-size: 12px; font-weight: 400; color: var(--nf-text-dim); }
 .nf-reqcard__head svg { color: var(--nf-accent); }
 .nf-reqcard__field { display: flex; align-items: flex-start; gap: var(--nf-space-2); }
@@ -568,7 +568,7 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   display: flex; align-items: baseline; gap: 6px; text-align: left;
   transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
 }
-.nf-candidates__idx { color: var(--nf-accent); font-weight: 600; flex-shrink: 0; }
+.nf-candidates__idx { color: var(--nf-accent-text); font-weight: 600; flex-shrink: 0; }
 .nf-candidates__btn:hover { border-color: var(--nf-accent); background: var(--nf-accent-soft); color: var(--nf-accent); }
 .nf-candidates__btn:active { transform: scale(0.99); }
 
@@ -688,7 +688,7 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-toolcall__impact { color: var(--nf-text); font-family: var(--nf-font-mono); }
 .nf-toolcall__note { color: var(--nf-text-dim); font-size: 11px; }
 /* 2026-08-04 授权架构 v4：允许并记住按钮（本次任务自动） */
-.nf-toolcall__remember { background: none; border: 1px solid var(--nf-accent); color: var(--nf-accent); border-radius: 4px; padding: 2px 10px; font-size: 12px; cursor: pointer; }
+.nf-toolcall__remember { background: none; border: 1px solid var(--nf-accent-text); color: var(--nf-accent-text); border-radius: 4px; padding: 2px 10px; font-size: 12px; cursor: pointer; }
 .nf-toolcall__remember:hover { background: var(--nf-accent); color: var(--nf-bg); }
 /* 2026-08-04 授权架构 v4：批量授权条（多条待授权合并——一次批准整批） */
 .nf-toolcall__batch { display: flex; align-items: center; gap: 8px; padding: 6px 10px; margin-bottom: 6px; border: 1px solid var(--nf-accent); border-radius: var(--nf-radius-sm); background: color-mix(in srgb, var(--nf-accent) 8%, transparent); font-size: 12px; }
