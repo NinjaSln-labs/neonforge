@@ -2,27 +2,10 @@ import { app, BrowserWindow, Menu } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync } from 'node:fs'
-import { execSync } from 'node:child_process'
 import { registerIpc } from './ipc.js'
 import { killAllSubprocesses } from './tools.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-
-// 2026-08-05 用户反馈 1（服务反复起/端口冲突）：清理上次会话残留的 dev server（5176-5199——模型项目服务范围）
-function cleanupStaleDevServers(): void {
-  try {
-    // Electron 启动环境 PATH 可能不含 /usr/sbin——lsof 用绝对路径
-    const out = execSync('/usr/sbin/lsof -tiTCP:5176-5199 -sTCP:LISTEN 2>/dev/null || true').toString().trim()
-    if (!out) return
-    let n = 0
-    for (const pid of out.split('\n')) {
-      try { process.kill(Number(pid), 'SIGKILL'); n++ } catch { /* 已退出 */ }
-    }
-    console.log(`[main] 已清理上次会话残留 dev server（${n} 个，端口 5176-5199）`)
-  } catch (e) {
-    console.log('[main] cleanupStaleDevServers 跳过:', String(e).slice(0, 100))
-  }
-}
 
 // 单实例（2026-08-03 优化）：同时只能运行一个 NeonForge——第二个实例启动即退出，并聚焦已有实例主窗口
 // 必须在 app ready 前获取锁；锁按 app 用户数据目录（app name）作用域
@@ -87,9 +70,9 @@ if (!gotTheLock) {
   }
 
   app.whenReady().then(() => {
-    // 2026-08-05 用户反馈 1（服务反复起/端口冲突）根治：启动时清理上次会话残留的 dev server
-    // （模型起的项目服务在 5176-5199——nohup 脱离进程组，退出时杀不到 → 下次启动先清掉，避免端口冲突）
-    cleanupStaleDevServers()
+    // 2026-08-05 用户反馈（「启动清固定端口会误杀用户进程」→ 修正）：只清 NeonForge 自己记录的子进程（PID 文件）
+    // ——不碰任何端口/用户进程；上次异常退出（SIGKILL）残留的 dev server 在此清理
+    killAllSubprocesses()
     // 2026-08-04 体验修复：隐藏默认应用菜单（全屏时顶部不再显示「Electron」菜单栏——产品化；Cmd+Q/Cmd+C 等系统快捷键仍由窗口/系统兜底）
     Menu.setApplicationMenu(null)
     registerIpc()

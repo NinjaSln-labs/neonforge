@@ -157,11 +157,22 @@ async function editExecutor(args: Record<string, unknown>, ctx: { rootPath?: str
 }
 
 // 所有 bash 子进程（进程组跟踪——2026-08-05 用户反馈「服务反复起/端口冲突」：dev server 残留）
-// detached 进程组：app 退出时 killAllSubprocesses 杀整个组（含 `&`/nohup 后台进程——exec 时代孤儿残留）
+// detached 进程组：app 退出时 killAllSubprocesses 杀整个组（含 `&` 后台进程——exec 时代孤儿残留）
+// 2026-08-05 用户反馈（杀固定端口会误杀用户进程）：清理只杀「自己记录 pid 的进程」（PID 文件——kill 进程组覆盖 & 后台）
 let activeProc: { proc: import('child_process').ChildProcess; cmd: string } | null = null
 const subprocs = new Set<import('child_process').ChildProcess>()
+// PID 记录文件（userData 下）——NeonForge 自己起的 bash 进程 pid 持久化；异常退出（SIGKILL）后下次启动/退出可清
+// 只杀这里记录的 pid——用户自己的进程从不记录 → 不会误杀（修复「启动清固定端口会杀用户进程」）
+function subprocFile(): string {
+  try {
+    const { app } = require('electron') as typeof import('electron')
+    return `${app.getPath('userData')}/neonforge-subprocs.jsonl`
+  } catch { return `${process.env.HOME ?? ''}/Library/Application Support/neonforge-desktop/neonforge-subprocs.jsonl` }
+}
+function recordPid(pid: number): void {
+  try { require('node:fs').appendFileSync(subprocFile(), `${pid}\n`) } catch { /* 记录失败不影响执行 */ }
+}
 
-// 2026-08-05 用户反馈 1：Electron 关闭时清理所有 bash 子进程（残留 dev server 占端口 → 下次会话端口冲突）
 // 递归杀进程树（进程组 + 后代）——nohup 后台进程 setsid 脱离进程组，仅杀组不够
 function killTree(pid: number): void {
   try {
@@ -170,14 +181,22 @@ function killTree(pid: number): void {
   } catch { /* 无后代 */ }
   try { process.kill(-pid, 'SIGKILL') } catch { try { process.kill(pid, 'SIGKILL') } catch { /* 已退出 */ } }
 }
+// 清 NeonForge 自己起的全部子进程（含异常退出残留——读 PID 文件；只杀自己记录的，不碰用户进程）
 export function killAllSubprocesses(): void {
   for (const p of subprocs) killTree(p.pid ?? 0)
   subprocs.clear()
   activeProc = null
+  try {
+    const file = subprocFile()
+    const pids = require('node:fs').readFileSync(file, 'utf8').split('\n').filter(Boolean).map(Number)
+    for (const pid of pids) killTree(pid)
+    require('node:fs').writeFileSync(file, '')
+  } catch { /* 无记录文件 */ }
 }
 
 // 2026-08-04 端口冲突防护（用户实测：模型 npm run dev 抢占 NeonForge 5173/5174——dev server 无端口检测）：
 // NeonForge 保留端口：5173（dev）/ 5175（自动化测试）——模型起的项目 dev server 必须避开
+// 2026-08-05（用户反馈「不应绑定固定端口」）：除保留端口外**不限制**——vite 默认 strictPort:false 端口被占自动递增
 const RESERVED_PORTS = new Set([5173, 5175])
 const DEV_SERVER_RE = /(npm|pnpm|yarn) run (dev|start|serve|preview)|vite( |$)|next dev|react-scripts start|node .*(server|listen)/
 
@@ -192,13 +211,14 @@ async function bashExecutor(args: Record<string, unknown>, ctx: { rootPath?: str
     const m = cmd.match(/--port[= ](\d+)|PORT=(\d+)/)
     const port = m ? Number(m[1] ?? m[2]) : null
     if (port && RESERVED_PORTS.has(port)) {
-      throw new Error(`端口 ${port} 被 NeonForge 占用（开发/测试端口）——请改用其他端口：--port 5176（或 5176-5199 之间任意空闲端口）`)
+      throw new Error(`端口 ${port} 是 NeonForge 自己的开发/测试端口——请勿占用。其他端口随便用：不指定 --port 让 Vite 自动选空闲端口（被占自动递增），或用 --port 0（系统分配）`)
     }
   }
   return new Promise((resolve, reject) => {
     // 2026-08-05：spawn detached（新进程组）——app 退出可杀组（含 &/nohup 后台进程）；exec 30s 超时对 dev server（长驻）误杀且后台孤儿残留
     const child = spawn(cmd, { cwd: ctx.rootPath ?? undefined, shell: true, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
     subprocs.add(child)
+    recordPid(child.pid ?? 0) // 2026-08-05：PID 持久化——异常退出（SIGKILL）后启动/退出可清（只清自己记的，不碰用户进程）
     activeProc = { proc: child, cmd }
     let stdout = ''
     let stderr = ''
