@@ -29,7 +29,7 @@ export default function DigitalDeliveryPanel({ onDeliver }: { onDeliver: (pkg: D
       setDone(true)
       onDeliver({
         status: 'delivered',
-        summary: '已按类型整理 6 个文件：发票 4 份 →「发票」、合同 2 份 →「合同」，重复文件已标出（未删除）',
+        summary: '已按类型整理 6 个文件：发票 4 份归入「发票」、合同 2 份归入「合同」，重复文件已标出（未删除）',
         artifacts: ['发票/（4 份）', '合同/（2 份）', '重复文件清单.csv'],
         acceptance: [
           { label: '发票都在「发票」文件夹', done: false },
