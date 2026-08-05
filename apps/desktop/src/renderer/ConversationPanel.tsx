@@ -28,6 +28,7 @@ export interface ToolCallMsg {
   args: Record<string, unknown>
   status: 'pending' | 'done' | 'need-approval' | 'plan-approval' | 'error' | 'reverted'
   result?: string
+  rawResult?: string // 2026-08-05：API 回填用完整结果（UI 展示用 result 摘要）——read 完整内容防模型反复读同文件
   file?: string       // write/edit 成功写入的文件路径（回滚目标）
   canRevert?: boolean // 写前已快照——可回滚
 }
@@ -295,7 +296,7 @@ export default function ConversationPanel({
           const calls = (last.toolCalls ?? []).map((c) => {
             if (c.name !== tc.name || c.status !== 'pending') return c
             return r.ok
-              ? { ...c, status: 'done' as const, result: fmtToolResult(r), file: data?.file, canRevert: !!(data?.file && data.snapshot) }
+              ? { ...c, status: 'done' as const, result: fmtToolResult(r), rawResult: typeof r.data === 'string' ? r.data.slice(0, 4000) : JSON.stringify(r.data ?? '').slice(0, 4000), file: data?.file, canRevert: !!(data?.file && data.snapshot) }
               : { ...c, status: (r.error ?? '').includes('授权') ? ('need-approval' as const) : ('error' as const), result: r.error }
           })
           return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
@@ -325,20 +326,24 @@ export default function ConversationPanel({
       if (needsApproval) return // 有待授权——等用户点允许（approveToolCall 后触发续聊）
       if (pending.length === 0) {
         // 2026-08-04 重构：同工具重复检测（同一 name+args 连续 3 次 = 死循环——防模型空转不产出；跨调用累积——原局部变量每轮重置失效）
-        const sig = lastMsg.toolCalls.map((c) => `${c.name}:${JSON.stringify(c.args ?? {})}`).join('|')
-        const chain = chainRepeatRef.current
-        if (chain.sid !== sid) { chain.sid = sid; chain.sig = ''; chain.count = 0 }
-        chain.count = sig === chain.sig ? chain.count + 1 : 1
-        chain.sig = sig
-        if (chain.count >= 3) {
-          console.log('[conversation] 工具循环疑似死循环（同工具重复 3 次）——停止续聊')
-          // 2026-08-04 体验修复：停止时提示用户（原静默停——用户看到「卡住」不知道原因；提示后可继续）
-          setMessages((prev) => [...prev, {
-            role: 'assistant',
-            content: '搭档检测到在重复写同一个文件（已自动暂停，避免死循环）。你回复「继续」或告诉它下一步，它就会接着做。',
-            status: 'done'
-          }])
-          return
+        // 2026-08-05 体验反馈：只统计写工具（write/edit）——read/bash 只读重复是模型合理排查（曾因 read 摘要化反复读同文件被误伤），不触发；真正空转由 depth 40 兜底
+        const writeCalls = lastMsg.toolCalls.filter((c) => c.name === 'write' || c.name === 'edit')
+        if (writeCalls.length > 0) {
+          const sig = writeCalls.map((c) => `${c.name}:${JSON.stringify(c.args ?? {})}`).join('|')
+          const chain = chainRepeatRef.current
+          if (chain.sid !== sid) { chain.sid = sid; chain.sig = ''; chain.count = 0 }
+          chain.count = sig === chain.sig ? chain.count + 1 : 1
+          chain.sig = sig
+          if (chain.count >= 3) {
+            console.log('[conversation] 工具循环疑似死循环（重复写文件 3 次）——停止续聊')
+            // 2026-08-04 体验修复：停止时提示用户（原静默停——用户看到「卡住」不知道原因；提示后可继续）
+            setMessages((prev) => [...prev, {
+              role: 'assistant',
+              content: '搭档检测到在重复写同一个文件（已自动暂停，避免死循环）。你回复「继续」或告诉它下一步，它就会接着做。',
+              status: 'done'
+            }])
+            return
+          }
         }
         break // 全部执行完成
       }
@@ -357,7 +362,7 @@ export default function ConversationPanel({
         reasoning_content: lastMsg.reasoning ?? '',
         tool_calls: calls.map((c, i) => ({ id: `call_${i}`, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.args) } }))
       },
-      ...calls.map((c, i) => ({ role: 'tool', tool_call_id: `call_${i}`, content: c.result ?? '执行失败' }))
+      ...calls.map((c, i) => ({ role: 'tool', tool_call_id: `call_${i}`, content: c.rawResult ?? c.result ?? '执行失败' }))
     ]
     chatRef.current = { msgs: toolMsgs, depth: depth + 1 }
     setMessages((p) => [...p, { role: 'assistant', content: '', reasoning: '', status: 'streaming' }])
@@ -611,7 +616,7 @@ export default function ConversationPanel({
       // 13 交付包联动：授权后真实写入成功 → 上报变更
       if (r.ok && data?.file) onToolResult?.({ name: tc.name, file: data.file, ok: true })
       patchToolCall(idx, (c) => (r.ok
-        ? { ...c, status: 'done' as const, result: fmtToolResult(r), file: data?.file, canRevert: !!(data?.file && data.snapshot) }
+        ? { ...c, status: 'done' as const, result: fmtToolResult(r), rawResult: typeof r.data === 'string' ? r.data.slice(0, 4000) : JSON.stringify(r.data ?? '').slice(0, 4000), file: data?.file, canRevert: !!(data?.file && data.snapshot) }
         : { ...c, status: 'error' as const, result: r.error }), tc)
       // 2026-08-04 修复（流式链互斥）：授权续聊也占锁排队——防与 send/advanceChat 链并发（chunk 交错「游戏成的3是D」）
       setTimeout(async () => {
@@ -775,10 +780,12 @@ export default function ConversationPanel({
                 </button>
               )}
             </div>
-            {/* 2026-08-05 方案 3：结构化候选按钮——模型 <candidates> 块 → 可点击按钮（点选发送选项文本，不走序号解析） */}
+            {/* 2026-08-05 方案 3：结构化候选按钮——模型 <candidates> 块 → 可点击按钮（点选发送选项文本，不走序号解析）
+                体验反馈：竖排 + 行首序号（① ② ③）——序号仅展示，发送仍用选项文本 */}
             {m.role === 'assistant' && m.status === 'done' && m.content && (() => {
               const opts = parseCandidates(m.content)
               if (!opts) return null
+              const NUMS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧']
               return (
                 <div className="nf-candidates" role="group" aria-label="选择一项">
                   {opts.map((o, j) => (
@@ -788,7 +795,8 @@ export default function ConversationPanel({
                       className="nf-candidates__btn"
                       onClick={() => { inputRef.current = o; void sendRef.current() }}
                     >
-                      {o}
+                      <span className="nf-candidates__idx" aria-hidden="true">{NUMS[j] ?? `${j + 1}.`}</span>
+                      <span>{o}</span>
                     </button>
                   ))}
                 </div>
@@ -912,14 +920,15 @@ export default function ConversationPanel({
                 )}
               </div>
             )}
+            {/* 2026-08-05 体验反馈：working「搭档处理中」跟随最新一条消息（工具卡/回复旁）——不再独立渲染在列表末尾 */}
+            {working && i === messages.length - 1 && (
+              <div className="nf-working">
+                <IconDot size={12} className="nf-working__dot" />
+                <span>搭档处理中：{workingStage}</span>
+              </div>
+            )}
           </div>
         ))}
-        {working && (
-          <div className="nf-working">
-            <IconDot size={12} className="nf-working__dot" />
-            <span>搭档处理中：{workingStage}</span>
-          </div>
-        )}
       </div>
 
       {/* 2026-08-04 授权架构 v4：授权记录条——固定在输入框上方（用户随时可见/清除；原在消息列表顶部——会话长滚出视野看不到） */}
