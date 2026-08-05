@@ -231,6 +231,8 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 }
 .nf-statusbar__dot--ready { background: #22C55E; }
 .nf-statusbar__dot--working { background: var(--nf-accent); animation: nf-breath-blue 2s ease-in-out infinite; }
+/* 2026-08-05 用户反馈 2：isActionPromise 状态栏提示（非侵入）——amber 静态提示（不闪烁，区别于授权卡） */
+.nf-statusbar__dot--hint { background: var(--nf-amber); }
 /* 2026-08-04 审计修复（D2）：待批准（授权卡）状态灯——amber 脉动（与授权卡视觉一致） */
 .nf-statusbar__dot--approval { background: var(--nf-amber); animation: nf-ember-pulse 1.6s ease-out infinite; }
 
@@ -356,6 +358,14 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   line-height: 1.6; min-height: 64px; outline: none;
 }
 .nf-chat__input textarea:focus { border-color: var(--nf-accent); }
+/* 2026-08-05 用户反馈 4：停止按钮（working 时显示）——打断当前流/杀 bash；红色描边警示（区别于发送） */
+.nf-chat__stop {
+  background: transparent; color: #f87171;
+  border: 1px solid #f87171; border-radius: var(--nf-radius-md);
+  padding: var(--nf-space-2) var(--nf-space-3); font-size: var(--nf-font-sm);
+  cursor: pointer; white-space: nowrap; height: 40px;
+}
+.nf-chat__stop:hover { background: rgba(248, 113, 113, 0.12); }
 
 /* WIG：prefers-reduced-motion 降级（呼吸光条动效 + 按钮按压位移） */
 @media (prefers-reduced-motion: reduce) {

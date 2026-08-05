@@ -54,6 +54,8 @@ export default function MainWorkspace({
   const [working, setWorking] = useState(false)
   // 2026-08-04 审计修复（D2）：有待批准工具操作（授权卡）——状态栏提示（键盘用户感知，Shift+Tab 可回退到授权卡）
   const [pendingApproval, setPendingApproval] = useState(false)
+  // 2026-08-05 用户反馈 2：isActionPromise 状态栏提示（非侵入——不插入对话流）——模型说要做没动手时提示可回复「继续」
+  const [actionHint, setActionHint] = useState<string | null>(null)
   const [chatKey, setChatKey] = useState(0)
   const [rerunRequest, setRerunRequest] = useState<string | null>(null) // 05 B：复跑请求
   const [showSettings, setShowSettings] = useState(false)
@@ -311,7 +313,7 @@ function initProblems(): ProblemInstance[] {
         )}
         <div className="nf-panel__body">
           {chatTab === 'chat' ? (
-            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} onApprovalChange={setPendingApproval} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} onRequirementConfirmed={handleRequirementConfirmed} recentFilesExternal={projectFiles} stageHint={stageHint} flowStage={flowStage} stageAdvance={stageAdvance} initialPrompt={initialPrompt} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} />
+            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} onApprovalChange={setPendingApproval} onActionPromiseHint={setActionHint} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} onRequirementConfirmed={handleRequirementConfirmed} recentFilesExternal={projectFiles} stageHint={stageHint} flowStage={flowStage} stageAdvance={stageAdvance} initialPrompt={initialPrompt} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} />
           ) : (
             <TaskPanel />
           )}
@@ -341,6 +343,8 @@ function initProblems(): ProblemInstance[] {
           <><span className="nf-statusbar__dot nf-statusbar__dot--working" />搭档处理中…</>
         ) : pendingApproval ? (
           <><span className="nf-statusbar__dot nf-statusbar__dot--approval" />有操作待你批准（对话区授权卡）</>
+        ) : actionHint ? (
+          <><span className="nf-statusbar__dot nf-statusbar__dot--hint" />{actionHint}</>
         ) : (
           <><span className="nf-statusbar__dot nf-statusbar__dot--ready" />就绪</>
         )}

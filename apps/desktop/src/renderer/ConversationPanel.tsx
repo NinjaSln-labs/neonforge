@@ -95,6 +95,7 @@ export default function ConversationPanel({
   onReasoning,
   onWorkingChange,
   onApprovalChange,
+  onActionPromiseHint,
   externalRequest,
   onExternalConsumed,
   onToolResult,
@@ -113,6 +114,7 @@ export default function ConversationPanel({
   onReasoning?: (text: string) => void
   onWorkingChange?: (working: boolean) => void
   onApprovalChange?: (pending: boolean) => void // 2026-08-04 审计修复（D2）：有待批准工具操作时上报（状态栏提示——键盘用户感知）
+  onActionPromiseHint?: (hint: string | null) => void // 2026-08-05 用户反馈 2：isActionPromise 提示不插入对话流（污染阅读）——状态栏非侵入提示
   externalRequest?: string | null
   onExternalConsumed?: () => void
   onToolResult?: (r: { name: string; file?: string; ok: boolean }) => void
@@ -261,6 +263,8 @@ export default function ConversationPanel({
   const streamingRef = useRef<{ content: string; toolCalls: ToolCallMsg[] }>({ content: '', toolCalls: [] })
   const applyChunk = (chunk: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => {
     console.log('[conv] chunk', chunk.type)
+    // 2026-08-05 用户反馈 2：模型有新动作（chunk）→ 清除 isActionPromise 状态栏提示（模型在动——之前只是陈述/即将调工具）
+    if (chunk.type === 'content' || chunk.type === 'tool-call') onActionPromiseHint?.(null)
     // 事件层累积（每事件一次——双调安全）
     if (chunk.type === 'content') streamingRef.current.content += chunk.text ?? ''
     if (chunk.type === 'tool-call' && chunk.toolCall) {
@@ -281,12 +285,9 @@ export default function ConversationPanel({
       // （非卡死——working 已释放；判定收紧：问句/征求同意/「确认/思考」类对话行为不触发；不限于开发阶段——任何阶段说了要看/读/写就该做）
       // 2026-08-05 自动化实测发现（需求阶段偶发误判）：需求阶段（flowStage=0）模型「我先…再确认/再问」是问答引导（STAGE_HINT 需求阶段禁止工具），
       // 不是「承诺写代码没动手」——误判会插入「回复继续」提示 → 打断正常需求问答；需求阶段排除 isActionPromise
+      // 2026-08-05 用户反馈 2：提示不再插入对话流（「陈述句后紧跟『说要做但还没动手』」——污染阅读且常误判模型正常陈述）→ 状态栏非侵入提示，模型下一条消息自动清除
       if ((flowStage ?? 0) >= 1 && streamingRef.current.toolCalls.length === 0 && isActionPromise(content)) {
-        setMessages((prev) => [...prev, {
-          role: 'assistant',
-          content: '搭档说要做但还没动手——回复「继续」，它会接着做。',
-          status: 'done'
-        }])
+        onActionPromiseHint?.('搭档说要做但还没动手——回复「继续」它会接着做')
       }
       streamingRef.current = { content: '', toolCalls: [] }
     }
@@ -381,15 +382,21 @@ export default function ConversationPanel({
   const maybeContinue = async (depth: number, sid: number) => {
     const ctx = chatRef.current
     if (!ctx || depth >= 40 || sessionRef.current !== sid) return
+    // 2026-08-05 用户反馈 3（处理中可发送）：工具执行期间保持 working=true（状态栏「搭档处理中」）——send 守卫/停止按钮可感知模型仍在干活；
+    // 原工具执行间隙 working=false → 用户发送放行 → 新旧对话并发（未知问题）
+    setWorking(true)
+    onWorkingChange?.(true)
+    setWorkingStage('工具执行中…')
+    const releaseWorking = () => { setWorking(false); onWorkingChange?.(false) }
     // 等待自动执行（pending）完成——最多 8s；待授权（need-approval）立即停止（等用户点允许）
     for (let i = 0; i < 16; i++) {
       await new Promise((r) => setTimeout(r, 500))
       const latest = messagesRef.current
       const lastMsg = latest[latest.length - 1]
-      if (!lastMsg || !lastMsg.toolCalls || lastMsg.toolCalls.length === 0) return
+      if (!lastMsg || !lastMsg.toolCalls || lastMsg.toolCalls.length === 0) { releaseWorking(); return }
       const pending = lastMsg.toolCalls.filter((c) => c.status === 'pending')
       const needsApproval = lastMsg.toolCalls.some((c) => c.status === 'need-approval' || c.status === 'plan-approval')
-      if (needsApproval) return // 有待授权——等用户点允许（approveToolCall 后触发续聊）
+      if (needsApproval) { releaseWorking(); return } // 有待授权——等用户点允许（approveToolCall 后触发续聊）
       if (pending.length === 0) {
         // 2026-08-04 重构：同工具重复检测（同一 name+args 连续 3 次 = 死循环——防模型空转不产出；跨调用累积——原局部变量每轮重置失效）
         // 2026-08-05 体验反馈：只统计写工具（write/edit）——read/bash 只读重复是模型合理排查（曾因 read 摘要化反复读同文件被误伤），不触发；真正空转由 depth 40 兜底
@@ -408,6 +415,7 @@ export default function ConversationPanel({
               content: '搭档检测到在重复写同一个文件（已自动暂停，避免死循环）。你回复「继续」或告诉它下一步，它就会接着做。',
               status: 'done'
             }])
+            releaseWorking()
             return
           }
         }
@@ -416,9 +424,9 @@ export default function ConversationPanel({
     }
     const latest = messagesRef.current
     const lastMsg = latest[latest.length - 1]
-    if (!lastMsg) return
+    if (!lastMsg) { releaseWorking(); return }
     const calls = lastMsg.toolCalls ?? []
-    if (calls.length === 0) return
+    if (calls.length === 0) { releaseWorking(); return }
     // 组装 tool 消息序列
     const toolMsgs: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; reasoning_content?: string }> = [
       ...ctx.msgs,
@@ -531,9 +539,28 @@ export default function ConversationPanel({
     return prev.then(() => release)
   }
 
+  // 2026-08-05 用户反馈 4：打断能力（对齐 Claude Code Esc / Cursor Stop）——停止当前流 + 杀当前 bash + 释放状态
+  // 停止后旧流 chunk / maybeContinue 续聊 / pendingAdvance 全部失效（sessionRef++ 隔离）；用户可继续输入新指令
+  const stopGeneration = async () => {
+    sessionRef.current++ // 旧会话失效——旧流 chunk（streamingSidRef 检查）、maybeContinue 续聊（sessionRef 检查）、pendingAdvance 全失效
+    streamingSidRef.current = sessionRef.current
+    pendingAdvanceRef.current = null
+    onActionPromiseHint?.(null)
+    try { await window.neonforge.tools.cancel?.() } catch { /* 无活动命令 */ }
+    setWorking(false)
+    onWorkingChange?.(false)
+    setWorkingStage('已停止')
+  }
+
   const send = async () => {
     const text = inputRef.current.trim()
-    if (!text || working) return
+    if (!text) return
+    // 2026-08-05 用户反馈 3（处理中可发送）+ 反馈 4（无打断能力）：处理中发送 = 打断当前 + 新指令优先
+    // （竞品共识：Claude Code Esc+新输入 / Devin 中断保留状态恢复——不是排队，不是禁止）
+    if (workingRef.current) {
+      console.log('[conversation] 处理中发送——打断当前，新指令优先')
+      await stopGeneration()
+    }
     inputRef.current = ''
     setInput('')
     // 13 复跑入口：上报用户输入（真实交付包 rerunPrompt 用）
@@ -1095,7 +1122,13 @@ export default function ConversationPanel({
             ))}
           </div>
         )}
-        <button type="button" className="nf-config__cta" onClick={() => void send()} disabled={working || !input.trim()}>
+        {/* 2026-08-05 用户反馈 4：停止按钮（working 时显示）——打断当前流/杀 bash；反馈 3：处理中发送 = 打断+新指令（按钮不禁用） */}
+        {working && (
+          <button type="button" className="nf-chat__stop" onClick={() => void stopGeneration()} aria-label="停止搭档当前工作">
+            ⏹ 停止
+          </button>
+        )}
+        <button type="button" className="nf-config__cta" onClick={() => void send()} disabled={!input.trim()}>
           发送
         </button>
       </div>
