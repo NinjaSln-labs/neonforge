@@ -449,7 +449,11 @@ export default function ConversationPanel({
     // 2026-08-04：当前活跃流 = 本 sid（停止后旧流 chunk 不再更新 UI）
     streamingSidRef.current = sid
     // 2026-08-04 重构（用户：「定多少才不卡」根因——原 `depth > 4` 硬上限，开发工具链 5+ 轮必断）：40 轮总兜底（防死循环由 maybeContinue 重复检测承担）
-    if (depth > 40) return
+    if (depth > 40) {
+      // 2026-08-05：提前 return 释放 working（不经过 maybeContinue/finishError——防卡「搭档处理中」）
+      setWorking(false); onWorkingChange?.(false); setWorkingStage('就绪')
+      return
+    }
     const key = await window.neonforge.config.getKey()
     if (!key) { finishError('key-invalid'); return }
     // 系统提示：引导直接 read（项目根相对路径）——避免 bash 全局搜索/工具循环（提速）
@@ -804,6 +808,8 @@ export default function ConversationPanel({
 
   const finishError = (err: string) => {
     // 2026-08-04 体验修复：错误分类 + 日志记录在 updater 外（坑 32——StrictMode updater 双调；原仅 done 记录错误无法追溯）
+    // 2026-08-05 用户反馈（第二轮候选点选后卡住）：runChat 提前 return（gateway 错误/网络错误/key 失效）走 finishError 不经过 maybeContinue——
+    // working 释放点已移到 maybeContinue（0e12ea6）→ finishError 不释放 → working 卡 true → 状态栏「搭档处理中」→ 卡住；此处统一释放
     let errorType: 'key-invalid' | 'service' | 'unknown' = 'unknown'
     let content = '刚才出错了，请再试一次。'
     if (err === 'key-invalid' || String(err).includes('401')) {
@@ -813,6 +819,10 @@ export default function ConversationPanel({
       errorType = 'service'
       content = '服务暂时不可用，稍后再试。'
     }
+    setWorking(false)
+    onWorkingChange?.(false)
+    setWorkingStage('就绪')
+    onActionPromiseHint?.(null)
     window.neonforge.chatLog?.log?.({ ts: new Date().toISOString(), role: 'assistant', content, error: errorType })
     setMessages((p) => {
       const last = p[p.length - 1]
