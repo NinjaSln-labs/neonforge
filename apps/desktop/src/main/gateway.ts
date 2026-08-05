@@ -123,7 +123,6 @@ export class DeepSeekGateway {
   ): Promise<void> {
     const model = opts.model ?? this.router.route({ thinking: opts.level ?? 'basic' })
     console.log('[gateway] stream start model=' + model + ' tools=' + (opts.tools ?? false))
-    console.log('[gateway] stream start model=' + model + ' tools=' + (opts.tools ?? false))
     const res = await fetch(`${API_BASE}/chat/completions`, {
       method: 'POST',
       headers: {
