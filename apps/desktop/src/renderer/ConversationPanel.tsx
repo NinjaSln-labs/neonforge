@@ -10,6 +10,8 @@ import { buildAuthHint, canMergeApprove, toolRisk } from './authModel'
 // 2026-08-03 v33：思考过程内容清洗（reasoning 含 Markdown 标记 → 展示为可读纯文字）
 // 2026-08-04：cleanContent 回复正文展示清洗（字面转义/连续换行杂音）
 import { cleanContent, stripMarkdown } from './textClean'
+// 2026-08-05 方案 3：结构化候选按钮——<candidates> 块解析/剥离（点选文本替代序号，消除模型序号解析漂移）
+import { parseCandidates, stripCandidates } from './candidates'
 // 2026-08-03 视觉审计 P1-6：内联 SVG 图标（替换 emoji 图标）
 import {
   IconBrain, IconCheck, IconClock, IconDot, IconFile,
@@ -764,14 +766,34 @@ export default function ConversationPanel({
             )}
             {m.role === 'user' && <span className="nf-msg__role">你</span>}
             <div className={`nf-msg__body${m.role === 'assistant' && m.status === 'streaming' && !m.content ? ' nf-msg__body--thinking' : ''}`}>
-              {/* 2026-08-04：展示前 cleanContent 清洗（字面转义/连续换行/行尾空白）——只影响展示，API 发送原文 */}
-              {m.content ? cleanContent(m.content) : (m.status === 'streaming' ? '搭档处理中…' : m.error === 'empty-response' ? '搭档没有返回内容——请重试或换个说法' : m.status === 'error' ? '处理失败' : '')}
+              {/* 2026-08-04：展示前 cleanContent 清洗（字面转义/连续换行/行尾空白）——只影响展示，API 发送原文
+                  2026-08-05：stripCandidates 先剥离 <candidates> 候选块（不露标记；候选渲染为按钮组） */}
+              {m.content ? cleanContent(stripCandidates(m.content)) : (m.status === 'streaming' ? '搭档处理中…' : m.error === 'empty-response' ? '搭档没有返回内容——请重试或换个说法' : m.status === 'error' ? '处理失败' : '')}
               {m.error === 'key-invalid' && (
                 <button type="button" className="nf-config__link" onClick={onKeyExpired}>
                   要不要更新一下？
                 </button>
               )}
             </div>
+            {/* 2026-08-05 方案 3：结构化候选按钮——模型 <candidates> 块 → 可点击按钮（点选发送选项文本，不走序号解析） */}
+            {m.role === 'assistant' && m.status === 'done' && m.content && (() => {
+              const opts = parseCandidates(m.content)
+              if (!opts) return null
+              return (
+                <div className="nf-candidates" role="group" aria-label="选择一项">
+                  {opts.map((o, j) => (
+                    <button
+                      key={j}
+                      type="button"
+                      className="nf-candidates__btn"
+                      onClick={() => { inputRef.current = o; void sendRef.current() }}
+                    >
+                      {o}
+                    </button>
+                  ))}
+                </div>
+              )
+            })()}
             {m.role === 'user' && <span className="nf-msg__sent"><IconCheck size={11} /> 已发送</span>}
             {m.reasoning && m.role === 'assistant' && m.status === 'done' && (
               // 2026-08-03 v33：标签「推理」→「思考过程」（非技术语言）+ 内容 Markdown 清洗 + .nf-reasoning 约束（160px 滚动——修长文本撑开）
