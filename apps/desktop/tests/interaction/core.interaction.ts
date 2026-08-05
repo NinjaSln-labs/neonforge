@@ -259,9 +259,10 @@ test('0-1 从零开始：确认推进按钮常驻可见（修复——不在滚�
   await page.getByRole('button', { name: /快速迭代/ }).click()
   const advance = page.locator('.nf-flow__advance button')
   await expect(advance).toBeVisible()
-  // 2026-08-04 P0：需求未确认 → 按钮禁用（文案「确认需求后可推进」）——可见性 + 门控文案
+  // 2026-08-04 P0→2026-08-05 第六轮演进：需求阶段按钮不再禁用（原「需求未确认禁用」导致死锁：模型提示点按钮却点不了）——
+  // 现在按钮可点 = 确认当前需求并进入设计（handleStageChange 兜底确认）；可见性 + 门控文案
   await expect(advance).toContainText(/确认.*推进/)
-  await expect(advance).toBeDisabled()
+  await expect(advance).toBeEnabled()
   // 修复验证：推进按钮不在 .nf-panel__body（滚动容器）内——对话滚动不隐藏
   const inScrollBody = await advance.evaluate((el) => !!el.closest('.nf-panel__body'))
   expect(inScrollBody).toBe(false)
@@ -726,4 +727,65 @@ test('结构化候选：<candidates> 渲染为按钮 + 点选发送选项文本'
   // 点选第一个按钮 → 发送的是选项文本（不是序号——模型直接按文本理解，无序号可错位）
   await page.locator('.nf-candidates__btn').first().click()
   await expect(page.locator('.nf-msg--user').last()).toContainText('建造游戏：玩家自己搭房子、造工具、创造东西')
+})
+
+// 2026-08-05 第六轮实测复现（用户「到确认推进的步骤了，最上面的页卡点不了确认推进」）：
+// 模型回复「需求确认完毕。点下面的『确认推进』」但没有输出【需求确认：】标记 → 原 requirementConfirmed 未置 true → 按钮禁用（死锁：模型提示点按钮却点不了）。
+// 修复：需求阶段按钮不再依赖标记禁用——用户显式点击 = 确认需求（handleStageChange 兜底 + 回写）
+test('需求阶段无【需求确认】标记：确认推进按钮可点 → 点击确认需求并进入设计（第六轮死锁修复）', async ({ page }) => {
+  await page.addInitScript(() => {
+    let streamCb: ((c: { type: string; text?: string }) => void) | null = null
+    let chatCount = 0
+    let titleCalls = 0
+    window.neonforge = {
+      version: 'test',
+      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
+      workspace: {
+        openFolder: async () => null, listDir: async () => [], readFile: async (p: string) => ({ ok: true, content: '// ' + p }),
+        readNotebook: async () => null, initProject: async () => ({ ok: true, path: '/test', title: 't' }),
+        updateProjectTitle: async () => { titleCalls++; (window as unknown as { __titleCalls?: number }).__titleCalls = titleCalls; return { ok: true } }
+      },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        streamChat: async () => {
+          chatCount++
+          setTimeout(() => {
+            // 需求阶段回复：只写「需求确认完毕」——【需求确认：】标记缺失（第六轮死锁根因——模型违反 STAGE_HINT 规则⑤）
+            if (chatCount === 1) streamCb?.({ type: 'content', text: '你的需求我确认好了：做一款在网页浏览器里玩的、面向大众的轻松休闲 3D 射击游戏，能开枪打中目标、有得分，界面简单即可。需求确认完毕。点下面的「确认推进」，我就可以开始动手做了。' })
+            else streamCb?.({ type: 'content', text: '设计阶段：整体方案用 Three.js + HTML 原生界面…（完整设计）' })
+            streamCb?.({ type: 'done' })
+          }, 30)
+          return { ok: true }
+        },
+        onStreamChunk: (cb: (c: { type: string; text?: string }) => void) => { streamCb = cb; return () => {} }
+      },
+      tools: { execute: async () => ({ ok: true }), list: async () => [] },
+      context: { resolve: async () => ({ fragments: [] }) },
+      compaction: { compact: async () => ({ ok: false }) },
+      plugins: { list: async () => [], toggle: async () => true },
+      chatLog: { log: async () => {}, export: async () => ({ ok: true, path: '/tmp/x.md' }) }
+    }
+    ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
+  })
+  await page.goto('http://localhost:5175/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.getByRole('button', { name: '从零开始' }).click()
+  await page.getByRole('button', { name: /快速迭代/ }).click()
+  // 需求阶段：对话输入需求（不走需求卡——initialPrompt 空则不显示）
+  await page.locator('.nf-chat__input textarea').fill('我想做一个网页3D射击游戏')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  await expect(page.locator('.nf-chat__list .nf-msg--assistant')).toHaveCount(1)
+  // 等回复完成（模型无【需求确认】标记——requirementConfirmed 仍 false）
+  await expect(page.locator('.nf-statusbar')).toContainText('就绪', { timeout: 8000 })
+  // 第六轮修复：需求阶段按钮不再禁用（点击 = 确认需求）
+  const advance = page.locator('.nf-flow__advance button')
+  await expect(advance).toBeEnabled()
+  await expect(advance).toContainText(/确认.*推进/)
+  await advance.click()
+  // 进入设计阶段 + 需求确认回写（updateProjectTitle 被调——handleStageChange 兜底确认）
+  await expect(page.locator('.nf-flow__stage--active')).toContainText('设计')
+  await expect(page.locator('.nf-flow__focus-step')).toContainText('设计')
+  await page.waitForTimeout(200)
+  const titleCalls = await page.evaluate(() => (window as unknown as { __titleCalls?: number }).__titleCalls ?? 0)
+  expect(titleCalls).toBeGreaterThan(0)
 })
