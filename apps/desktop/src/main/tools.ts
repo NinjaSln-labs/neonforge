@@ -1,5 +1,6 @@
 import { promises as fs, existsSync } from 'fs'
 import path from 'path'
+import { execSync } from 'child_process'
 import { snapshot as takeSnapshot, revert as revertFile } from './applyDiff.js'
 import { codeRag } from './codeRag.js'
 
@@ -155,8 +156,25 @@ async function editExecutor(args: Record<string, unknown>, ctx: { rootPath?: str
   return { file: filePath, snapshot: true }
 }
 
-// 当前活动 bash 子进程（ticket 14 可撤销：任何时刻停止当前操作——cancelActiveCommand kill）
+// 所有 bash 子进程（进程组跟踪——2026-08-05 用户反馈「服务反复起/端口冲突」：dev server 残留）
+// detached 进程组：app 退出时 killAllSubprocesses 杀整个组（含 `&`/nohup 后台进程——exec 时代孤儿残留）
 let activeProc: { proc: import('child_process').ChildProcess; cmd: string } | null = null
+const subprocs = new Set<import('child_process').ChildProcess>()
+
+// 2026-08-05 用户反馈 1：Electron 关闭时清理所有 bash 子进程（残留 dev server 占端口 → 下次会话端口冲突）
+// 递归杀进程树（进程组 + 后代）——nohup 后台进程 setsid 脱离进程组，仅杀组不够
+function killTree(pid: number): void {
+  try {
+    const kids = execSync(`pgrep -P ${pid}`).toString().trim().split('\n').filter(Boolean).map(Number)
+    for (const k of kids) killTree(k)
+  } catch { /* 无后代 */ }
+  try { process.kill(-pid, 'SIGKILL') } catch { try { process.kill(pid, 'SIGKILL') } catch { /* 已退出 */ } }
+}
+export function killAllSubprocesses(): void {
+  for (const p of subprocs) killTree(p.pid ?? 0)
+  subprocs.clear()
+  activeProc = null
+}
 
 // 2026-08-04 端口冲突防护（用户实测：模型 npm run dev 抢占 NeonForge 5173/5174——dev server 无端口检测）：
 // NeonForge 保留端口：5173（dev）/ 5175（自动化测试）——模型起的项目 dev server 必须避开
@@ -166,7 +184,7 @@ const DEV_SERVER_RE = /(npm|pnpm|yarn) run (dev|start|serve|preview)|vite( |$)|n
 async function bashExecutor(args: Record<string, unknown>, ctx: { rootPath?: string }): Promise<unknown> {
   // V1 真实执行：授权（approved=true）后执行命令（child_process）——在项目根目录执行
   // 风险标注（ticket 14）：high 风险——本机进程执行；授权即同意本机执行；可随时停止（cancelActiveCommand）
-  const { exec } = await import('child_process')
+  const { spawn } = await import('child_process')
   const cmd = String(args.command ?? '')
   if (!cmd.trim()) throw new Error('bash: 缺少 command')
   // 2026-08-04 端口冲突检测：服务类命令显式指定保留端口 → 友好错误（防静默撞车——NeonForge 5173/5175 被抢占）
@@ -178,22 +196,41 @@ async function bashExecutor(args: Record<string, unknown>, ctx: { rootPath?: str
     }
   }
   return new Promise((resolve, reject) => {
-    const child = exec(cmd, { cwd: ctx.rootPath ?? undefined, timeout: 30000, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
-      if (activeProc?.proc === child) activeProc = null
-      if (err) {
-        reject(new Error(err.killed ? `已停止（${cmd.slice(0, 40)}…）` : stderr ? `exit-${err.code}: ${stderr.slice(0, 500)}` : `exit-${err.code}`))
-        return
-      }
-      resolve({ stdout: stdout.slice(0, 2000), stderr: stderr.slice(0, 500) })
-    })
+    // 2026-08-05：spawn detached（新进程组）——app 退出可杀组（含 &/nohup 后台进程）；exec 30s 超时对 dev server（长驻）误杀且后台孤儿残留
+    const child = spawn(cmd, { cwd: ctx.rootPath ?? undefined, shell: true, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    subprocs.add(child)
     activeProc = { proc: child, cmd }
+    let stdout = ''
+    let stderr = ''
+    let timer: NodeJS.Timeout | null = null
+    const cleanup = () => {
+      if (timer) clearTimeout(timer)
+      timer = null
+      // 2026-08-05 用户反馈 1：不从 subprocs 删除——保留进程组记录直到 app 退出统一杀
+      // （&/nohup 后台进程：shell 退出（close）但后代仍在进程组——close 时删记录 → 后台进程失联残留）
+      if (activeProc?.proc === child) activeProc = null
+    }
+    child.stdout?.on('data', (d: Buffer) => { stdout += d.toString(); if (stdout.length > 4000) stdout = stdout.slice(-2000) })
+    child.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); if (stderr.length > 2000) stderr = stderr.slice(-1000) })
+    child.on('error', (err) => { cleanup(); reject(new Error(`bash 启动失败: ${err.message}`)) })
+    child.on('close', (code, signal) => {
+      cleanup()
+      // 被信号终止（SIGKILL——cancel/超时）→ 「已停止」（对齐原 exec 语义：err.killed → 已停止）
+      if (signal || code === null) reject(new Error('已停止（命令被中断）'))
+      else if (code !== 0) reject(new Error(stderr ? `exit-${code}: ${stderr.slice(0, 500)}` : `exit-${code}`))
+      else resolve({ stdout: stdout.slice(0, 2000), stderr: stderr.slice(0, 500) })
+    })
+    // 30s 超时（非长驻命令防挂死）；dev server（& 后台）shell 立即退出不算超时——后台进程留组内待 app 退出清理
+    timer = setTimeout(() => {
+      try { process.kill(-(child.pid ?? 0), 'SIGKILL') } catch { /* 已退出 */ }
+    }, 30000)
   })
 }
 
-// 可撤销（ticket 14）：停止当前活动命令（bash 高危——任何时刻可停；无活动命令返回错误）
+// 可撤销（ticket 14）：停止当前活动命令（bash 高危——任何时刻可停；无活动命令返回错误）——杀整个进程组
 export function cancelActiveCommand(): { ok: true } | { ok: false; error: string } {
   if (!activeProc) return { ok: false, error: '无活动命令' }
-  activeProc.proc.kill('SIGKILL')
+  try { process.kill(-(activeProc.proc.pid ?? 0), 'SIGKILL') } catch { try { activeProc.proc.kill('SIGKILL') } catch {} }
   activeProc = null
   return { ok: true }
 }
