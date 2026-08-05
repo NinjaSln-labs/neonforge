@@ -279,7 +279,9 @@ export default function ConversationPanel({
       })
       // 2026-08-05 体验反馈（用户「最后一条像卡住」）：模型承诺行动（「我先…再…」）但没调工具 → 提示用户可回复「继续」
       // （非卡死——working 已释放；判定收紧：问句/征求同意/「确认/思考」类对话行为不触发；不限于开发阶段——任何阶段说了要看/读/写就该做）
-      if (streamingRef.current.toolCalls.length === 0 && isActionPromise(content)) {
+      // 2026-08-05 自动化实测发现（需求阶段偶发误判）：需求阶段（flowStage=0）模型「我先…再确认/再问」是问答引导（STAGE_HINT 需求阶段禁止工具），
+      // 不是「承诺写代码没动手」——误判会插入「回复继续」提示 → 打断正常需求问答；需求阶段排除 isActionPromise
+      if ((flowStage ?? 0) >= 1 && streamingRef.current.toolCalls.length === 0 && isActionPromise(content)) {
         setMessages((prev) => [...prev, {
           role: 'assistant',
           content: '搭档说要做但还没动手——回复「继续」，它会接着做。',
