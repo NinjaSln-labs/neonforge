@@ -273,9 +273,9 @@ export default function ConversationPanel({
         content,
         toolCalls: streamingRef.current.toolCalls.map((t) => ({ name: t.name, status: t.status }))
       })
-      // 2026-08-05 体验反馈（用户「最后一条像卡住」）：开发阶段模型承诺行动（「我先…再…」）但没调工具 → 提示用户可回复「继续」
-      // （非卡死——working 已释放；判定收紧：问句/征求同意不触发，避免打扰正常决策等待）
-      if ((flowStage ?? 0) >= 2 && streamingRef.current.toolCalls.length === 0 && isActionPromise(content)) {
+      // 2026-08-05 体验反馈（用户「最后一条像卡住」）：模型承诺行动（「我先…再…」）但没调工具 → 提示用户可回复「继续」
+      // （非卡死——working 已释放；判定收紧：问句/征求同意/「确认/思考」类对话行为不触发；不限于开发阶段——任何阶段说了要看/读/写就该做）
+      if (streamingRef.current.toolCalls.length === 0 && isActionPromise(content)) {
         setMessages((prev) => [...prev, {
           role: 'assistant',
           content: '搭档说要做但还没动手——回复「继续」，它会接着做。',
