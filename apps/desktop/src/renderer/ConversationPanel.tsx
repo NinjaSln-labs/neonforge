@@ -74,13 +74,17 @@ function fmtToolArgs(tc: { name: string; args: Record<string, unknown> }): strin
 
 // 2026-08-05 体验反馈（用户「最后一条像卡住」——模型承诺行动但没调工具，如「我先打开服务端看看再动手」后停住）：
 // 检测开发阶段模型回复「承诺要做事但没实际调工具」→ 对话区提示用户可回复「继续」（非卡死——working 已释放，只是模型停住等指令）
+// 2026-08-05 第五轮修复：排除「确认/沟通」类（「我先和你确认一下…建造游戏」——模型在引导候选/确认需求，不是行动承诺；
+// 误判 → 插入提示消息 → done updater 被拦截 → 候选按钮 status 卡 streaming 不渲染）——沟通动词（确认/复述/说明等）不是行动
 export function isActionPromise(content: string): boolean {
   if (!content) return false
   const t = content.trim()
   if (!t) return false
   if (/[?？]$/.test(t) || /吗$|呢$|吧$|可以吗|行不行/.test(t)) return false // 问句/征求同意——不是承诺
+  // 沟通/澄清类行为不是行动承诺（「我先和你确认一下」「我先复述需求」「我说明一下」——模型在对话不是在干活）
+  if (/(确认|复述|说明|解释|总结|澄清|商量|理解|确认一下|跟你确认|和你确认|跟您确认|介绍一下|跟你聊|和你聊)/.test(t)) return false
   const promise = /(我先|我来|接着|这就|准备|马上|让我|我会|要先|先读|先看|先写|先建|先改|直接|开始|继续(做|写|加|改|调|检查|启动))/.test(t)
-  const action = /(写|做|加|改|读|看|查|建|装|启|跑|执行|调整|清理|检查|修复|实现|看结构|打开)/.test(t)
+  const action = /(写|做|加|改|读|看|查|建|装|启|跑|执行|调整|清理|检查|修复|实现|看结构|打开|动手|着手)/.test(t)
   return promise && action
 }
 
@@ -286,10 +290,17 @@ export default function ConversationPanel({
     }
     setMessages((prev) => {
       // 纯 UI 更新（无副作用——StrictMode 双调安全）
-      const last = prev[prev.length - 1]
-      if (!last || last.role !== 'assistant') return prev
-      if (chunk.type !== 'tool-call' && last.status !== 'streaming') return prev
-      const next = { ...last }
+      // 2026-08-05 第五轮修复：定位「最后一条 streaming 的 assistant 消息」而非「最后一条消息」——
+      // done 分支插入提示消息（isActionPromise）后，原 last 变成提示消息（status='done'）→ guard 拦截 → 流式消息 status 卡 streaming → 候选按钮不渲染（选项卡消失根因）
+      // 从尾部向前找 streaming 消息；tool-call 保留原语义（无 streaming 时回退到最后一条 assistant）
+      let target = -1
+      for (let i = prev.length - 1; i >= 0; i--) {
+        if (prev[i].role !== 'assistant') continue
+        if (prev[i].status === 'streaming') { target = i; break }
+        if (chunk.type === 'tool-call' && target === -1) target = i
+      }
+      if (target === -1) return prev
+      const next = { ...prev[target] }
       if (chunk.type === 'reasoning') {
         next.reasoning = (next.reasoning ?? '') + (chunk.text ?? '')
         onReasoning?.(next.reasoning)
@@ -323,7 +334,7 @@ export default function ConversationPanel({
             : undefined
         }]
       }
-      return [...prev.slice(0, -1), next]
+      return [...prev.slice(0, target), next, ...prev.slice(target + 1)]
     })
     // 工具执行副作用（移出 updater——StrictMode 双调会执行两次；真实工具写文件等不可重复）
     // 2026-08-04 规划级授权：plan_approval 跳过执行（虚拟工具——批准由 renderer approvePlan 处理）

@@ -692,8 +692,10 @@ test('结构化候选：<candidates> 渲染为按钮 + 点选发送选项文本'
       gateway: {
         validate: async () => ({ ok: true }),
         streamChat: async () => {
+          // 2026-08-05 第五轮复现：真实模型回复（需求阶段同音泛化引导）——含「我先和你确认一下…建造游戏」，
+          // 误判 isActionPromise → 插入「搭档说要做但还没动手」提示 → done updater 被拦截 → 按钮不渲染（回归防护）
           setTimeout(() => {
-            streamCb?.({ type: 'content', text: '你对「设计」的理解，点选或回复：\n<candidates>\n- 射击游戏（打敌人那种）\n- 解谜游戏（动脑过关）\n- 建造游戏（搭积木）\n</candidates>\n选好咱们继续。' })
+            streamCb?.({ type: 'content', text: '你提到想做一个「3D设计游戏」——我先和你确认一下，你对这个「设计」是怎么理解的：\n\n- 你是指做成一个让玩家**自己搭建筑、造东西**的游戏（比如搭房子、造机械）？\n- 还是说你的意思是**「射击」**游戏（可能是打字打错了）？\n- 又或者是让玩家**设计物品外观、画画、捏角色**这一类创作玩法？\n\n<candidates>\n- 建造游戏：玩家自己搭房子、造工具、创造东西\n- 射击游戏：打枪、打怪的一类玩法\n- 创作游戏：设计物品外观、捏人、画画这类的创作玩法\n</candidates>\n\n你点选或者直接回复序号都行。' })
             streamCb?.({ type: 'done' })
           }, 50)
           return { ok: true }
@@ -716,12 +718,12 @@ test('结构化候选：<candidates> 渲染为按钮 + 点选发送选项文本'
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
   // 候选渲染为 3 个按钮（done 后出现）
   await expect(page.locator('.nf-candidates__btn')).toHaveCount(3, { timeout: 8000 })
-  await expect(page.locator('.nf-candidates__btn').first()).toContainText('射击游戏（打敌人那种）')
+  await expect(page.locator('.nf-candidates__btn').first()).toContainText('建造游戏：玩家自己搭房子、造工具、创造东西')
   // 正文剥离 <candidates> 标记（不露标记杂音）
   await expect(page.locator('.nf-msg--assistant .nf-msg__body')).not.toContainText('<candidates>')
   // 等 working 释放（done 渲染与 setWorking(false) 是不同 state 提交——按钮刚出现瞬间 send 守卫 working 仍 true 会拦截）
   await expect(page.locator('.nf-statusbar')).toContainText('就绪', { timeout: 8000 })
   // 点选第一个按钮 → 发送的是选项文本（不是序号——模型直接按文本理解，无序号可错位）
   await page.locator('.nf-candidates__btn').first().click()
-  await expect(page.locator('.nf-msg--user').last()).toContainText('射击游戏（打敌人那种）')
+  await expect(page.locator('.nf-msg--user').last()).toContainText('建造游戏：玩家自己搭房子、造工具、创造东西')
 })
