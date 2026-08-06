@@ -144,7 +144,7 @@ test('信任阶梯：授权记录接真实数据（06 问题快照 authorized—
     const bridge = {
       version: 'test',
       config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
-      workspace: { openFolder: async () => '/test', listDir: async () => [], readFile: async () => ({ ok: true, content: '// x' }), readNotebook: async () => null, initProject: async () => ({ ok: true, path: '/test', title: 't' }) },
+      workspace: { openFolder: async () => '/test', listDir: async () => [], readFile: async () => ({ ok: true, content: '// x' }), readNotebook: async () => null, initProject: async () => ({ ok: true, path: '/test', title: 't' }), updateProjectTitle: async () => ({ ok: true }) },
       gateway: { validate: async () => ({ ok: true }), streamChat: async () => ({ ok: true }), onStreamChunk: () => () => {} },
       delivery: { applyDiff: async () => ({ ok: true, file: '/test/a.txt' }), revertDiff: async () => ({ ok: true }) },
       tools: { list: async () => [], execute: async () => ({ ok: true, data: { file: '/test/a.txt', snapshot: true } }), revert: async () => ({ ok: true }) },
@@ -182,7 +182,7 @@ test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 1
     const bridge = {
       version: 'test',
       config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
-      workspace: { openFolder: async () => '/test', listDir: async () => [], readFile: async () => ({ ok: true, content: '// x' }), readNotebook: async () => null, initProject: async () => ({ ok: true, path: '/test', title: 't' }) },
+      workspace: { openFolder: async () => '/test', listDir: async () => [], readFile: async () => ({ ok: true, content: '// x' }), readNotebook: async () => null, initProject: async () => ({ ok: true, path: '/test', title: 't' }), updateProjectTitle: async () => ({ ok: true }) },
       gateway: {
         validate: async () => ({ ok: true }),
         streamChat: async () => ({ ok: true }),
@@ -214,6 +214,7 @@ test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 1
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
   await page.waitForTimeout(300)
   await page.evaluate(() => {
+    window.__emit({ type: 'content', text: '好的。【需求确认：批量整理文件】【任务类型：B 文件操作】' })
     window.__emit({ type: 'tool-call', toolCall: { name: 'write', args: { path: '/test/a.txt', content: 'x' } } })
     window.__emit({ type: 'tool-call', toolCall: { name: 'edit', args: { path: '/test/b.txt', old: 'a', new: 'b' } } })
     window.__emit({ type: 'done' })
