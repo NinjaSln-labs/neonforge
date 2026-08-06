@@ -6,7 +6,7 @@
 // 显式端口分配替换 --port 0——坑 77 vite 忽略 0；waitForUrl 失败检测——close 无输出=命令失败返回 stderr 错误——不再 port 0 误导）
 
 import { spawn } from 'child_process'
-import { HOST_RESERVED_PORTS, normalizeServerCommand, buildSpawnEnv, allocatePort, releasePort, ensureEnvironment, getEnvironment } from './envManager'
+import { HOST_RESERVED_PORTS, normalizeServerCommand, buildSpawnEnv, allocatePort, releasePort, ensureEnvironment, getEnvironment } from './envManager.js'
 
 export interface ServiceEntry {
   rootPath: string
