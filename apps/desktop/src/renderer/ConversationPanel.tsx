@@ -434,6 +434,19 @@ export default function ConversationPanel({
       setWorkingStage(stageMap[tc.name] ?? (tc.name.startsWith('find_') || tc.name.startsWith('get_') ? '正在查代码…' : '正在处理…'))
       // ticket 14 L4 委托：低危文件操作（write/edit）命中委托规则 → 免确认直接执行（仍快照可回滚）；bash 高危永远单独授权
       // 2026-08-04 授权架构 v4：任务级信任——「允许并记住」的文件 write/edit 自动（沙箱内）；read/bash 只读由 main preApproval 裁决（沙箱内自动/沙箱外 ask）
+      // 2026-08-06 偏离清单拦截（基于事实：06:03 已规划但写「正确路径」偏离批准清单 → 逐个弹授权/规划外文件——用户「相同文件弹授权」根因）：
+      // 已规划（planApprovedRef）但文件不在批准清单 → 不弹逐个卡——拒绝 + 引导补充 plan_approval（清单与实际始终一致）
+      if ((tc.name === 'write' || tc.name === 'edit') && planApprovedRef.current && !plannedFilesRef.current.has(trustPath(tc.args.path))) {
+        setMessages((prev) => {
+          const last = prev[prev.length - 1]
+          if (!last || last.role !== 'assistant') return prev
+          const calls = (last.toolCalls ?? []).map((c) => c.name === tc.name && c.status === 'pending'
+            ? { ...c, status: 'done' as const, result: '文件不在批准清单（批准后写清单外文件会逐个弹授权）——先调 plan_approval 工具补充这个文件（列出新增/修改文件 + 原因），用户批准后再写' }
+            : c)
+          return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
+        })
+        return
+      }
       const autoApproved = (delegateLowRisk && toolRisk(tc.name) === 'low') || isTrusted(tc.args)
       void (window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: autoApproved, rootPath: rootPath ?? undefined }) ?? Promise.resolve({ ok: false, error: 'tools 通道未就绪' })).then((r) => {
         const data = r.data as { file?: string; snapshot?: boolean } | undefined
@@ -879,7 +892,8 @@ export default function ConversationPanel({
     const files = (tc.args.files ?? []) as Array<{ path: string }>
     files.forEach((f) => addTrust({ path: f.path }))
     // 2026-08-06 任务完成度：保存规划文件清单（progress 检测用——deepcode unimplemented_files 借鉴）+ 重置产出（新任务）
-    plannedFilesRef.current = new Set(files.map((f) => f.path))
+    // 2026-08-06 偏离拦截（基于事实：06:03 已规划但写「正确路径」偏离清单 → 弹授权/规划外）：存规范化路径（trustPath 绝对——比较一致）
+    plannedFilesRef.current = new Set(files.map((f) => trustPath(f.path)))
     producedFilesRef.current = new Set()
     // 2026-08-05：幂等标记——本任务内再调 plan_approval 不再弹卡
     planApprovedRef.current = true
