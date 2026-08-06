@@ -4,7 +4,7 @@ import { execSync } from 'child_process'
 import { snapshot as takeSnapshot, revert as revertFile } from './applyDiff.js'
 import { codeRag } from './codeRag.js'
 // 2026-08-06 设计层升级（服务生命周期独立——用户「白名单匹配不完」）：模型用 start/check/stop-server 管服务，不用 bash 起服务/curl 验证
-import { startServer, checkServer, stopServer } from './serviceManager.js'
+import { startServer, checkServer, stopServer, checkEnvironment } from './serviceManager.js'
 
 // ToolRegistry（ticket 10 / A0 §2）：工具注册与执行分发
 // 边界判定：ToolRegistry=目录与分发；ShellAgent=bash 执行；Gateway=工具调用修复（02 已实现）
@@ -364,6 +364,31 @@ export function initTools(): void {
   })
   // 2026-08-06 设计层升级（服务生命周期独立）：start/check/stop-server——模型不用 bash 起服务（端口冲突/超时杀进程/进程残留）也不用 curl 验证（弹卡）
   // 授权：全部自动（start 白名单命令 + NeonForge 管生命周期可停；check 只读；stop 只停自己起的）
+  toolRegistry.register({
+    name: 'check-env',
+    source: 'core',
+    requiresApproval: false,
+    risk: 'none',
+    execute: async (args) => {
+      const dir = String(args.dir ?? args.rootPath ?? '')
+      if (!dir) return { ok: false, error: 'check-env: 缺少 dir（项目目录绝对路径）' }
+      const env = checkEnvironment(dir)
+      return {
+        ok: true,
+        data: {
+          runtime: env.runtime,
+          runtimeVersion: env.runtimeVersion,
+          hasPackageJson: env.hasPackageJson,
+          hasNodeModules: env.hasNodeModules,
+          packageManager: env.packageManager,
+          toolchain: env.toolchain.slice(0, 15),
+          note: !env.hasNodeModules && env.hasPackageJson
+            ? 'node_modules 未安装——先执行 npm install（或 pnpm install）再开发'
+            : env.runtime === 'none' ? '未检测到 runtime（node/python）——确认项目类型' : '环境就绪'
+        }
+      }
+    }
+  })
   toolRegistry.register({
     name: 'start-server',
     source: 'core',

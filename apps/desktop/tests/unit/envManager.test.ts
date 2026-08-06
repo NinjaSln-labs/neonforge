@@ -1,0 +1,71 @@
+import { describe, it, expect, vi } from 'vitest'
+
+// 2026-08-06 补充：buildSpawnEnv 依赖 fs.existsSync（.bin 目录存在才注入 PATH）——测试 mock fs（含 node_modules/.bin 的路径视为存在）
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>()
+  return {
+    ...actual,
+    existsSync: (p: string) => typeof p === 'string' && p.includes('node_modules/.bin')
+  }
+})
+
+import { normalizeServerCommand, allocatePort, releasePort, buildSpawnEnv, HOST_RESERVED_PORTS } from '../../src/main/envManager'
+
+// 环境管理领域层（2026-08-06 尽调调研驱动——环境单源：检测→记录→使用；显式端口替换 --port 0；.bin PATH 注入通用机制）
+
+describe('normalizeServerCommand（服务命令端口规范化——显式端口替换 --port 0）', () => {
+  it('`--port 0` → 替换为显式端口（坑 77：vite 忽略 0 用默认 5173——显式端口有效）', () => {
+    expect(normalizeServerCommand('vite --port 0', 5190)).toBe('vite --port 5190')
+    expect(normalizeServerCommand('npx vite --port 0', 5191)).toBe('npx vite --port 5191')
+  })
+
+  it('无 --port 的 vite 命令 → 注入显式端口（不注入 0——无效）', () => {
+    expect(normalizeServerCommand('npx vite', 5192)).toBe('npx vite --port 5192')
+    expect(normalizeServerCommand('vite', 5193)).toBe('vite --port 5193')
+  })
+
+  it('已有显式端口 → 尊重（不覆盖模型指定的）', () => {
+    expect(normalizeServerCommand('vite --port 5200', 5194)).toBe('vite --port 5200')
+  })
+
+  it('非 vite 命令 → 原样（npm run dev 等——脚本内部端口不可控）', () => {
+    expect(normalizeServerCommand('npm run dev', 5195)).toBe('npm run dev')
+  })
+})
+
+describe('端口分配器（显式独立端口——避开宿主保留 + 已用）', () => {
+
+  it('分配避开保留端口 5173/5175（5190 起）', () => {
+    const p = allocatePort('/test/proj1')
+    expect(HOST_RESERVED_PORTS.has(p)).toBe(false)
+    expect(p).toBeGreaterThanOrEqual(5190)
+  })
+
+  it('多项目分配不同端口（互不冲突——多项目并行环境隔离）', () => {
+    const p1 = allocatePort('/test/proj1')
+    const p2 = allocatePort('/test/proj2')
+    expect(p1).not.toBe(p2)
+  })
+
+  it('同项目重复分配 → 复用已分配端口（Registry 记忆）', () => {
+    const p1 = allocatePort('/test/proj3')
+    const p2 = allocatePort('/test/proj3')
+    expect(p1).toBe(p2)
+  })
+
+  it('释放后端口不再占用（新分配不冲突——分配器单调递增不回退）', () => {
+    const p1 = allocatePort('/test/proj4')
+    releasePort('/test/proj4')
+    const p2 = allocatePort('/test/proj4')
+    expect(p2).not.toBe(p1)
+    expect(p2).toBeGreaterThan(p1)
+  })
+})
+
+describe('buildSpawnEnv（环境单源——项目 node_modules/.bin 入 PATH，通用非 vite 特判）', () => {
+  it('注入项目 .bin 到 PATH 前缀（任何 npm 本地工具可跑）', () => {
+    const env = buildSpawnEnv('/proj/root', { PATH: '/usr/bin:/bin' })
+    expect(env.PATH).toContain('/proj/root/node_modules/.bin')
+    expect(env.PATH).toContain('/usr/bin:/bin') // 原 PATH 保留
+  })
+})
