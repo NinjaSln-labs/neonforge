@@ -295,7 +295,9 @@ async function openExecutor(args: Record<string, unknown>): Promise<unknown> {
   const url = String(args.url ?? args.target ?? '')
   if (!isValidOpenUrl(url)) throw new Error('open: 只支持 http/https 地址（如 open {url: "http://localhost:5174/"}）')
   try {
-    const { shell } = require('electron') as typeof import('electron')
+    // 2026-08-06 open 失败根因（用户反馈「open 调用出现了错误」）：main 是 ESM（NodeNext）——require 未定义 → 永远失败；
+    // 用动态 import（vitest 可 mock；同文件其他 require 都被 try/catch 兜住走 fallback，唯独 open 的失败暴露）
+    const { shell } = await import('electron')
     if (!shell?.openExternal) throw new Error('当前环境不支持打开浏览器（非 Electron 运行）')
     await shell.openExternal(url)
     return { ok: true, data: `已在默认浏览器打开 ${url}` }
