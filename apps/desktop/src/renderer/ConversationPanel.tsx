@@ -79,6 +79,7 @@ function fmtToolArgs(tc: { name: string; args: Record<string, unknown> }): strin
     case 'get_call_chain': return a.path ? `查看代码结构：${String(a.path)}` : '查看代码结构'
     case 'open': return a.url ? `打开网页：${String(a.url)}` : '打开网页'
     // 2026-08-06 设计层升级：服务工具人类化
+    case 'check-env': return a.dir ? `检测环境：${String(a.dir)}` : '检测项目环境'
     case 'start-server': return a.dir ? `启动服务器：${String(a.dir)}` : '启动服务器'
     case 'check-server': return a.dir ? `检查服务：${String(a.dir)}` : '检查服务状态'
     case 'stop-server': return a.dir ? `停止服务：${String(a.dir)}` : '停止服务'

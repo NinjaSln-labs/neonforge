@@ -1,9 +1,12 @@
-// ServiceManager（2026-08-06 设计层升级——用户「白名单匹配不完」+「服务生命周期独立」）：
+// ServiceManager（2026-08-06 设计层升级——用户「白名单匹配不完」+「服务生命周期独立」+「环境单源」）：
 // NeonForge 管理开发服务器生命周期——模型用 start-server/check-server/stop-server 工具，
 // 不用 bash 起服务（端口冲突/进程残留/超时杀进程）也不用 curl 验证（弹卡）——只读探索走专用工具面，bash 回归「真正执行命令」
 // 服务注册表按 rootPath 记忆（端口/PID/URL）——模型不用猜端口（坑 67「帮我打开猜端口」终结）
+// 2026-08-06 环境单源（尽调调研 5 源驱动）：spawn 统一走 envManager（node_modules/.bin 入 PATH——任何 npm 工具可跑；
+// 显式端口分配替换 --port 0——坑 77 vite 忽略 0；waitForUrl 失败检测——close 无输出=命令失败返回 stderr 错误——不再 port 0 误导）
 
 import { spawn } from 'child_process'
+import { HOST_RESERVED_PORTS, normalizeServerCommand, buildSpawnEnv, allocatePort, releasePort, ensureEnvironment, getEnvironment } from './envManager'
 
 export interface ServiceEntry {
   rootPath: string
@@ -25,18 +28,34 @@ export function parseLocalUrl(text: string): string | null {
 }
 
 // 等待子进程输出中的地址（起服务需要时间——最长 15s）
-function waitForUrl(child: import('child_process').ChildProcess, timeoutMs = 15000): Promise<string | null> {
+// 2026-08-06 失败检测（用户「所有命令都要能拿到错误返回」）：close 无任何 stdout 输出 = 命令失败（command not found 等）→ 返回 stderr 错误；
+// 有输出但未解析到地址 = 服务启动中（不报错）；超时无输出 = 命令失败
+function waitForUrl(child: import('child_process').ChildProcess, timeoutMs = 15000): Promise<{ url: string | null; error?: string }> {
   return new Promise((resolve) => {
     let buf = ''
+    let errBuf = ''
     let done = false
-    const finish = (url: string | null) => { if (!done) { done = true; resolve(url) } }
-    const timer = setTimeout(() => finish(null), timeoutMs)
+    const finish = (url: string | null, error?: string) => { if (!done) { done = true; resolve({ url, error }) } }
+    const timer = setTimeout(() => {
+      if (!buf && !errBuf) finish(null, '命令启动超时（15s 无输出）——检查命令是否存在或环境未就绪（可用 check-env 检测）')
+      else finish(null)
+    }, timeoutMs)
     child.stdout?.on('data', (d: Buffer) => {
       buf += d.toString()
       const url = parseLocalUrl(buf)
       if (url) { clearTimeout(timer); finish(url) }
     })
-    child.on('close', () => finish(null))
+    child.stderr?.on('data', (d: Buffer) => { errBuf += d.toString() })
+    child.on('close', () => {
+      if (!buf) {
+        const err = errBuf.trim() || '命令执行失败（无输出）——检查命令是否存在（如 vite 需先 npm install）或环境是否就绪'
+        clearTimeout(timer)
+        finish(null, err)
+      } else {
+        clearTimeout(timer)
+        finish(null)
+      }
+    })
   })
 }
 
@@ -54,18 +73,6 @@ export function isServerCommand(cmd: string): boolean {
   return SERVER_COMMAND_WHITELIST.some((s) => s.test(cmd.trim()))
 }
 
-// 宿主保留端口（NeonForge 自己的 dev server 5173 / 测试 server 5175）——用户项目服务绝不可占用（坑 13/67/73 + 本轮「一直用 5173」）
-export const HOST_RESERVED_PORTS = new Set([5173, 5175])
-
-// 2026-08-06 端口升级（用户「启动服务器一直用 5173」——第 N 次端口问题，确认升级）：
-// vite 类命令强制 `--port 0`（系统分配动态端口）——不指定时 vite 默认 5173 → 用户项目占宿主端口（本次实证：项目 vite 绑 *:5173 与宿主 localhost:5173 并存冲突）
-export function normalizeServerCommand(cmd: string): string {
-  const c = cmd.trim()
-  const isVite = /^npx vite/.test(c) || /^vite( |$)/.test(c)
-  if (isVite && !/--port/.test(c)) return `${c} --port 0`
-  return c
-}
-
 // 启动开发服务器（rootPath 已有服务 → 直接返回；否则起进程并等地址）
 export async function startServer(rootPath: string, command?: string): Promise<{ ok: true; data: { url: string; port: number } } | { ok: false; error: string }> {
   const existing = services.get(rootPath)
@@ -74,26 +81,42 @@ export async function startServer(rootPath: string, command?: string): Promise<{
   if (!isServerCommand(rawCmd)) {
     return { ok: false, error: `start-server 只支持服务类命令（npx vite / npm run dev 等）——不支持「${rawCmd}」` }
   }
-  const cmd = normalizeServerCommand(rawCmd)
+  // 2026-08-06 环境单源：分配显式端口（避开宿主保留 + 已用）→ normalize 注入（--port 0 替换为显式——坑 77 vite 忽略 0）
+  const port = allocatePort(rootPath)
+  const cmd = normalizeServerCommand(rawCmd, port)
   try {
-    const child = spawn(cmd, { cwd: rootPath, shell: true, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    // 环境注入：node_modules/.bin 入 PATH——`vite`（不带 npx）也能找到（通用——非 vite 特判）
+    const env = buildSpawnEnv(rootPath, process.env)
+    const child = spawn(cmd, { cwd: rootPath, shell: true, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env })
     serviceProcs.add(child)
-    const url = await waitForUrl(child)
-    if (!url) {
-      // 没解析到地址（输出慢/格式不同）→ 不杀进程（服务可能正在起），返回启动中——模型用 check-server 确认
-      services.set(rootPath, { rootPath, port: 0, pid: child.pid ?? 0, url: '', startedAt: Date.now() })
-      return { ok: true, data: { url: '', port: 0 } }
-    }
-    const port = Number(url.match(/:(\d+)/)?.[1] ?? 0)
-    // 2026-08-06 宿主端口保护机制化：结果端口 ∈ 保留集（npm run dev 等无法强制 --port 0 的脚本可能落 5173）→ 拒绝占用 + 杀进程重试
-    if (HOST_RESERVED_PORTS.has(port)) {
+    const { url, error } = await waitForUrl(child)
+    if (error) {
+      // 2026-08-06 失败检测：命令失败（command not found 等）→ 明确错误 + 释放端口（不再 port 0 误导）
       try { process.kill(-(child.pid ?? 0), 'SIGKILL') } catch { try { child.kill('SIGKILL') } catch { /* 已退出 */ } }
       serviceProcs.delete(child)
-      return { ok: false, error: `start-server: 服务落到了宿主保留端口 ${port}（NeonForge 自己用）——已停止；请用 vite 类命令（自动 --port 0 动态端口）或换端口启动` }
+      releasePort(rootPath)
+      return { ok: false, error: `start-server: ${error}（已分配端口 ${port}）——可用 check-env 检测环境后重试` }
     }
-    services.set(rootPath, { rootPath, port, pid: child.pid ?? 0, url, startedAt: Date.now() })
-    return { ok: true, data: { url, port } }
+    if (!url) {
+      // 有输出但没解析到地址（输出慢/格式不同）→ 不杀进程（服务可能正在起），返回启动中——模型用 check-server 确认
+      services.set(rootPath, { rootPath, port, pid: child.pid ?? 0, url: '', startedAt: Date.now() })
+      return { ok: true, data: { url: '', port } }
+    }
+    const actualPort = Number(url.match(/:(\d+)/)?.[1] ?? 0)
+    // 宿主端口保护机制化：结果端口 ∈ 保留集（npm run dev 等无法强制端口的脚本可能落 5173）→ 拒绝占用 + 杀进程
+    if (HOST_RESERVED_PORTS.has(actualPort)) {
+      try { process.kill(-(child.pid ?? 0), 'SIGKILL') } catch { try { child.kill('SIGKILL') } catch { /* 已退出 */ } }
+      serviceProcs.delete(child)
+      releasePort(rootPath)
+      return { ok: false, error: `start-server: 服务落到了宿主保留端口 ${actualPort}（NeonForge 自己用）——已停止；已换显式端口请用 vite 类命令` }
+    }
+    services.set(rootPath, { rootPath, port: actualPort, pid: child.pid ?? 0, url, startedAt: Date.now() })
+    // 环境 Registry 记录实际端口（后续 check-env/端口复用一致）
+    const regEnv = getEnvironment(rootPath)
+    if (regEnv) { regEnv.servicePort = actualPort }
+    return { ok: true, data: { url, port: actualPort } }
   } catch (e) {
+    releasePort(rootPath)
     return { ok: false, error: `启动服务失败: ${e instanceof Error ? e.message : String(e)}` }
   }
 }
@@ -102,7 +125,7 @@ export async function startServer(rootPath: string, command?: string): Promise<{
 export async function checkServer(rootPath: string): Promise<{ ok: true; data: { running: boolean; url?: string; port?: number; note?: string } } | { ok: false; error: string }> {
   const s = services.get(rootPath)
   if (!s) {
-    return { ok: true, data: { running: false, note: '没有启动过的开发服务器——用 start-server 启动' } }
+    return { ok: true, data: { running: false, note: '没有启动过的开发服务器——用 start-server 启动（先 check-env 确认环境）' } }
   }
   if (!s.url) {
     return { ok: true, data: { running: false, url: s.url, note: '服务启动中（未确认地址）——稍后再查' } }
@@ -122,6 +145,7 @@ export function stopServer(rootPath: string): { ok: true; data: { stopped: boole
   if (!s) return { ok: true, data: { stopped: false } }
   try { process.kill(-s.pid, 'SIGKILL') } catch { try { process.kill(s.pid, 'SIGKILL') } catch { /* 已退出 */ } }
   services.delete(rootPath)
+  releasePort(rootPath)
   return { ok: true, data: { stopped: true } }
 }
 
@@ -136,4 +160,10 @@ export function stopAllServices(): void {
 
 export function listServices(): Array<{ rootPath: string; url: string; port: number }> {
   return [...services.values()].map((s) => ({ rootPath: s.rootPath, url: s.url, port: s.port }))
+}
+
+// 环境预检（开发阶段环境就绪——check-env 工具核心）：返回项目环境报告（模型判断环境是否就绪）
+export function checkEnvironment(rootPath: string): ReturnType<typeof ensureEnvironment> {
+  const env = ensureEnvironment(rootPath)
+  return env
 }
