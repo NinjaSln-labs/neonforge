@@ -68,6 +68,14 @@ function fmtToolArgs(tc: { name: string; args: Record<string, unknown> }): strin
     case 'bash': return a.command ? `执行 ${String(a.command).slice(0, 60)}` : '执行命令'
     case 'search': return a.query ? `搜索 ${String(a.query)}` : '搜索代码'
     case 'plan_approval': return `规划 ${((a.files ?? []) as unknown[]).length} 个文件`
+    // 2026-08-06 用户反馈「get_diagnostics 具体干什么了不知道」：LSP 工具名技术化 → 人类化描述（工具卡显示）
+    case 'get_diagnostics': return a.path ? `检查代码错误：${String(a.path)}` : '检查代码错误'
+    case 'get_imports': return a.path ? `查看文件依赖：${String(a.path)}` : '查看文件依赖'
+    case 'find_definition': return a.path ? `定位定义：${String(a.symbol ?? a.path)}` : '定位代码定义'
+    case 'find_references': return a.path ? `查找引用：${String(a.symbol ?? a.path)}` : '查找代码引用'
+    case 'get_type_info': return a.path ? `查看类型：${String(a.symbol ?? a.path)}` : '查看类型信息'
+    case 'get_call_chain': return a.path ? `查看代码结构：${String(a.path)}` : '查看代码结构'
+    case 'open': return a.url ? `打开网页：${String(a.url)}` : '打开网页'
     default: return tc.name
   }
 }
@@ -196,7 +204,9 @@ export default function ConversationPanel({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   // 2026-08-04 体验修复（用户实测：启动页输入句预填多余）：initialPrompt 进入工作区自动发送——说了就直接开始
   // （区别于 externalRequest「预填+自动发送」复跑语义；initialPrompt 只用于启动页首句）
-  const sendRef = useRef<() => Promise<void>>(async () => {})
+  const sendRef = useRef<(opts?: { silent?: boolean }) => Promise<void>>(async () => {})
+  // 2026-08-06 只说不做第 5 次升级（用户反馈「最后又卡住了」）：用户已说「继续」模型仍承诺不调工具 → 自动 silent 续聊一次；每会话最多一次（防死循环）
+  const autoNudgeRef = useRef(false)
   // 2026-08-05：renderer 侧「已规划」标记——approvePlan 置 true（幂等：本任务内再调 plan_approval 不弹卡）；阶段推进（clearTrust）重置
   const planApprovedRef = useRef(false)
   useEffect(() => {
@@ -286,8 +296,20 @@ export default function ConversationPanel({
       // 2026-08-05 自动化实测发现（需求阶段偶发误判）：需求阶段（flowStage=0）模型「我先…再确认/再问」是问答引导（STAGE_HINT 需求阶段禁止工具），
       // 不是「承诺写代码没动手」——误判会插入「回复继续」提示 → 打断正常需求问答；需求阶段排除 isActionPromise
       // 2026-08-05 用户反馈 2：提示不再插入对话流（「陈述句后紧跟『说要做但还没动手』」——污染阅读且常误判模型正常陈述）→ 状态栏非侵入提示，模型下一条消息自动清除
+      // 2026-08-06 只说不做第 5 次升级（用户反馈「最后又卡住了」）：用户已说「继续」模型仍承诺不调工具 →
+      // 自动 silent 续聊一次（「继续，把刚才说要做的做完」——不显示用户消息，避免用户看到「自己发的」困惑）；
+      // 防死循环 autoNudgeRef 每会话最多一次，之后降级为状态栏提示
       if ((flowStage ?? 0) >= 1 && streamingRef.current.toolCalls.length === 0 && isActionPromise(content)) {
-        onActionPromiseHint?.('搭档说要做但还没动手——回复「继续」它会接着做')
+        const lastUser = [...messagesRef.current].reverse().find((m) => m.role === 'user')
+        const userAlreadyContinued = lastUser && /(继续|接着|去做|然后呢|去啊|动手|往下|走走走|快点)/.test(String(lastUser.content ?? ''))
+        if (userAlreadyContinued && !autoNudgeRef.current) {
+          autoNudgeRef.current = true
+          onActionPromiseHint?.(null) // 清提示——自动续聊代替
+          inputRef.current = '继续，把刚才说要做的做完'
+          void sendRef.current?.({ silent: true })
+        } else {
+          onActionPromiseHint?.('搭档说要做但还没动手——回复「继续」它会接着做')
+        }
       }
       streamingRef.current = { content: '', toolCalls: [] }
     }
@@ -343,10 +365,28 @@ export default function ConversationPanel({
     // 2026-08-04 规划级授权：plan_approval 跳过执行（虚拟工具——批准由 renderer approvePlan 处理）
     if (chunk.type === 'tool-call' && chunk.toolCall && chunk.toolCall.name !== 'plan_approval') {
       const tc = chunk.toolCall
+      // 2026-08-06 用户反馈「第一句话就有一个工具执行」：需求阶段（flowStage=0）工具门控——需求未确认前不执行任何工具
+      // （需求都没澄清，看目录/写文件都没意义）；工具直接 done + 提示（maybeContinue 回填给模型 → 模型停止调工具继续澄清需求）
+      // 严格 flowStage === 0（undefined=演示/测试通道不拦截——demo 场景工具需正常执行）
+      if (flowStage === 0 && tc.name === 'bash' && initialPrompt) {
+        setMessages((prev) => {
+          const last = prev[prev.length - 1]
+          if (!last || last.role !== 'assistant') return prev
+          const calls = (last.toolCalls ?? []).map((c) => c.name === tc.name && c.status === 'pending'
+            ? { ...c, status: 'done' as const, result: '需求确认前先不执行命令——先把需求问清楚（进入设计/开发阶段再动手）' }
+            : c)
+          return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
+        })
+        return
+      }
       // 2026-08-03 v35：workingStage 人类化（原「调用工具 bash…」技术腔——按工具名映射自然描述）
       const stageMap: Record<string, string> = {
         read: '正在读取文件…', write: '正在写入文件…', edit: '正在修改文件…',
-        bash: '正在执行命令…', search: '正在搜索…'
+        bash: '正在执行命令…', search: '正在搜索…',
+        // 2026-08-06 用户反馈「get_diagnostics 具体干什么了不知道」：LSP 工具名技术化 → 人类化描述（查代码错误/引用/定义等）
+        get_diagnostics: '正在检查代码错误…', get_imports: '正在查看文件依赖…',
+        find_definition: '正在定位代码定义…', find_references: '正在查找代码引用…',
+        get_type_info: '正在查看类型信息…', get_call_chain: '正在查看代码结构…'
       }
       setWorkingStage(stageMap[tc.name] ?? (tc.name.startsWith('find_') || tc.name.startsWith('get_') ? '正在查代码…' : '正在处理…'))
       // ticket 14 L4 委托：低危文件操作（write/edit）命中委托规则 → 免确认直接执行（仍快照可回滚）；bash 高危永远单独授权
@@ -524,6 +564,9 @@ export default function ConversationPanel({
   const isTrusted = (args: Record<string, unknown>): boolean =>
     taskTrustRef.current.includes(trustPath(args.path ?? args.filePath ?? ''))
   const addTrust = (args: Record<string, unknown>): void => {
+    // 2026-08-06 安全漏洞（用户反馈「启动服务没弹授权卡」）：bash 点「允许并记住」→ trustPath('') fallback rootPath → 整个项目根被信任 → 后续所有 bash 绕过授权！
+    // 修复：只信任「文件路径类」工具（write/edit 的 path）——bash 无 path 一律不进入信任（bash 高危永远单独确认）
+    if (!args.path && !args.filePath) return
     const p = trustPath(args.path ?? args.filePath ?? '')
     if (!p || taskTrustRef.current.includes(p)) return
     // 2026-08-04 授权架构 v4：只信任沙箱内（项目根内）——沙箱外 write/edit 永不进入信任集合（每次弹卡——安全底线）
@@ -560,7 +603,8 @@ export default function ConversationPanel({
     setWorkingStage('已停止')
   }
 
-  const send = async () => {
+  // 2026-08-06 只说不做第 5 次升级（用户反馈「最后又卡住了」）：send 支持 silent（自动续聊用——不显示/不记录用户消息，避免用户看到「自己发的」困惑）
+  const send = async (opts?: { silent?: boolean }) => {
     const text = inputRef.current.trim()
     if (!text) return
     // 2026-08-05 用户反馈 3（处理中可发送）+ 反馈 4（无打断能力）：处理中发送 = 打断当前 + 新指令优先
@@ -571,17 +615,19 @@ export default function ConversationPanel({
     }
     inputRef.current = ''
     setInput('')
-    // 13 复跑入口：上报用户输入（真实交付包 rerunPrompt 用）
-    onUserMessage?.(text)
-    // 2026-08-04：对话日志（自动记录用户消息——与 assistant done 互补成完整对话）
-    window.neonforge.chatLog?.log?.({ ts: new Date().toISOString(), role: 'user', content: text })
+    if (!opts?.silent) {
+      // 13 复跑入口：上报用户输入（真实交付包 rerunPrompt 用）
+      onUserMessage?.(text)
+      // 2026-08-04：对话日志（自动记录用户消息——与 assistant done 互补成完整对话）
+      window.neonforge.chatLog?.log?.({ ts: new Date().toISOString(), role: 'user', content: text })
+      setMessages((p) => [...p, { role: 'user', content: text, status: 'done' }])
+    }
     // 2026-08-04：新轮次——重置流式累积（防上轮异常残留）
     streamingRef.current = { content: '', toolCalls: [] }
     setWorking(true)
     onWorkingChange?.(true)
     const sid = ++sessionRef.current // 新会话——旧会话事件/续聊失效
     const history = buildHistory(messages)
-    setMessages((p) => [...p, { role: 'user', content: text, status: 'done' }])
     setMessages((p) => [...p, { role: 'assistant', content: '', reasoning: '', status: 'streaming' }])
     setWorkingStage('已发送，等待搭档…')
 
@@ -1004,14 +1050,18 @@ export default function ConversationPanel({
                           >
                             允许执行
                           </button>
-                          {/* 2026-08-04 授权架构 v4：允许并记住（本次任务内此文件自动）——授权疲劳核心解法 */}
-                          <button
-                            type="button"
-                            className="nf-toolcall__remember"
-                            onClick={() => rememberAndApprove(m.toolCalls ?? [], i, tc)}
-                          >
-                            允许并记住
-                          </button>
+                          {/* 2026-08-04 授权架构 v4：允许并记住（本次任务内此文件自动）——授权疲劳核心解法
+                              // 2026-08-06 安全漏洞（用户反馈「启动服务没弹授权卡」）：bash 点允许并记住 → trustPath('')=rootPath → 后续所有 bash 绕过授权！
+                              // bash 高危永远单独确认（授权原则）——不显示「允许并记住」 */}
+                          {tc.name !== 'bash' && (
+                            <button
+                              type="button"
+                              className="nf-toolcall__remember"
+                              onClick={() => rememberAndApprove(m.toolCalls ?? [], i, tc)}
+                            >
+                              允许并记住
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="nf-toolcall__reject"
