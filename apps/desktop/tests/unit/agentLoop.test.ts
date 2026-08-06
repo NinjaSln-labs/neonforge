@@ -87,4 +87,15 @@ describe('StuckDetector（卡住检测——连续无进展升级）', () => {
     expect(r2.event?.type).toBe('escalate')
     expect(r2.event && 'message' in r2.event ? r2.event.message : '').toContain('规划文件还有 1 个没写')
   })
+
+  // 2026-08-06 补充（用户「清单来源不只 plan_approval」——③ projectFiles 项目文件树产出校验）
+  it('规划文件出现在项目文件树（projectFiles）→ 视为已产出（比 write 记录可靠——回滚/删除不在树中）', () => {
+    const planned = new Set(['index.html', 'main.js'])
+    const produced = new Set(['index.html']) // write 记录只有 index.html
+    const projectFiles = new Set(['index.html', 'main.js']) // 但 main.js 已在文件树（树刷新确认产出）
+    const turn = evaluateTurnProgress({ toolCalls: [], content: '都写好了', prevReadFiles: new Set(), plannedFiles: planned, producedFiles: produced, projectFiles })
+    expect(turn.hasRemainingPlanned).toBe(false) // 树中已有 → 无剩余
+    const r = detectStuck({ turn, prev: { consecutiveNoProgress: 1, escalations: 0 } })
+    expect(r.event).toBeUndefined()
+  })
 })

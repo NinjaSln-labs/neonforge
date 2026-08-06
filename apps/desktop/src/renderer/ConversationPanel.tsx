@@ -336,7 +336,9 @@ export default function ConversationPanel({
           content,
           prevReadFiles: prevReadFilesRef.current,
           plannedFiles: plannedFilesRef.current,
-          producedFiles: producedFilesRef.current
+          producedFiles: producedFilesRef.current,
+          // 2026-08-06 补充（用户「清单来源不只 plan_approval」——③ projectFiles 项目文件树）：产出校验（规划文件出现在文件树=已产出）
+          projectFiles: new Set(recentFilesExternal ?? [])
         })
         streamingRef.current.toolCalls.forEach((c) => { if (c.name === 'read' && c.file) prevReadFilesRef.current.add(c.file) })
         const { state, event } = detectStuck({ turn, prev: stuckStateRef.current })

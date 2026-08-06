@@ -32,6 +32,7 @@ export function evaluateTurnProgress(input: {
   prevReadFiles: Set<string>
   plannedFiles?: Set<string>      // plan_approval 规划文件清单（开发阶段——approvePlan 保存）
   producedFiles?: Set<string>     // write/edit 成功累积的文件（任务完成度）
+  projectFiles?: Set<string>      // 2026-08-06 补充（用户「清单来源不只 plan_approval」——③ projectFiles 项目文件树实时快照）：规划文件出现在文件树 = 已产出（比 write 记录可靠——回滚/删除则不在树中）
 }): TurnProgress {
   const { toolCalls, content, prevReadFiles } = input
   const t = (content ?? '').trim()
@@ -39,12 +40,16 @@ export function evaluateTurnProgress(input: {
   const readNewFile = toolCalls.some((c) => c.name === 'read' && c.file && !prevReadFiles.has(c.file))
   const plannedFiles = input.plannedFiles
   const producedFiles = input.producedFiles
+  const projectFiles = input.projectFiles
   // 任务完成度：规划文件非空时——还有未产出规划文件 = 任务未完成（deepcode unimplemented_files 同思路）
   const hasPlannedFiles = !!plannedFiles && plannedFiles.size > 0
+  // 产出判定：write/edit 成功记录 ∪ 出现在项目文件树（projectFiles——回滚/删除后不在树中，更可靠）
+  const isProduced = (f: string): boolean =>
+    !!(producedFiles?.has(f)) || !!(projectFiles?.has(f))
   const hasRemainingPlanned = hasPlannedFiles
-    && [...(plannedFiles ?? [])].some((f) => !(producedFiles?.has(f)))
+    && [...(plannedFiles ?? [])].some((f) => !isProduced(f))
   const remainingCount = hasRemainingPlanned
-    ? [...(plannedFiles ?? [])].filter((f) => !(producedFiles?.has(f))).length
+    ? [...(plannedFiles ?? [])].filter((f) => !isProduced(f)).length
     : 0
   const isQuestion = /[?？]$/.test(t) || /(吗|呢|吧)[。.!！]?$|可以吗|行不行/.test(t)
   const isCommunication = /(确认|复述|说明|解释|总结|澄清|商量|理解|明白|知道|收到|确认一下|跟你确认|和你确认|跟您确认|介绍一下|跟你聊|和你聊)/.test(t)
