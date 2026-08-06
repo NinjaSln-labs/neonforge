@@ -38,11 +38,14 @@ describe('authModel 授权执行模型（ticket 14）', () => {
     expect(h.note).toContain('你的电脑上运行')
   })
 
-  it('buildAuthHint：bash 超长命令截断（>60 字符加 …）', () => {
-    const long = 'echo ' + 'a'.repeat(80)
+  // 2026-08-06 用户反馈「命令失败了但先让我授权，不确认是不是有问题」：授权卡 bash 显示完整命令（不截断——用户要看完整命令判断）+ note 加「看不懂可拒绝」引导
+  it('buildAuthHint：bash 显示完整命令（不截断）+ 风险判断引导', () => {
+    const long = 'cd /Users/x/项目 && ls -la && ech'
     const h = buildAuthHint('bash', { command: long })
-    expect(h.impact.length).toBeLessThanOrEqual(61)
-    expect(h.impact.endsWith('…')).toBe(true)
+    expect(h.impact).toBe(long)
+    expect(h.impact.endsWith('…')).toBe(false)
+    expect(h.note).toContain('你的电脑上运行')
+    expect(h.note).toContain('拒绝')
   })
 
   it('canMergeApprove：同批 ≥2 低危文件操作 → 可合并授权（疲劳防护）', () => {

@@ -146,16 +146,16 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
   })
 
   // 2026-08-06 open 工具（用户「帮我打开」4 次没打开网页）：http/https 打开默认浏览器（无需授权——无害操作）
-  // vitest 非 electron 环境 shell 不可用——成功打开路径留 Electron 运行时（L4 e2e/手动实测）验证；此处验证注册配置 + URL 校验 + 环境降级
-  it('open：注册为无需授权（requiresApproval false / risk none）——http/https 通过 URL 校验', async () => {
+  // main 是 ESM——openExecutor 用 await import('electron')（require 在 ESM 未定义 = open 失败根因）；vitest mock 动态 import 生效 → 可断言完整成功路径
+  it('open：http/https 地址放行并调用 shell.openExternal（无需授权）', async () => {
+    openExternalMock.mockClear()
+    const r = await toolRegistry.execute('open', { url: 'http://localhost:5174/' }, {})
+    expect(r.ok).toBe(true)
+    expect(openExternalMock).toHaveBeenCalledWith('http://localhost:5174/')
+    // requiresApproval false → 不传 approved 也执行（无需授权卡）
     const tool = toolRegistry.list().find((t) => t.name === 'open')
     expect(tool?.requiresApproval).toBe(false)
     expect(tool?.risk).toBe('none')
-    // URL 校验放行 http/https → 走到 shell 分支；非 electron 环境报环境不支持（而非 URL 被拦截）
-    const r = await toolRegistry.execute('open', { url: 'http://localhost:5174/' }, {})
-    expect(r.ok).toBe(false)
-    expect(r.error).toContain('open 失败')
-    expect(r.error).toContain('不支持')
   })
 
   it('open：非 http/https 地址拒绝（file:// 等本地协议防越权）', async () => {
