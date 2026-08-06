@@ -241,6 +241,8 @@ function initProblems(): ProblemInstance[] {
   // 07 阶段产物编排：阶段推进 → 交付包验收项（阶段确认列表——确定性，不依赖模型）
   // 2026-08-04：推进反馈——seq 递增通知 ConversationPanel 追加「已进入【X】阶段」对话提示（用户反馈「推进按钮没有实际功能」）
   const [stageAdvance, setStageAdvance] = useState<{ seq: number; stage: string; hint: string; requirement?: string } | null>(null)
+  // 2026-08-06 阶段推进设计层（用户反馈「测试阶段不会自动或提示进入部署」）：模型输出「确认推进」→ 推进按钮高亮（用户注意到该点了）
+  const [advanceHint, setAdvanceHint] = useState(false)
   // 2026-08-04 方案 A：requirement 可选——需求卡确认时携带确认摘要（注入对话上下文，模型按确认结果工作）
   const handleStageChange = (stage: number, requirement?: string) => {
     // 2026-08-05 第六轮修复：需求阶段推进 = 用户显式确认需求（按钮已解锁——不依赖模型【需求确认】标记；
@@ -249,11 +251,14 @@ function initProblems(): ProblemInstance[] {
       handleRequirementConfirmed(reqTextRef.current || requirement || '需求已确认')
     }
     setFlowStage(stage)
+    setAdvanceHint(false) // 2026-08-06 推进后清除按钮高亮
     // 2026-08-06 用户反馈「已进入阶段下面一堆定义的话」：对话区提示用 USER_STAGE_HINT（用户版一句话）——STAGE_HINT 是给模型的完整规则长文（含 <candidates> 示例/编号规则），不得显示给用户（坑 49 只修了阶段卡，漏了这里）
     setStageAdvance((prev) => ({ seq: (prev?.seq ?? 0) + 1, stage: FLOW_STAGES[stage], hint: USER_STAGE_HINT[FLOW_STAGES[stage]] ?? STAGE_HINT[FLOW_STAGES[stage]], requirement }))
+    // 2026-08-06 用户反馈「交付推进后产物已解决但验收对照没完成」：交付是最后阶段——推进到交付 = 项目完成 → acceptance 全 done（与产物「已解决」一致）
+    const isLastStage = stage >= FLOW_STAGES.length - 1
     const acceptance = FLOW_STAGES.map((s, i) => ({
-      label: i < stage ? `${s} 阶段已完成` : i === stage ? `${s} 阶段进行中` : `${s} 待开始`,
-      done: i < stage
+      label: i < stage || isLastStage ? `${s} 阶段已完成` : i === stage ? `${s} 阶段进行中` : `${s} 待开始`,
+      done: i < stage || isLastStage
     }))
     setDeliveryPkg((prev) => ({
       status: 'delivered',
@@ -303,7 +308,7 @@ function initProblems(): ProblemInstance[] {
         {/* 2026-08-04 UX 修复：0-1 交付流面板移出滚动容器——对话滚动时「模型选择/确认推进」常驻可见（原在 .nf-panel__body 内被对话内容滚出视口——用户找不到推进按钮） */}
         {zeroToOne && (
           <div className="nf-flow__dock">
-            <DeliveryFlowPanel onStageChange={handleStageChange} onModelSelect={setFlowModel} model={flowModel} requirementConfirmed={requirementConfirmed} artifactsReady={realChanges.length > 0} busy={working} stageOverride={flowStage} />
+            <DeliveryFlowPanel onStageChange={handleStageChange} onModelSelect={setFlowModel} model={flowModel} requirementConfirmed={requirementConfirmed} artifactsReady={realChanges.length > 0} busy={working} stageOverride={flowStage} advanceHint={advanceHint} />
             {/* 2026-08-04 P2：需求确认卡——需求阶段未确认时显示（点选 4 项 → 确认 → 自动进设计；确定性收敛不依赖模型标记）
                 2026-08-04 体验修复：initialPrompt 首句关键词预选「做什么」（用户已说过的类型不用重选）
                 2026-08-04 体验修复：无输入（initialPrompt 空——用户空 Enter 进入）不显示需求卡——没说过需求，卡片选项对用户没意义（用户困惑「你怎么知道我要做什么」），让对话引导 */}
@@ -314,7 +319,7 @@ function initProblems(): ProblemInstance[] {
         )}
         <div className="nf-panel__body">
           {chatTab === 'chat' ? (
-            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} onApprovalChange={setPendingApproval} onActionPromiseHint={setActionHint} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} onRequirementConfirmed={handleRequirementConfirmed} recentFilesExternal={projectFiles} stageHint={stageHint} flowStage={flowStage} stageAdvance={stageAdvance} initialPrompt={initialPrompt} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} />
+            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} onApprovalChange={setPendingApproval} onActionPromiseHint={setActionHint} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} onRequirementConfirmed={handleRequirementConfirmed} recentFilesExternal={projectFiles} stageHint={stageHint} flowStage={flowStage} stageAdvance={stageAdvance} initialPrompt={initialPrompt} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} onAdvanceHint={setAdvanceHint} />
           ) : (
             <TaskPanel />
           )}
