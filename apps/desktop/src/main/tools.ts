@@ -5,6 +5,8 @@ import { snapshot as takeSnapshot, revert as revertFile } from './applyDiff.js'
 import { codeRag } from './codeRag.js'
 // 2026-08-06 设计层升级（服务生命周期独立——用户「白名单匹配不完」）：模型用 start/check/stop-server 管服务，不用 bash 起服务/curl 验证
 import { startServer, checkServer, stopServer, checkEnvironment } from './serviceManager.js'
+// 2026-08-06 能力模型（坑 83）：check-env 返回能力视图（平台原生 + 外部扩展 Status——模型按需求选能力）
+import { detectCapabilities } from './envManager.js'
 
 // ToolRegistry（ticket 10 / A0 §2）：工具注册与执行分发
 // 边界判定：ToolRegistry=目录与分发；ShellAgent=bash 执行；Gateway=工具调用修复（02 已实现）
@@ -373,18 +375,22 @@ export function initTools(): void {
       const dir = String(args.dir ?? args.rootPath ?? '')
       if (!dir) return { ok: false, error: 'check-env: 缺少 dir（项目目录绝对路径）' }
       const env = checkEnvironment(dir)
+      // 2026-08-06 能力视图（坑 83 能力模型——用户「能力才是要检测的东西」）：返回能力清单（平台原生 + 外部扩展 Status）
+      // 模型按「用户需求 → 所需能力」从清单匹配（reasonix semantic 路由思路——模型理解判断，非词匹配）
+      const caps = detectCapabilities(dir)
+      const missing = caps.filter((c) => c.status === 'missing').map((c) => c.id)
       return {
         ok: true,
         data: {
+          capabilities: caps.map((c) => ({ id: c.id, category: c.category, status: c.status, implementations: c.implementations, requires: c.requires, detail: c.detail })),
           runtime: env.runtime,
           runtimeVersion: env.runtimeVersion,
-          hasPackageJson: env.hasPackageJson,
           hasNodeModules: env.hasNodeModules,
           packageManager: env.packageManager,
-          toolchain: env.toolchain.slice(0, 15),
-          note: !env.hasNodeModules && env.hasPackageJson
-            ? 'node_modules 未安装——先执行 npm install（或 pnpm install）再开发'
-            : env.runtime === 'none' ? '未检测到 runtime（node/python）——确认项目类型' : '环境就绪'
+          missing: missing,
+          note: missing.length > 0
+            ? `缺少能力：${missing.join('、')}——先安装再继续（node_modules 未装先 npm install；openpyxl 用 pip install）`
+            : env.runtime === 'none' ? '能力就绪（系统原生）——从零项目需先初始化（建 package.json + 装依赖）' : '环境就绪'
         }
       }
     }
