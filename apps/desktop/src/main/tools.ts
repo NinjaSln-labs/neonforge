@@ -3,6 +3,8 @@ import path from 'path'
 import { execSync } from 'child_process'
 import { snapshot as takeSnapshot, revert as revertFile } from './applyDiff.js'
 import { codeRag } from './codeRag.js'
+// 2026-08-06 设计层升级（服务生命周期独立——用户「白名单匹配不完」）：模型用 start/check/stop-server 管服务，不用 bash 起服务/curl 验证
+import { startServer, checkServer, stopServer } from './serviceManager.js'
 
 // ToolRegistry（ticket 10 / A0 §2）：工具注册与执行分发
 // 边界判定：ToolRegistry=目录与分发；ShellAgent=bash 执行；Gateway=工具调用修复（02 已实现）
@@ -294,12 +296,8 @@ export function isReadOnlyBash(cmd: string): boolean {
   // 含写副作用标记（重定向 / 写命令 / 可执行任意代码的解释器）→ 非只读
   if (/>\s*[^|]*$/m.test(c)) return false // 重定向到文件（echo x > f / cat a > b）
   if (/[;&|]\s*(rm|mv|cp|mkdir|touch|npm|pnpm|yarn|git|curl|wget|python|python3|node|write|install|unlink|ln|chmod|chown)/.test(c)) return false
-  // 2026-08-06 用户反馈「读取/浏览文件弹授权卡」：模型反复用 curl 验证服务（07:36 日志「curl 验证 5188」）——curl 不在白名单 → 每次弹卡；
-  // curl GET 类（无写标志 -o/-O/-d/--data/-X POST/--upload/-F）是只读网络请求（验证服务/读取 URL）→ 自动执行；含写操作需授权
-  const head0 = c.split(/[;&|]/)[0].trim().split(/\s+/)[0]?.replace(/^sudo\s+/, '') ?? ''
-  if (head0 === 'curl') {
-    return !/(\s-o\s|\s-O\s|\s-d\s|\s--data|-X\s*POST|--upload|-F\s|--output)/.test(c)
-  }
+  // 2026-08-06 设计层升级（fail-closed——用户「白名单匹配不完」）：白名单**冻结**（不再加条目）；
+  // curl 特判**删除**——curl 验证服务交给 check-server 工具（模型被引导不用 bash curl）；新命令一律默认授权（fail-closed）
   // 首命令在白名单 → 只读（cd "dir" && ls 也覆盖——head 取 cd）
   const head = c.split(/[;&|]/)[0].trim().split(/\s+/)[0]?.replace(/^sudo\s+/, '') ?? ''
   return BASH_READONLY_HEAD.has(head)
@@ -351,6 +349,41 @@ export function initTools(): void {
     requiresApproval: false,
     risk: 'none',
     execute: (args, ctx) => codeRag.search(ctx?.rootPath ?? null, String(args.query ?? '')) as unknown as Promise<unknown>
+  })
+  // 2026-08-06 设计层升级（服务生命周期独立）：start/check/stop-server——模型不用 bash 起服务（端口冲突/超时杀进程/进程残留）也不用 curl 验证（弹卡）
+  // 授权：全部自动（start 白名单命令 + NeonForge 管生命周期可停；check 只读；stop 只停自己起的）
+  toolRegistry.register({
+    name: 'start-server',
+    source: 'core',
+    requiresApproval: false,
+    risk: 'low',
+    execute: async (args) => {
+      const dir = String(args.dir ?? '')
+      if (!dir) return { ok: false, error: 'start-server: 缺少 dir（项目目录绝对路径）' }
+      return startServer(dir, args.command ? String(args.command) : undefined)
+    }
+  })
+  toolRegistry.register({
+    name: 'check-server',
+    source: 'core',
+    requiresApproval: false,
+    risk: 'none',
+    execute: async (args) => {
+      const dir = String(args.dir ?? '')
+      if (!dir) return { ok: false, error: 'check-server: 缺少 dir（项目目录绝对路径）' }
+      return checkServer(dir)
+    }
+  })
+  toolRegistry.register({
+    name: 'stop-server',
+    source: 'core',
+    requiresApproval: false,
+    risk: 'low',
+    execute: async (args) => {
+      const dir = String(args.dir ?? '')
+      if (!dir) return { ok: false, error: 'stop-server: 缺少 dir（项目目录绝对路径）' }
+      return stopServer(dir)
+    }
   })
 }
 

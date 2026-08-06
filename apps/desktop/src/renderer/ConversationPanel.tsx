@@ -76,6 +76,10 @@ function fmtToolArgs(tc: { name: string; args: Record<string, unknown> }): strin
     case 'get_type_info': return a.path ? `查看类型：${String(a.symbol ?? a.path)}` : '查看类型信息'
     case 'get_call_chain': return a.path ? `查看代码结构：${String(a.path)}` : '查看代码结构'
     case 'open': return a.url ? `打开网页：${String(a.url)}` : '打开网页'
+    // 2026-08-06 设计层升级：服务工具人类化
+    case 'start-server': return a.dir ? `启动服务器：${String(a.dir)}` : '启动服务器'
+    case 'check-server': return a.dir ? `检查服务：${String(a.dir)}` : '检查服务状态'
+    case 'stop-server': return a.dir ? `停止服务：${String(a.dir)}` : '停止服务'
     default: return tc.name
   }
 }
@@ -91,8 +95,10 @@ export function isActionPromise(content: string): boolean {
   if (/[?？]$/.test(t) || /吗$|呢$|吧$|可以吗|行不行/.test(t)) return false // 问句/征求同意——不是承诺
   // 沟通/澄清类行为不是行动承诺（「我先和你确认一下」「我先复述需求」「我说明一下」——模型在对话不是在干活）
   if (/(确认|复述|说明|解释|总结|澄清|商量|理解|确认一下|跟你确认|和你确认|跟您确认|介绍一下|跟你聊|和你聊)/.test(t)) return false
-  const promise = /(我先|我来|接着|这就|准备|马上|让我|我会|要先|先读|先看|先写|先建|先改|直接|开始|继续(做|写|加|改|调|检查|启动))/.test(t)
-  const action = /(写|做|加|改|读|看|查|建|装|启|跑|执行|调整|清理|检查|修复|实现|看结构|打开|动手|着手)/.test(t)
+  // 2026-08-06 设计层升级（文本模拟工具拦截——07:37「[open 工具已调用：...]」）：模型在正文假装调了工具（sysHint ⑪ 禁止）
+  // → 视为承诺行动（「已调用/调用了」= promise），命中后 autoNudge 自动续聊触发真实调用
+  const promise = /(我先|我来|接着|这就|准备|马上|让我|我会|要先|先读|先看|先写|先建|先改|直接|开始|已调用|调用了|已执行|继续(做|写|加|改|调|检查|启动))/.test(t)
+  const action = /(写|做|加|改|读|看|查|建|装|启|跑|执行|调整|清理|检查|修复|实现|看结构|打开|动手|着手|调用)/.test(t)
   return promise && action
 }
 
@@ -387,7 +393,9 @@ export default function ConversationPanel({
         // 2026-08-06 用户反馈「get_diagnostics 具体干什么了不知道」：LSP 工具名技术化 → 人类化描述（查代码错误/引用/定义等）
         get_diagnostics: '正在检查代码错误…', get_imports: '正在查看文件依赖…',
         find_definition: '正在定位代码定义…', find_references: '正在查找代码引用…',
-        get_type_info: '正在查看类型信息…', get_call_chain: '正在查看代码结构…'
+        get_type_info: '正在查看类型信息…', get_call_chain: '正在查看代码结构…',
+        // 2026-08-06 设计层升级：服务工具人类化
+        'start-server': '正在启动开发服务器…', 'check-server': '正在检查服务状态…', 'stop-server': '正在停止服务…'
       }
       setWorkingStage(stageMap[tc.name] ?? (tc.name.startsWith('find_') || tc.name.startsWith('get_') ? '正在查代码…' : '正在处理…'))
       // ticket 14 L4 委托：低危文件操作（write/edit）命中委托规则 → 免确认直接执行（仍快照可回滚）；bash 高危永远单独授权
@@ -510,7 +518,7 @@ export default function ConversationPanel({
     const langRule = lastUserMsg && /[\u4e00-\u9fff]/.test(String(lastUserMsg.content ?? ''))
       ? '⑧ 用中文回复用户（避免英文夹杂；工具名/代码/技术名词可保留原文；**即使工具结果/代码是英文，回复用户也保持中文**——不要中途切换成英文）'
       : '⑧ 用与用户消息相同的语言回复'
-    const sysHint = { role: 'system', content: `你是 NeonForge 搭档。当前项目根目录：${rootPath ?? '(未指定)'}。规则：① 读文件用 read 工具（路径用项目根下的相对路径，如 package.json）② 不要用 bash find 全局搜索（直接 read 目标文件）③ 工具一次调用一个，执行完看结果再决定 ④ 找不到文件就直接告诉用户 ⑤ 查符号定义/引用/类型用 LSP 工具：find_definition/find_references/get_type_info（传 path + symbol，如 {path: 'src/a.ts', symbol: 'greet'}）⑥ 查文件错误/import 用 get_diagnostics/get_imports ⑦（2026-08-05 定位优先——竞品 grep-first 共识）排查/修复问题时**必须先用 search 或 LSP 定位到具体文件和行号，再 read 目标文件——禁止盲读文件试探**（盲读浪费轮次）；search 传 query 关键词（如 "射线" "命中"）返回命中文件+行号+片段；不要反复 read 不同文件碰运气。${langRule}⑨ 用户可能不懂技术——回答简洁口语化：优先短句，少用术语；必须提术语时用一句大白话解释；不要堆砌要点清单。⑩ 回复正文不要用 Markdown 标记（不要 #、**、反引号、- 列表、代码块框）；少用括号补充说明；段落之间最多空一行，不要连续空行；**也不要使用任何尖括号标签**（如 <one-question>——会原样显示给用户；除 <candidates> 候选块外）。⑪（2026-08-04 防文本模拟）执行工具必须通过真正的函数调用（tool-call）发出——对话历史里的「（工具调用：…）」只是执行记录，绝不能模仿成文本写在回复正文里，文本写的调用不会被执行；要调工具就在这条回复里发出真实函数调用，工具执行完会自动继续。⑫（2026-08-05 说了就做——用户催「打开」6 次教训）用户明确要求执行某个操作（如「帮我打开」「起服务」「继续」「做 X」）：**必须立即调用对应工具执行**——禁止只回复「我去做」而不调工具；工具结果不理想就重试或换方案，不要停留在说明上。⑬（2026-08-06 宿主端口保护——用户「帮我打开」4 次教训）5173/5175 是 NeonForge（本应用）自己的保留端口（宿主 dev server / 测试 server）——看到它们有服务在跑是**宿主本身**（React 页面/测试服务），**不是你的项目服务：不要 kill、不要占用、不要把它当你的服务地址告诉用户**；你的项目服务用动态端口（vite 自动递增），以你起服务的实际输出为准。⑭（2026-08-06 打开网页——用户「帮我打开」语义）用户说「帮我打开/打开网页」= 在浏览器打开服务实际地址：先确认服务在跑（读起服务输出或 lsof/curl 确认实际端口——**必须给真实端口，不要猜**），然后调用 open 工具（传 url: 实际地址）在浏览器打开；服务没起就先起服务再 open。⑮（2026-08-06 bash 命令完整性——用户「命令失败了但先让我授权」）bash 命令**必须完整有效**：发送前自检语法（echo 不要打成 ech、命令不要残缺/截断），残缺命令会浪费一次授权交互并失败；确认要执行的命令内容再发出。` }
+    const sysHint = { role: 'system', content: `你是 NeonForge 搭档。当前项目根目录：${rootPath ?? '(未指定)'}。规则：① 读文件用 read 工具（路径用项目根下的相对路径，如 package.json）② 不要用 bash find 全局搜索（直接 read 目标文件）③ 工具一次调用一个，执行完看结果再决定 ④ 找不到文件就直接告诉用户 ⑤ 查符号定义/引用/类型用 LSP 工具：find_definition/find_references/get_type_info（传 path + symbol，如 {path: 'src/a.ts', symbol: 'greet'}）⑥ 查文件错误/import 用 get_diagnostics/get_imports ⑦（2026-08-05 定位优先——竞品 grep-first 共识）排查/修复问题时**必须先用 search 或 LSP 定位到具体文件和行号，再 read 目标文件——禁止盲读文件试探**（盲读浪费轮次）；search 传 query 关键词（如 "射线" "命中"）返回命中文件+行号+片段；不要反复 read 不同文件碰运气。${langRule}⑨ 用户可能不懂技术——回答简洁口语化：优先短句，少用术语；必须提术语时用一句大白话解释；不要堆砌要点清单。⑩ 回复正文不要用 Markdown 标记（不要 #、**、反引号、- 列表、代码块框）；少用括号补充说明；段落之间最多空一行，不要连续空行；**也不要使用任何尖括号标签**（如 <one-question>——会原样显示给用户；除 <candidates> 候选块外）。⑪（2026-08-04 防文本模拟）执行工具必须通过真正的函数调用（tool-call）发出——对话历史里的「（工具调用：…）」只是执行记录，绝不能模仿成文本写在回复正文里，文本写的调用不会被执行；要调工具就在这条回复里发出真实函数调用，工具执行完会自动继续。⑫（2026-08-05 说了就做——用户催「打开」6 次教训）用户明确要求执行某个操作（如「帮我打开」「起服务」「继续」「做 X」）：**必须立即调用对应工具执行**——禁止只回复「我去做」而不调工具；工具结果不理想就重试或换方案，不要停留在说明上。⑬（2026-08-06 宿主端口保护——用户「帮我打开」4 次教训）5173/5175 是 NeonForge（本应用）自己的保留端口（宿主 dev server / 测试 server）——看到它们有服务在跑是**宿主本身**（React 页面/测试服务），**不是你的项目服务：不要 kill、不要占用、不要把它当你的服务地址告诉用户**；你的项目服务用动态端口（vite 自动递增），以你起服务的实际输出为准。⑭（2026-08-06 打开网页——用户「帮我打开」语义）用户说「帮我打开/打开网页」= 在浏览器打开服务实际地址：先确认服务在跑（读起服务输出或 lsof/curl 确认实际端口——**必须给真实端口，不要猜**），然后调用 open 工具（传 url: 实际地址）在浏览器打开；服务没起就先起服务再 open。⑮（2026-08-06 bash 命令完整性——用户「命令失败了但先让我授权」）bash 命令**必须完整有效**：发送前自检语法（echo 不要打成 ech、命令不要残缺/截断），残缺命令会浪费一次授权交互并失败；确认要执行的命令内容再发出。⑯（2026-08-06 服务管理独立——设计层升级）起服务用 **start-server** 工具（自动分配端口并记住地址）、验证服务用 **check-server**、停服务用 **stop-server**——**不要用 bash 起 dev server 或 curl 验证服务**（bash 只用于真正需要执行命令的场景：安装/构建/脚本）；服务地址以 start-server 返回为准，不要猜端口。` }
     try {
       const res = await window.neonforge.gateway.streamChat({
         apiKey: key,

@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url'
 import { existsSync } from 'node:fs'
 import { registerIpc } from './ipc.js'
 import { killAllSubprocesses } from './tools.js'
+// 2026-08-06 设计层升级（服务生命周期独立）：服务进程退出清理（与 bash 子进程同路径）
+import { stopAllServices } from './serviceManager.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -85,6 +87,7 @@ if (!gotTheLock) {
   app.on('window-all-closed', () => {
     // 2026-08-05 用户反馈 1：关窗也清理子进程（单窗口应用——关窗即退出语义；macOS 不 quit 但清理残留）
     killAllSubprocesses()
+    stopAllServices() // 2026-08-06 服务生命周期独立：关窗清理服务进程
     if (process.platform !== 'darwin') app.quit()
   })
 
@@ -92,11 +95,13 @@ if (!gotTheLock) {
   // （模型起的 dev server 是 detached 进程组——exec 时代残留孤儿 → 下次会话端口被占 → 模型反复换端口）
   app.on('before-quit', () => {
     killAllSubprocesses()
+    stopAllServices() // 2026-08-06 服务生命周期独立
   })
 
   // 2026-08-05：外部终止（SIGTERM——playwright close/系统关闭）不走 before-quit——兜底清理
   process.on('SIGTERM', () => {
     killAllSubprocesses()
+    stopAllServices() // 2026-08-06 服务生命周期独立
     process.exit(0)
   })
 }
