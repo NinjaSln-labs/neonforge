@@ -31,7 +31,9 @@ export function buildAuthHint(name: string, args: Record<string, unknown>): Auth
   }
   if (name === 'bash') {
     const cmd = String(args.command ?? '').trim()
-    return { level: '需要授权 · 执行命令', impact: cmd.length > 60 ? cmd.slice(0, 60) + '…' : cmd || '?', note: '这条命令会在你的电脑上运行——点允许才会执行' }
+    // 2026-08-06 用户反馈「命令实际失败了但先让我授权，不确认是不是有问题」：授权卡命令截断 60 字符用户无法判断命令内容 →
+    // 显示完整命令（用户要看到完整命令才能判断「干什么、是否可靠」）；note 加「看不懂/命令有问题可拒绝」判断引导
+    return { level: '需要授权 · 执行命令', impact: cmd || '?', note: '这条命令会在你的电脑上运行——确认命令内容没问题再点允许；看不懂或命令看起来有问题的，点「拒绝」' }
   }
   return { level: '需要授权', impact: JSON.stringify(args).slice(0, 60), note: '' }
 }
