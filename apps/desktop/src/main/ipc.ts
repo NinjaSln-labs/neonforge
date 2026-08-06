@@ -122,7 +122,9 @@ export function registerIpc(): void {
       rootPath: opts.rootPath ?? workspace.getCurrentRoot() ?? undefined
     })
     // 2026-08-04 诊断日志（用户反馈「刚才出错了」无法追溯——工具执行结果落日志；定位后清理或降噪保留）
-    console.log(`[ipc:tools] ${opts.name} approved=${opts.approved ?? false} →`, JSON.stringify(res).slice(0, 400))
+    // 2026-08-06 补充：记录命令/参数摘要（用户反馈「读取文件弹授权卡/起服务没弹卡」——需定位具体命令判定授权）
+    const argSum = opts.name === 'bash' ? String(opts.args?.command ?? '').slice(0, 120) : JSON.stringify(opts.args ?? {}).slice(0, 120)
+    console.log(`[ipc:tools] ${opts.name} approved=${opts.approved ?? false} args=${argSum} →`, JSON.stringify(res).slice(0, 300))
     return res
   })
   // 工具写文件回滚（write/edit 写前已快照 .nf-bak——回滚恢复原样）
