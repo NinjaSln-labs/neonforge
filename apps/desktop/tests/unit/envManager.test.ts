@@ -9,7 +9,7 @@ vi.mock('node:fs', async (importOriginal) => {
   }
 })
 
-import { normalizeServerCommand, allocatePort, releasePort, buildSpawnEnv, HOST_RESERVED_PORTS } from '../../src/main/envManager'
+import { normalizeServerCommand, allocatePort, releasePort, buildSpawnEnv, HOST_RESERVED_PORTS, detectCapabilities } from '../../src/main/envManager'
 
 // 环境管理领域层（2026-08-06 尽调调研驱动——环境单源：检测→记录→使用；显式端口替换 --port 0；.bin PATH 注入通用机制）
 
@@ -67,5 +67,30 @@ describe('buildSpawnEnv（环境单源——项目 node_modules/.bin 入 PATH，
     const env = buildSpawnEnv('/proj/root', { PATH: '/usr/bin:/bin' })
     expect(env.PATH).toContain('/proj/root/node_modules/.bin')
     expect(env.PATH).toContain('/usr/bin:/bin') // 原 PATH 保留
+  })
+})
+
+// 2026-08-06 能力模型（坑 83——用户「能力才是要检测的东西」+ reasonix Capability 验证）
+describe('CapabilityRegistry（能力模型——平台原生 + 外部扩展 Status/Requires）', () => {
+  it('平台原生能力按 OS（mac grep / windows Select-String——同一「文本搜索」能力不同实现）', () => {
+    const mac = detectCapabilities('/proj', 'darwin').find((c) => c.id === 'text-search')
+    expect(mac?.status).toBe('ready')
+    expect(mac?.implementations).toContain('grep')
+    const win = detectCapabilities('/proj', 'win32').find((c) => c.id === 'text-search')
+    expect(win?.implementations).toContain('Select-String')
+    expect(win?.implementations).not.toContain('grep') // Windows 无 grep——能力抽象层
+  })
+
+  it('外部扩展能力带 Status 和 Requires（电子表格依赖 python runtime——reasonix Requires）', () => {
+    const spread = detectCapabilities('/proj', 'darwin').find((c) => c.id === 'spreadsheet')
+    expect(spread?.category).toBe('external')
+    expect(spread?.requires).toContain('python-runtime')
+    expect(['ready', 'missing', 'failed']).toContain(spread?.status ?? '')
+  })
+
+  it('能力视图包含系统原生 + 外部扩展（filesystem 原生 / node-runtime 外部）', () => {
+    const caps = detectCapabilities('/proj', 'darwin')
+    expect(caps.find((c) => c.id === 'filesystem')?.category).toBe('system')
+    expect(caps.find((c) => c.id === 'node-runtime')?.category).toBe('external')
   })
 })
