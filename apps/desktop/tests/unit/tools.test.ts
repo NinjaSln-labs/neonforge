@@ -174,12 +174,13 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     expect(isValidOpenUrl('')).toBe(false)
     expect(isValidOpenUrl('not a url')).toBe(false)
   })
-  // 2026-08-06 用户反馈「读取/浏览文件弹授权卡」：curl GET 类（验证服务）只读自动执行；含写标志需授权
-  it('isReadOnlyBash：curl GET 类只读放行（验证服务不弹卡）；写标志拒绝', () => {
-    expect(isReadOnlyBash('curl -s http://localhost:5188/')).toBe(true)
-    expect(isReadOnlyBash('curl -s localhost:5173 && cat package.json')).toBe(true) // curl 开头复合（head0=curl）
-    expect(isReadOnlyBash('curl -s -o /dev/null -w "%{http_code}" http://localhost:5173/')).toBe(false) // -o 写文件
-    expect(isReadOnlyBash('curl -d "a=1" http://x.com')).toBe(false) // POST 数据
+  // 2026-08-06 设计层升级（fail-closed——用户「白名单匹配不完」）：curl 一律需授权（验证服务用 check-server 工具）；
+  // 白名单冻结（不加新条目）；cat 等只读白名单命令仍自动
+  it('isReadOnlyBash：fail-closed——curl 一律需授权（交 check-server）；只读白名单仍自动', () => {
+    expect(isReadOnlyBash('curl -s http://localhost:5188/')).toBe(false) // curl 不再自动（fail-closed——用 check-server）
+    expect(isReadOnlyBash('curl -s -o /dev/null http://localhost:5173/')).toBe(false)
     expect(isReadOnlyBash('cat package.json')).toBe(true) // cat 白名单（回归）
+    expect(isReadOnlyBash('ls -la /x && cat package.json')).toBe(true) // ls/cat 白名单复合
+    expect(isReadOnlyBash('npm run dev')).toBe(false) // 高风险命令需授权
   })
 })
