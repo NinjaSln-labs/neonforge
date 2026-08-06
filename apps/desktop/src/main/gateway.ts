@@ -124,6 +124,9 @@ export class DeepSeekGateway {
       level?: ThinkingLevel
       messages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; reasoning_content?: string }>
       tools?: boolean
+      // 2026-08-06 调研驱动（官方仓库 issue #1376 + 官方文档 + 实测三源交叉验证）：工具模式已是 thinking disabled（toDeepSeekParams('none')），
+      // 此时 tool_choice: 'required' 可用（实测成功强制 tool_calls）——forceTool=true 强制模型必须调工具（不能只输出文本）——「只说不做」从 API 层根治
+      forceTool?: boolean
       onDelta: (chunk: { type: 'reasoning' | 'content' | 'tool-call' | 'done'; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void
     }
   ): Promise<void> {
@@ -141,7 +144,7 @@ export class DeepSeekGateway {
         ...toDeepSeekParams(opts.tools ? 'none' : (opts.level ?? 'basic')),
         messages: opts.messages,
         stream: true,
-        ...(opts.tools ? { tools: TOOL_DEFS, tool_choice: 'auto' } : {})
+        ...(opts.tools ? { tools: TOOL_DEFS, tool_choice: opts.forceTool ? 'required' : 'auto' } : {})
       }),
       signal: AbortSignal.timeout(45000)
     })

@@ -32,6 +32,7 @@ export function registerIpc(): void {
     apiKey: string
     level?: 'none' | 'basic' | 'medium' | 'high'
     tools?: boolean
+    forceTool?: boolean
     messages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; reasoning_content?: string }>
   }) => {
     const send = (type: 'reasoning' | 'content' | 'tool-call' | 'done', text?: string, toolCall?: { name: string; args: Record<string, unknown> }) => {
@@ -47,6 +48,7 @@ export function registerIpc(): void {
       await gateway.streamChat(opts.apiKey, {
         level: opts.level ?? 'basic',
         tools: opts.tools ?? false,
+        forceTool: opts.forceTool ?? false,
         messages: opts.messages,
         onDelta: (chunk) => send(chunk.type, chunk.text, 'toolCall' in chunk ? chunk.toolCall : undefined)
       })
