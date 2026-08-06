@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import SessionPanel from './SessionPanel'
 import SettingsPanel from './SettingsPanel'
-import DeliveryFlowPanel, { FLOW_STAGES, STAGE_HINT, inferFlowModel } from './DeliveryFlowPanel'
+import DeliveryFlowPanel, { FLOW_STAGES, STAGE_HINT, USER_STAGE_HINT, inferFlowModel } from './DeliveryFlowPanel'
 import RequirementCard from './RequirementCard'
 import OutputPanel from './OutputPanel'
 import ConversationPanel from './ConversationPanel'
@@ -249,7 +249,8 @@ function initProblems(): ProblemInstance[] {
       handleRequirementConfirmed(reqTextRef.current || requirement || '需求已确认')
     }
     setFlowStage(stage)
-    setStageAdvance((prev) => ({ seq: (prev?.seq ?? 0) + 1, stage: FLOW_STAGES[stage], hint: STAGE_HINT[FLOW_STAGES[stage]], requirement }))
+    // 2026-08-06 用户反馈「已进入阶段下面一堆定义的话」：对话区提示用 USER_STAGE_HINT（用户版一句话）——STAGE_HINT 是给模型的完整规则长文（含 <candidates> 示例/编号规则），不得显示给用户（坑 49 只修了阶段卡，漏了这里）
+    setStageAdvance((prev) => ({ seq: (prev?.seq ?? 0) + 1, stage: FLOW_STAGES[stage], hint: USER_STAGE_HINT[FLOW_STAGES[stage]] ?? STAGE_HINT[FLOW_STAGES[stage]], requirement }))
     const acceptance = FLOW_STAGES.map((s, i) => ({
       label: i < stage ? `${s} 阶段已完成` : i === stage ? `${s} 阶段进行中` : `${s} 待开始`,
       done: i < stage

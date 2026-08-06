@@ -246,6 +246,9 @@ async function bashExecutor(args: Record<string, unknown>, ctx: { rootPath?: str
           const m = (stdout + stderr).match(/https?:\/\/localhost:\d+|https?:\/\/127\.0\.0\.1:\d+|Local:\s*http:\/\/[^\s]+/)
           if (m) note = `【服务状态】已启动 ${m[0].replace(/^Local:\s*/, '')}（本命令已返回，服务在后台运行）`
           else if (/localhost:\d+/.test(cmd)) note = '【服务状态】命令含端口启动（以实际输出/浏览器为准）'
+          // 2026-08-06 用户反馈「帮我打开——模型猜 5173 实际 5174」：后台起服务（&/nohup）stdout 回不来 → 无地址可提取；
+          // 提示模型先探测实际端口再告知用户（不要猜端口）
+          else note = '【服务状态】服务命令已执行但 stdout 未见实际地址（可能后台启动）——先 lsof -iTCP -sTCP:LISTEN 或 curl 确认实际端口，再告知用户实际地址，不要猜端口'
         }
         resolve({ stdout: stdout.slice(0, 2000), stderr: stderr.slice(0, 500), note })
       }
@@ -282,6 +285,25 @@ export function isReadOnlyBash(cmd: string): boolean {
   return BASH_READONLY_HEAD.has(head)
 }
 
+// 2026-08-06 用户反馈「帮我打开」（催 4 次都没打开网页）：open 工具——默认浏览器打开 http/https 地址
+// 语义化优于 bash `open`（macOS 限定 + 白名单外需授权）；打开网页无害 → 无需授权（risk none）
+// 仅放行 http/https（拒绝 file:// 等本地协议，防越权打开本地文件）
+export function isValidOpenUrl(url: string): boolean {
+  return /^https?:\/\/\S+$/.test(url)
+}
+async function openExecutor(args: Record<string, unknown>): Promise<unknown> {
+  const url = String(args.url ?? args.target ?? '')
+  if (!isValidOpenUrl(url)) throw new Error('open: 只支持 http/https 地址（如 open {url: "http://localhost:5174/"}）')
+  try {
+    const { shell } = require('electron') as typeof import('electron')
+    if (!shell?.openExternal) throw new Error('当前环境不支持打开浏览器（非 Electron 运行）')
+    await shell.openExternal(url)
+    return { ok: true, data: `已在默认浏览器打开 ${url}` }
+  } catch (e) {
+    throw new Error(`open 失败: ${e instanceof Error ? e.message : String(e)}`)
+  }
+}
+
 export const toolRegistry = new ToolRegistry()
 
 // 2026-08-04 规划级授权强制：会话级「已规划」标记——plan_approval 被批准后置 true（write/edit 放行）
@@ -296,6 +318,8 @@ export function initTools(): void {
   toolRegistry.register({ name: 'write', source: 'core', requiresApproval: true, risk: 'low', execute: writeExecutor })
   toolRegistry.register({ name: 'edit', source: 'core', requiresApproval: true, risk: 'low', execute: editExecutor })
   toolRegistry.register({ name: 'bash', source: 'core', requiresApproval: true, risk: 'high', execute: bashExecutor, preApproval: (args) => ({ auto: isReadOnlyBash(String(args.command ?? '')) }) })
+  // 2026-08-06 打开网页（用户「帮我打开」）：http/https 打开默认浏览器——无害操作自动放行（risk none）
+  toolRegistry.register({ name: 'open', source: 'core', requiresApproval: false, risk: 'none', execute: openExecutor })
   // 2026-08-04 规划级授权：虚拟工具——不执行操作，renderer 收到后弹规划授权卡（用户批准后文件加入任务级信任，write/edit 自动放行）
   toolRegistry.register({ name: 'plan_approval', source: 'core', requiresApproval: false, risk: 'none', execute: async () => ({ ok: true, data: { virtual: true } }) })
   // Layer2 CodeRAG：关键词检索兜底（Claude Code grep 模式——2026-08-02 调研：agentic 工具检索为行业共识，见 .scratch/neonforge-v1/layer2-retrieval-research.md）
