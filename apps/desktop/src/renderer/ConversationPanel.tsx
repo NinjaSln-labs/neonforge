@@ -121,6 +121,7 @@ export default function ConversationPanel({
   onToolResult,
   onUserMessage,
   onRequirementConfirmed,
+  requirementConfirmed,
   recentFilesExternal,
   stageHint,
   flowStage,
@@ -142,6 +143,7 @@ export default function ConversationPanel({
   onUserMessage?: (text: string) => void
   // 2026-08-04：需求确认回写——模型输出【需求确认：xxx】→ 上报 MainWorkspace（更新台账标题/快照 + 项目 README）
   onRequirementConfirmed?: (title: string) => void
+  requirementConfirmed?: boolean // 2026-08-06 需求阶段门控：用户确认（MainWorkspace state）→ 同步 ref——确认后 B 类直接执行（write/edit/bash 放行）
   recentFilesExternal?: string[]
   stageHint?: string // 0-1 交付阶段指引（ticket 07——注入对话引导模型按阶段产出）
   flowStage?: number // 2026-08-05：当前阶段序号（plan_approval 阶段门控——设计阶段未确认不弹规划授权卡）
@@ -226,6 +228,8 @@ export default function ConversationPanel({
   const producedFilesRef = useRef<Set<string>>(new Set())
   // 2026-08-05：renderer 侧「已规划」标记——approvePlan 置 true（幂等：本任务内再调 plan_approval 不弹卡）；阶段推进（clearTrust）重置
   const planApprovedRef = useRef(false)
+  const requirementConfirmedRef = useRef(false) // 2026-08-06 需求阶段门控：模型输出【需求确认】→ true（B 类确认后 write/edit/bash 放行——直接执行）
+  useEffect(() => { if (requirementConfirmed) requirementConfirmedRef.current = true }, [requirementConfirmed]) // 用户确认（MainWorkspace state）→ 同步
   useEffect(() => {
     if (initialPrompt && initialPrompt.trim()) {
       inputRef.current = initialPrompt.trim()
@@ -293,7 +297,11 @@ export default function ConversationPanel({
     // 2026-08-05 用户反馈 2：模型有新动作（chunk）→ 清除 isActionPromise 状态栏提示（模型在动——之前只是陈述/即将调工具）
     if (chunk.type === 'content' || chunk.type === 'tool-call') onActionPromiseHint?.(null)
     // 事件层累积（每事件一次——双调安全）
-    if (chunk.type === 'content') streamingRef.current.content += chunk.text ?? ''
+    if (chunk.type === 'content') {
+      streamingRef.current.content += chunk.text ?? ''
+      // 2026-08-06 需求确认提前检测（不等 done——工具调用可能在 done 前）：【需求确认】标记 → 门控放行（B 类确认后直接执行）
+      if (streamingRef.current.content.includes('【需求确认')) requirementConfirmedRef.current = true
+    }
     if (chunk.type === 'tool-call' && chunk.toolCall) {
       streamingRef.current.toolCalls.push({ name: chunk.toolCall.name, args: chunk.toolCall.args, status: 'pending' })
     }
@@ -311,7 +319,7 @@ export default function ConversationPanel({
       // 2026-08-06 阶段推进设计层（用户反馈「测试阶段不会自动或提示进入部署」）：模型输出「确认推进」→ 推进按钮高亮（用户注意到该点了）
       // 2026-08-06 修正（用户「需求确认后点推进按钮但没看到高亮」）：需求阶段模型输出【需求确认】后常不说「点确认推进」（违反规则⑤）→ 高亮不触发；
       // 需求确认 = 该推进了 → 【需求确认】标记同样触发高亮（不依赖模型措辞）
-      if (/确认推进|【需求确认/.test(content)) onAdvanceHint?.(true)
+      if (/确认推进|【需求确认/.test(content)) { onAdvanceHint?.(true); requirementConfirmedRef.current = true }
       // 2026-08-05 体验反馈（用户「最后一条像卡住」）：模型承诺行动（「我先…再…」）但没调工具 → 提示用户可回复「继续」
       // （非卡死——working 已释放；判定收紧：问句/征求同意/「确认/思考」类对话行为不触发；不限于开发阶段——任何阶段说了要看/读/写就该做）
       // 2026-08-05 自动化实测发现（需求阶段偶发误判）：需求阶段（flowStage=0）模型「我先…再确认/再问」是问答引导（STAGE_HINT 需求阶段禁止工具），
@@ -409,12 +417,36 @@ export default function ConversationPanel({
       // 2026-08-06 用户反馈「第一句话就有一个工具执行」：需求阶段（flowStage=0）工具门控——需求未确认前不执行任何工具
       // （需求都没澄清，看目录/写文件都没意义）；工具直接 done + 提示（maybeContinue 回填给模型 → 模型停止调工具继续澄清需求）
       // 严格 flowStage === 0（undefined=演示/测试通道不拦截——demo 场景工具需正常执行）
-      if (flowStage === 0 && tc.name === 'bash' && initialPrompt) {
+      if (flowStage === 0 && tc.name === 'bash' && initialPrompt && !requirementConfirmedRef.current) {
         setMessages((prev) => {
           const last = prev[prev.length - 1]
           if (!last || last.role !== 'assistant') return prev
           const calls = (last.toolCalls ?? []).map((c) => c.name === tc.name && c.status === 'pending'
             ? { ...c, status: 'done' as const, result: '需求确认前先不执行命令——先把需求问清楚（进入设计/开发阶段再动手）' }
+            : c)
+          return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
+        })
+        return
+      }
+      // 2026-08-06 设计阶段 write/edit 门控（真实 API 实测：模型设计阶段调 edit → 弹授权卡卡住——设计阶段不改文件，机制拦截非弹卡）
+      if (flowStage === 1 && (tc.name === 'write' || tc.name === 'edit')) {
+        setMessages((prev) => {
+          const last = prev[prev.length - 1]
+          if (!last || last.role !== 'assistant') return prev
+          const calls = (last.toolCalls ?? []).map((c) => c.name === tc.name && c.status === 'pending'
+            ? { ...c, status: 'done' as const, result: '设计阶段不改文件——先把方案说完整让用户确认（进入开发阶段再动手写/改）' }
+            : c)
+          return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
+        })
+        return
+      }
+      // 2026-08-06 需求阶段门控（用户「需求阶段不是不会实际动手吗」——需求未确认不改文件；【需求确认】输出 → requirementConfirmedRef 放行——B 类确认后直接执行）
+      if (flowStage === 0 && (tc.name === 'write' || tc.name === 'edit') && !requirementConfirmedRef.current) {
+        setMessages((prev) => {
+          const last = prev[prev.length - 1]
+          if (!last || last.role !== 'assistant') return prev
+          const calls = (last.toolCalls ?? []).map((c) => c.name === tc.name && c.status === 'pending'
+            ? { ...c, status: 'done' as const, result: '需求阶段不改文件——先输出【需求确认：…】【任务类型：A/B】让用户确认，确认后再动手' }
             : c)
           return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
         })
@@ -572,7 +604,11 @@ export default function ConversationPanel({
       // 工具循环轮（depth>=1）auto——模型自由收敛；需求阶段/纯确认 auto——问答不强制
       const lastUserText = depth === 0 ? String(msgs[msgs.length - 1]?.content ?? '') : ''
       const isPureAck = /^(嗯|好|可以|ok|OK|好的|是的|对|行|明白了|知道了|继续|谢谢|收到)[。.！!~～\s]*$/.test(lastUserText)
-      const forceTool = depth === 0 && (flowStage ?? 0) >= 1 && !isPureAck
+      // 2026-08-06 forceTool 三态（真实 API 实测：需求确认后模型「方案一句话」只说不做——确认=批准必须执行到产出）：
+    // A 类（flowStage>=1）：首轮强制（设计/开发）——工具循环轮 auto + progress escalate 兜底
+    // B 类（requirementConfirmed && 未产出）：每轮强制——直到有产出（edit/write 成功——producedFiles 非空）才停（模型回文本完成）——read 不算产出（activity≠progress）持续强制 + progress escalate 双兜底
+    const produced = producedFilesRef.current.size > 0
+    const forceTool = !isPureAck && (((flowStage ?? 0) >= 1 && depth === 0) || (requirementConfirmed && !produced))
       const res = await window.neonforge.gateway.streamChat({
         apiKey: key,
         level: 'basic',

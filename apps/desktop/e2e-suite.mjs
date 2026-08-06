@@ -1,4 +1,5 @@
 import { _electron } from 'playwright'
+import fs from 'node:fs'
 
 // NeonForge 真实环境 E2E 套件：真实 Electron + 真实 DeepSeek API
 // 场景矩阵：主链路 / 工具待授权 / 多轮对话 / 纯文本 / 异常 / 空回复 / 超时
@@ -10,9 +11,12 @@ let pass = 0, fail = 0
 const results = []
 
 async function launch(proj) {
+  // 2026-08-06 测试隔离（根因修复——场景 13 加载了用户真实会话 3d设计游戏-59 → 旧上下文污染 → 模型行为误判）：
+  // 每次测试独立 userData（main 读 NF_TEST_USERDATA → app.setPath）——不加载用户真实会话
+  const userData = '/tmp/nf-e2e-ud-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)
   const app = await _electron.launch({
     args: ['.'],
-    env: { ...process.env, VITE_DEV_SERVER_URL: 'http://localhost:5173', NF_TEST_PROJECT: proj, ELECTRON_RUN_AS_NODE: '' }
+    env: { ...process.env, VITE_DEV_SERVER_URL: 'http://localhost:5173', NF_TEST_PROJECT: proj, NF_TEST_USERDATA: userData, ELECTRON_RUN_AS_NODE: '' }
   })
   const page = await app.firstWindow()
   await page.waitForSelector('.nf-start', { timeout: 10000 })
@@ -125,6 +129,37 @@ await case_('快速连发（并发保护）', async () => {
   await app.close()
   const ok = !r.text.includes('处理中')
   return { ok, detail: `| ${r.dur}s | ${r.text.slice(0, 40)}` }
+})
+
+
+// 场景 13：需求分流 B 类（2026-08-06 3670734）——改文件内容 → 模型判断【任务类型：B】→ edit 直接执行（不弹 plan 卡）——真实 API + 真实文件修改
+await case_('需求分流 B 类（改文件内容→edit 直接执行）', async () => {
+  const TEST_DIR = '/Users/sin/Documents/文件整理测试'
+  const TEST_FILE = TEST_DIR + '/待办事项.txt'
+  const ORIG = 'TODO: 买牛奶、交电费、约牙医'
+  // 测试幂等：先还原原始内容
+  fs.writeFileSync(TEST_FILE, ORIG, 'utf-8')
+  const { app, page } = await launch(TEST_DIR)
+  await send(page, '把待办事项.txt 里的买牛奶改成买面包')
+  // 需求确认（模型输出【需求确认】/确认需求——需求阶段不动手）
+  const r1 = await waitSettle(page, 30000)
+  const msgs = await page.locator('.nf-msg').allInnerTexts()
+  const hasTypeLabel = msgs.some((t) => t.includes('任务类型：B')) || msgs.some((t) => t.includes('需求确认'))
+  // 用户确认推进（需求确认后 forceTool 强制——模型可能标 A（进设计——设计门控拦 edit 不弹卡）或标 B（直接执行）——循环推进直到文件改，最多 4 段
+  let changed = false, lastText = ''
+  for (let i = 0; i < 4; i++) {
+    await send(page, '确认推进')
+    const r = await waitSettle(page, 40000)
+    lastText = r.text
+    const contentNow = fs.readFileSync(TEST_FILE, 'utf-8')
+    changed = contentNow.includes('买面包') && !contentNow.includes('买牛奶')
+    if (changed) break
+  }
+  // 还原
+  fs.writeFileSync(TEST_FILE, ORIG, 'utf-8')
+  await app.close()
+  const ok = changed && hasTypeLabel && !lastText.includes('处理中')
+  return { ok, detail: ' | 文件真实修改:' + changed + ' | 需求确认:' + hasTypeLabel + ' | ' + (lastText.slice(0, 40)) }
 })
 
 console.log(`\n=== 汇总: ${pass} passed / ${fail} failed ===`)
