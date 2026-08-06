@@ -67,7 +67,11 @@ export const TOOL_DEFS = [
   { type: 'function', function: { name: 'get_type_info', description: '获取符号的类型信息（hover）——LSP 真实查询', parameters: { type: 'object', properties: { path: { type: 'string', description: '文件绝对路径或项目根相对路径' }, symbol: { type: 'string', description: '符号名' } }, required: ['path', 'symbol'] } } },
   { type: 'function', function: { name: 'get_diagnostics', description: '获取文件全部诊断（类型/语法错误）——LSP 真实查询', parameters: { type: 'object', properties: { path: { type: 'string', description: '文件绝对路径或项目根相对路径' } }, required: ['path'] } } },
   { type: 'function', function: { name: 'get_imports', description: '提取文件 import 语句（本地扫描——零成本）', parameters: { type: 'object', properties: { path: { type: 'string', description: '文件绝对路径或项目根相对路径' } }, required: ['path'] } } },
-  { type: 'function', function: { name: 'get_call_chain', description: '获取文件符号结构（documentSymbol 降级）', parameters: { type: 'object', properties: { path: { type: 'string', description: '文件绝对路径或项目根相对路径' } }, required: ['path'] } } }
+  { type: 'function', function: { name: 'get_call_chain', description: '获取文件符号结构（documentSymbol 降级）', parameters: { type: 'object', properties: { path: { type: 'string', description: '文件绝对路径或项目根相对路径' } }, required: ['path'] } } },
+  // 2026-08-06 设计层升级（服务生命周期独立——用户「白名单匹配不完」）：模型用服务工具管 dev server，不用 bash 起服务/curl 验证
+  { type: 'function', function: { name: 'start-server', description: '启动开发服务器（NeonForge 管理进程——自动分配端口并记住地址）。**起服务/打开网页前用它，不要用 bash 起 dev server**（bash 起服务会端口冲突/进程残留）；参数 dir=项目目录绝对路径，command 可选（npm run dev / npx vite 等，默认 vite）', parameters: { type: 'object', properties: { dir: { type: 'string', description: '项目目录绝对路径' }, command: { type: 'string', description: '启动命令（可选，默认 npx vite）' } }, required: ['dir'] } } },
+  { type: 'function', function: { name: 'check-server', description: '检查开发服务器状态——返回 运行中/地址/端口。**验证服务用（不要用 bash curl）**；参数 dir=项目目录绝对路径', parameters: { type: 'object', properties: { dir: { type: 'string', description: '项目目录绝对路径' } }, required: ['dir'] } } },
+  { type: 'function', function: { name: 'stop-server', description: '停止开发服务器（只停 NeonForge 自己起的）——用完服务可停，释放资源', parameters: { type: 'object', properties: { dir: { type: 'string', description: '项目目录绝对路径' } }, required: ['dir'] } } }
 ]
 
 const API_BASE = 'https://api.deepseek.com'
