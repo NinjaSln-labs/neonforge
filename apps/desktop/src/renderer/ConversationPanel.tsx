@@ -10,6 +10,8 @@ import { buildAuthHint, canMergeApprove, toolRisk } from './authModel'
 // 2026-08-03 v33：思考过程内容清洗（reasoning 含 Markdown 标记 → 展示为可读纯文字）
 // 2026-08-04：cleanContent 回复正文展示清洗（字面转义/连续换行杂音）
 import { cleanContent, stripMarkdown } from './textClean'
+// 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层纯逻辑，双源调研驱动）
+import { evaluateTurnProgress, detectStuck, initialStuckState } from './domain/agentLoop'
 // 2026-08-05 方案 3：结构化候选按钮——<candidates> 块解析/剥离（点选文本替代序号，消除模型序号解析漂移）
 import { parseCandidates, stripCandidates, stripTags } from './candidates'
 // 2026-08-03 视觉审计 P1-6：内联 SVG 图标（替换 emoji 图标）
@@ -215,9 +217,9 @@ export default function ConversationPanel({
   // 2026-08-04 体验修复（用户实测：启动页输入句预填多余）：initialPrompt 进入工作区自动发送——说了就直接开始
   // （区别于 externalRequest「预填+自动发送」复跑语义；initialPrompt 只用于启动页首句）
   const sendRef = useRef<(opts?: { silent?: boolean }) => Promise<void>>(async () => {})
-  // 2026-08-06 只说不做多次（用户反馈「光说不做也发生很多轮次了」——催「打开」10+ 次模型不调工具）：
-  // 用户已催同类指令模型仍承诺不调工具 → 自动 silent 续聊；每会话最多 2 次（防死循环），之后降级状态栏提示
-  const autoNudgeRef = useRef(0)
+  // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层状态）：连续无进展计数 + 升级次数（不可变 StuckState）+ 已读文件集合
+  const stuckStateRef = useRef(initialStuckState)
+  const prevReadFilesRef = useRef<Set<string>>(new Set())
   // 2026-08-05：renderer 侧「已规划」标记——approvePlan 置 true（幂等：本任务内再调 plan_approval 不弹卡）；阶段推进（clearTrust）重置
   const planApprovedRef = useRef(false)
   useEffect(() => {
@@ -317,20 +319,25 @@ export default function ConversationPanel({
       // 2026-08-06 升级（用户「说了做没做老问题」——09:37-09:38 日志：模型 6+ 条「我要看/查/确认」toolCalls:[] + 文本模拟「（上一步执行：[read]）」+ course_correction_guidance）：
       // ① isTextSimulation 检测——模型把工具执行记录当正文输出（sysHint ⑪ 禁止）→ 视为「以为执行了实际没调」触发
       // ② autoNudge 次数 2→3 + 续聊内容带修正指令（指出「没调工具/文本模拟」——比「继续」有效，模型收到后真正调工具）
-      // ③ 2026-08-06 再升级：**不需要用户先催**——模型承诺行动（说了要做）就自动续聊（用户痛点「要疯狂点继续」——09:38 用户点了 5+ 次继续模型才动）；
-      //    isActionPromise 已排除问句/沟通词（确认/复述/说明等）——非需求阶段模型「我要看 X」= 真承诺 → 自动追一次；autoNudgeRef 3 次上限防死循环
-      const isTextSimulation = /（上一步执行|工具已调用|course_correction_guidance|\[read\]|\[write\]|\[edit\]|\[bash\]|\[open\]/.test(content)
-      if ((flowStage ?? 0) >= 1 && streamingRef.current.toolCalls.length === 0 && (isActionPromise(content) || isTextSimulation)) {
-        const nudgeContent = isTextSimulation
-          ? '你上一条把工具调用写成了文本（如「（上一步执行：…）」或 course_correction_guidance）——文本写的调用不会被执行。现在直接调用真实函数工具执行（真实 tool-call，不要写文本模拟）'
-          : '你上一条说要做事但没实际调用工具（toolCalls 为空）——现在直接调用对应工具执行（说「看 X」就同一轮发 read X，不要只停在说明）'
-        if (autoNudgeRef.current < 3) {
-          autoNudgeRef.current += 1
-          onActionPromiseHint?.(null) // 清提示——自动续聊代替
-          inputRef.current = nudgeContent
+      // ③ 2026-08-06 DDD 落地（progress-aware 卡住检测——双源调研 tavily+serper：activity≠progress + 连续无进展升级 + needs-human）：
+      //    替换散落的 isActionPromise/isTextSimulation/autoNudge 3 次配额——领域层 ProgressEvaluator + StuckDetector 判定；
+      //    只处理工具循环轮（首轮已 forceTool API 强制——不重复）；连续 2 轮无产出（无 write/edit/新 read）→ escalate 自动续聊指出没动手；
+      //    升级 2 次仍无产出 → needs-human 状态栏提示（对齐行业——不再固定配额「耗尽」问题）
+      if ((flowStage ?? 0) >= 1) {
+        const turn = evaluateTurnProgress({
+          toolCalls: streamingRef.current.toolCalls.map((c) => ({ name: c.name, status: c.status, file: c.file })),
+          content,
+          prevReadFiles: prevReadFilesRef.current
+        })
+        streamingRef.current.toolCalls.forEach((c) => { if (c.name === 'read' && c.file) prevReadFilesRef.current.add(c.file) })
+        const { state, event } = detectStuck({ turn, prev: stuckStateRef.current })
+        stuckStateRef.current = state
+        if (event?.type === 'escalate') {
+          onActionPromiseHint?.(null)
+          inputRef.current = event.message
           void sendRef.current?.({ silent: true })
-        } else {
-          onActionPromiseHint?.('搭档说要做但还没动手——回复「继续」它会接着做')
+        } else if (event?.type === 'needs-human') {
+          onActionPromiseHint?.(event.message)
         }
       }
       streamingRef.current = { content: '', toolCalls: [] }
