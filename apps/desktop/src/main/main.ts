@@ -1,13 +1,21 @@
 import { app, BrowserWindow, Menu } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { existsSync } from 'node:fs'
+import { existsSync, appendFileSync } from 'node:fs'
 import { registerIpc } from './ipc.js'
 import { killAllSubprocesses } from './tools.js'
 // 2026-08-06 设计层升级（服务生命周期独立）：服务进程退出清理（与 bash 子进程同路径）
 import { stopAllServices } from './serviceManager.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+// 2026-08-06（用户两次报错）：console.log 写 stdout 管道破裂（EPIPE——终端 `electron . | head` 等管道提前关闭）不该崩主进程——
+// 兜底记录到文件（Electron 主进程因 console 管道破裂崩溃是「为了日志而崩」——streamChat gateway.js:116 的 console.log 触发）
+process.on('uncaughtException', (err) => {
+  try {
+    appendFileSync(path.join(process.env.HOME ?? '/tmp', 'nf-electron-uncaught.log'), `${new Date().toISOString()} ${err?.message ?? String(err)}\n`)
+  } catch { /* 兜底失败也忽略——不能二次崩溃 */ }
+})
 
 // 单实例（2026-08-03 优化）：同时只能运行一个 NeonForge——第二个实例启动即退出，并聚焦已有实例主窗口
 // 必须在 app ready 前获取锁；锁按 app 用户数据目录（app name）作用域
