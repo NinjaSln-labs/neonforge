@@ -325,7 +325,8 @@ test('0-1 从零开始：确认推进 → 对话区出现阶段推进反馈消�
   await expect(advance).toBeEnabled()
   const feedback = page.locator('.nf-chat__list .nf-msg--assistant').filter({ hasText: '已进入【设计】阶段' })
   await expect(feedback).toHaveCount(1)
-  await expect(feedback).toContainText('确认方案')
+  // 2026-08-06 用户反馈「已进入阶段下面一堆定义的话」：对话区提示用 USER_STAGE_HINT（用户版一句话），不再是 STAGE_HINT 完整规则长文
+  await expect(feedback).toContainText('定方案')
   // 阶段机同步前进（设计 = active）
   await expect(page.locator('.nf-flow__stage--active')).toContainText('设计')
   // 2026-08-04 方案 A 回归：需求卡确认摘要注入模型上下文——advanceChat 内部指令含【需求确认】（模型按确认结果做设计，不再基于模糊原始消息）

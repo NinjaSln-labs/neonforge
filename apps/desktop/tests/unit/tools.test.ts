@@ -1,7 +1,14 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { initTools, toolRegistry, revertToolFile, cancelActiveCommand, markPlanApproved } from '../../src/main/tools'
+import { initTools, toolRegistry, revertToolFile, cancelActiveCommand, markPlanApproved, isValidOpenUrl } from '../../src/main/tools'
+
+// 2026-08-06 open 工具（用户「帮我打开」）：mock electron shell——vitest node 环境无 electron
+const { openExternalMock } = vi.hoisted(() => ({ openExternalMock: vi.fn(async () => {}) }))
+vi.mock('electron', () => ({
+  app: { getPath: () => '/tmp/nf-unit-tools' },
+  shell: { openExternal: openExternalMock }
+}))
 
 const TMP = '/tmp/nf-unit-tools'
 
@@ -136,5 +143,35 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     // 无活动命令 → 取消返回错误
     const c2 = cancelActiveCommand()
     expect(c2.ok).toBe(false)
+  })
+
+  // 2026-08-06 open 工具（用户「帮我打开」4 次没打开网页）：http/https 打开默认浏览器（无需授权——无害操作）
+  // vitest 非 electron 环境 shell 不可用——成功打开路径留 Electron 运行时（L4 e2e/手动实测）验证；此处验证注册配置 + URL 校验 + 环境降级
+  it('open：注册为无需授权（requiresApproval false / risk none）——http/https 通过 URL 校验', async () => {
+    const tool = toolRegistry.list().find((t) => t.name === 'open')
+    expect(tool?.requiresApproval).toBe(false)
+    expect(tool?.risk).toBe('none')
+    // URL 校验放行 http/https → 走到 shell 分支；非 electron 环境报环境不支持（而非 URL 被拦截）
+    const r = await toolRegistry.execute('open', { url: 'http://localhost:5174/' }, {})
+    expect(r.ok).toBe(false)
+    expect(r.error).toContain('open 失败')
+    expect(r.error).toContain('不支持')
+  })
+
+  it('open：非 http/https 地址拒绝（file:// 等本地协议防越权）', async () => {
+    openExternalMock.mockClear()
+    const r = await toolRegistry.execute('open', { url: 'file:///etc/passwd' }, {})
+    expect(r.ok).toBe(false)
+    expect(r.error).toContain('http/https')
+    expect(openExternalMock).not.toHaveBeenCalled()
+  })
+
+  it('isValidOpenUrl：只认 http/https（防注入/空值）', () => {
+    expect(isValidOpenUrl('http://localhost:5174/')).toBe(true)
+    expect(isValidOpenUrl('https://example.com')).toBe(true)
+    expect(isValidOpenUrl('file:///etc/passwd')).toBe(false)
+    expect(isValidOpenUrl('javascript:alert(1)')).toBe(false)
+    expect(isValidOpenUrl('')).toBe(false)
+    expect(isValidOpenUrl('not a url')).toBe(false)
   })
 })
