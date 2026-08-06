@@ -790,3 +790,53 @@ test('需求阶段无【需求确认】标记：确认推进按钮可点 → 点
   const titleCalls = await page.evaluate(() => (window as unknown as { __titleCalls?: number }).__titleCalls ?? 0)
   expect(titleCalls).toBeGreaterThan(0)
 })
+
+// 2026-08-06 需求分流 A/B（3670734）：B 类文件操作——需求确认【任务类型：B】→ edit 直接执行（豁免 plan gate——改现有文件操作明确）
+test('需求分流 B 类：改文件内容 → edit 直接执行（不弹 plan 授权卡）', async ({ page }) => {
+  await page.addInitScript(() => {
+    let streamCb: ((c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) | null = null
+    let chatCount = 0
+    window.neonforge = {
+      version: 'test',
+      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
+      workspace: { openFolder: async () => null, listDir: async () => [{ name: '待办事项.txt', path: '/test/待办事项.txt', kind: 'file' }], readFile: async () => ({ ok: true, content: 'TODO: 买牛奶' }), readNotebook: async () => null, initProject: async () => ({ ok: true, path: '/test', title: 't' }), updateProjectTitle: async () => ({ ok: true }) },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        streamChat: async () => {
+          chatCount++
+          setTimeout(() => {
+            if (chatCount === 1) {
+              streamCb?.({ type: 'content', text: '好，你要把待办事项.txt 里的「买牛奶」改成「买面包」。【需求确认：把待办事项里的买牛奶改成买面包】【任务类型：B 文件操作】' })
+            } else if (chatCount === 2) {
+              streamCb?.({ type: 'tool-call', toolCall: { name: 'edit', args: { path: '/test/待办事项.txt', old: '买牛奶', new: '买面包' } } })
+            } else {
+              streamCb?.({ type: 'content', text: '已改好，买牛奶换成买面包了。' })
+            }
+            streamCb?.({ type: 'done' })
+          }, 30)
+          return { ok: true }
+        },
+        onStreamChunk: (cb: (c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) => { streamCb = cb; return () => {} }
+      },
+      tools: { execute: async () => ({ ok: true, data: { file: '/test/待办事项.txt' } }), list: async () => [] },
+      context: { resolve: async () => ({ fragments: [] }) },
+      compaction: { compact: async () => ({ ok: false }) },
+      plugins: { list: async () => [], toggle: async () => true }
+    }
+    ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
+  })
+  await page.goto('http://localhost:5175/')
+  await page.getByRole('button', { name: '从零开始' }).click()
+  await page.getByRole('button', { name: /快速迭代/ }).click()
+  await page.locator('.nf-chat__input textarea').fill('把待办事项.txt 里的买牛奶改成买面包')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  await page.waitForTimeout(600)
+  await page.locator('.nf-chat__input textarea').fill('确认推进')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  // 需求确认含任务类型标注（用户可见）
+  await expect(page.locator('.nf-chat__list .nf-msg--assistant').filter({ hasText: '任务类型：B' })).toHaveCount(1, { timeout: 15000 })
+  // B 类 edit 直接执行（done——无 need-approval/plan-approval——豁免生效）
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(1, { timeout: 15000 })
+  await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(0)
+  await expect(page.locator('.nf-toolcall--plan-approval')).toHaveCount(0)
+})
