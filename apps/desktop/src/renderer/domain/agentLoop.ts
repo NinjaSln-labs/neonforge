@@ -14,6 +14,11 @@ export interface ToolCallView {
 export interface TurnProgress {
   artifactProduced: boolean // write/edit 成功 = 真实产出（0-1 流程最可靠 progress 信号——与 artifactsReady 门控同源）
   readNewFile: boolean      // read 了此前未读过的文件（新信息）——同文件重复 read = activity 非 progress
+  // 2026-08-06 补充（deepcode-hkuds 任务完成度借鉴——用户「文件清单很多地方有」）：plan_approval 规划文件是否全部产出
+  // 有剩余规划文件 = 任务未完成——模型无工具结束 = 停滞（escalate 强理由）；规划全产出 → 无工具结束 = 阶段完成（不 escalate）
+  hasPlannedFiles: boolean      // 是否有 plan_approval 规划（开发阶段）
+  hasRemainingPlanned: boolean  // 还有未产出规划文件（任务未完成）
+  remainingCount: number
   isQuestion: boolean       // 问句/征求同意——模型在等用户，不算停滞
   isCommunication: boolean  // 沟通/澄清/确认——模型在对话，不算停滞
   isDone: boolean           // 完成态汇报——模型已完成，不算停滞
@@ -25,15 +30,26 @@ export function evaluateTurnProgress(input: {
   toolCalls: ToolCallView[]
   content: string
   prevReadFiles: Set<string>
+  plannedFiles?: Set<string>      // plan_approval 规划文件清单（开发阶段——approvePlan 保存）
+  producedFiles?: Set<string>     // write/edit 成功累积的文件（任务完成度）
 }): TurnProgress {
   const { toolCalls, content, prevReadFiles } = input
   const t = (content ?? '').trim()
   const artifactProduced = toolCalls.some((c) => (c.name === 'write' || c.name === 'edit') && c.status === 'done')
   const readNewFile = toolCalls.some((c) => c.name === 'read' && c.file && !prevReadFiles.has(c.file))
+  const plannedFiles = input.plannedFiles
+  const producedFiles = input.producedFiles
+  // 任务完成度：规划文件非空时——还有未产出规划文件 = 任务未完成（deepcode unimplemented_files 同思路）
+  const hasPlannedFiles = !!plannedFiles && plannedFiles.size > 0
+  const hasRemainingPlanned = hasPlannedFiles
+    && [...(plannedFiles ?? [])].some((f) => !(producedFiles?.has(f)))
+  const remainingCount = hasRemainingPlanned
+    ? [...(plannedFiles ?? [])].filter((f) => !(producedFiles?.has(f))).length
+    : 0
   const isQuestion = /[?？]$/.test(t) || /(吗|呢|吧)[。.!！]?$|可以吗|行不行/.test(t)
   const isCommunication = /(确认|复述|说明|解释|总结|澄清|商量|理解|明白|知道|收到|确认一下|跟你确认|和你确认|跟您确认|介绍一下|跟你聊|和你聊)/.test(t)
   const isDone = /(完成|做好|搞定|改好|解决|处理完|已写好|已修改|已删除|已添加|已加|可以了|能玩了|没问题|修好了|加好了|实现了|就绪|收工|结束|达标|通过了|在跑|能跑|弄好|好了，|好的，|就是这些|就这样|先说这么多)/.test(t)
-  return { artifactProduced, readNewFile, isQuestion, isCommunication, isDone }
+  return { artifactProduced, readNewFile, hasPlannedFiles, hasRemainingPlanned, remainingCount, isQuestion, isCommunication, isDone }
 }
 
 // === Value Object: 卡住状态（连续无进展轮数 + 已升级次数）——不可变，每次变化生成新实例 ===
@@ -65,8 +81,14 @@ export function detectStuck(input: {
   if (turn.isQuestion || turn.isCommunication || turn.isDone) {
     return { state: initialStuckState, event: undefined }
   }
-  // 有进展（write/edit 产出 / 读新文件）→ 重置（行业：恢复即重置）
-  if (turn.artifactProduced || turn.readNewFile) {
+  // 有进展（write/edit 产出）→ 重置（行业：恢复即重置）
+  // 2026-08-06 修正：read 新文件**不算** progress（activity≠progress——行业 oh-my-pi workspace dirty / deepcode files_completed 只有文件改动才是进展；
+  // 防「模型连续 read 不同文件假装进展」——L3 545 测试场景连续 3 轮 read 必须触发 escalate）
+  if (turn.artifactProduced) {
+    return { state: initialStuckState, event: undefined }
+  }
+  // 2026-08-06 任务完成度（deepcode-hkuds unimplemented_files 借鉴）：有规划且规划文件全部产出 → 无工具结束 = 阶段完成（非停滞——等用户推进）
+  if (turn.hasPlannedFiles && !turn.hasRemainingPlanned) {
     return { state: initialStuckState, event: undefined }
   }
   const consecutiveNoProgress = prev.consecutiveNoProgress + 1
@@ -81,11 +103,12 @@ export function detectStuck(input: {
         }
       }
     }
+    const remaining = turn.hasRemainingPlanned ? `规划文件还有 ${turn.remainingCount} 个没写（${turn.remainingCount > 1 ? '们' : ''}）——` : ''
     return {
       state: { consecutiveNoProgress: 0, escalations },
       event: {
         type: 'escalate',
-        message: '你连续几轮只读文件/停在分析，没有产出改动——现在直接调用 edit/write 修改代码（说「改 X」就同一轮发 edit X，不要停在分析）'
+        message: `${remaining}你连续几轮只读文件/停在分析，没有产出改动——现在直接调用 edit/write 修改代码（说「改 X」就同一轮发 edit X，不要停在分析）`
       }
     }
   }

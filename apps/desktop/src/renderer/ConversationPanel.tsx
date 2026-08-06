@@ -220,6 +220,9 @@ export default function ConversationPanel({
   // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层状态）：连续无进展计数 + 升级次数（不可变 StuckState）+ 已读文件集合
   const stuckStateRef = useRef(initialStuckState)
   const prevReadFilesRef = useRef<Set<string>>(new Set())
+  // 2026-08-06 任务完成度（deepcode unimplemented_files 借鉴）：plan_approval 规划文件清单 + write/edit 产出文件（approvePlan 时保存/重置）
+  const plannedFilesRef = useRef<Set<string>>(new Set())
+  const producedFilesRef = useRef<Set<string>>(new Set())
   // 2026-08-05：renderer 侧「已规划」标记——approvePlan 置 true（幂等：本任务内再调 plan_approval 不弹卡）；阶段推进（clearTrust）重置
   const planApprovedRef = useRef(false)
   useEffect(() => {
@@ -324,10 +327,16 @@ export default function ConversationPanel({
       //    只处理工具循环轮（首轮已 forceTool API 强制——不重复）；连续 2 轮无产出（无 write/edit/新 read）→ escalate 自动续聊指出没动手；
       //    升级 2 次仍无产出 → needs-human 状态栏提示（对齐行业——不再固定配额「耗尽」问题）
       if ((flowStage ?? 0) >= 1) {
+        // 2026-08-06 任务完成度：write/edit 成功标记产出（plan_approval 规划文件 vs 已产出——deepcode unimplemented_files 借鉴）
+        streamingRef.current.toolCalls.forEach((c) => {
+          if ((c.name === 'write' || c.name === 'edit') && c.status === 'done' && c.file) producedFilesRef.current.add(c.file)
+        })
         const turn = evaluateTurnProgress({
           toolCalls: streamingRef.current.toolCalls.map((c) => ({ name: c.name, status: c.status, file: c.file })),
           content,
-          prevReadFiles: prevReadFilesRef.current
+          prevReadFiles: prevReadFilesRef.current,
+          plannedFiles: plannedFilesRef.current,
+          producedFiles: producedFilesRef.current
         })
         streamingRef.current.toolCalls.forEach((c) => { if (c.name === 'read' && c.file) prevReadFilesRef.current.add(c.file) })
         const { state, event } = detectStuck({ turn, prev: stuckStateRef.current })
@@ -865,6 +874,9 @@ export default function ConversationPanel({
   const approvePlan = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg) => {
     const files = (tc.args.files ?? []) as Array<{ path: string }>
     files.forEach((f) => addTrust({ path: f.path }))
+    // 2026-08-06 任务完成度：保存规划文件清单（progress 检测用——deepcode unimplemented_files 借鉴）+ 重置产出（新任务）
+    plannedFilesRef.current = new Set(files.map((f) => f.path))
+    producedFilesRef.current = new Set()
     // 2026-08-05：幂等标记——本任务内再调 plan_approval 不再弹卡
     planApprovedRef.current = true
     // 2026-08-04 规划强制：通知 main（planApproved=true——write/edit 放行）
