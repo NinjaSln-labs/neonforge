@@ -205,8 +205,9 @@ export default function ConversationPanel({
   // 2026-08-04 体验修复（用户实测：启动页输入句预填多余）：initialPrompt 进入工作区自动发送——说了就直接开始
   // （区别于 externalRequest「预填+自动发送」复跑语义；initialPrompt 只用于启动页首句）
   const sendRef = useRef<(opts?: { silent?: boolean }) => Promise<void>>(async () => {})
-  // 2026-08-06 只说不做第 5 次升级（用户反馈「最后又卡住了」）：用户已说「继续」模型仍承诺不调工具 → 自动 silent 续聊一次；每会话最多一次（防死循环）
-  const autoNudgeRef = useRef(false)
+  // 2026-08-06 只说不做多次（用户反馈「光说不做也发生很多轮次了」——催「打开」10+ 次模型不调工具）：
+  // 用户已催同类指令模型仍承诺不调工具 → 自动 silent 续聊；每会话最多 2 次（防死循环），之后降级状态栏提示
+  const autoNudgeRef = useRef(0)
   // 2026-08-05：renderer 侧「已规划」标记——approvePlan 置 true（幂等：本任务内再调 plan_approval 不弹卡）；阶段推进（clearTrust）重置
   const planApprovedRef = useRef(false)
   useEffect(() => {
@@ -296,14 +297,14 @@ export default function ConversationPanel({
       // 2026-08-05 自动化实测发现（需求阶段偶发误判）：需求阶段（flowStage=0）模型「我先…再确认/再问」是问答引导（STAGE_HINT 需求阶段禁止工具），
       // 不是「承诺写代码没动手」——误判会插入「回复继续」提示 → 打断正常需求问答；需求阶段排除 isActionPromise
       // 2026-08-05 用户反馈 2：提示不再插入对话流（「陈述句后紧跟『说要做但还没动手』」——污染阅读且常误判模型正常陈述）→ 状态栏非侵入提示，模型下一条消息自动清除
-      // 2026-08-06 只说不做第 5 次升级（用户反馈「最后又卡住了」）：用户已说「继续」模型仍承诺不调工具 →
-      // 自动 silent 续聊一次（「继续，把刚才说要做的做完」——不显示用户消息，避免用户看到「自己发的」困惑）；
-      // 防死循环 autoNudgeRef 每会话最多一次，之后降级为状态栏提示
+      // 2026-08-06 只说不做多次升级（用户反馈「光说不做也发生很多轮次了」——07:36 催「打开」10+ 次模型不调 open）：
+      // 用户已催同类指令（继续/打开等）模型仍承诺不调工具 → 自动 silent 续聊（「继续，把刚才说要做的做完」——不显示用户消息）；
+      // 防死循环 autoNudgeRef 每会话最多 2 次，之后降级为状态栏提示
       if ((flowStage ?? 0) >= 1 && streamingRef.current.toolCalls.length === 0 && isActionPromise(content)) {
         const lastUser = [...messagesRef.current].reverse().find((m) => m.role === 'user')
-        const userAlreadyContinued = lastUser && /(继续|接着|去做|然后呢|去啊|动手|往下|走走走|快点)/.test(String(lastUser.content ?? ''))
-        if (userAlreadyContinued && !autoNudgeRef.current) {
-          autoNudgeRef.current = true
+        const userAlreadyContinued = lastUser && /(继续|接着|去做|然后呢|去啊|动手|往下|走走走|快点|打开|开始|去干|干活)/.test(String(lastUser.content ?? ''))
+        if (userAlreadyContinued && autoNudgeRef.current < 2) {
+          autoNudgeRef.current += 1
           onActionPromiseHint?.(null) // 清提示——自动续聊代替
           inputRef.current = '继续，把刚才说要做的做完'
           void sendRef.current?.({ silent: true })
@@ -662,6 +663,17 @@ export default function ConversationPanel({
       try {
         const compacted = await window.neonforge.compaction.compact(history)
         if (compacted.ok) {
+          // 2026-08-06 用户反馈「压缩条数够了就一直触发」：原只改本次发送 chatHistory，messages state 不变 → 每轮 send 都重新压缩
+          // （每轮重压早期上下文 → 上下文不稳定 + 浪费 token + 模型行为异常）；修复：压缩结果写回 messages state
+          // （早期压缩为摘要 + 保留最近 20 条）→ 压缩只触发一次，新消息累积到阈值才再压
+          setMessages((prev) => {
+            const tail = prev.slice(-2) // 当前轮新 user + streaming（压缩后保留）
+            return [
+              { role: 'assistant', content: `（早期对话已压缩：${compacted.summary}）`, status: 'done' as const },
+              ...compacted.kept.filter((m) => m.content != null).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content ?? '', status: 'done' as const })),
+              ...tail
+            ]
+          })
           chatHistory = [
             { role: 'user' as const, content: compacted.summary },
             ...compacted.kept.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content ?? '' }))

@@ -256,9 +256,23 @@ async function bashExecutor(args: Record<string, unknown>, ctx: { rootPath?: str
     // 超时（防挂死）：安装类命令（npm/pnpm/yarn/pip install——网络慢常超 30s）放宽到 120s；其他 30s
     // 2026-08-05 e2e 实测：npm install 30s 被杀 → 模型重试 → 体验卡（用户 11:32 起服务反复的同族问题）
     const INSTALL_RE = /(npm|pnpm|yarn|bun) (i|install|add)( |$)|pip install|go mod download|brew install/
-    const timeoutMs = INSTALL_RE.test(cmd) ? 120000 : 30000
+    const isDevServer = DEV_SERVER_RE.test(cmd)
+    const timeoutMs = INSTALL_RE.test(cmd) ? 120000 : (isDevServer ? 15000 : 30000)
     timer = setTimeout(() => {
-      try { process.kill(-(child.pid ?? 0), 'SIGKILL') } catch { /* 已退出 */ }
+      // 2026-08-06 用户反馈「工具执行很多次」（模型起服务反复失败重试）：起服务（长驻进程）30s 超时杀进程组 → 服务被杀 → 模型反复重试（07:35 日志实证「每次 bash 调用结束时把进程组杀了」）；
+      // 修复：起服务命令超时后**不杀进程**（服务本就该长驻），返回已收集输出 + ServiceState note（提示 curl 确认端口）；
+      // 残留由 subprocs 记录 + app 退出 killAllSubprocesses 统一清（坑 54）
+      if (isDevServer) {
+        cleanup()
+        const m = (stdout + stderr).match(/https?:\/\/localhost:\d+|https?:\/\/127\.0\.0\.1:\d+|Local:\s*http:\/\/[^\s]+/)
+        resolve({
+          stdout: stdout.slice(0, 2000),
+          stderr: stderr.slice(0, 500),
+          note: m ? `【服务状态】已启动 ${m[0].replace(/^Local:\s*/, '')}（服务在后台运行）` : '【服务状态】服务命令已启动（长驻）——用 lsof/curl 确认实际端口'
+        })
+      } else {
+        try { process.kill(-(child.pid ?? 0), 'SIGKILL') } catch { /* 已退出 */ }
+      }
     }, timeoutMs)
   })
 }
@@ -273,13 +287,19 @@ export function cancelActiveCommand(): { ok: true } | { ok: false; error: string
 
 // 2026-08-04 授权架构重构（用户授权疲劳）：bash 只读命令检测——ls/cat/grep 等查看类自动执行（零打断）；
 // 写命令（rm/mv/cp/npm/git/python/node/重定向）保持授权（main 进程裁决，renderer 不判断防绕过）
-const BASH_READONLY_HEAD = new Set(['ls', 'cat', 'head', 'tail', 'grep', 'wc', 'pwd', 'echo', 'which', 'find', 'sed', 'awk', 'cd', 'stat', 'file', 'du', 'df', 'sort', 'uniq'])
+const BASH_READONLY_HEAD = new Set(['ls', 'cat', 'head', 'tail', 'grep', 'wc', 'pwd', 'echo', 'which', 'find', 'sed', 'awk', 'cd', 'stat', 'file', 'du', 'df', 'sort', 'uniq', 'rg', 'tree', 'diff', 'history'])
 export function isReadOnlyBash(cmd: string): boolean {
   const c = (cmd ?? '').trim()
   if (!c) return false
   // 含写副作用标记（重定向 / 写命令 / 可执行任意代码的解释器）→ 非只读
   if (/>\s*[^|]*$/m.test(c)) return false // 重定向到文件（echo x > f / cat a > b）
   if (/[;&|]\s*(rm|mv|cp|mkdir|touch|npm|pnpm|yarn|git|curl|wget|python|python3|node|write|install|unlink|ln|chmod|chown)/.test(c)) return false
+  // 2026-08-06 用户反馈「读取/浏览文件弹授权卡」：模型反复用 curl 验证服务（07:36 日志「curl 验证 5188」）——curl 不在白名单 → 每次弹卡；
+  // curl GET 类（无写标志 -o/-O/-d/--data/-X POST/--upload/-F）是只读网络请求（验证服务/读取 URL）→ 自动执行；含写操作需授权
+  const head0 = c.split(/[;&|]/)[0].trim().split(/\s+/)[0]?.replace(/^sudo\s+/, '') ?? ''
+  if (head0 === 'curl') {
+    return !/(\s-o\s|\s-O\s|\s-d\s|\s--data|-X\s*POST|--upload|-F\s|--output)/.test(c)
+  }
   // 首命令在白名单 → 只读（cd "dir" && ls 也覆盖——head 取 cd）
   const head = c.split(/[;&|]/)[0].trim().split(/\s+/)[0]?.replace(/^sudo\s+/, '') ?? ''
   return BASH_READONLY_HEAD.has(head)

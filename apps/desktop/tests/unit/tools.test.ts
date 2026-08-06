@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { initTools, toolRegistry, revertToolFile, cancelActiveCommand, markPlanApproved, isValidOpenUrl } from '../../src/main/tools'
+import { initTools, toolRegistry, revertToolFile, cancelActiveCommand, markPlanApproved, isValidOpenUrl, isReadOnlyBash } from '../../src/main/tools'
 
 // 2026-08-06 open 工具（用户「帮我打开」）：mock electron shell——vitest node 环境无 electron
 const { openExternalMock } = vi.hoisted(() => ({ openExternalMock: vi.fn(async () => {}) }))
@@ -173,5 +173,13 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     expect(isValidOpenUrl('javascript:alert(1)')).toBe(false)
     expect(isValidOpenUrl('')).toBe(false)
     expect(isValidOpenUrl('not a url')).toBe(false)
+  })
+  // 2026-08-06 用户反馈「读取/浏览文件弹授权卡」：curl GET 类（验证服务）只读自动执行；含写标志需授权
+  it('isReadOnlyBash：curl GET 类只读放行（验证服务不弹卡）；写标志拒绝', () => {
+    expect(isReadOnlyBash('curl -s http://localhost:5188/')).toBe(true)
+    expect(isReadOnlyBash('curl -s localhost:5173 && cat package.json')).toBe(true) // curl 开头复合（head0=curl）
+    expect(isReadOnlyBash('curl -s -o /dev/null -w "%{http_code}" http://localhost:5173/')).toBe(false) // -o 写文件
+    expect(isReadOnlyBash('curl -d "a=1" http://x.com')).toBe(false) // POST 数据
+    expect(isReadOnlyBash('cat package.json')).toBe(true) // cat 白名单（回归）
   })
 })
