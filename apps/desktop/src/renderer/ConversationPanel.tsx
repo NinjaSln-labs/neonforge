@@ -491,7 +491,12 @@ export default function ConversationPanel({
           const calls = (last.toolCalls ?? []).map((c) => {
             if (c.name !== tc.name || c.status !== 'pending') return c
             return r.ok
-              ? { ...c, status: 'done' as const, result: fmtToolResult(r), rawResult: typeof r.data === 'string' ? r.data.slice(0, 16000) : JSON.stringify(r.data ?? '').slice(0, 16000), file: data?.file, canRevert: !!(data?.file && data.snapshot) }
+              ? (() => {
+                  // 2026-08-06 修正重写可见性（用户「第二次 write 很快不知道发生了什么——只需知道第二次是 fix bug」）：
+                  // write 且该文件之前已写过（producedFilesRef 已有）→ 卡上标记「修正重写」——用户看到第二次是修正不是重复
+                  const isRewrite = tc.name === 'write' && !!data?.file && producedFilesRef.current.has(data.file)
+                  return { ...c, status: 'done' as const, result: (isRewrite ? '⚠️ 修正重写——' : '') + fmtToolResult(r), rawResult: typeof r.data === 'string' ? r.data.slice(0, 16000) : JSON.stringify(r.data ?? '').slice(0, 16000), file: data?.file, canRevert: !!(data?.file && data.snapshot) }
+                })()
               : { ...c, status: (r.error ?? '').includes('授权') ? ('need-approval' as const) : ('error' as const), result: r.error }
           })
           return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
