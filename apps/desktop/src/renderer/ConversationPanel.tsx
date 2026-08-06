@@ -312,13 +312,20 @@ export default function ConversationPanel({
       // 2026-08-06 只说不做多次升级（用户反馈「光说不做也发生很多轮次了」——07:36 催「打开」10+ 次模型不调 open）：
       // 用户已催同类指令（继续/打开等）模型仍承诺不调工具 → 自动 silent 续聊（「继续，把刚才说要做的做完」——不显示用户消息）；
       // 防死循环 autoNudgeRef 每会话最多 2 次，之后降级为状态栏提示
-      if ((flowStage ?? 0) >= 1 && streamingRef.current.toolCalls.length === 0 && isActionPromise(content)) {
-        const lastUser = [...messagesRef.current].reverse().find((m) => m.role === 'user')
-        const userAlreadyContinued = lastUser && /(继续|接着|去做|然后呢|去啊|动手|往下|走走走|快点|打开|开始|去干|干活)/.test(String(lastUser.content ?? ''))
-        if (userAlreadyContinued && autoNudgeRef.current < 2) {
+      // 2026-08-06 升级（用户「说了做没做老问题」——09:37-09:38 日志：模型 6+ 条「我要看/查/确认」toolCalls:[] + 文本模拟「（上一步执行：[read]）」+ course_correction_guidance）：
+      // ① isTextSimulation 检测——模型把工具执行记录当正文输出（sysHint ⑪ 禁止）→ 视为「以为执行了实际没调」触发
+      // ② autoNudge 次数 2→3 + 续聊内容带修正指令（指出「没调工具/文本模拟」——比「继续」有效，模型收到后真正调工具）
+      // ③ 2026-08-06 再升级：**不需要用户先催**——模型承诺行动（说了要做）就自动续聊（用户痛点「要疯狂点继续」——09:38 用户点了 5+ 次继续模型才动）；
+      //    isActionPromise 已排除问句/沟通词（确认/复述/说明等）——非需求阶段模型「我要看 X」= 真承诺 → 自动追一次；autoNudgeRef 3 次上限防死循环
+      const isTextSimulation = /（上一步执行|工具已调用|course_correction_guidance|\[read\]|\[write\]|\[edit\]|\[bash\]|\[open\]/.test(content)
+      if ((flowStage ?? 0) >= 1 && streamingRef.current.toolCalls.length === 0 && (isActionPromise(content) || isTextSimulation)) {
+        const nudgeContent = isTextSimulation
+          ? '你上一条把工具调用写成了文本（如「（上一步执行：…）」或 course_correction_guidance）——文本写的调用不会被执行。现在直接调用真实函数工具执行（真实 tool-call，不要写文本模拟）'
+          : '你上一条说要做事但没实际调用工具（toolCalls 为空）——现在直接调用对应工具执行（说「看 X」就同一轮发 read X，不要只停在说明）'
+        if (autoNudgeRef.current < 3) {
           autoNudgeRef.current += 1
           onActionPromiseHint?.(null) // 清提示——自动续聊代替
-          inputRef.current = '继续，把刚才说要做的做完'
+          inputRef.current = nudgeContent
           void sendRef.current?.({ silent: true })
         } else {
           onActionPromiseHint?.('搭档说要做但还没动手——回复「继续」它会接着做')
@@ -547,18 +554,30 @@ export default function ConversationPanel({
   }
 
   // 2026-08-04：对话历史构造（send 与阶段推进自动触发共用——工具轮转文本摘要保留上下文，DeepSeek 要求 tool 消息带 reasoning_content）
-  const buildHistory = (msgs: Msg[]) => msgs
-    .filter((m) => m.role === 'user' || (m.role === 'assistant' && m.status === 'done'))
-    .map((m) => {
-      if (m.role === 'assistant' && !m.content && m.toolCalls && m.toolCalls.length > 0) {
-        // 工具轮（无文本）——转文本摘要保留上下文（2026-08-04：措辞避免模型误当调用方式——用「上一步执行」不用「调用」）
-        const summary = m.toolCalls
-          .map((c) => `[${c.name}] ${JSON.stringify(c.args).slice(0, 60)} → ${(c.result ?? c.status).toString().slice(0, 100)}`)
-          .join('; ')
-        return { role: 'assistant', content: `（上一步执行：${summary}）` }
-      }
-      return { role: m.role, content: m.content }
-    })
+  // 2026-08-06 根因修复（用户「说了做没做老问题——到底需要多少兜底」）：工具轮**不再转「（上一步执行：xxx）」自然语言文本**——
+  // 那是模型文本模拟工具的模仿源（09:38 日志模型输出「（上一步执行：[read]）」= 模仿历史里我方塞的文本；9 层兜底全在补救症状，从没修模仿源）；
+  // 改为保留**标准结构化 tool_calls + tool 消息**（与工具循环 497-505 行同格式——模型看到的是系统工具消息，不会模仿成正文）
+  const buildHistory = (msgs: Msg[]): Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; reasoning_content?: string }> => {
+    let callSeq = 0 // 历史多轮工具的全局唯一 tool_call_id
+    return msgs
+      .filter((m) => m.role === 'user' || (m.role === 'assistant' && m.status === 'done'))
+      .flatMap((m): Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string }> => {
+        if (m.role === 'assistant' && !m.content && m.toolCalls && m.toolCalls.length > 0) {
+          const calls = m.toolCalls.map((c, i) => ({
+            id: `h${callSeq + i}`,
+            name: c.name,
+            args: c.args,
+            result: c.rawResult ?? c.result ?? c.status ?? '执行失败'
+          }))
+          callSeq += calls.length
+          return [
+            { role: 'assistant', content: null, tool_calls: calls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.args) } })) },
+            ...calls.map((c) => ({ role: 'tool', tool_call_id: c.id, content: String(c.result).slice(0, 300) }))
+          ]
+        }
+        return [{ role: m.role, content: m.content }]
+      })
+  }
   const workingRef = useRef(false)
   useEffect(() => { workingRef.current = working }, [working])
   // 2026-08-04 体验修复：流式 done 通知——runChat 尾部等 done（working 及时释放，用户快速「确认推进」不被拦）
