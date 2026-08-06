@@ -134,6 +134,18 @@ function readExecutor(args: Record<string, unknown>, ctx: { rootPath?: string })
   return fs.stat(filePath).then((st) => {
     if (st.isDirectory()) return `这是目录（${filePath}）——要列出内容请用 bash 执行 ls 命令`
     return fs.readFile(filePath, 'utf-8')
+  }).catch(async (e) => {
+    // 2026-08-06 用户反馈「读取工具先读不存在（盲读）——任何时候都应该先确认有没有文件」：文件不存在时列出父目录内容——
+    // 模型知道目录里有什么（不再盲读试探浪费轮次）；0-1 空目录 read package.json（未创建）→ 提示目录内容 + 引导
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
+      try {
+        const entries = await fs.readdir(path.dirname(filePath))
+        return `找不到文件：${filePath}——这个目录里有：${entries.slice(0, 20).join('、') || '（空目录——项目还没创建文件，先确认要读什么再读，或用 bash ls 看完整列表）'}`
+      } catch {
+        return `找不到文件：${filePath}——父目录也不存在，确认路径是否正确`
+      }
+    }
+    throw e
   })
 }
 

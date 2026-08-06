@@ -457,6 +457,10 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   padding: 6px var(--nf-space-3); font-size: var(--nf-font-sm); cursor: pointer;
 }
 .nf-delivery__primary:disabled { opacity: 0.4; cursor: not-allowed; }
+/* 2026-08-06 阶段推进设计层：模型说「确认推进」→ 按钮高亮脉冲（用户注意到该点了）
+   注意：用 box-shadow 动画（不用 transform scale——会改变布局尺寸导致 Playwright 判定元素不稳定点击失败 + 视觉抖动） */
+.nf-delivery__primary--hint { animation: nf-advance-pulse 1.2s ease-in-out infinite; }
+@keyframes nf-advance-pulse { 0%, 100% { box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.35); } 50% { box-shadow: 0 0 0 6px rgba(79, 70, 229, 0.65); } }
 .nf-delivery__ghost {
   background: none; border: 1px solid var(--nf-border); color: var(--nf-text-dim);
   border-radius: var(--nf-radius-sm); padding: 6px var(--nf-space-3); font-size: var(--nf-font-sm); cursor: pointer;

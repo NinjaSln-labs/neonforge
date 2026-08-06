@@ -43,7 +43,8 @@ export default function DeliveryFlowPanel({
   requirementConfirmed = false,
   artifactsReady = false,
   busy = false,
-  stageOverride
+  stageOverride,
+  advanceHint = false
 }: {
   onStageChange?: (stage: number) => void
   onModelSelect?: (model: 'traditional' | 'agile') => void
@@ -52,6 +53,7 @@ export default function DeliveryFlowPanel({
   artifactsReady?: boolean // 2026-08-04 体验修复：开发阶段已有真实文件产出（write/edit 成功）→ 解锁推进到测试（防阶段空转）
   busy?: boolean // 2026-08-04 体验修复：搭档处理中禁止推进（防 advanceChat 被 working 守卫跳过——阶段前进但模型不知道）
   stageOverride?: number // 2026-08-04：外部推进（需求确认卡）同步本地阶段机——本地 stage 与 MainWorkspace flowStage 双状态对齐
+  advanceHint?: boolean // 2026-08-06 阶段推进设计层：模型输出「确认推进」→ 按钮高亮（用户注意到该点了）
 }) {
   const [stage, setStage] = useState(0) // 当前进行阶段（index）
   // 2026-08-04：受控/非受控双模式——主流程传 model（受控）；demo 通道不传（非受控，内部维护）——修复受控化破坏 demo 选择
@@ -129,13 +131,12 @@ export default function DeliveryFlowPanel({
           {stage === 2 && !artifactsReady && (
             <span className="nf-flow__gate-hint">开发阶段还没产出文件——等搭档写完文件（对话里会出现可回滚的工具卡）再推进</span>
           )}
-          {/* 2026-08-04 体验修复：搭档处理中（advanceChat 自动触发阶段工作）时禁止推进——避免阶段推进被 working 守卫跳过（模型不知道已推进） */}
-          {busy && (
-            <span className="nf-flow__gate-hint">搭档正在处理——等它回复完再推进</span>
-          )}
+          {/* 2026-08-06 用户反馈「每阶段顶部常驻搭档处理中卡片（界面设计问题）」：删除常驻 busy 提示（按钮文案「搭档处理中…」已表达 busy + 状态栏有 workingStage）——
+              busy 只在按钮禁用语义（坑 43 防推进被 working 守卫跳过），不需要阶段卡顶部常驻大卡片 */}
           <button
             type="button"
-            className="nf-delivery__primary"
+            // 2026-08-06 阶段推进设计层：模型说「确认推进」→ 按钮高亮脉冲（用户注意到该点了——反馈「不会自动或提示进入部署」）
+            className={`nf-delivery__primary${advanceHint && !busy && !(stage === 2 && !artifactsReady) ? ' nf-delivery__primary--hint' : ''}`}
             // 2026-08-05 第六轮修复：需求阶段不再依赖 requirementConfirmed 禁用——模型没输出【需求确认】标记时按钮禁用 = 死锁（模型提示点按钮却点不了）；
             // 用户显式点击「确认推进」= 最强确认信号 → MainWorkspace 自动确认需求（handleStageChange 兜底）；busy/开发产物门控保留
             disabled={(stage === 2 && !artifactsReady) || busy}
