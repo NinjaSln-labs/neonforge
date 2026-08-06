@@ -54,14 +54,27 @@ export function isServerCommand(cmd: string): boolean {
   return SERVER_COMMAND_WHITELIST.some((s) => s.test(cmd.trim()))
 }
 
+// 宿主保留端口（NeonForge 自己的 dev server 5173 / 测试 server 5175）——用户项目服务绝不可占用（坑 13/67/73 + 本轮「一直用 5173」）
+export const HOST_RESERVED_PORTS = new Set([5173, 5175])
+
+// 2026-08-06 端口升级（用户「启动服务器一直用 5173」——第 N 次端口问题，确认升级）：
+// vite 类命令强制 `--port 0`（系统分配动态端口）——不指定时 vite 默认 5173 → 用户项目占宿主端口（本次实证：项目 vite 绑 *:5173 与宿主 localhost:5173 并存冲突）
+export function normalizeServerCommand(cmd: string): string {
+  const c = cmd.trim()
+  const isVite = /^npx vite/.test(c) || /^vite( |$)/.test(c)
+  if (isVite && !/--port/.test(c)) return `${c} --port 0`
+  return c
+}
+
 // 启动开发服务器（rootPath 已有服务 → 直接返回；否则起进程并等地址）
 export async function startServer(rootPath: string, command?: string): Promise<{ ok: true; data: { url: string; port: number } } | { ok: false; error: string }> {
   const existing = services.get(rootPath)
   if (existing) return { ok: true, data: { url: existing.url, port: existing.port } }
-  const cmd = (command ?? 'npx vite').trim()
-  if (!isServerCommand(cmd)) {
-    return { ok: false, error: `start-server 只支持服务类命令（npx vite / npm run dev 等）——不支持「${cmd}」` }
+  const rawCmd = (command ?? 'npx vite').trim()
+  if (!isServerCommand(rawCmd)) {
+    return { ok: false, error: `start-server 只支持服务类命令（npx vite / npm run dev 等）——不支持「${rawCmd}」` }
   }
+  const cmd = normalizeServerCommand(rawCmd)
   try {
     const child = spawn(cmd, { cwd: rootPath, shell: true, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
     serviceProcs.add(child)
@@ -72,6 +85,12 @@ export async function startServer(rootPath: string, command?: string): Promise<{
       return { ok: true, data: { url: '', port: 0 } }
     }
     const port = Number(url.match(/:(\d+)/)?.[1] ?? 0)
+    // 2026-08-06 宿主端口保护机制化：结果端口 ∈ 保留集（npm run dev 等无法强制 --port 0 的脚本可能落 5173）→ 拒绝占用 + 杀进程重试
+    if (HOST_RESERVED_PORTS.has(port)) {
+      try { process.kill(-(child.pid ?? 0), 'SIGKILL') } catch { try { child.kill('SIGKILL') } catch { /* 已退出 */ } }
+      serviceProcs.delete(child)
+      return { ok: false, error: `start-server: 服务落到了宿主保留端口 ${port}（NeonForge 自己用）——已停止；请用 vite 类命令（自动 --port 0 动态端口）或换端口启动` }
+    }
     services.set(rootPath, { rootPath, port, pid: child.pid ?? 0, url, startedAt: Date.now() })
     return { ok: true, data: { url, port } }
   } catch (e) {
