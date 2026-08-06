@@ -63,4 +63,28 @@ describe('StuckDetector（卡住检测——连续无进展升级）', () => {
     expect(r2.state.consecutiveNoProgress).toBe(0)
     expect(r2.event).toBeUndefined()
   })
+
+  // 2026-08-06 任务完成度（deepcode unimplemented_files 借鉴——plan_approval 规划文件 vs 产出）
+  it('规划文件全部产出 → 无工具结束 = 阶段完成（不 escalate）', () => {
+    const planned = new Set(['index.html', 'main.js'])
+    const produced = new Set(['index.html', 'main.js'])
+    const doneTurn = evaluateTurnProgress({ toolCalls: [], content: '文件都写完了', prevReadFiles: new Set(), plannedFiles: planned, producedFiles: produced })
+    expect(doneTurn.hasPlannedFiles).toBe(true)
+    expect(doneTurn.hasRemainingPlanned).toBe(false)
+    const r = detectStuck({ turn: doneTurn, prev: { consecutiveNoProgress: 1, escalations: 0 } })
+    expect(r.event).toBeUndefined() // 任务完成——不停滞
+    expect(r.state.consecutiveNoProgress).toBe(0)
+  })
+
+  it('规划文件未全部产出 → 无工具结束 = 任务未完成（escalate 消息带剩余数）', () => {
+    const planned = new Set(['index.html', 'main.js'])
+    const produced = new Set(['index.html']) // main.js 未产出
+    const incompleteTurn = evaluateTurnProgress({ toolCalls: [], content: '我看到了问题', prevReadFiles: new Set(), plannedFiles: planned, producedFiles: produced })
+    expect(incompleteTurn.hasRemainingPlanned).toBe(true)
+    expect(incompleteTurn.remainingCount).toBe(1)
+    const r1 = detectStuck({ turn: incompleteTurn, prev: initialStuckState })
+    const r2 = detectStuck({ turn: incompleteTurn, prev: r1.state })
+    expect(r2.event?.type).toBe('escalate')
+    expect(r2.event && 'message' in r2.event ? r2.event.message : '').toContain('规划文件还有 1 个没写')
+  })
 })
