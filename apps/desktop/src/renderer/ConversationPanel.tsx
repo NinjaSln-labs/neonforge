@@ -436,7 +436,7 @@ export default function ConversationPanel({
       // 2026-08-04 授权架构 v4：任务级信任——「允许并记住」的文件 write/edit 自动（沙箱内）；read/bash 只读由 main preApproval 裁决（沙箱内自动/沙箱外 ask）
       // 2026-08-06 偏离清单拦截（基于事实：06:03 已规划但写「正确路径」偏离批准清单 → 逐个弹授权/规划外文件——用户「相同文件弹授权」根因）：
       // 已规划（planApprovedRef）但文件不在批准清单 → 不弹逐个卡——拒绝 + 引导补充 plan_approval（清单与实际始终一致）
-      if ((tc.name === 'write' || tc.name === 'edit') && planApprovedRef.current && !plannedFilesRef.current.has(trustPath(tc.args.path))) {
+      if (tc.name === 'write' && planApprovedRef.current && !plannedFilesRef.current.has(trustPath(tc.args.path))) { // 2026-08-06 edit 豁免（改现有文件=操作明确——B 类文件操作直接改）；write 新建强制规划
         setMessages((prev) => {
           const last = prev[prev.length - 1]
           if (!last || last.role !== 'assistant') return prev
