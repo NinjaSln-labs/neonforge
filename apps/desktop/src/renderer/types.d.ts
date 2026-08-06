@@ -15,7 +15,7 @@ export interface NeonForgeBridge {
   }
   gateway: {
     validate: (apiKey: string) => Promise<{ ok: boolean; error?: string }>
-    streamChat: (opts: { apiKey: string; level?: string; tools?: boolean; messages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; reasoning_content?: string }> }) => Promise<{ ok: boolean; error?: string }>
+    streamChat: (opts: { apiKey: string; level?: string; tools?: boolean; forceTool?: boolean; messages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; reasoning_content?: string }> }) => Promise<{ ok: boolean; error?: string }>
     onStreamChunk: (cb: (chunk: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) => () => void
   }
   delivery: {
