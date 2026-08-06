@@ -729,7 +729,8 @@ export default function ConversationPanel({
           setMessages((prev) => {
             const tail = prev.slice(-2) // 当前轮新 user + streaming（压缩后保留）
             return [
-              { role: 'assistant', content: `（早期对话已压缩：${compacted.summary}）`, status: 'done' as const },
+              // 2026-08-06 用户「早期对话已压缩不要显示实际内容」：展示只提示压缩，summary 只进 API（738 行）——用户不读早期总结
+              { role: 'assistant', content: '（早期对话已压缩——长对话自动摘要，最近 20 条保留）', status: 'done' as const },
               ...compacted.kept.filter((m) => m.content != null).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content ?? '', status: 'done' as const })),
               ...tail
             ]

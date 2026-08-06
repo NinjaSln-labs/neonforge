@@ -95,12 +95,16 @@ export default function MainWorkspace({
     setFileTreeRefreshKey((k) => k + 1) // 文件变更 → 文件树重载
     refreshProjectFiles() // @mention 列表同步
     // 06 断点续做深度（基线 §21）：授权操作记录到问题快照 authorized（跨会话可回溯）
+    // 2026-08-06 用户「HUD.js 授权清单记录了两次」：label=[工具名]文件——write+edit 各授权一次 → label 不同 → 两条记录；
+    // 修复：按文件去重（同一文件任何工具授权过即视为已授权——TrustLadder 不重复显示）；
+    // 举一反三：r.file 是绝对路径（writeExecutor 返回 filePath）→ endsWith 精确匹配唯一标识（不同目录同名文件绝对路径不同不误判；不用 includes 防路径后缀巧合）
     if (activeProblem) {
       setProblems((prev) => prev.map((p) => {
         if (p.id !== activeProblem) return p
         const label = `[${r.name}] ${r.file}`
         const auth = p.snapshot?.authorized ?? []
-        return auth.includes(label) ? p : updateProblemSnapshot(p, { authorized: [...auth, label] })
+        const alreadyFile = auth.some((a) => a.endsWith(`] ${r.file}`))
+        return alreadyFile ? p : updateProblemSnapshot(p, { authorized: [...auth, label] })
       }))
     }
   }
