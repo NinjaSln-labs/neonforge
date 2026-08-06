@@ -90,11 +90,12 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     } finally {
       rmSync(outside, { force: true })
     }
-    // 2026-08-04 回归：绝对路径不存在 → 不拼出 rootPath+绝对路径 的荒谬路径（talk.txt 实测 bug）——返回友好错误
+    // 2026-08-04 回归：绝对路径不存在 → 不拼出 rootPath+绝对路径 的荒谬路径（talk.txt 实测 bug）——返回友好提示
+    // 2026-08-06 read 增强：不存在时返回目录列表（模型知道目录里有什么，不再盲读）
     const r4 = await toolRegistry.execute('read', { path: '/Users/nobody/NeonForge/package.json' }, { rootPath: TMP })
-    expect(r4.ok).toBe(false)
-    expect(r4.error).not.toContain(`${TMP}/Users`)
-    expect(r4.error).toContain('找不到这个文件')
+    expect(r4.ok).toBe(true)
+    expect(String(r4.data)).not.toContain(`${TMP}/Users`)
+    expect(String(r4.data)).toContain('找不到文件')
   })
 
   it('search：关键词检索（Layer2 CodeRAG——agentic grep 模式）返回命中+行号+片段', async () => {
