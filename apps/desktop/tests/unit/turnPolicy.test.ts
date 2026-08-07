@@ -1,77 +1,80 @@
 import { describe, it, expect } from 'vitest'
 import { decideTurnPolicy, type TurnPolicyInput } from '../../src/renderer/domain/turnPolicy'
 
-// 领域层：轮次执行保障（Conversation BC——2026-08-07 forceTool 领域化，坑 89 根因回归）
-// 原语义保留（坑 80）：用户指令轮强制产出 / B 类每轮强制直到产出 / 纯确认不强制 / 工具循环 auto
-// 坑 89 修复：阶段推进轮（advance-turn）≠ 用户指令轮——按阶段工作模式（设计=文本方案不强制）
+// 领域层：轮次执行保障（Conversation BC——2026-08-07 无阶段重构 S1）
+// 三态判定（目标驱动）：goalConfirmed / executionConfirmed / produced——穷举 3 布尔 = 8 组合
+// forceTool 原意保留（坑 80）：目标+执行已确认但无产出 → 强制必须动手到产出（防只说不做）
+// produced 后 auto（坑 81 StuckDetector 兜底；避免 required 无限循环/已干活被迫空转）
 
 const base: TurnPolicyInput = {
-  stage: '设计',
-  turnKind: 'user-turn',
-  isPureAck: false,
-  requirementConfirmed: true,
+  goalConfirmed: true,
+  executionConfirmed: true,
   produced: true,
-  depth: 0,
 }
 
-describe('TurnExecutionPolicy（轮次执行保障）', () => {
-  // === 坑 89 回归：阶段推进轮按阶段工作模式 ===
-  it('设计阶段推进轮（advance-turn 首轮）→ 不强制工具（输出方案文本——坑 89 根因修复）', () => {
-    const r = decideTurnPolicy({ ...base, turnKind: 'advance-turn', stage: '设计' })
+describe('TurnExecutionPolicy（三态——无阶段重构 S1）', () => {
+  // === 核心：goal-exec-until-produced（防只说不做，坑 80 B 类语义延续） ===
+  it('目标+执行已确认 + 无产出 → 强制工具（read 不算产出持续强制，直到 write/edit）', () => {
+    const r = decideTurnPolicy({ ...base, produced: false })
+    expect(r.forceTool).toBe(true)
+    expect(r.reason).toBe('goal-exec-until-produced')
+  })
+
+  it('目标+执行已确认 + 有产出 → auto（收敛到文本结束，StuckDetector 兜底）', () => {
+    const r = decideTurnPolicy(base)
     expect(r.forceTool).toBe(false)
-    expect(r.reason).toContain('advance')
+    expect(r.reason).toBe('produced-auto')
   })
 
-  it('开发阶段推进轮 → 强制工具（动手产出）', () => {
-    expect(decideTurnPolicy({ ...base, turnKind: 'advance-turn', stage: '开发' }).forceTool).toBe(true)
+  // === 目标未确认 → 澄清问答 ===
+  it('目标未确认（执行/产出任意）→ auto（澄清问答）', () => {
+    const r = decideTurnPolicy({ goalConfirmed: false, executionConfirmed: false, produced: false })
+    expect(r.forceTool).toBe(false)
+    expect(r.reason).toBe('goal-clarify')
+    // 防御：目标未确认但其他状态为 true（状态不一致）——仍按目标未确认处理
+    expect(decideTurnPolicy({ goalConfirmed: false, executionConfirmed: true, produced: false }).reason).toBe('goal-clarify')
+    expect(decideTurnPolicy({ goalConfirmed: false, executionConfirmed: true, produced: true }).reason).toBe('goal-clarify')
   })
 
-  it('测试/部署阶段推进轮 → 强制工具（验证/发布动作）', () => {
-    expect(decideTurnPolicy({ ...base, turnKind: 'advance-turn', stage: '测试' }).forceTool).toBe(true)
-    expect(decideTurnPolicy({ ...base, turnKind: 'advance-turn', stage: '部署' }).forceTool).toBe(true)
+  // === 执行未确认 → 等用户确认执行方案 ===
+  it('目标已确认 + 执行未确认 → auto（执行方案已给，等用户确认——不能逼工具）', () => {
+    const r = decideTurnPolicy({ goalConfirmed: true, executionConfirmed: false, produced: false })
+    expect(r.forceTool).toBe(false)
+    expect(r.reason).toBe('awaiting-exec-confirm')
   })
 
-  it('交付阶段推进轮 → 不强制（汇报+验收文本）', () => {
-    expect(decideTurnPolicy({ ...base, turnKind: 'advance-turn', stage: '交付' }).forceTool).toBe(false)
+  it('目标已确认 + 执行未确认 + 已有产出（防御——状态不一致）→ awaiting-exec-confirm', () => {
+    expect(decideTurnPolicy({ goalConfirmed: true, executionConfirmed: false, produced: true }).reason).toBe('awaiting-exec-confirm')
   })
 
-  it('需求阶段推进轮 → 不强制（防御——需求阶段不推进）', () => {
-    expect(decideTurnPolicy({ ...base, turnKind: 'advance-turn', stage: '需求' }).forceTool).toBe(false)
+  // === 已产出优先（状态优先级：produced 生效早于 awaiting——但 reason 按状态机顺序） ===
+  it('全部 true → produced-auto（已产出收敛）', () => {
+    const r = decideTurnPolicy({ goalConfirmed: true, executionConfirmed: true, produced: true })
+    expect(r.forceTool).toBe(false)
+    expect(r.reason).toBe('produced-auto')
   })
 
-  // === 原语义保留（坑 80） ===
-  it('用户指令轮首轮（非需求阶段）→ 强制工具（原意：用户下达执行指令必须动手到产出）', () => {
-    expect(decideTurnPolicy({ ...base, turnKind: 'user-turn', stage: '设计' }).forceTool).toBe(true)
-    expect(decideTurnPolicy({ ...base, turnKind: 'user-turn', stage: '开发' }).forceTool).toBe(true)
+  it('全部 false → goal-clarify', () => {
+    const r = decideTurnPolicy({ goalConfirmed: false, executionConfirmed: false, produced: false })
+    expect(r.forceTool).toBe(false)
+    expect(r.reason).toBe('goal-clarify')
   })
 
-  it('用户指令轮首轮 + 需求阶段 → 不强制（问答澄清）', () => {
-    expect(decideTurnPolicy({ ...base, turnKind: 'user-turn', stage: '需求' }).forceTool).toBe(false)
-  })
-
-  it('未进入 0-1 流程（stage=null，demo）→ 不强制', () => {
-    expect(decideTurnPolicy({ ...base, turnKind: 'user-turn', stage: null }).forceTool).toBe(false)
-    expect(decideTurnPolicy({ ...base, turnKind: 'advance-turn', stage: null }).forceTool).toBe(false)
-  })
-
-  it('纯确认 → 不强制（模型在问答）', () => {
-    expect(decideTurnPolicy({ ...base, turnKind: 'user-turn', isPureAck: true }).forceTool).toBe(false)
-  })
-
-  it('B 类（需求已确认 + 无产出）→ 每轮强制直到产出（read 不算产出）', () => {
-    const bClass: TurnPolicyInput = { ...base, requirementConfirmed: true, produced: false }
-    expect(decideTurnPolicy({ ...bClass, turnKind: 'user-turn' }).forceTool).toBe(true)
-    expect(decideTurnPolicy({ ...bClass, turnKind: 'tool-loop' }).forceTool).toBe(true)
-    expect(decideTurnPolicy({ ...bClass, turnKind: 'advance-turn' }).forceTool).toBe(true)
-    // 有产出后 → 按轮次类型正常决策
-    expect(decideTurnPolicy({ ...base, requirementConfirmed: true, produced: true }).forceTool).toBe(true) // user-turn
-  })
-
-  it('工具循环轮 → auto（不强制，StuckDetector 兜底）', () => {
-    expect(decideTurnPolicy({ ...base, turnKind: 'tool-loop' }).forceTool).toBe(false)
-  })
-
-  it('非首轮（depth>0）→ auto', () => {
-    expect(decideTurnPolicy({ ...base, turnKind: 'user-turn', depth: 1 }).forceTool).toBe(false)
+  // === 边界：forceTool=true 的唯一条件 ===
+  it('forceTool=true 仅当 goalConfirmed && executionConfirmed && !produced（唯一强制组合）', () => {
+    const cases: TurnPolicyInput[] = [
+      { goalConfirmed: false, executionConfirmed: false, produced: false },
+      { goalConfirmed: false, executionConfirmed: false, produced: true },
+      { goalConfirmed: false, executionConfirmed: true, produced: false },
+      { goalConfirmed: false, executionConfirmed: true, produced: true },
+      { goalConfirmed: true, executionConfirmed: false, produced: false },
+      { goalConfirmed: true, executionConfirmed: false, produced: true },
+      { goalConfirmed: true, executionConfirmed: true, produced: false },
+      { goalConfirmed: true, executionConfirmed: true, produced: true },
+    ]
+    cases.forEach((c) => {
+      const r = decideTurnPolicy(c)
+      expect(r.forceTool).toBe(c.goalConfirmed && c.executionConfirmed && !c.produced)
+    })
   })
 })

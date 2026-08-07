@@ -1,27 +1,18 @@
 // 领域层：轮次执行保障（Conversation BC——多轮对话子域）
-// 2026-08-07 DDD 落地（坑 89 根因修复）：forceTool 领域化——
-// 「对话轮次该不该强制模型产出」是对话轮次的领域规则（坑 80 原意：用户执行指令 → 必须动手到产出），
-// 此前散落在 ConversationPanel.tsx:616 的组件 if 条件（`flowStage>=1 && depth===0` 数值拼凑——
-// 误把「阶段推进轮」当「用户指令轮」→ 设计阶段推进后被强制调工具，无法输出方案文本）。
-// 依据 A0 §2 裁决「对话上下文/消息流 → Conversation」——轮次执行保障属 Conversation BC，
-// 与 agentLoop（TurnProgress/StuckDetector——轮次卡住检测）同 BC 并列（deepcode loop_detector 同位置）。
+// 2026-08-07 无阶段重构 S1（用户决策「完整移除阶段体系」——目标驱动+能力驱动+确认驱动）：
+// 三态判定替代六阶段版（原 stage/turnKind/isPureAck/depth 依赖阶段体系——全部移除）。
+// forceTool 原意保留（坑 80：用户执行指令 → 必须动手到产出；坑 89：阶段推进轮 ≠ 用户指令轮——
+// 无阶段下「推进轮」概念消失，统一由「目标确认/执行确认」状态推导）。
 // 纯逻辑无 React 依赖——L1 可测；ConversationPanel（Application 层）调用。
 
-import { PRODUCT_STAGE_DEFS, type ProductStageName } from './stageFlow'
-
-// === Value Object: 轮次类型（触发语义——机制原意） ===
-// user-turn    = 用户下达真实指令/消息（forceTool 原意作用对象——必须动手到产出）
-// advance-turn = 阶段推进（advanceChat——切换阶段工作模式，不是用户执行指令）
-// tool-loop    = 工具循环续聊（maybeContinue——自由收敛，StuckDetector 兜底）
-export type TurnKind = 'user-turn' | 'advance-turn' | 'tool-loop'
-
+// === Value Object: 轮次执行输入（三态——目标驱动核心） ===
+// goalConfirmed      = 目标已确认（无阶段下确认「达成什么」——原 requirementConfirmed 语义演进）
+// executionConfirmed = 执行已确认（能力检查后用户确认执行方案——无阶段新增）
+// produced           = 已有产出（write/edit 成功——read 不算产出，activity≠progress 坑 81）
 export interface TurnPolicyInput {
-  stage: ProductStageName | null // 当前阶段（flowStage 映射；null=未进入 0-1 流程/demo）
-  turnKind: TurnKind
-  isPureAck: boolean // 纯确认（嗯/好/可以/ok/继续…——问答不强制）；2026-08-07 T4 决策：词表=豁免名单，漏网 fail-safe（确认=批准继续→强制符合意图），不扩充/不移除继续（坑 79 意图词穷举不完 + 坑 90 设计阶段继续=出方案文本）
-  requirementConfirmed: boolean // 需求已确认
-  produced: boolean // 已有产出（write/edit 成功——B 类持续强制直到产出）
-  depth: number // 0=该轮首轮
+  goalConfirmed: boolean
+  executionConfirmed: boolean
+  produced: boolean
 }
 
 export interface TurnPolicyDecision {
@@ -29,24 +20,29 @@ export interface TurnPolicyDecision {
   reason: string
 }
 
-// === Domain Service: TurnExecutionPolicy（执行保障决策） ===
+// === Domain Service: TurnExecutionPolicy（执行保障决策——三态穷举） ===
+// 状态空间（3 布尔 = 8 组合）：
+//   goal=false               → goal-clarify（目标未确认 = 澄清问答，不强制）
+//   goal=true, exec=false    → awaiting-exec-confirm（执行方案已给等用户确认，不强制）
+//   goal=true, exec=true,
+//     produced=false         → goal-exec-until-produced（目标+执行已确认但无产出 → 强制——防只说不做）
+//   produced=true            → produced-auto（已有产出 → auto——StuckDetector 兜底坑 81；
+//                              避免 required 无限循环（OpenAI reset_tool_choice 防循环）+
+//                              避免已干活后被迫空转）
 export function decideTurnPolicy(input: TurnPolicyInput): TurnPolicyDecision {
-  const { stage, turnKind, isPureAck, requirementConfirmed, produced, depth } = input
-  // 纯确认 → 不强制（模型在问答）
-  if (isPureAck) return { forceTool: false, reason: 'pure-ack' }
-  // B 类（需求已确认但无产出）→ 每轮强制直到产出（坑 80 B 类语义——read 不算产出持续强制）
-  if (requirementConfirmed && !produced) return { forceTool: true, reason: 'b-class-until-produced' }
-  // 用户指令轮（首轮）→ 强制（坑 80 原意——用户下达执行指令必须动手到产出）
-  // 需求阶段例外：问答澄清（STAGE_HINT 需求阶段禁止工具）——不强制；null=未进入 0-1 流程（demo）不强制
-  if (turnKind === 'user-turn' && depth === 0) {
-    if (!stage || stage === '需求') return { forceTool: false, reason: 'requirement-clarify' }
-    return { forceTool: true, reason: 'user-command' }
+  const { goalConfirmed, executionConfirmed, produced } = input
+  // 目标未确认 → auto（澄清问答——无论执行/产出状态，目标未确认一切免谈）
+  if (!goalConfirmed) {
+    return { forceTool: false, reason: 'goal-clarify' }
   }
-  // 阶段推进轮（首轮）→ 按阶段工作模式（坑 89：设计=text-proposal 输出方案文本，不强制工具）
-  if (turnKind === 'advance-turn' && depth === 0) {
-    if (!stage) return { forceTool: false, reason: 'advance-no-stage' }
-    return { forceTool: PRODUCT_STAGE_DEFS[stage].forceToolOnAdvance, reason: `advance-${stage}` }
+  // 目标已确认、执行未确认 → 已给执行方案等用户确认（auto——模型在等确认不能逼工具）
+  if (!executionConfirmed) {
+    return { forceTool: false, reason: 'awaiting-exec-confirm' }
   }
-  // 工具循环轮 / 非首轮 → auto（forceTool=false，由 StuckDetector 检测无产出循环）
-  return { forceTool: false, reason: 'auto' }
+  // 已有产出 → auto（收敛到文本结束；StuckDetector 检测无产出循环兜底）
+  if (produced) {
+    return { forceTool: false, reason: 'produced-auto' }
+  }
+  // 目标+执行已确认但无产出 → 强制（B 类语义延续：read 不算产出持续强制，直到 write/edit）
+  return { forceTool: true, reason: 'goal-exec-until-produced' }
 }
