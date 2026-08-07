@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import DeliveryFlowPanel from './DeliveryFlowPanel'
 import DigitalDeliveryPanel from './DigitalDeliveryPanel'
 import TrustLadderPanel from './TrustLadderPanel'
 import DoDAlignPanel from './DoDAlignPanel'
@@ -14,7 +13,7 @@ import { cleanContent, stripMarkdown } from './textClean'
 import { evaluateTurnProgress, detectStuck, initialStuckState, isQuestionLike, isCommunicationLike, isDoneLike } from './domain/agentLoop'
 // 2026-08-07 DDD 落地（坑 89 forceTool/advanceChat 领域化——Conversation BC 轮次执行保障 + AgentChain BC 产品阶段流转）
 import { decideTurnPolicy } from './domain/turnPolicy'
-import { buildAdvanceInstruction, type ProductStageName } from './domain/stageFlow'
+// 2026-08-07 无阶段重构 S4：buildAdvanceInstruction/stageFlow import 删除（advanceChat 随阶段体系移除）
 // 2026-08-05 方案 3：结构化候选按钮——<candidates> 块解析/剥离（点选文本替代序号，消除模型序号解析漂移）
 import { parseCandidates, stripCandidates, stripTags } from './candidates'
 // 2026-08-03 视觉审计 P1-6：内联 SVG 图标（替换 emoji 图标）
@@ -120,17 +119,15 @@ export default function ConversationPanel({
   onWorkingChange,
   onApprovalChange,
   onActionPromiseHint,
-  onAdvanceHint,
   externalRequest,
   onExternalConsumed,
   onToolResult,
   onUserMessage,
-  onRequirementConfirmed,
-  requirementConfirmed,
+  onGoalConfirmed,
+  goalConfirmed,
+  executionConfirmed,
+  goalSeq,
   recentFilesExternal,
-  stageHint,
-  flowStage,
-  stageAdvance,
   activeAuthorizedLogs,
   initialPrompt
 }: {
@@ -141,20 +138,17 @@ export default function ConversationPanel({
   onWorkingChange?: (working: boolean) => void
   onApprovalChange?: (pending: boolean) => void // 2026-08-04 审计修复（D2）：有待批准工具操作时上报（状态栏提示——键盘用户感知）
   onActionPromiseHint?: (hint: string | null) => void // 2026-08-05 用户反馈 2：isActionPromise 提示不插入对话流（污染阅读）——状态栏非侵入提示
-  onAdvanceHint?: (hint: boolean) => void // 2026-08-06 阶段推进设计层：模型输出「确认推进」→ 推进按钮高亮（用户注意到该点了）
   externalRequest?: string | null
   onExternalConsumed?: () => void
   onToolResult?: (r: { name: string; file?: string; ok: boolean }) => void
   onUserMessage?: (text: string) => void
   // 2026-08-04：目标确认回写——模型输出【目标确认：xxx】→ 上报 MainWorkspace（更新台账标题/快照 + 项目 README）
-  onRequirementConfirmed?: (title: string) => void
-  requirementConfirmed?: boolean // 2026-08-06 需求阶段门控：用户确认（MainWorkspace state）→ 同步 ref——确认后 B 类直接执行（write/edit/bash 放行）
+  // 2026-08-07 无阶段重构 S4：onRequirementConfirmed → onGoalConfirmed / requirementConfirmed → goalConfirmed + executionConfirmed
+  onGoalConfirmed?: (title: string) => void
+  goalConfirmed?: boolean // 2026-08-06 需求阶段门控（无阶段重构 S4：目标确认）：用户确认（MainWorkspace state）→ 同步 ref——确认后 write/edit/bash 放行
+  executionConfirmed?: boolean // 2026-08-07 无阶段重构 S4：执行确认（ExecutionConfirmCard——目标确认后用户确认执行方案）
+  goalSeq?: number // 2026-08-07 无阶段重构 S4：目标确认次数——每次确认 = 任务边界（clearTrust 驱动）
   recentFilesExternal?: string[]
-  stageHint?: string // 0-1 交付阶段指引（ticket 07——注入对话引导模型按阶段产出）
-  flowStage?: number // 2026-08-05：当前阶段序号（plan_approval 阶段门控——设计阶段未确认不弹规划授权卡）
-  // 2026-08-04：阶段推进反馈——用户点「确认推进」后对话区出现「已进入【X】阶段」提示（本地生成，确定性无杂音；顺带作为上下文让模型知道阶段切换）
-  // 2026-08-04 方案 A：requirement 可选——需求卡确认摘要（注入对话上下文，模型按确认结果工作）
-  stageAdvance?: { seq: number; stage: string; hint: string; requirement?: string } | null
   // 2026-08-04 体验修复：启动页首句 → 进入工作区自动发送（说了就直接开始；输入框不预填）
   initialPrompt?: string
   activeAuthorizedLogs?: string[] // 06/14 授权记录可回溯：当前问题快照 authorized（TrustLadder 展示）
@@ -234,7 +228,7 @@ export default function ConversationPanel({
   // 2026-08-05：renderer 侧「已规划」标记——approvePlan 置 true（幂等：本任务内再调 plan_approval 不弹卡）；阶段推进（clearTrust）重置
   const planApprovedRef = useRef(false)
   const goalConfirmedRef = useRef(false) // 2026-08-06 需求阶段门控：模型输出【目标确认】→ true（无阶段重构 S3：需求确认→目标确认——确认后 write/edit/bash 放行——直接执行）
-  useEffect(() => { if (requirementConfirmed) goalConfirmedRef.current = true }, [requirementConfirmed]) // 用户确认（MainWorkspace state）→ 同步（无阶段重构 S3：requirementConfirmed prop 保持原名——S4 与 MainWorkspace 一并改名 goalConfirmed）
+  useEffect(() => { if (goalConfirmed) goalConfirmedRef.current = true }, [goalConfirmed]) // 用户确认（MainWorkspace state）→ 同步（无阶段重构 S4：prop 改名 goalConfirmed）
   useEffect(() => {
     if (initialPrompt && initialPrompt.trim()) {
       inputRef.current = initialPrompt.trim()
@@ -254,21 +248,21 @@ export default function ConversationPanel({
       setTimeout(() => void sendRef.current(), 50)
     }
   }, [externalRequest])
-  // 2026-08-04：阶段推进反馈——用户点「确认推进」→ 对话区追加本地阶段提示（确定性无杂音；作为历史上下文模型也知道阶段切换）
-  // + 自动触发搭档按新阶段工作（advanceChat——流程真正走完）
-  const handledStageRef = useRef(0)
-  // 2026-08-04 授权架构 v4：任务边界 = 阶段推进（确认推进 = 新任务）——清除任务级信任（授权自动收回）
-  useEffect(() => { clearTrust() }, [stageAdvance?.seq])
+  // 2026-08-04 授权架构 v4：任务边界 = 目标确认（新目标任务开始）——清除任务级信任（授权自动收回）
+  // 2026-08-07 无阶段重构 S4：原 stageAdvance?.seq（阶段推进）→ goalSeq（目标确认次数——每次确认 = 任务边界，覆盖首确认与后续新任务）
   useEffect(() => {
-    if (!stageAdvance || stageAdvance.seq === handledStageRef.current) return
-    handledStageRef.current = stageAdvance.seq
-    setMessages((prev) => [...prev, {
-      role: 'assistant',
-      content: `已进入【${stageAdvance.stage}】阶段\n${stageAdvance.hint}\n（在对话里告诉搭档你的想法，搭档会继续推进）`,
-      status: 'done'
-    }])
-    void advanceChatRef.current(stageAdvance.stage, stageAdvance.hint, stageAdvance.requirement)
-  }, [stageAdvance])
+    if ((goalSeq ?? 0) > 0) clearTrust()
+  }, [goalSeq])
+  // 2026-08-07 无阶段重构 S4：执行确认后自动触发模型开始执行（旧 advanceChat 等价物——确认执行 = 该动手了）
+  // silent send（不显示用户消息）：「已确认执行——开始动手」→ forceTool=goal-exec-until-produced 强制产出
+  const execConfirmedHandledRef = useRef(false)
+  useEffect(() => {
+    if (executionConfirmed && !execConfirmedHandledRef.current) {
+      execConfirmedHandledRef.current = true
+      inputRef.current = '用户已确认执行——开始动手（按执行方案产出；需要用户决定的地方停下询问）'
+      void sendRef.current?.({ silent: true })
+    }
+  }, [executionConfirmed])
   const [mentionOpen, setMentionOpen] = useState(false)
   const [recentFiles, setRecentFiles] = useState<string[]>([])
   // 2026-08-04 审计修复（A2）：浮层方向键高亮索引（-1=未高亮）——listbox 键盘语义落地（原仅 Tab 可达，Arrow 无反应）
@@ -297,11 +291,7 @@ export default function ConversationPanel({
   // 处理单个流式事件（当前轮次——写入最后一条 assistant 消息）
   // 2026-08-04：流式累积（事件层）——React StrictMode 会双调 setMessages updater，副作用（日志/工具执行）放 updater 内会重复执行（实测对话日志每条记录两次）
   const streamingRef = useRef<{ content: string; toolCalls: ToolCallMsg[] }>({ content: '', toolCalls: [] })
-  // 2026-08-07 DDD 落地（坑 89）：当前轮次类型——send=user-turn / advanceChat=advance-turn / maybeContinue=tool-loop；
-  // forceTool 决策改由领域层 TurnExecutionPolicy 推导（区分「用户指令轮」与「阶段推进轮」——设计阶段推进不强制工具）
-  // 2026-08-07 无阶段重构 S1：TurnKind 已移出领域层（阶段体系类型）——本地过渡定义，S3 删阶段耦合时一并移除
-  type TurnKind = 'user-turn' | 'advance-turn' | 'tool-loop'
-  const turnKindRef = useRef<TurnKind>('user-turn')
+  // 2026-08-07 无阶段重构 S4：TurnKind/turnKindRef 删除（advanceChat 随阶段体系移除——无 advance-turn；send/maybeContinue 不再需要轮次类型标记）
   const applyChunk = (chunk: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => {
     console.log('[conv] chunk', chunk.type)
     // 2026-08-05 用户反馈 2：模型有新动作（chunk）→ 清除 isActionPromise 状态栏提示（模型在动——之前只是陈述/即将调工具）
@@ -319,17 +309,16 @@ export default function ConversationPanel({
       // 副作用移出 updater：目标确认回写 + 对话日志（updater 双调会重复记录）
       const content = streamingRef.current.content
       const confirm = content?.match(/【目标确认[:：]\s*([^】]+)/)
-      if (confirm?.[1]) onRequirementConfirmed?.(confirm[1].trim())
+      if (confirm?.[1]) onGoalConfirmed?.(confirm[1].trim())
       window.neonforge.chatLog?.log?.({
         ts: new Date().toISOString(),
         role: 'assistant',
         content,
         toolCalls: streamingRef.current.toolCalls.map((t) => ({ name: t.name, status: t.status }))
       })
-      // 2026-08-06 阶段推进设计层（用户反馈「测试阶段不会自动或提示进入部署」）：模型输出「确认推进」→ 推进按钮高亮（用户注意到该点了）
-      // 2026-08-06 修正（用户「需求确认后点推进按钮但没看到高亮」）：需求阶段模型输出【目标确认】后常不说「点确认推进」（违反规则⑤）→ 高亮不触发；
-      // 目标确认 = 该推进了 → 【目标确认】标记同样触发高亮（不依赖模型措辞）
-      if (/确认推进|【目标确认/.test(content)) { onAdvanceHint?.(true); goalConfirmedRef.current = true }
+      // 2026-08-07 无阶段重构 S4：onAdvanceHint（推进按钮高亮）删除——无阶段无推进按钮；
+      // 【目标确认】标记仍同步 goalConfirmedRef（门控放行——目标确认后直接执行）
+      if (content.includes('【目标确认')) goalConfirmedRef.current = true
       // 2026-08-05 体验反馈（用户「最后一条像卡住」）：模型承诺行动（「我先…再…」）但没调工具 → 提示用户可回复「继续」
       // （非卡死——working 已释放；判定收紧：问句/征求同意/「确认/思考」类对话行为不触发；不限于开发阶段——任何阶段说了要看/读/写就该做）
       // 2026-08-05 自动化实测发现（需求阶段偶发误判）：需求阶段（flowStage=0）模型「我先…再确认/再问」是问答引导（STAGE_HINT 需求阶段禁止工具），
@@ -579,7 +568,6 @@ export default function ConversationPanel({
     chatRef.current = { msgs: toolMsgs, depth: depth + 1 }
     setMessages((p) => [...p, { role: 'assistant', content: '', reasoning: '', status: 'streaming' }])
     await new Promise((r) => setTimeout(r, 50))
-    turnKindRef.current = 'tool-loop' // 2026-08-07 坑 89：工具循环轮——forceTool=auto（StuckDetector 兜底）
     await runChat(toolMsgs, depth + 1, sid)
   }
 
@@ -607,17 +595,14 @@ export default function ConversationPanel({
     const sysHint = { role: 'system', content: `你是 NeonForge 搭档。当前项目根目录：${rootPath ?? '(未指定)'}。规则：① 读文件用 read 工具（路径用项目根下的相对路径，如 package.json）② 不要用 bash find 全局搜索（直接 read 目标文件）③ 工具一次调用一个，执行完看结果再决定 ④ 找不到文件就直接告诉用户 ⑤ 查符号定义/引用/类型用 LSP 工具：find_definition/find_references/get_type_info（传 path + symbol，如 {path: 'src/a.ts', symbol: 'greet'}）⑥ 查文件错误/import 用 get_diagnostics/get_imports ⑦（2026-08-05 定位优先——竞品 grep-first 共识）排查/修复问题时**必须先用 search 或 LSP 定位到具体文件和行号，再 read 目标文件——禁止盲读文件试探**（盲读浪费轮次）；search 传 query 关键词（如 "射线" "命中"）返回命中文件+行号+片段；不要反复 read 不同文件碰运气。${langRule}⑨ 用户可能不懂技术——回答简洁口语化：优先短句，少用术语；必须提术语时用一句大白话解释；不要堆砌要点清单。⑩ 回复正文不要用 Markdown 标记（不要 #、**、反引号、- 列表、代码块框）；少用括号补充说明；段落之间最多空一行，不要连续空行；**也不要使用任何尖括号标签**（如 <one-question>——会原样显示给用户；除 <candidates> 候选块外）。⑪（2026-08-04 防文本模拟）执行工具必须通过真正的函数调用（tool-call）发出——对话历史里的「（工具调用：…）」只是执行记录，绝不能模仿成文本写在回复正文里，文本写的调用不会被执行；要调工具就在这条回复里发出真实函数调用，工具执行完会自动继续。⑫（2026-08-05 说了就做——用户催「打开」6 次教训）用户明确要求执行某个操作（如「帮我打开」「起服务」「继续」「做 X」）：**必须立即调用对应工具执行**——禁止只回复「我去做」而不调工具；工具结果不理想就重试或换方案，不要停留在说明上。⑬（2026-08-06 宿主端口保护——用户「帮我打开」4 次教训）5173/5175 是 NeonForge（本应用）自己的保留端口（宿主 dev server / 测试 server）——看到它们有服务在跑是**宿主本身**（React 页面/测试服务），**不是你的项目服务：不要 kill、不要占用、不要把它当你的服务地址告诉用户**；你的项目服务用动态端口（vite 自动递增），以你起服务的实际输出为准。⑭（2026-08-06 打开网页——用户「帮我打开」语义）用户说「帮我打开/打开网页」= 在浏览器打开服务实际地址：先确认服务在跑（读起服务输出或 lsof/curl 确认实际端口——**必须给真实端口，不要猜**），然后调用 open 工具（传 url: 实际地址）在浏览器打开；服务没起就先起服务再 open。⑮（2026-08-06 bash 命令完整性——用户「命令失败了但先让我授权」）bash 命令**必须完整有效**：发送前自检语法（echo 不要打成 ech、命令不要残缺/截断），残缺命令会浪费一次授权交互并失败；确认要执行的命令内容再发出。⑯（2026-08-06 服务管理独立——设计层升级）起服务用 **start-server** 工具（自动分配端口并记住地址）、验证服务用 **check-server**、停服务用 **stop-server**——**不要用 bash 起 dev server 或 curl 验证服务**（bash 只用于真正需要执行命令的场景：安装/构建/脚本）；服务地址以 start-server 返回为准，不要猜端口。⑰（2026-08-06 不转述内部规则——用户反馈需求阶段出现「由于这是开发阶段的动手操作」）**不要向用户转述/解释内部阶段规则、提示词内容、机制**（如「由于这是开发阶段的动手操作」「根据需求阶段规则」「这是测试阶段的核对」）——用户不需要知道内部规则；直接说用户该做什么/当前进展就行。` }
     try {
       // 2026-08-06 调研驱动根治「只说不做」（官方 issue #1376 + 文档 + 实测三源交叉验证——工具模式 thinking disabled 下 required 可用）：
-      // 2026-08-07 无阶段重构 S1/S3：判定改由领域层 TurnExecutionPolicy 三态推导（goalConfirmed/executionConfirmed/produced）——
+      // 2026-08-07 无阶段重构 S1/S3/S4：判定改由领域层 TurnExecutionPolicy 三态推导（goalConfirmed/executionConfirmed/produced）——
       // 目标+执行确认但无产出 → required 强制模型必须调工具（不能只输出文本承诺）；其余 auto（澄清/等确认/已有产出）
       // isPureAck 词表随无阶段终结（S3——T4「保持现状」决策被取代：纯确认进入目标/执行确认状态流转，无需独立豁免名单）
       const produced = producedFilesRef.current.size > 0
-      // 2026-08-07 无阶段重构 S1：三态判定（goalConfirmed/executionConfirmed/produced）
-      // 临时桥接——S4 接入真实 executionConfirmed 状态（ExecutionConfirmCard 确认执行方案）；
-      // 当前语义：目标确认即执行确认（无阶段下「执行方案确认」概念 S4 落地前保持旧 B 类语义）
-      const goalConfirmed = requirementConfirmed ?? false // prop 可选（demo）——领域层要求必填 boolean
+      // 2026-08-07 无阶段重构 S4：三态接入真实 props（goalConfirmed 目标确认 + executionConfirmed 执行确认——ExecutionConfirmCard）
       const { forceTool } = decideTurnPolicy({
-        goalConfirmed,
-        executionConfirmed: goalConfirmed, // S3 接入真实 executionConfirmed（能力检查后用户确认执行方案）
+        goalConfirmed: goalConfirmed ?? false, // prop 可选（demo）——领域层要求必填 boolean
+        executionConfirmed: executionConfirmed ?? false,
         produced,
       })
       const res = await window.neonforge.gateway.streamChat({
@@ -670,9 +655,7 @@ export default function ConversationPanel({
   useEffect(() => { workingRef.current = working }, [working])
   // 2026-08-04 体验修复：流式 done 通知——runChat 尾部等 done（working 及时释放，用户快速「确认推进」不被拦）
   const doneNotifierRef = useRef<(() => void) | null>(null)
-  // 2026-08-04 体验修复：阶段推进排队——working 时 advanceChat 不直接跳过（告知丢失：UI 进设计但模型不知道）
-  // 存 pending，流式/工具链结束（send/advanceChat finally）后自动补发
-  const pendingAdvanceRef = useRef<{ stage: string; hint: string; requirement?: string } | null>(null)
+  // 2026-08-07 无阶段重构 S4：pendingAdvanceRef（阶段推进排队）删除——advanceChat 随阶段体系移除
   // 2026-08-04 重构：工具链死循环检测——同工具（name+args）连续 3 次停止（跨 maybeContinue 调用累积——原局部变量每轮重置失效）
   const chainRepeatRef = useRef<{ sid: number; sig: string; count: number }>({ sid: -1, sig: '', count: 0 })
   // 2026-08-04 授权架构 v4：任务级信任集合——「允许并记住」的文件（沙箱内 write/edit 自动）；阶段推进（确认推进=新任务）自动清除
@@ -713,11 +696,10 @@ export default function ConversationPanel({
   }
 
   // 2026-08-05 用户反馈 4：打断能力（对齐 Claude Code Esc / Cursor Stop）——停止当前流 + 杀当前 bash + 释放状态
-  // 停止后旧流 chunk / maybeContinue 续聊 / pendingAdvance 全部失效（sessionRef++ 隔离）；用户可继续输入新指令
+  // 停止后旧流 chunk / maybeContinue 续聊全部失效（sessionRef++ 隔离）；用户可继续输入新指令
   const stopGeneration = async () => {
-    sessionRef.current++ // 旧会话失效——旧流 chunk（streamingSidRef 检查）、maybeContinue 续聊（sessionRef 检查）、pendingAdvance 全失效
+    sessionRef.current++ // 旧会话失效——旧流 chunk（streamingSidRef 检查）、maybeContinue 续聊（sessionRef 检查）全失效
     streamingSidRef.current = sessionRef.current
-    pendingAdvanceRef.current = null
     onActionPromiseHint?.(null)
     try { await window.neonforge.tools.cancel?.() } catch { /* 无活动命令 */ }
     setWorking(false)
@@ -774,10 +756,7 @@ export default function ConversationPanel({
         }
       } catch { /* 注入失败不影响发送 */ }
     }
-    // ticket 07：0-1 交付阶段指引（引导模型按阶段产出——优先级最高，最前）
-    if (stageHint) {
-      msgs.unshift({ role: 'system', content: stageHint })
-    }
+    // 2026-08-07 无阶段重构 S4：stageHint（阶段指引注入）删除——无阶段体系
     // ticket 11 Compaction：对话历史超阈值（>100 条或 >200K 字符）→ 压缩为摘要 + 保留最近 20 条（上下文不丢）
     let chatHistory = history
     if (history.length > 100) {
@@ -805,9 +784,8 @@ export default function ConversationPanel({
       } catch { /* 压缩失败 → 全量发送（降级不阻塞） */ }
     }
     try {
-      // 2026-08-04 修复（流式链互斥）：send 链占锁——其他链（授权续聊/阶段补发）排队，防 chunk 交错
+      // 2026-08-04 修复（流式链互斥）：send 链占锁——其他链（授权续聊）排队，防 chunk 交错
       const release = await acquireChain()
-      turnKindRef.current = 'user-turn' // 2026-08-07 坑 89：用户消息轮 = user-turn（forceTool 原意作用对象）
       try {
         await runChat([...chatHistory, ...msgs], 0, sid)
       } finally {
@@ -818,65 +796,13 @@ export default function ConversationPanel({
     } finally {
       setWorking(false)
       onWorkingChange?.(false)
-      // 2026-08-04 体验修复：用户消息流式结束后补发排队中的阶段推进（「确认推进」→ working 时 advanceChat 排队 → 这里补发）
-      const pending = pendingAdvanceRef.current
-      if (pending) {
-        pendingAdvanceRef.current = null
-        void advanceChatRef.current(pending.stage, pending.hint, pending.requirement)
-      }
     }
   }
   // 05 B：sendRef 同步最新 send（externalRequest 触发用）
   useEffect(() => { sendRef.current = send }, [send])
 
-  // 2026-08-04：阶段推进自动触发——点「确认推进」→ 搭档主动按新阶段工作（用户反馈「推进后无反馈/流程走不完」）
-  // 内部指令作为 user 消息发给模型但不显示在对话区（本地提示消息已展示阶段切换）；模型流式回复 = 推进后的实际反馈
-  // 2026-08-04 方案 A：requirement 可选——需求卡确认摘要附带在内部指令里（模型按确认结果工作；不显示在对话区）
-  const advanceChat = async (stage: string, hint: string, requirement?: string) => {
-    // 2026-08-04 体验修复（根因 B）：working 时排队（用户「确认推进」刚发消息→流式中）——流式结束后自动补发；
-    // 原直接 return = 模型收不到「已进入设计」指令 → 按旧阶段回复混乱（导出实证 13:36:50 乱码）
-    if (workingRef.current) {
-      pendingAdvanceRef.current = { stage, hint, requirement }
-      return
-    }
-    streamingRef.current = { content: '', toolCalls: [] } // 新轮次重置流式累积
-    setWorking(true)
-    onWorkingChange?.(true)
-    setWorkingStage(`进入${stage}阶段…`)
-    const sid = ++sessionRef.current // 新会话——旧会话事件/续聊失效
-    const history = buildHistory(messagesRef.current)
-    const msgs: Array<{ role: 'user' | 'system'; content: string }> = [{
-      role: 'user',
-      // 2026-08-07 坑 89：阶段推进指令生成抽象到领域层（AgentChain BC——buildAdvanceInstruction）
-      content: buildAdvanceInstruction({ stage: stage as ProductStageName, hint, requirement }) // stage 来自 FLOW_STAGES 恒为合法阶段名——断言收窄
-    }]
-    if (stageHint) msgs.unshift({ role: 'system', content: stageHint })
-    // 追加 streaming 占位——模型回复直接流式显示（内部指令不显示为用户消息）
-    setMessages((p) => [...p, { role: 'assistant', content: '', reasoning: '', status: 'streaming' }])
-    try {
-      // 2026-08-04 修复（流式链互斥）：advanceChat 链占锁——防与授权续聊并发（chunk 交错）
-      const release = await acquireChain()
-      try {
-        turnKindRef.current = 'advance-turn' // 2026-08-07 坑 89：阶段推进轮——forceTool 按阶段工作模式（设计=不强制）
-        await runChat([...history, ...msgs], 0, sid)
-      } finally {
-        release()
-      }
-    } catch {
-      finishError('network')
-    } finally {
-      setWorking(false)
-      onWorkingChange?.(false)
-      // 2026-08-04 体验修复：本流式结束后补发排队中的阶段推进（链式推进不丢失）
-      const pending = pendingAdvanceRef.current
-      if (pending) {
-        pendingAdvanceRef.current = null
-        void advanceChatRef.current(pending.stage, pending.hint, pending.requirement)
-      }
-    }
-  }
-  const advanceChatRef = useRef<typeof advanceChat>(async () => {})
-  useEffect(() => { advanceChatRef.current = advanceChat }, [advanceChat])
+  // 2026-08-07 无阶段重构 S4：advanceChat（阶段推进自动触发）删除——无阶段无阶段切换；
+  // 目标确认/执行确认后由用户消息驱动（send 正常流程），不再有内部阶段指令
 
   // L3 授权：允许执行（approved=true）/ 拒绝（标记拒绝）
   // 2026-08-04 重构（用户：「搭档处理中」卡住根因）：按消息定位工具卡更新——原固定更新最后一条消息，
@@ -1022,7 +948,7 @@ export default function ConversationPanel({
   }
 
   const d = (window.neonforge as unknown as { demo?: Record<string, unknown> }).demo ?? {}
-  const demoFlow = !!d.deliveryFlow
+  // 2026-08-07 无阶段重构 S4：demoFlow（DeliveryFlowPanel demo 通道）删除——阶段卡随阶段体系移除
   const demoDigital = !!d.digitalDelivery
   const demoTrust = !!d.trustLadder
   const demoDod = !!d.dodAlign
@@ -1035,8 +961,6 @@ export default function ConversationPanel({
 
   return (
     <div className="nf-chat">
-      {/* 2026-08-04 P0：demo 通道跳过门控（展示完整流程——产品主流程在 MainWorkspace flow dock 带门控）；artifactsReady 同步跳过开发门控 */}
-      {demoFlow && <DeliveryFlowPanel requirementConfirmed artifactsReady />}
       {demoDigital && <DigitalDeliveryPanel onDeliver={onDeliver} />}
       {demoTrust && <TrustLadderPanel authorizedLogs={activeAuthorizedLogs} delegateLowRisk={delegateLowRisk} onDelegateChange={handleDelegateChange} />}
       {demoDod && <DoDAlignPanel />}

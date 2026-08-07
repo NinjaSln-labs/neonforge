@@ -1,5 +1,6 @@
-// 需求确认卡（2026-08-04 P2 重构——意图消歧 UI 化）：4 项候选 chips，点选 → 确认 → 自动进设计
-// 借鉴 workshop-facilitation 的「编号选项 + Other」交互模式：确定性收敛，不依赖模型输出【需求确认】标记
+// 目标确认卡（2026-08-04 P2 重构——意图消歧 UI 化；2026-08-07 无阶段重构 S4：RequirementCard → GoalCard——需求确认→目标确认）：
+// 4 项候选 chips，点选 → 确认目标（确定性收敛，不依赖模型输出【目标确认】标记）
+// 借鉴 workshop-facilitation 的「编号选项 + Other」交互模式
 import { useEffect, useState } from 'react'
 import { IconCheck } from './icons'
 
@@ -42,7 +43,7 @@ const FIELDS: Field[] = [
   }
 ]
 
-export default function RequirementCard({ onConfirm, initialPrompt }: { onConfirm: (summary: string) => void; initialPrompt?: string }) {
+export default function GoalCard({ onConfirm, initialPrompt }: { onConfirm: (summary: string) => void; initialPrompt?: string }) {
   const [sel, setSel] = useState<Record<string, string>>({})
   const allPicked = FIELDS.every((f) => sel[f.key])
   const pick = (key: string, v: string) => setSel((s) => ({ ...s, [key]: v }))
@@ -62,7 +63,7 @@ export default function RequirementCard({ onConfirm, initialPrompt }: { onConfir
     <div className="nf-reqcard">
       <div className="nf-reqcard__head">
         <IconCheck size={16} />
-        <span className="nf-reqcard__title">快速确认需求</span>
+        <span className="nf-reqcard__title">快速确认目标</span>
         <span className="nf-reqcard__sub">点选下面 4 项，10 秒搞定——不用一句句跟搭档聊</span>
       </div>
       {FIELDS.map((f) => (
@@ -93,7 +94,7 @@ export default function RequirementCard({ onConfirm, initialPrompt }: { onConfir
             onConfirm(summary)
           }}
         >
-          {allPicked ? '确认需求，开始设计 →' : '选完 4 项即可开始'}
+          {allPicked ? '确认目标' : '选完 4 项即可确认'}
         </button>
       </div>
     </div>

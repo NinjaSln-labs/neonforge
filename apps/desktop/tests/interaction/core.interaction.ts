@@ -215,7 +215,7 @@ test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 1
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
   await page.waitForTimeout(300)
   await page.evaluate(() => {
-    window.__emit({ type: 'content', text: '好的。【需求确认：批量整理文件】【任务类型：B 文件操作】' })
+    window.__emit({ type: 'content', text: '好的。【目标确认：批量整理文件】【任务类型：B 文件操作】' })
     window.__emit({ type: 'tool-call', toolCall: { name: 'write', args: { path: '/test/a.txt', content: 'x' } } })
     window.__emit({ type: 'tool-call', toolCall: { name: 'edit', args: { path: '/test/b.txt', old: 'a', new: 'b' } } })
     window.__emit({ type: 'done' })
@@ -234,7 +234,8 @@ test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 1
 })
 
 // 2026-08-04 回归：0-1 从零开始「确认推进」按钮常驻可见（原 flow 面板在滚动容器内——对话一多按钮滚出视口，用户找不到）
-test('0-1 从零开始：确认推进按钮常驻可见（修复——不在滚动容器内，对话滚动不隐藏）', async ({ page }) => {
+// 2026-08-07 无阶段重构 S4：推进按钮 → 目标确认卡（GoalCard——.nf-reqcard）——dock 常驻可见断言保持
+test('0-1 从零开始：目标确认卡常驻可见（不在滚动容器内，对话滚动不隐藏）', async ({ page }) => {
   await page.addInitScript(() => {
     window.neonforge = {
       version: 'test',
@@ -256,27 +257,24 @@ test('0-1 从零开始：确认推进按钮常驻可见（修复——不在滚�
   })
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
-  await page.getByRole('button', { name: '从零开始' }).click()
-  // 选模型 → 出现「确认推进」按钮（文案与模型阶段指引提示一致）
-  await page.getByRole('button', { name: /快速迭代/ }).click()
-  const advance = page.locator('.nf-flow__advance button')
-  await expect(advance).toBeVisible()
-  // 2026-08-04 P0→2026-08-05 第六轮演进：需求阶段按钮不再禁用（原「需求未确认禁用」导致死锁：模型提示点按钮却点不了）——
-  // 现在按钮可点 = 确认当前需求并进入设计（handleStageChange 兜底确认）；可见性 + 门控文案
-  await expect(advance).toContainText(/确认.*推进/)
-  await expect(advance).toBeEnabled()
-  // 修复验证：推进按钮不在 .nf-panel__body（滚动容器）内——对话滚动不隐藏
-  const inScrollBody = await advance.evaluate((el) => !!el.closest('.nf-panel__body'))
+  // 启动页输入需求（initialPrompt 非空 → 目标确认卡显示）
+  await page.locator('.nf-start__input').fill('做一个设计类小游戏')
+  await page.locator('.nf-start__input').press('Enter')
+  const goalCard = page.locator('.nf-reqcard')
+  await expect(goalCard).toBeVisible()
+  // 修复验证：目标确认卡不在 .nf-panel__body（滚动容器）内——对话滚动不隐藏
+  const inScrollBody = await goalCard.evaluate((el) => !!el.closest('.nf-panel__body'))
   expect(inScrollBody).toBe(false)
-  // 发送需求 → 对话开始后按钮仍常驻可见
+  // 发送需求 → 对话开始后卡片仍常驻可见
   await page.locator('.nf-chat__input textarea').fill('做一个设计类小游戏')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
   await page.waitForTimeout(300)
-  await expect(advance).toBeVisible()
+  await expect(goalCard).toBeVisible()
 })
 
-// 2026-08-04 回归：点「确认推进」→ 对话区出现「已进入【X】阶段」反馈消息（用户反馈「推进按钮没有实际功能」——原仅 UI 阶段机前进，对话无响应）
-test('0-1 从零开始：确认推进 → 对话区出现阶段推进反馈消息', async ({ page }) => {
+// 2026-08-04 回归：点「确认推进」→ 对话区出现「已进入【X】阶段」反馈消息
+// 2026-08-07 无阶段重构 S4：无阶段交互——目标确认卡确认 → 目标确认 → 执行确认卡出现（无「已进入设计阶段」提示/advanceChat）
+test('0-1 从零开始：目标确认卡确认 → 目标确认 + 执行确认卡出现', async ({ page }) => {
   await page.addInitScript(() => {
     window.__sentMsgs = []
     let streamCb: ((c: { type: string }) => void) | null = null
@@ -293,8 +291,7 @@ test('0-1 从零开始：确认推进 → 对话区出现阶段推进反馈消�
       },
       gateway: {
         validate: async () => ({ ok: true }),
-        // 2026-08-04 方案 A 回归：捕获发给模型的 messages——验证需求卡确认摘要注入对话上下文；补 done 回调（否则 working 卡 true，后续 advanceChat 被守卫跳过）
-        streamChat: async (opts: { messages: Array<{ role: string; content: string }> }) => { (window as unknown as { __streamCount: number }).__streamCount = ((window as unknown as { __streamCount?: number }).__streamCount ?? 0) + 1; (window as unknown as { __sentMsgs: Array<{ role: string; content: string }> }).__sentMsgs = opts.messages; setTimeout(() => streamCb?.({ type: 'done' }), 10); return { ok: true } },
+        streamChat: async (opts: { messages: Array<{ role: string; content: string }> }) => { (window as unknown as { __sentMsgs: Array<{ role: string; content: string }> }).__sentMsgs = opts.messages; setTimeout(() => streamCb?.({ type: 'done' }), 10); return { ok: true } },
         onStreamChunk: (cb: (c: { type: string }) => void) => { streamCb = cb; return () => {} }
       },
       tools: { execute: async () => ({ ok: true }), list: async () => [] },
@@ -306,41 +303,24 @@ test('0-1 从零开始：确认推进 → 对话区出现阶段推进反馈消�
   })
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
-  // 2026-08-04 体验修复：空输入不显示需求卡（用户「没输入你怎么知道我要做什么」）——启动页输入需求（方案 A）→ initialPrompt 非空 → 需求卡出现（注意：避开「射击」等预选关键词，4 项需全点选）
+  // 启动页输入需求（initialPrompt 非空 → 目标确认卡出现；避开「射击」等预选关键词，4 项需全点选）
   await page.locator('.nf-start__input').fill('帮我做个网页游戏')
   await page.locator('.nf-start__input').press('Enter')
-  await page.getByRole('button', { name: /快速迭代/ }).click()
-  // 2026-08-07 质量把关修复：原断言「需求未确认→按钮禁用」过时——坑 51（1653f8f）改后需求阶段按钮不禁用（用户显式点击=确认需求）；
-  // disabled 仅 busy/开发产物门控（坑 43）；此处等待 busy 结束后的状态（enabled）
-  const advance = page.locator('.nf-flow__advance button')
-  await page.waitForTimeout(1200) // 2026-08-04：等自动发送的 working 结束（runChat 尾部等 1s）——否则需求卡确认后的 advanceChat 被 working 守卫跳过（streamChat 不调用）
-  await expect(advance).toBeEnabled()
-  // P2 需求卡：输入后出现（initialPrompt 非空）→ 点选 4 项 → 确认 → 自动推进到设计（对话区出现「已进入【设计】阶段」）
+  await page.waitForTimeout(300)
+  // 目标确认卡：输入后出现（initialPrompt 非空）→ 点选 4 项 → 确认目标
   await expect(page.locator('.nf-reqcard')).toBeVisible()
   await page.locator('.nf-reqcard__chip', { hasText: '射击游戏' }).click()
   await page.locator('.nf-reqcard__chip', { hasText: '网页打开就能玩' }).click()
   await page.locator('.nf-reqcard__chip', { hasText: '发给朋友玩' }).click()
   await page.locator('.nf-reqcard__chip', { hasText: '先做个能玩的版本' }).click()
   await page.locator('.nf-reqcard__actions button').click()
-  // 需求确认后：卡片消失 + 推进按钮解锁 + 对话区「已进入【设计】阶段」（handleStageChange(1) → stageAdvance → advanceChat）
+  // 目标确认后：目标卡消失 + 执行确认卡出现（无阶段：目标确认 → 能力检查/执行方案 → 确认执行）
   await expect(page.locator('.nf-reqcard')).toHaveCount(0)
-  await expect(advance).toBeEnabled()
-  const feedback = page.locator('.nf-chat__list .nf-msg--assistant').filter({ hasText: '已进入【设计】阶段' })
-  await expect(feedback).toHaveCount(1)
-  // 2026-08-06 用户反馈「已进入阶段下面一堆定义的话」：对话区提示用 USER_STAGE_HINT（用户版一句话），不再是 STAGE_HINT 完整规则长文
-  await expect(feedback).toContainText('定方案')
-  // 阶段机同步前进（设计 = active）
-  await expect(page.locator('.nf-flow__stage--active')).toContainText('设计')
-  // 2026-08-04 方案 A 回归：需求卡确认摘要注入模型上下文——advanceChat 内部指令含【需求确认】（模型按确认结果做设计，不再基于模糊原始消息）
-  await page.waitForTimeout(200)
-  const sent = await page.evaluate(() => (window as unknown as { __sentMsgs: Array<{ role: string; content: string }> }).__sentMsgs)
-  const streamCount = await page.evaluate(() => (window as unknown as { __streamCount?: number }).__streamCount ?? 0)
-  expect(streamCount, 'streamChat 应调用 2 次（自动发送 + 需求卡确认后的 advanceChat）；实际 ' + streamCount).toBe(2)
-  const userMsgs = sent.filter((m) => m.role === 'user')
-  expect(
-    userMsgs.some((m) => m.content.includes('【需求确认】用户已通过需求确认卡确认需求：射击游戏：网页打开就能玩，发给朋友玩，先做个能玩的版本')),
-    '实际 user 消息：' + JSON.stringify(userMsgs.map((m) => m.content.slice(0, 150)), null, 2)
-  ).toBe(true)
+  await expect(page.locator('.nf-exec-card')).toBeVisible()
+  // 无阶段：对话区不再出现「已进入【X】阶段」提示（阶段推进反馈删除）
+  await expect(page.locator('.nf-chat__list .nf-msg--assistant').filter({ hasText: '已进入【设计】阶段' })).toHaveCount(0)
+  // 无阶段：无阶段机 active 概念（.nf-flow__stage--active 删除）
+  await expect(page.locator('.nf-flow__stage--active')).toHaveCount(0)
 })
 
 // 2026-08-04 回归：需求确认回写——模型输出【需求确认：xxx】→ 台账标题/快照 + 项目 README 更新（目录名不变；错别字/同音需求被校正）
@@ -381,7 +361,7 @@ test('0-1 从零开始：模型需求确认 → 回写台账标题 + updateProje
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
-  await page.getByRole('button', { name: /快速迭代/ }).click()
+  // 2026-08-07 无阶段重构 S4：模型选择按钮（快速迭代）随 DeliveryFlowPanel 删除——直接对话输入需求
   // 输入模糊需求（「3d设计」——可能是输入法/错别字，实际想要 3D 射击）
   await page.locator('.nf-chat__input textarea').fill('我想做一个3d设计小游戏')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
@@ -438,10 +418,11 @@ test('需求卡：首句含「射击」→ 「做什么」自动预选射击游�
 })
 
 // 2026-08-04 体验修复（用户实测：开发阶段模型只问不产出、阶段空转）：开发产物门控——无真实文件产出不能推进到测试，产出后解锁
-test('开发产物门控：无文件产出推进禁用 → write 成功后解锁', async ({ page }) => {
+// 2026-08-07 无阶段重构 S4：门控由阶段机改为 forceTool 三态（目标+执行确认无产出 → API 强制模型调工具产出）
+test('执行确认门控：目标+执行确认后无产出 → 强制工具产出（write 后收敛）', async ({ page }) => {
   await page.addInitScript(() => {
     let streamCb: ((c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) | null = null
-    let chatCount = 0 // 第 1 次 = 需求卡确认后的设计 advanceChat（不产出）；第 2 次 = 开发 advanceChat（触发 write 产出）
+    let chatCount = 0 // 第 1 次 = 启动页自动发送（不产出）；第 2 次 = 执行确认后的强制轮（write 产出）
     const bridge = {
       version: 'test',
       config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
@@ -451,11 +432,10 @@ test('开发产物门控：无文件产出推进禁用 → write 成功后解锁
         streamChat: async () => {
           chatCount++
           setTimeout(() => {
-            // 2026-08-04 重构适配：开发阶段只发 1 次 write（原 `>= 2` 无限发 write——靠旧 depth 上限意外截断；自然停止后 mock 需自己收尾）
             if (chatCount === 2) {
               streamCb?.({ type: 'tool-call', toolCall: { name: 'write', args: { path: '/test/game.js', content: 'x' } } })
             } else {
-              streamCb?.({ type: 'content', text: '开发阶段：第一个文件已写好' })
+              streamCb?.({ type: 'content', text: '目标是射击游戏，先确认目标。' })
             }
             streamCb?.({ type: 'done' })
           }, 60)
@@ -473,27 +453,25 @@ test('开发产物门控：无文件产出推进禁用 → write 成功后解锁
   })
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
-  // 2026-08-04 体验修复：空输入不显示需求卡——启动页输入需求（方案 A）→ initialPrompt 非空 → 需求卡出现
+  // 启动页输入需求（initialPrompt 非空 → 目标确认卡出现）
   await page.locator('.nf-start__input').fill('做个射击游戏')
   await page.locator('.nf-start__input').press('Enter')
-  await page.getByRole('button', { name: /快速迭代/ }).click()
-  // 需求卡确认（输入后出现 → 走需求卡 → 自动进设计）
+  await page.waitForTimeout(300)
+  // 目标确认卡确认（「做个射击游戏」命中预选 type=射击游戏；其余 3 项手动选）→ 目标确认 → 执行确认卡出现
   await expect(page.locator('.nf-reqcard')).toBeVisible()
-  await page.locator('.nf-reqcard__chip', { hasText: '射击游戏' }).click()
   await page.locator('.nf-reqcard__chip', { hasText: '网页打开就能玩' }).click()
   await page.locator('.nf-reqcard__chip', { hasText: '发给朋友玩' }).click()
   await page.locator('.nf-reqcard__chip', { hasText: '先做个能玩的版本' }).click()
   await page.locator('.nf-reqcard__actions button').click()
-  // 设计阶段推进 → 开发阶段（设计→开发无门控）
-  const advance = page.locator('.nf-flow__advance button')
-  await expect(advance).toBeEnabled()
-  await advance.click()
-  await expect(page.locator('.nf-flow__stage--active')).toContainText('开发')
-  // 开发阶段：此时 write 工具已执行成功（streamChat 触发）→ realChanges 有产物 → 推进解锁
-  await expect(page.locator('.nf-toolcall--done')).toHaveCount(1)
-  await expect(advance).toBeEnabled()
-  await advance.click()
-  await expect(page.locator('.nf-flow__stage--active')).toContainText('测试')
+  // 目标确认后：执行确认卡出现（无阶段——等待用户确认执行）
+  const execCard = page.locator('.nf-exec-card')
+  await expect(execCard).toBeVisible()
+  // 执行确认前：无强制产出（forceTool=awaiting-exec-confirm auto——模型不被逼工具）
+  // 点「确认，开始执行」→ 自动触发模型开始执行（forceTool=goal-exec-until-produced）→ write 产出
+  await page.getByRole('button', { name: /确认，开始执行/ }).click()
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(1, { timeout: 15000 })
+  // 执行确认卡消失（已确认执行）
+  await expect(execCard).toHaveCount(0)
 })
 
 // 2026-08-04 体验修复（用户实测「确认了需求但上面还停在需求确认」）：需求阶段用户打字「确认推进」→ 自动确认需求 + 推进到设计——
@@ -529,18 +507,17 @@ test('0-1 对话确认需求：用户发「确认推进」→ 自动确认 + 推
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
-  await page.getByRole('button', { name: /快速迭代/ }).click()
-  // 需求阶段：对话输入需求（不走需求卡——initialPrompt 空则不显示）
+  // 2026-08-07 无阶段重构 S4：模型选择按钮删除——直接对话输入需求
+  // 目标确认前：对话输入需求（不走目标卡——initialPrompt 空则不显示）
   await page.locator('.nf-chat__input textarea').fill('我想做一个网页3D射击游戏')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
   await expect(page.locator('.nf-chat__list .nf-msg--assistant')).toHaveCount(1)
-  await page.waitForTimeout(1000) // 等 working 释放（mock 需求链 ≈530ms——不足则「确认推进」被 working 守卫拦截）
-  // 用户打字「确认推进」→ 自动确认需求 + 推进到设计（不依赖模型【需求确认：】标记）
+  await page.waitForTimeout(1000) // 等 working 释放（mock 需求链 ≈530ms——不足则「确认」被 working 守卫拦截）
+  // 用户打字「确认推进」→ 自动确认目标（不依赖模型【目标确认：】标记——「确认推进」含确认词）
   await page.locator('.nf-chat__input textarea').fill('确认推进')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
-  // 需求已确认：阶段机到设计 + 推进按钮解锁（不再卡在「需求确认」）
-  await expect(page.locator('.nf-flow__stage--active')).toContainText('设计')
-  await expect(page.locator('.nf-flow__advance button')).toBeEnabled()
+  // 目标已确认：执行确认卡出现（无阶段——目标确认 → 能力检查/执行方案 → 确认执行）
+  await expect(page.locator('.nf-exec-card')).toBeVisible()
 })
 
 // 2026-08-04 体验修复（根因 A）：工具链 depth 2 → 8——连续 3 轮工具（read→read→read）不被掐断，最终回复正常
@@ -583,20 +560,17 @@ test('0-1 工具链自主推进：连续 3 轮 read → 自动续聊 → 最终�
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
-  await page.getByRole('button', { name: /快速迭代/ }).click()
-  // 启动页无输入 → 需求卡不显示——直接对话发需求 + 确认推进
+  // 2026-08-07 无阶段重构 S4：模型选择按钮删除——启动页无输入 → 目标卡不显示——直接对话发需求
   await page.locator('.nf-chat__input textarea').fill('帮我做个网页游戏')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
-  await page.waitForTimeout(600)
-  await page.locator('.nf-chat__input textarea').fill('确认推进')
-  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
-  // 设计阶段 advanceChat → 3 轮 read 工具链自动续聊 → 最终回复
+  // 用户消息首轮 → 3 轮 read 工具链自动续聊 → 最终回复（不被 depth 限制掐断）
   await expect(page.locator('.nf-toolcall--done')).toHaveCount(3, { timeout: 15000 })
   await expect(page.locator('.nf-chat__list .nf-msg--assistant').filter({ hasText: '设计完成，方案定了。' })).toHaveCount(1, { timeout: 15000 })
 })
 
-// 2026-08-04 授权架构 v4 用户路径实测：记住后同文件自动 → 阶段推进清除 → 重新弹授权
-test('0-1 授权 v4 完整路径：允许并记住 → 同文件自动 → 确认推进清除信任 → 再写重新弹授权', async ({ page }) => {
+// 2026-08-04 授权架构 v4 用户路径实测：记住后同文件自动 → 信任清除 → 重新弹授权
+// 2026-08-07 无阶段重构 S4：信任清除时机 = 新目标确认（任务边界——原阶段推进清除）
+test('0-1 授权 v4 完整路径：允许并记住 → 同文件自动 → 新目标确认清除信任', async ({ page }) => {
   await page.addInitScript(() => {
     let streamCb: ((c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) | null = null
     let chatCount = 0
@@ -614,14 +588,14 @@ test('0-1 授权 v4 完整路径：允许并记住 → 同文件自动 → 确�
         streamChat: async () => {
           chatCount++
           setTimeout(() => {
-            // chatCount：1=需求消息、2=确认推进 send、3=设计 advanceChat（都回 content）；4-6=开发 advanceChat 的 3 次 write；7=收尾 content
-            if (chatCount <= 3) {
-              streamCb?.({ type: 'content', text: chatCount === 3 ? '设计完成，方案定了。' : '收到，继续。' })
-            } else if (chatCount >= 4 && chatCount <= 6) {
-              const w = writes[chatCount - 4]
+            // chatCount：1=需求消息、2=确认推进 send（都回 content）；3-5=执行确认后的 3 次 write；6=收尾 content
+            if (chatCount <= 2) {
+              streamCb?.({ type: 'content', text: '收到，继续。' })
+            } else if (chatCount >= 3 && chatCount <= 5) {
+              const w = writes[chatCount - 3]
               streamCb?.({ type: 'tool-call', toolCall: { name: 'write', args: { path: w.path, content: w.content } } })
             } else {
-              streamCb?.({ type: 'content', text: '开发完成，文件写好了。' })
+              streamCb?.({ type: 'content', text: '文件写好了。' })
             }
             streamCb?.({ type: 'done' })
           }, 30)
@@ -647,36 +621,30 @@ test('0-1 授权 v4 完整路径：允许并记住 → 同文件自动 → 确�
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
-  await page.getByRole('button', { name: /快速迭代/ }).click()
-  // 对话发需求 + 确认推进 → 自动进设计
+  // 对话发需求 + 确认推进（目标确认）→ 执行确认卡出现
   await page.locator('.nf-chat__input textarea').fill('做个网页游戏')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
   await page.waitForTimeout(600)
   await page.locator('.nf-chat__input textarea').fill('确认推进')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
   await page.waitForTimeout(600)
-  // 设计推进到开发（无门控）——开发 advanceChat 触发 write
-  const advance = page.locator('.nf-flow__advance button')
-  await expect(advance).toBeEnabled({ timeout: 8000 })
-  await advance.click()
-  await expect(page.locator('.nf-flow__stage--active')).toContainText('开发')
-  // 第一个 write（chatCount 2）→ 授权卡出现（含「允许并记住」）
+  // 点执行确认 → 自动触发模型执行 → 第一个 write → 授权卡出现（含「允许并记住」）
+  await page.getByRole('button', { name: /确认，开始执行/ }).click()
   await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(1, { timeout: 8000 })
   await expect(page.getByRole('button', { name: '允许并记住' })).toBeVisible()
   await page.getByRole('button', { name: '允许并记住' }).click()
-  // 记住后：第二个 write（chatCount 3）同文件 → 自动 done（无授权卡）
+  // 记住后：第二个 write（同文件）→ 自动 done（无授权卡）
   await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(0, { timeout: 8000 })
   await expect(page.locator('.nf-toolcall--done')).toHaveCount(2, { timeout: 8000 })
   // 信任条显示已记住文件
   await expect(page.locator('.nf-trustbar')).toContainText('index.html')
-  // 第三个 write（chatCount 4）同文件 → 仍自动 done（信任未清除）
+  // 第三个 write（同文件）→ 仍自动 done（信任未清除）
   await expect(page.locator('.nf-toolcall--done')).toHaveCount(3, { timeout: 8000 })
-  // 确认推进（开发→测试）→ 阶段推进 = 任务边界 → 信任清除
+  // 新问题 = 任务边界：点「新问题」按钮（handleNew——清会话 + 重挂载 ConversationPanel → 信任/授权全部重置）
   await page.waitForTimeout(500)
-  await advance.click()
-  await expect(page.locator('.nf-flow__stage--active')).toContainText('测试')
-  // 信任条消失（已清除）
-  await expect(page.locator('.nf-trustbar')).toHaveCount(0)
+  await page.getByRole('button', { name: '新问题' }).click()
+  // 信任条消失（已清除——新任务需重新授权）
+  await expect(page.locator('.nf-trustbar')).toHaveCount(0, { timeout: 8000 })
 })
 
 // 2026-08-05 方案 3：结构化候选按钮——模型 <candidates> 块 → 可点击按钮；点选发送选项文本（不走序号解析）
@@ -736,7 +704,8 @@ test('结构化候选：<candidates> 渲染为按钮 + 点选发送选项文本'
 // 2026-08-05 第六轮实测复现（用户「到确认推进的步骤了，最上面的页卡点不了确认推进」）：
 // 模型回复「需求确认完毕。点下面的『确认推进』」但没有输出【需求确认：】标记 → 原 requirementConfirmed 未置 true → 按钮禁用（死锁：模型提示点按钮却点不了）。
 // 修复：需求阶段按钮不再依赖标记禁用——用户显式点击 = 确认需求（handleStageChange 兜底 + 回写）
-test('需求阶段无【需求确认】标记：确认推进按钮可点 → 点击确认需求并进入设计（第六轮死锁修复）', async ({ page }) => {
+// 2026-08-07 无阶段重构 S4：死锁修复语义延续——用户打字「确认推进」= 显式确认目标（handleGoalConfirmed 兜底——不依赖模型【目标确认】标记）
+test('目标无【目标确认】标记：用户打字「确认推进」→ 确认目标 + 执行确认卡出现（死锁修复延续）', async ({ page }) => {
   await page.addInitScript(() => {
     let streamCb: ((c: { type: string; text?: string }) => void) | null = null
     let chatCount = 0
@@ -754,9 +723,9 @@ test('需求阶段无【需求确认】标记：确认推进按钮可点 → 点
         streamChat: async () => {
           chatCount++
           setTimeout(() => {
-            // 需求阶段回复：只写「需求确认完毕」——【需求确认：】标记缺失（第六轮死锁根因——模型违反 STAGE_HINT 规则⑤）
+            // 目标确认前回复：只写「需求确认完毕」——【目标确认：】标记缺失（死锁根因——模型违反规则）
             if (chatCount === 1) streamCb?.({ type: 'content', text: '你的需求我确认好了：做一款在网页浏览器里玩的、面向大众的轻松休闲 3D 射击游戏，能开枪打中目标、有得分，界面简单即可。需求确认完毕。点下面的「确认推进」，我就可以开始动手做了。' })
-            else streamCb?.({ type: 'content', text: '设计阶段：整体方案用 Three.js + HTML 原生界面…（完整设计）' })
+            else streamCb?.({ type: 'content', text: '开始执行：先检查能力再动手。' })
             streamCb?.({ type: 'done' })
           }, 30)
           return { ok: true }
@@ -774,21 +743,17 @@ test('需求阶段无【需求确认】标记：确认推进按钮可点 → 点
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
-  await page.getByRole('button', { name: /快速迭代/ }).click()
-  // 需求阶段：对话输入需求（不走需求卡——initialPrompt 空则不显示）
+  // 对话输入需求（不走目标卡——initialPrompt 空则不显示）
   await page.locator('.nf-chat__input textarea').fill('我想做一个网页3D射击游戏')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
   await expect(page.locator('.nf-chat__list .nf-msg--assistant')).toHaveCount(1)
-  // 等回复完成（模型无【需求确认】标记——requirementConfirmed 仍 false）
+  // 等回复完成（模型无【目标确认】标记——goalConfirmed 仍 false）
   await expect(page.locator('.nf-statusbar')).toContainText('就绪', { timeout: 8000 })
-  // 第六轮修复：需求阶段按钮不再禁用（点击 = 确认需求）
-  const advance = page.locator('.nf-flow__advance button')
-  await expect(advance).toBeEnabled()
-  await expect(advance).toContainText(/确认.*推进/)
-  await advance.click()
-  // 进入设计阶段 + 需求确认回写（updateProjectTitle 被调——handleStageChange 兜底确认）
-  await expect(page.locator('.nf-flow__stage--active')).toContainText('设计')
-  await expect(page.locator('.nf-flow__focus-step')).toContainText('设计')
+  // 用户显式「确认推进」= 确认目标（不依赖模型标记——死锁修复：模型提示点按钮但没标记时用户仍可确认）
+  await page.locator('.nf-chat__input textarea').fill('确认推进')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  // 目标确认 → 执行确认卡出现 + 目标回写（updateProjectTitle 被调——handleGoalConfirmed 兜底确认）
+  await expect(page.locator('.nf-exec-card')).toBeVisible()
   await page.waitForTimeout(200)
   const titleCalls = await page.evaluate(() => (window as unknown as { __titleCalls?: number }).__titleCalls ?? 0)
   expect(titleCalls).toBeGreaterThan(0)
@@ -809,7 +774,7 @@ test('需求分流 B 类：改文件内容 → edit 直接执行（不弹 plan �
           chatCount++
           setTimeout(() => {
             if (chatCount === 1) {
-              streamCb?.({ type: 'content', text: '好，你要把待办事项.txt 里的「买牛奶」改成「买面包」。【需求确认：把待办事项里的买牛奶改成买面包】【任务类型：B 文件操作】' })
+              streamCb?.({ type: 'content', text: '好，你要把待办事项.txt 里的「买牛奶」改成「买面包」。【目标确认：把待办事项里的买牛奶改成买面包】【任务类型：B 文件操作】' })
             } else if (chatCount === 2) {
               streamCb?.({ type: 'tool-call', toolCall: { name: 'edit', args: { path: '/test/待办事项.txt', old: '买牛奶', new: '买面包' } } })
             } else {
@@ -830,15 +795,14 @@ test('需求分流 B 类：改文件内容 → edit 直接执行（不弹 plan �
   })
   await page.goto('http://localhost:5175/')
   await page.getByRole('button', { name: '从零开始' }).click()
-  await page.getByRole('button', { name: /快速迭代/ }).click()
+  // 2026-08-07 无阶段重构 S4：模型选择按钮删除
   await page.locator('.nf-chat__input textarea').fill('把待办事项.txt 里的买牛奶改成买面包')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
   await page.waitForTimeout(600)
-  await page.locator('.nf-chat__input textarea').fill('确认推进')
-  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
-  // 需求确认含任务类型标注（用户可见）
-  await expect(page.locator('.nf-chat__list .nf-msg--assistant').filter({ hasText: '任务类型：B' })).toHaveCount(1, { timeout: 15000 })
-  // B 类 edit 直接执行（done——无 need-approval/plan-approval——豁免生效）
+  // 模型输出【目标确认：】标记 → 目标确认 → 执行确认卡出现（无阶段——确认后执行）
+  await expect(page.locator('.nf-exec-card')).toBeVisible({ timeout: 8000 })
+  // 点执行确认 → 自动触发模型执行 → B 类 edit 直接执行（done——无 need-approval/plan-approval——豁免生效）
+  await page.getByRole('button', { name: /确认，开始执行/ }).click()
   await expect(page.locator('.nf-toolcall--done')).toHaveCount(1, { timeout: 15000 })
   await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(0)
   await expect(page.locator('.nf-toolcall--plan-approval')).toHaveCount(0)
