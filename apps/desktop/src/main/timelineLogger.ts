@@ -27,7 +27,7 @@ export function timelineFile(session?: string): string {
 // 事件类型（穷举会话步骤——见 .scratch/neonforge-v1/session-timeline-domain.md §2.2）
 // user-message / assistant-start / assistant-chunk（可选） / assistant-done / tool-call / tool-exec /
 // tool-result / tool-approval / goal-confirmed / exec-confirmed / status-change / stuck-escalate / error / interrupt
-// 2026-08-08 新增 card-shown：确认卡/授权卡弹出（用户「加一个确认/授权等卡弹出的点」）——detail: { card: 'goal-confirm'|'exec-confirm'|'achieve-confirm'|'approval'|'plan-approval', name?, args? }
+// 2026-08-08 新增 card-shown：确认卡/授权卡弹出（用户「加一个确认/授权等卡弹出的点」）——detail: { card: 'goal-confirm'|'exec-confirm'|'achieve-confirm'|'approval'|'file-approval', name?, args? }
 export function logTimeline(evt: {
   session?: string
   type: string

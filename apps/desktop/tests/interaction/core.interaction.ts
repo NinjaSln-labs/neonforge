@@ -457,7 +457,7 @@ test('执行确认门控：目标+执行确认后无产出 → 强制工具产�
 // 2026-08-08 根因 3 修复①③（HANDOFF §3——冒烟 O4/O5 不稳根因：forceTool 判定链断裂——prop 滞后 + 策略拦截置失败 + 门控不认执行方案块）：
 // ① 确认卡按钮同事件触发 send（onClick 内 setState 异步 + sendRef 同步调用）——forceTool 判定必须读到**最新确认状态**
 //   （修复前读 prop 闭包旧值 → forceTool 恒 auto → 模型纯文本承诺后停住）
-// ② 确认执行后【执行方案】块清单内 write 自动放行（approved=true——用户确认执行 = 认可清单，无需再点 plan_approval 卡）
+// ② 确认执行后【执行方案】块清单内 write 自动放行（approved=true——用户确认执行 = 认可清单，无需再点 approve-files 卡）
 test('根因 3：点「确认执行」按钮 → 同事件 send 读到已确认状态 → forceTool 强制 + 清单内 write 自动放行', async ({ page }) => {
   await page.addInitScript(() => {
     let streamCb: ((c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) | null = null

@@ -65,7 +65,7 @@ export interface ToolResult {
   // 2026-08-07 T2（regex-todo）：needApproval 结构化字段——renderer 不再 includes('授权') 文本匹配
   //（main 改文案/英文 → 授权卡变 error 的脆弱耦合）；仅授权拦截返回时出现
   needApproval?: boolean
-  // 2026-08-08 根因 3 修复②：policy 结构化字段——策略引导/拦截（如 write 规划门控「先 plan_approval 再写」）
+  // 2026-08-08 根因 3 修复②：policy 结构化字段——策略引导/拦截（如 write 规划门控「先 approve-files 再写」）
   // ≠ 工具执行失败：renderer 据此不置 lastToolFailed（否则 forceTool 恒释放 → 模型纯文本承诺后停住——冒烟 O4/O5 根因）
   policy?: boolean
 }
@@ -98,11 +98,11 @@ class ToolRegistry {
     logTimeline({ session: opts.sessionId ?? opts.rootPath ?? undefined, type: 'tool-exec', role: 'tool', detail: { name, args, approved: opts.approved } })
     const tool = this.tools.get(name)
     if (!tool) return { ok: false, error: `未知工具：${name}` }
-    // 2026-08-04 规划级授权强制（用户实测：模型说了调 plan_approval 但没调——指令不可靠，机制兜底）：
-    // write/edit 首次执行前必须 plan_approval 已批准——否则返回错误引导模型先规划（一次性授权整批，不再逐个授权）
-    // 2026-08-08 根因 3 修复②：policy=true——策略引导非执行失败（renderer 不置 lastToolFailed，forceTool 保持强制逼模型调 plan_approval）
-    if (name === 'write' && !planApprovedRef && !opts.approved) { // 2026-08-06 edit 豁免（改现有文件=操作明确——B 类直接改）；write 新建强制规划
-      return { ok: false, policy: true, error: '修改前请先调用 plan_approval 工具一次性列出本次要新增/修改的文件清单（用户批准后这些文件自动放行，不需要逐个授权）——不要直接逐个 write/edit' }
+    // 2026-08-04 规划级授权强制（用户实测：模型说了调 approve-files 但没调——指令不可靠，机制兜底）：
+    // write/edit 首次执行前必须 approve-files 已批准——否则返回错误引导模型先规划（一次性授权整批，不再逐个授权）
+    // 2026-08-08 根因 3 修复②：policy=true——策略引导非执行失败（renderer 不置 lastToolFailed，forceTool 保持强制逼模型调 approve-files）
+    if (name === 'write' && !filesApprovedRef && !opts.approved) { // 2026-08-06 edit 豁免（改现有文件=操作明确——B 类直接改）；write 新建强制规划
+      return { ok: false, policy: true, error: '修改前请先调用 approve-files 工具一次性列出本次要新增/修改的文件清单（用户批准后这些文件自动放行，不需要逐个授权）——不要直接逐个 write/edit' }
     }
     // 2026-08-04 授权架构 v4：规则裁决 deny > allow > ask（fail-closed）——对齐 Claude/Codex/Cursor 共识
     const rule = this.rules.find((r) => matchesRule(name, args, r))
@@ -357,11 +357,11 @@ async function openExecutor(args: Record<string, unknown>): Promise<unknown> {
 
 export const toolRegistry = new ToolRegistry()
 
-// 2026-08-04 规划级授权强制：会话级「已规划」标记——plan_approval 被批准后置 true（write/edit 放行）
-let planApprovedRef = false
-export function markPlanApproved(): void { planApprovedRef = true }
-// 2026-08-08 根因 3 修复②：重置规划标记（测试用——模拟用户未批准过 plan_approval；产品运行由 renderer 会话边界 clearTrust 控制）
-export function resetPlanApproved(): void { planApprovedRef = false }
+// 2026-08-04 规划级授权强制：会话级「已规划」标记——approve-files 被批准后置 true（write/edit 放行）
+let filesApprovedRef = false
+export function markPlanApproved(): void { filesApprovedRef = true }
+// 2026-08-08 根因 3 修复②：重置规划标记（测试用——模拟用户未批准过 approve-files；产品运行由 renderer 会话边界 clearTrust 控制）
+export function resetPlanApproved(): void { filesApprovedRef = false }
 
 // 注册 4 核心工具 + search（Layer2 CodeRAG——2026-08-02 接入模型；6 LSP 随 12 ContextEngine 注册）
 export function initTools(): void {
@@ -374,7 +374,7 @@ export function initTools(): void {
   // 2026-08-06 打开网页（用户「帮我打开」）：http/https 打开默认浏览器——无害操作自动放行（risk none）
   toolRegistry.register({ name: 'open', source: 'core', requiresApproval: false, risk: 'none', execute: openExecutor })
   // 2026-08-04 规划级授权：虚拟工具——不执行操作，renderer 收到后弹规划授权卡（用户批准后文件加入任务级信任，write/edit 自动放行）
-  toolRegistry.register({ name: 'plan_approval', source: 'core', requiresApproval: false, risk: 'none', execute: async () => ({ ok: true, data: { virtual: true } }) })
+  toolRegistry.register({ name: 'approve-files', source: 'core', requiresApproval: false, risk: 'none', execute: async () => ({ ok: true, data: { virtual: true } }) })
   // Layer2 CodeRAG：关键词检索兜底（Claude Code grep 模式——2026-08-02 调研：agentic 工具检索为行业共识，见 .scratch/neonforge-v1/layer2-retrieval-research.md）
   toolRegistry.register({
     name: 'search',

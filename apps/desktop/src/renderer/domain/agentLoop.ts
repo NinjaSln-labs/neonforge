@@ -15,9 +15,9 @@ export interface ToolCallView {
 export interface TurnProgress {
   artifactProduced: boolean // write/edit 成功 = 真实产出（0-1 流程最可靠 progress 信号——与 artifactsReady 门控同源）
   readNewFile: boolean      // read 了此前未读过的文件（新信息）——同文件重复 read = activity 非 progress
-  // 2026-08-06 补充（deepcode-hkuds 任务完成度借鉴——用户「文件清单很多地方有」）：plan_approval 规划文件是否全部产出
+  // 2026-08-06 补充（deepcode-hkuds 任务完成度借鉴——用户「文件清单很多地方有」）：approve-files 规划文件是否全部产出
   // 有剩余规划文件 = 任务未完成——模型无工具结束 = 停滞（escalate 强理由）；规划全产出 → 无工具结束 = 阶段完成（不 escalate）
-  hasPlannedFiles: boolean      // 是否有 plan_approval 规划（开发阶段）
+  hasPlannedFiles: boolean      // 是否有 approve-files 规划（开发阶段）
   hasRemainingPlanned: boolean  // 还有未产出规划文件（任务未完成）
   remainingCount: number
   isQuestion: boolean       // 问句/征求同意——模型在等用户，不算停滞
@@ -42,7 +42,7 @@ export function isDoneLike(t: string): boolean {
 }
 
 // === Domain Service: 执行方案清单解析（2026-08-07 无阶段重构 S5——TurnProgress.plannedFiles 来源调整） ===
-// plannedFiles = plan_approval 批准 ∪ 执行方案清单（模型输出【执行方案】块——S6 提示词引导格式）：
+// plannedFiles = approve-files 批准 ∪ 执行方案清单（模型输出【执行方案】块——S6 提示词引导格式）：
 //   【执行方案】
 //   - 文件路径（原因）
 //   - 文件路径2（原因）
@@ -67,9 +67,9 @@ export function evaluateTurnProgress(input: {
   toolCalls: ToolCallView[]
   content: string
   prevReadFiles: Set<string>
-  plannedFiles?: Set<string>      // plan_approval 规划文件清单（开发阶段——approvePlan 保存）
+  plannedFiles?: Set<string>      // approve-files 规划文件清单（开发阶段——approvePlan 保存）
   producedFiles?: Set<string>     // write/edit 成功累积的文件（任务完成度）
-  projectFiles?: Set<string>      // 2026-08-06 补充（用户「清单来源不只 plan_approval」——③ projectFiles 项目文件树实时快照）：规划文件出现在文件树 = 已产出（比 write 记录可靠——回滚/删除则不在树中）
+  projectFiles?: Set<string>      // 2026-08-06 补充（用户「清单来源不只 approve-files」——③ projectFiles 项目文件树实时快照）：规划文件出现在文件树 = 已产出（比 write 记录可靠——回滚/删除则不在树中）
 }): TurnProgress {
   const { toolCalls, content, prevReadFiles } = input
   const t = (content ?? '').trim()
@@ -92,7 +92,7 @@ export function evaluateTurnProgress(input: {
   const isCommunication = isCommunicationLike(t)
   const isDone = isDoneLike(t)
   // 2026-08-07 待授权轮（根因 2）：need-approval/plan-approval 卡 = 模型停住等用户批准（正常状态）——不算停滞
-  const needsApproval = toolCalls.some((c) => c.status === 'need-approval' || c.status === 'plan-approval')
+  const needsApproval = toolCalls.some((c) => c.status === 'need-approval' || c.status === 'file-approval')
   return { artifactProduced, readNewFile, hasPlannedFiles, hasRemainingPlanned, remainingCount, isQuestion, isCommunication, isDone, needsApproval }
 }
 

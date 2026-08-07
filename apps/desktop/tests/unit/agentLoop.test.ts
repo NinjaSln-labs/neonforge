@@ -82,7 +82,7 @@ describe('StuckDetector（卡住检测——连续无进展升级）', () => {
     expect(r2.event).toBeUndefined()
   })
 
-  // 2026-08-06 任务完成度（deepcode unimplemented_files 借鉴——plan_approval 规划文件 vs 产出）
+  // 2026-08-06 任务完成度（deepcode unimplemented_files 借鉴——approve-files 规划文件 vs 产出）
   it('规划文件全部产出 → 无工具结束 = 阶段完成（不 escalate）', () => {
     const planned = new Set(['index.html', 'main.js'])
     const produced = new Set(['index.html', 'main.js'])
@@ -106,7 +106,7 @@ describe('StuckDetector（卡住检测——连续无进展升级）', () => {
     expect(r2.event && 'message' in r2.event ? r2.event.message : '').toContain('规划文件还有 1 个没写')
   })
 
-  // 2026-08-06 补充（用户「清单来源不只 plan_approval」——③ projectFiles 项目文件树产出校验）
+  // 2026-08-06 补充（用户「清单来源不只 approve-files」——③ projectFiles 项目文件树产出校验）
   it('规划文件出现在项目文件树（projectFiles）→ 视为已产出（比 write 记录可靠——回滚/删除不在树中）', () => {
     const planned = new Set(['index.html', 'main.js'])
     const produced = new Set(['index.html']) // write 记录只有 index.html
@@ -167,10 +167,10 @@ describe('StuckDetector 待授权轮排除（根因 2——write 授权卡被当
       expect(r.event?.type ?? 'none').not.toBe('needs-human')
     }
   })
-  it('plan-approval 卡同理（plan_approval 待批准——不 escalate）', () => {
+  it('plan-approval 卡同理（approve-files 待批准——不 escalate）', () => {
     let state = initialStuckState
     for (let i = 0; i < 4; i++) {
-      const turn = evaluateTurnProgress({ ...baseInput, toolCalls: [{ name: 'plan_approval', status: 'plan-approval' }] })
+      const turn = evaluateTurnProgress({ ...baseInput, toolCalls: [{ name: 'approve-files', status: 'file-approval' }] })
       const r = detectStuck({ turn, prev: state })
       state = r.state
       expect(r.event?.type ?? 'none').not.toBe('escalate')
