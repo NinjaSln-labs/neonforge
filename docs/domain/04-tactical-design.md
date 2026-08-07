@@ -296,6 +296,37 @@ interface PrefixCacheService {
 }
 ```
 
+### 3.9 TurnExecutionPolicy（Conversation BC——2026-08-07 领域化，坑 89）
+
+对话轮次「该不该强制模型产出」的领域服务（`src/renderer/domain/turnPolicy.ts`——forceTool 决策从组件 if 移入领域层）。
+
+```typescript
+// TurnKind：轮次触发语义（user-turn=用户指令 / advance-turn=阶段推进 / tool-loop=工具循环）
+interface TurnExecutionPolicy {
+  decide(input: {
+    stage: ProductStageName | null
+    turnKind: TurnKind
+    isPureAck: boolean
+    requirementConfirmed: boolean
+    produced: boolean
+    depth: number
+  }): { forceTool: boolean; reason: string }
+}
+```
+
+不变式：advance-turn 按阶段工作模式（设计=text-proposal 不强制 / 开发=artifacts 强制）；user-turn 非需求阶段强制（坑 80 原意）；B 类（确认未产出）每轮强制；纯确认/工具循环不强制。
+
+### 3.10 ProductStage / 阶段推进（AgentChain BC——2026-08-07 领域化，坑 89）
+
+产品六阶段（需求→设计→开发→测试→部署→交付）产品级流水线（`src/renderer/domain/stageFlow.ts`——advanceChat 指令生成从组件移入领域层）。
+
+```typescript
+// ProductStage（VO）：阶段 + 工作模式（StageOutputMode：clarify/text-proposal/artifacts/verify/deploy/report）
+// buildAdvanceInstruction({ stage, hint, requirement }): string —— 阶段推进内部指令（StageTransition 事件的应用侧载荷）
+```
+
+不变式：设计=text-proposal（推进轮不强制工具）；开发=artifacts（推进轮强制工具）；阶段推进指令必须含「本阶段完成时提示用户点确认推进」。
+
 ---
 
 ## 4. 仓库接口

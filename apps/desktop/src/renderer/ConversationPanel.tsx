@@ -12,6 +12,9 @@ import { buildAuthHint, canMergeApprove, toolRisk } from './authModel'
 import { cleanContent, stripMarkdown } from './textClean'
 // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层纯逻辑，双源调研驱动）
 import { evaluateTurnProgress, detectStuck, initialStuckState } from './domain/agentLoop'
+// 2026-08-07 DDD 落地（坑 89 forceTool/advanceChat 领域化——Conversation BC 轮次执行保障 + AgentChain BC 产品阶段流转）
+import { decideTurnPolicy, type TurnKind } from './domain/turnPolicy'
+import { stageByIndex, buildAdvanceInstruction } from './domain/stageFlow'
 // 2026-08-05 方案 3：结构化候选按钮——<candidates> 块解析/剥离（点选文本替代序号，消除模型序号解析漂移）
 import { parseCandidates, stripCandidates, stripTags } from './candidates'
 // 2026-08-03 视觉审计 P1-6：内联 SVG 图标（替换 emoji 图标）
@@ -292,6 +295,9 @@ export default function ConversationPanel({
   // 处理单个流式事件（当前轮次——写入最后一条 assistant 消息）
   // 2026-08-04：流式累积（事件层）——React StrictMode 会双调 setMessages updater，副作用（日志/工具执行）放 updater 内会重复执行（实测对话日志每条记录两次）
   const streamingRef = useRef<{ content: string; toolCalls: ToolCallMsg[] }>({ content: '', toolCalls: [] })
+  // 2026-08-07 DDD 落地（坑 89）：当前轮次类型——send=user-turn / advanceChat=advance-turn / maybeContinue=tool-loop；
+  // forceTool 决策改由领域层 TurnExecutionPolicy 推导（区分「用户指令轮」与「阶段推进轮」——设计阶段推进不强制工具）
+  const turnKindRef = useRef<TurnKind>('user-turn')
   const applyChunk = (chunk: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => {
     console.log('[conv] chunk', chunk.type)
     // 2026-08-05 用户反馈 2：模型有新动作（chunk）→ 清除 isActionPromise 状态栏提示（模型在动——之前只是陈述/即将调工具）
@@ -578,6 +584,7 @@ export default function ConversationPanel({
     chatRef.current = { msgs: toolMsgs, depth: depth + 1 }
     setMessages((p) => [...p, { role: 'assistant', content: '', reasoning: '', status: 'streaming' }])
     await new Promise((r) => setTimeout(r, 50))
+    turnKindRef.current = 'tool-loop' // 2026-08-07 坑 89：工具循环轮——forceTool=auto（StuckDetector 兜底）
     await runChat(toolMsgs, depth + 1, sid)
   }
 
@@ -609,11 +616,19 @@ export default function ConversationPanel({
       // 工具循环轮（depth>=1）auto——模型自由收敛；需求阶段/纯确认 auto——问答不强制
       const lastUserText = depth === 0 ? String(msgs[msgs.length - 1]?.content ?? '') : ''
       const isPureAck = /^(嗯|好|可以|ok|OK|好的|是的|对|行|明白了|知道了|继续|谢谢|收到)[。.！!~～\s]*$/.test(lastUserText)
-      // 2026-08-06 forceTool 三态（真实 API 实测：需求确认后模型「方案一句话」只说不做——确认=批准必须执行到产出）：
-    // A 类（flowStage>=1）：首轮强制（设计/开发）——工具循环轮 auto + progress escalate 兜底
-    // B 类（requirementConfirmed && 未产出）：每轮强制——直到有产出（edit/write 成功——producedFiles 非空）才停（模型回文本完成）——read 不算产出（activity≠progress）持续强制 + progress escalate 双兜底
-    const produced = producedFilesRef.current.size > 0
-    const forceTool = !isPureAck && (((flowStage ?? 0) >= 1 && depth === 0) || (requirementConfirmed && !produced))
+      // 2026-08-06 forceTool 三态（真实 API 实测：需求确认后模型「方案一句话」只说不做——确认=批准必须执行到产出）
+      // 2026-08-07 DDD 落地（坑 89 根因修复）：判定改由领域层 TurnExecutionPolicy 推导——
+      // 区分「用户指令轮（user-turn——坑 80 原意：必须动手到产出）」vs「阶段推进轮（advance-turn——按阶段工作模式：
+      // 设计=text-proposal 输出方案文本，不强制工具）」——原 `flowStage>=1 && depth===0` 数值拼凑误把阶段推进当用户指令
+      const produced = producedFilesRef.current.size > 0
+      const { forceTool } = decideTurnPolicy({
+        stage: stageByIndex(flowStage ?? -1)?.name ?? null,
+        turnKind: turnKindRef.current,
+        isPureAck,
+        requirementConfirmed: requirementConfirmed ?? false, // prop 可选（demo）——领域层要求必填 boolean
+        produced,
+        depth,
+      })
       const res = await window.neonforge.gateway.streamChat({
         apiKey: key,
         level: 'basic',
@@ -801,6 +816,7 @@ export default function ConversationPanel({
     try {
       // 2026-08-04 修复（流式链互斥）：send 链占锁——其他链（授权续聊/阶段补发）排队，防 chunk 交错
       const release = await acquireChain()
+      turnKindRef.current = 'user-turn' // 2026-08-07 坑 89：用户消息轮 = user-turn（forceTool 原意作用对象）
       try {
         await runChat([...chatHistory, ...msgs], 0, sid)
       } finally {
@@ -840,7 +856,8 @@ export default function ConversationPanel({
     const history = buildHistory(messagesRef.current)
     const msgs: Array<{ role: 'user' | 'system'; content: string }> = [{
       role: 'user',
-      content: `${requirement ? `【需求确认】用户已通过需求确认卡确认需求：${requirement}——请基于此需求进行本阶段工作。` : ''}【阶段推进】已进入「${stage}」阶段。${hint}。请开始本阶段工作：先用简洁口语向用户说明本阶段要做什么、需要用户提供什么；本阶段完成时提示用户点「确认推进」。${stage === '开发' ? '开发阶段第 0 步（必须）：先用一句话说明本次要做什么，然后调用 plan_approval 工具列出要新增/修改的全部文件（每个文件：路径 + 修改原因），等用户批准后再开始写——不要只写文字清单不调 plan_approval 工具，也不要直接逐个 write 触发授权（用户批准 plan_approval 后这些文件自动放行，不用逐个确认）。然后：直接动手产出真实文件（用 write/edit 工具，写前先读现有文件再修改；先写出第一版能跑的文件，产出后再问需要用户决策的问题，一次只问一个——不要只提问不产出）。铁律：本条回复必须以实际行动收尾——说「开始」后立刻调用工具（read/ls 看目录或 write 写文件），不要以「开始动手了」结束回复等用户。2026-08-04 体验修复：禁止预告轮——说「现在写 X」的同一条回复必须同时调用写 X 的工具（write X），说了就同轮做掉；工具结果显示「已写入：路径」= 该文件已经写好了，不要重复写同一个文件（重复写会被检测为死循环而暂停）；写文件用绝对路径或项目内相对路径。' : '本阶段不要写代码。'}`
+      // 2026-08-07 坑 89：阶段推进指令生成抽象到领域层（AgentChain BC——buildAdvanceInstruction）
+      content: buildAdvanceInstruction({ stage, hint, requirement })
     }]
     if (stageHint) msgs.unshift({ role: 'system', content: stageHint })
     // 追加 streaming 占位——模型回复直接流式显示（内部指令不显示为用户消息）
@@ -849,6 +866,7 @@ export default function ConversationPanel({
       // 2026-08-04 修复（流式链互斥）：advanceChat 链占锁——防与授权续聊并发（chunk 交错）
       const release = await acquireChain()
       try {
+        turnKindRef.current = 'advance-turn' // 2026-08-07 坑 89：阶段推进轮——forceTool 按阶段工作模式（设计=不强制）
         await runChat([...history, ...msgs], 0, sid)
       } finally {
         release()
