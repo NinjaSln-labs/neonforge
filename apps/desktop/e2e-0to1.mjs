@@ -479,6 +479,25 @@ class SessionDriver {
     return null
   }
 
+  // 2026-08-08 第 4 个问题修复（feedback.log 标注「之前用户未点确认目标卡」——e2e 与无阶段交互脱节根因）：
+  // 无阶段重构后确认**只走卡片按钮**（坑 135：文本确认词已删除）——e2e 用户模拟必须点卡：
+  // 结构化确认卡（目标确认/执行确认/已解决——.nf-confirmcard）+ 授权卡（approve-files 等——approvePending）
+  async handleCards() {
+    const p = this.page
+    // 结构化确认卡（对话流内嵌）——点「确认目标」→ goalConfirmed；「确认执行」→ executionConfirmed；「已解决」→ goalAchieved
+    const confirmBtns = ['确认目标', '确认执行', '已解决']
+    for (const name of confirmBtns) {
+      const btn = p.getByRole('button', { name })
+      if (await btn.count() > 0) {
+        await btn.first().click()
+        return { label: `点确认卡「${name}」` }
+      }
+    }
+    // 授权卡（approve-files 批量/单卡/允许并记住/允许执行）
+    const ap = await this.approvePending()
+    return ap ? { label: `批准授权：${ap.label}`, detail: ap.detail, planFiles: ap.planFiles } : null
+  }
+
   async fileTree() {
     return (await this.page.locator('.nf-filetree span, [class*="filetree"] span').allInnerTexts().catch(() => []))
       .map((s) => s.trim()).filter(Boolean)
@@ -574,6 +593,10 @@ class StageMachine {
         continue
       }
       lastProcessed = msg.content
+      // 2026-08-08 第 4 个问题修复：卡片优先——确认卡（目标/执行/已解决）+ 授权卡（approve-files 等）——
+      // 无阶段重构后确认只走卡片按钮（坑 135），e2e 必须先点卡（否则 goalConfirmed/executionConfirmed 永不置位 → 死循环）
+      const card = await this.driver.handleCards()
+      if (card) { console.log(`   🧑 ${card.label}${card.detail ? `（${card.detail}）` : ''}`); continue }
       // 2026-08-05 需求阶段模型越界（输出技术方案——STAGE_HINT 需求规则禁止给方案）→ 提醒先确认需求（防阶段错位）
       if (/(技术选型|整体方案|页面结构|模块划分|Three\.js|Vite|代码结构|用.*做.*引擎|渲染库)/.test(msg.content) && !/(【需求确认|需求确认：|确认完毕)/.test(msg.content)) {
         printModel(msg)
@@ -636,7 +659,7 @@ class StageMachine {
       if (msg.content === lastProcessed) { await this.driver.page.waitForTimeout(3000); continue }
       lastProcessed = msg.content
       // 授权卡（设计阶段模型可能违规调 read/bash——正常批准）
-      const ap = await this.driver.approvePending()
+      const ap = await this.driver.handleCards()
       if (ap) { console.log(`   🔓 授权：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`); continue }
       if (/说要做但还没动手|回复.*继续/.test(msg.content)) {
         console.log(`   🧑 模型说要做但没动手——回复「继续」让它干完`)
@@ -718,7 +741,7 @@ class StageMachine {
       if (msg.content === lastProcessed) { await this.driver.page.waitForTimeout(3000); continue }
       lastProcessed = msg.content
       // 授权卡（approve-files/bash/单卡）——批准并记录清单
-      const ap = await this.driver.approvePending()
+      const ap = await this.driver.handleCards()
       if (ap) {
         console.log(`   🔓 授权：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`)
         if (ap.planFiles && ap.planFiles.length > 0) {
@@ -838,7 +861,7 @@ class StageMachine {
       const msg = await this.driver.waitSettled(120000)
       if (msg.content === lastProcessed) { await this.driver.page.waitForTimeout(3000); continue }
       lastProcessed = msg.content
-      const ap = await this.driver.approvePending()
+      const ap = await this.driver.handleCards()
       if (ap) { console.log(`   🔓 授权：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`); continue }
       printModel(msg)
       // 2026-08-05 LLM 语义理解（用户指示：真实用户模拟必须语义理解，非正则穷举）
@@ -927,7 +950,7 @@ class StageMachine {
     const deadline = Date.now() + 300000
     while (Date.now() < deadline) {
       msg = await this.driver.waitSettled(120000)
-      const ap = await this.driver.approvePending()
+      const ap = await this.driver.handleCards()
       if (ap) { console.log(`   🔓 授权：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`); continue }
       if (/说要做但还没动手|回复.*继续/.test(msg.content) || SEM_PROMISE.test(msg.content)) {
         console.log(`   🧑 模型说要做但没动手——回复「继续」让它干完`)
