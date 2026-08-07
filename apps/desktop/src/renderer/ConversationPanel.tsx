@@ -935,6 +935,8 @@ export default function ConversationPanel({
   }
   // 2026-08-04 规划级授权（用户「规划好文件一次性要授权，减少逐个授权打断」）：批准计划文件清单 → 全部加入任务级信任 → 模型后续 write/edit 自动放行
   const approvePlan = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg) => {
+    // 2026-08-07 会话时间线：plan_approval 批准事件（补——approvePlan 独立于 approveToolCall，之前缺失）
+    tlog('tool-approval', { name: 'plan_approval', action: 'approve', files: ((tc.args.files ?? []) as Array<{ path: string }>).map((f) => f.path) }, 'system')
     const files = (tc.args.files ?? []) as Array<{ path: string }>
     files.forEach((f) => addTrust({ path: f.path }))
     // 2026-08-06 任务完成度：保存规划文件清单（progress 检测用——deepcode unimplemented_files 借鉴）+ 重置产出（新任务）
