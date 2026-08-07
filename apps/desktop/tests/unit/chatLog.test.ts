@@ -76,6 +76,29 @@ describe('chatLog（对话日志 + 导出——2026-08-04 用户诉求：对话�
     expect(md).toContain('正常消息')
   })
 
+  it('appendChatLog：带会话 ID → 写入独立会话文件（chat-<会话ID>.jsonl，非日期聚合）', () => {
+    const sid = '3f8a2c1b-9d4e-4a1a-8b2b-123456789abc'
+    appendChatLog(base, { ts: '2026-08-04T09:00:00.000Z', role: 'user', content: '会话A消息', session: sid })
+    const file = todayLogFile(base, sid)
+    expect(existsSync(file)).toBe(true)
+    // 日期文件（无会话）不存在——不再按日期聚合
+    expect(existsSync(todayLogFile(base))).toBe(false)
+    const lines = readFileSync(file, 'utf-8').trim().split('\n')
+    expect(lines).toHaveLength(1)
+    expect(JSON.parse(lines[0])).toMatchObject({ role: 'user', content: '会话A消息', session: sid })
+  })
+
+  it('exportChatLog：跨会话文件全部合并（会话级文件 + 日期文件）', () => {
+    const sid = 'bbbbbbbb-0000-4000-8000-00000000000b'
+    appendChatLog(base, { ts: '2026-08-04T09:00:01.000Z', role: 'user', content: '日期文件早' })
+    appendChatLog(base, { ts: '2026-08-04T09:00:02.000Z', role: 'user', content: '会话文件晚', session: sid })
+    const r = exportChatLog(base)
+    expect(r.ok).toBe(true)
+    const md = readFileSync(r.path!, 'utf-8')
+    expect(md).toContain('日期文件早')
+    expect(md).toContain('会话文件晚')
+  })
+
   it('exportChatLog：跨天多文件全部合并', () => {
     // 先建 logs 目录（真实运行 appendChatLog 会自动创建；这里直接写历史文件需先建目录）
     mkdirSync(logDir(base), { recursive: true })
