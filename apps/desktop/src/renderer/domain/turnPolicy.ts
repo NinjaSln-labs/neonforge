@@ -18,7 +18,7 @@ export type TurnKind = 'user-turn' | 'advance-turn' | 'tool-loop'
 export interface TurnPolicyInput {
   stage: ProductStageName | null // 当前阶段（flowStage 映射；null=未进入 0-1 流程/demo）
   turnKind: TurnKind
-  isPureAck: boolean // 纯确认（嗯/好/可以/ok/继续…——问答不强制）
+  isPureAck: boolean // 纯确认（嗯/好/可以/ok/继续…——问答不强制）；2026-08-07 T4 决策：词表=豁免名单，漏网 fail-safe（确认=批准继续→强制符合意图），不扩充/不移除继续（坑 79 意图词穷举不完 + 坑 90 设计阶段继续=出方案文本）
   requirementConfirmed: boolean // 需求已确认
   produced: boolean // 已有产出（write/edit 成功——B 类持续强制直到产出）
   depth: number // 0=该轮首轮
