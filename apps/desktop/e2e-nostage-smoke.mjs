@@ -174,6 +174,7 @@ async function main() {
       env: { ...process.env, VITE_DEV_SERVER_URL: 'http://localhost:5173', NF_TEST_PROJECT: WORK_DIR, ELECTRON_RUN_AS_NODE: '' }
     })
     const page = await app.firstWindow()
+    page.on('console', (m) => { const t = m.text(); if (t.includes('[debug]') || t.includes('[conversation]')) console.log('  [page]', t.slice(0, 150)) })
     await page.waitForSelector('.nf-start', { timeout: 20000 })
     await page.evaluate(() => {
       try { localStorage.removeItem('nf-session'); localStorage.removeItem('nf-problems'); localStorage.removeItem('nf-delegate-lowrisk') } catch {}

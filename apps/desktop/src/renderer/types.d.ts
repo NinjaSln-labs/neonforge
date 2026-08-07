@@ -34,6 +34,10 @@ export interface NeonForgeBridge {
     log: (entry: { ts: string; role: 'user' | 'assistant'; content?: string; toolCalls?: Array<{ name: string; status: string }>; error?: string }) => Promise<void>
     export: () => Promise<{ ok: boolean; path?: string; error?: string }>
   }
+  // 2026-08-07 会话时间线（单会话所有步骤统一日志——用户/搭档/工具/授权/状态）
+  timeline: {
+    log: (evt: { session?: string; type: string; role?: 'user' | 'assistant' | 'system' | 'tool'; detail?: Record<string, unknown> }) => Promise<void>
+  }
   tools: NeonForgeTools
   context: {
     resolve: (files: string[]) => Promise<{ fragments: Array<{ path: string; content: string; truncated: boolean }> }>
