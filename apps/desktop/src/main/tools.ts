@@ -52,10 +52,10 @@ export interface Tool {
   source: 'core' | 'lsp'
   requiresApproval: boolean
   risk: ToolRisk
-  execute: (args: Record<string, unknown>, ctx: { rootPath?: string }) => Promise<unknown>
+  execute: (args: Record<string, unknown>, ctx: { rootPath?: string; sessionId?: string }) => Promise<unknown>
   // 2026-08-04 授权架构重构（用户授权疲劳）：执行前裁决——requiresApproval 工具若 preApproval 判定 auto=true → 免授权直接执行
   // （main 进程裁决——bash 只读命令自动；renderer 不判断，防绕过）
-  preApproval?: (args: Record<string, unknown>, ctx?: { rootPath?: string }) => { auto: boolean; reason?: string }
+  preApproval?: (args: Record<string, unknown>, ctx?: { rootPath?: string; sessionId?: string }) => { auto: boolean; reason?: string }
 }
 
 export interface ToolResult {
@@ -87,11 +87,12 @@ class ToolRegistry {
   async execute(
     name: string,
     args: Record<string, unknown>,
-    opts: { approved?: boolean; rootPath?: string } = {}
+    opts: { approved?: boolean; rootPath?: string; sessionId?: string } = {}
   ): Promise<ToolResult> {
     console.log('[tools] execute', name, 'rootPath=' + (opts.rootPath ?? 'NONE'))
     // 2026-08-07 会话时间线（Session Timeline BC——main 侧工具执行记录兜底：renderer 崩溃也有工具时间线）
-    logTimeline({ session: opts.rootPath ?? undefined, type: 'tool-exec', role: 'tool', detail: { name, args, approved: opts.approved } })
+    // 2026-08-08 会话归属：sessionId（会话 UUID）优先——工具执行写入对应会话文件
+    logTimeline({ session: opts.sessionId ?? opts.rootPath ?? undefined, type: 'tool-exec', role: 'tool', detail: { name, args, approved: opts.approved } })
     const tool = this.tools.get(name)
     if (!tool) return { ok: false, error: `未知工具：${name}` }
     // 2026-08-04 规划级授权强制（用户实测：模型说了调 plan_approval 但没调——指令不可靠，机制兜底）：
@@ -114,7 +115,7 @@ class ToolRegistry {
       }
     }
     try {
-      const data = await tool.execute(args, { rootPath: opts.rootPath })
+      const data = await tool.execute(args, { rootPath: opts.rootPath, sessionId: opts.sessionId })
       return { ok: true, data }
     } catch (e) {
       // 2026-08-04：ENOENT 友好化——原始报错（含完整路径）透传给非技术用户不可读（talk.txt 实测）；提示用相对路径或先看工程文件
@@ -223,7 +224,7 @@ export function killAllSubprocesses(): void {
 // 2026-08-05（用户反馈「不应绑定固定端口」）：除保留端口外**不限制**——vite 默认 strictPort:false 端口被占自动递增
 const RESERVED_PORTS = new Set([5173, 5175])
 
-async function bashExecutor(args: Record<string, unknown>, ctx: { rootPath?: string }): Promise<unknown> {
+async function bashExecutor(args: Record<string, unknown>, ctx: { rootPath?: string; sessionId?: string }): Promise<unknown> {
   // V1 真实执行：授权（approved=true）后执行命令（child_process）——在项目根目录执行
   // 风险标注（ticket 14）：high 风险——本机进程执行；授权即同意本机执行；可随时停止（cancelActiveCommand）
   const { spawn } = await import('child_process')
@@ -263,7 +264,7 @@ async function bashExecutor(args: Record<string, unknown>, ctx: { rootPath?: str
       else if (code !== 0) {
         // 2026-08-07 Ledger（坑 83 ⑥）：bash 失败归因到能力（node/python/dev-tools）——check-capability 后续降级 failed（自学习）
         try { attributeCommandFailure(ctx.rootPath ?? '', cmd) } catch { /* 归因失败不影响命令错误返回 */ }
-        logTimeline({ session: ctx.rootPath ?? undefined, type: 'tool-result', role: 'tool', detail: { name: 'bash', ok: false, error: `exit-${code}: ${stderr.slice(0, 300)}`, command: cmd.slice(0, 200) } })
+        logTimeline({ session: ctx.sessionId ?? ctx.rootPath ?? undefined, type: 'tool-result', role: 'tool', detail: { name: 'bash', ok: false, error: `exit-${code}: ${stderr.slice(0, 300)}`, command: cmd.slice(0, 200) } })
         reject(new Error(stderr ? `exit-${code}: ${stderr.slice(0, 500)}` : `exit-${code}`))
       }
       else {

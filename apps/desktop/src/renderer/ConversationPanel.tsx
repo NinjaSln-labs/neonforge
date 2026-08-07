@@ -130,7 +130,8 @@ export default function ConversationPanel({
   goalSeq,
   recentFilesExternal,
   activeAuthorizedLogs,
-  initialPrompt
+  initialPrompt,
+  onSessionStart
 }: {
   rootPath?: string | null
   currentFile?: string | null // 08 快捷键 Cmd+E：当前选中文件（@引用——D0 §6）
@@ -154,7 +155,17 @@ export default function ConversationPanel({
   // 2026-08-04 体验修复：启动页首句 → 进入工作区自动发送（说了就直接开始；输入框不预填）
   initialPrompt?: string
   activeAuthorizedLogs?: string[] // 06/14 授权记录可回溯：当前问题快照 authorized（TrustLadder 展示）
+  // 2026-08-08 会话日志（用户「每次应该是单独的会话日志」）：挂载（进入对话）生成 UUID 会话 ID → 上报 MainWorkspace
+  // （goal-confirmed/exec-confirmed 等 MainWorkspace 侧事件归属同一会话；chatKey+1 新会话 remount → 新 ID）
+  onSessionStart?: (sessionId: string) => void
 }) {
+  // 2026-08-08 会话 ID：进入实际对话（本组件挂载）时生成——决定日志文件归属（timeline-<id>.jsonl / chat-<id>.jsonl）
+  // crypto.randomUUID（Electron renderer secure context 可用）失败降级时间戳+随机
+  const [sessionId] = useState<string>(() =>
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+  )
   const [messages, setMessages] = useState<Msg[]>([])
   const messagesRef = useRef<Msg[]>([])
   useEffect(() => { messagesRef.current = messages }, [messages])
@@ -191,6 +202,8 @@ export default function ConversationPanel({
   const streamingSidRef = useRef(0) // 2026-08-04：当前活跃流 sid——停止（sid++）后旧流 chunk 忽略（applyChunk 只处理活跃流）
   const applyChunkRef = useRef<((c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) | null>(null)
   useEffect(() => { applyChunkRef.current = applyChunk }) // 每次渲染同步最新 applyChunk
+  // 2026-08-08 会话日志：挂载（进入对话）→ 会话 ID 上报 MainWorkspace（其 timeline 事件归属本会话）
+  useEffect(() => { onSessionStart?.(sessionId) }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     // 永久 listener：不随 runChat off（off 竞争会导致 done 事件丢失——invoke resolve 与 stream-chunk 投递顺序）
     // 2026-08-04 修复（用户「按停止没反应」）：streamingSidRef 检查——只处理当前活跃流的 chunk（停止 sid++ 后旧流 chunk 忽略）
@@ -237,8 +250,44 @@ export default function ConversationPanel({
   const goalAchievedRef = useRef(false)
   // 2026-08-07 会话时间线（Session Timeline BC——单会话所有步骤统一日志：用户/搭档/工具/授权/状态——分析一步到位）
   const tlog = (type: string, detail: Record<string, unknown>, role?: 'user' | 'assistant' | 'system' | 'tool') => {
-    try { void window.neonforge.timeline?.log?.({ session: rootPath ?? undefined, type, role, detail }) } catch { /* 日志失败不影响 */ }
+    // 2026-08-08 会话归属：session 用会话 ID（UUID——本组件挂载生成）——写入对应会话 timeline 文件
+    try { void window.neonforge.timeline?.log?.({ session: sessionId, type, role, detail }) } catch { /* 日志失败不影响 */ }
   }
+  // 2026-08-08 卡弹出打点（用户「加一个确认/授权等卡弹出的点」）：确认卡（目标/执行/达成）+ 授权卡/plan_approval 卡——卡从无到有打一次
+  const cardShownRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    const last = messages[messages.length - 1]
+    const isLastAssistant = last?.role === 'assistant' && last.status === 'done'
+    const content = last?.content ?? ''
+    const show = (card: string, extra?: Record<string, unknown>) => {
+      if (cardShownRef.current.has(card)) return
+      cardShownRef.current.add(card)
+      tlog('card-shown', { card, ...extra }, 'system')
+    }
+    if (isLastAssistant) {
+      if ((/【目标确认[:：]/.test(content) || !goalConfirmed) && !goalConfirmed) show('goal-confirm', { goalText: content.slice(0, 80) })
+      if ((content.includes('【执行方案') || (goalConfirmed && !executionConfirmed)) && goalConfirmed && !executionConfirmed) show('exec-confirm')
+      if (content.includes('【已达成') && producedFilesRef.current.size > 0 && !goalAchievedRef.current) show('achieve-confirm')
+    }
+    // 授权卡 / plan_approval 卡（工具卡 need-approval/plan-approval 状态）——每次弹卡独立记录（同工具不同 args 是新的授权决策）
+    for (const m of messages) {
+      for (const c of m.toolCalls ?? []) {
+        if (c.status === 'need-approval' || c.status === 'plan-approval') {
+          const key = `approval:${c.name}:${JSON.stringify(c.args ?? {}).slice(0, 60)}`
+          show(key, { card: c.status === 'plan-approval' ? 'plan-approval' : 'approval', name: c.name, args: c.args })
+        }
+      }
+    }
+  }, [messages, goalConfirmed, executionConfirmed])
+  // 2026-08-08 状态变化打点（working / approval-pending / ready——统一状态机；变化才记录）
+  const lastStatusRef = useRef('')
+  useEffect(() => {
+    const status = working ? 'working' : pendingApprovalRef.current ? 'approval-pending' : 'ready'
+    if (status !== lastStatusRef.current) {
+      lastStatusRef.current = status
+      tlog('status-change', { status })
+    }
+  }, [working, messages])
   // 2026-08-07 无阶段修复（用户「错误要抛出来，模型自己修正」）：工具执行失败标志——bash exit≠0/write 失败
   // → turnPolicy lastToolFailed 释放强制（模型可停下诊断——防 required 压制修正被迫重试死循环，冒烟实测 37 轮）
   const lastToolFailedRef = useRef(false)
@@ -330,7 +379,8 @@ export default function ConversationPanel({
         ts: new Date().toISOString(),
         role: 'assistant',
         content,
-        toolCalls: streamingRef.current.toolCalls.map((t) => ({ name: t.name, status: t.status }))
+        toolCalls: streamingRef.current.toolCalls.map((t) => ({ name: t.name, status: t.status })),
+        session: sessionId
       })
       // 2026-08-07 用户决策（显式确认）：【目标确认】标记不再同步 goalConfirmedRef（自报确认删除——
       // goalConfirmedRef 由 prop 同步（用户点确认卡 → MainWorkspace state → 248 行 effect））
@@ -373,10 +423,12 @@ export default function ConversationPanel({
         const { state, event } = detectStuck({ turn, prev: stuckStateRef.current })
         stuckStateRef.current = state
         if (event?.type === 'escalate') {
+          tlog('stuck-escalate', { message: event.message }, 'system') // 2026-08-08 卡住升级打点
           onActionPromiseHint?.(null)
           inputRef.current = event.message
           void sendRef.current?.({ silent: true })
         } else if (event?.type === 'needs-human') {
+          tlog('stuck-escalate', { level: 'needs-human', message: event.message }, 'system') // 2026-08-08 升级达上限转用户
           onActionPromiseHint?.(event.message)
         }
       }
@@ -492,7 +544,7 @@ export default function ConversationPanel({
         return
       }
       const autoApproved = (delegateLowRisk && toolRisk(tc.name) === 'low') || isTrusted(tc.args)
-      void (window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: autoApproved, rootPath: rootPath ?? undefined }) ?? Promise.resolve({ ok: false, error: 'tools 通道未就绪' })).then((r) => {
+      void (window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: autoApproved, rootPath: rootPath ?? undefined, sessionId }) ?? Promise.resolve({ ok: false, error: 'tools 通道未就绪' })).then((r) => {
         const data = r.data as { file?: string; snapshot?: boolean } | undefined
         // 13 交付包联动：真实文件操作成功（write/edit 返回 file）→ 上报变更（产物区展示）
         if (r.ok && data?.file) onToolResult?.({ name: tc.name, file: data.file, ok: true })
@@ -628,7 +680,7 @@ export default function ConversationPanel({
     let envHint = ''
     if (rootPath) {
       try {
-        const cap = await window.neonforge.tools.execute('check-capability', { dir: rootPath })
+        const cap = await window.neonforge.tools.execute('check-capability', { dir: rootPath, sessionId })
         if (cap.ok) {
           const data = cap.data as { capabilities?: Array<{ id: string; status: string }>; runtime?: string; runtimeVersion?: string; hasNodeModules?: boolean } | undefined
           const caps = data?.capabilities ?? []
@@ -767,7 +819,8 @@ export default function ConversationPanel({
 
   // 2026-08-05 用户反馈 4：打断能力（对齐 Claude Code Esc / Cursor Stop）——停止当前流 + 杀当前 bash + 释放状态
   // 停止后旧流 chunk / maybeContinue 续聊全部失效（sessionRef++ 隔离）；用户可继续输入新指令
-  const stopGeneration = async () => {
+  const stopGeneration = async (source: 'button' | 'silent' = 'button') => {
+    tlog('interrupt', { source }, 'system') // 2026-08-08 打断打点（停止按钮 / silent 自动干预）
     sessionRef.current++ // 旧会话失效——旧流 chunk（streamingSidRef 检查）、maybeContinue 续聊（sessionRef 检查）全失效
     streamingSidRef.current = sessionRef.current
     onActionPromiseHint?.(null)
@@ -801,7 +854,7 @@ export default function ConversationPanel({
         // 系统自动消息（StuckDetector escalate/执行确认触发——非用户输入）：直接处理（打断当前——内部机制干预卡住，
         // 不受「输入≠打断」约束；排队会让修正消息延迟到当前轮完成——卡住时正是要立即干预）
         console.log('[conversation] 处理中 silent 发送——打断当前（系统自动续聊/修正）')
-        await stopGeneration()
+        await stopGeneration('silent')
       } else if (!pendingApprovalRef.current) {
         // 用户输入：排队衔接（不打断当前流式/工具链——输入≠打断，竞品共识：打断=显式停止按钮）
         // 只存 pending——消息显示/onUserMessage（确认词处理）由 flush 后 send 统一执行一次
@@ -819,9 +872,9 @@ export default function ConversationPanel({
     if (!opts?.silent) {
       // 13 复跑入口：上报用户输入（真实交付包 rerunPrompt 用）
       onUserMessage?.(text)
-      // 2026-08-04：对话日志（自动记录用户消息——与 assistant done 互补成完整对话）
+      // 2026-08-04：对话日志（自动记录用户消息——与 assistant done 互补成完整对话）；2026-08-08 会话归属
       tlog('user-message', { content: text }, 'user')
-      window.neonforge.chatLog?.log?.({ ts: new Date().toISOString(), role: 'user', content: text })
+      window.neonforge.chatLog?.log?.({ ts: new Date().toISOString(), role: 'user', content: text, session: sessionId })
       setMessages((p) => [...p, { role: 'user', content: text, status: 'done' }])
     }
     // 2026-08-04：新轮次——重置流式累积（防上轮异常残留）
@@ -924,7 +977,7 @@ export default function ConversationPanel({
   const approveToolCall = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg) => {
     tlog('tool-approval', { name: tc.name, action: 'approve' }, 'system')
     patchToolCall(idx, (c) => ({ ...c, status: 'pending' as const }), tc)
-    void window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: true, rootPath: rootPath ?? undefined }).then((r) => {
+    void window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: true, rootPath: rootPath ?? undefined, sessionId }).then((r) => {
       const data = r.data as { file?: string; snapshot?: boolean } | undefined
       // 13 交付包联动：授权后真实写入成功 → 上报变更
       if (r.ok && data?.file) onToolResult?.({ name: tc.name, file: data.file, ok: true })
@@ -1041,6 +1094,7 @@ export default function ConversationPanel({
     // working 释放点已移到 maybeContinue（0e12ea6）→ finishError 不释放 → working 卡 true → 状态栏「搭档处理中」→ 卡住；此处统一释放
     // 2026-08-07 T1 根因补强：ipc 返回结构化 errorType 优先（gateway 源头分类）——classifyChatError 仅兜底（字面量/未知格式）
     const errorType = errorTypeHint ?? classifyChatError(err)
+    tlog('error', { errorType, message: err }, 'system') // 2026-08-08 错误打点（错误链路可追溯）
     let content = '刚才出错了，请再试一次。'
     if (errorType === 'key-invalid') {
       content = 'API Key 好像失效了，换个 Key 试试。'
@@ -1051,7 +1105,7 @@ export default function ConversationPanel({
     onWorkingChange?.(false)
     setWorkingStage('就绪')
     onActionPromiseHint?.(null)
-    window.neonforge.chatLog?.log?.({ ts: new Date().toISOString(), role: 'assistant', content, error: errorType })
+    window.neonforge.chatLog?.log?.({ ts: new Date().toISOString(), role: 'assistant', content, error: errorType, session: sessionId })
     setMessages((p) => {
       const last = p[p.length - 1]
       if (!last || last.role !== 'assistant') return p
