@@ -462,12 +462,14 @@ export default function ConversationPanel({
           || (content.includes('【已达成') && !goalAchievedRef.current)  // 达成确认卡待决策
         )
       }
-      if (confirmPending(streamingRef.current.content, [tc]) && (tc.name === 'write' || tc.name === 'edit' || tc.name === 'bash')) {
+      // 2026-08-07 用户纠正（「无害≠有用」）：pending 下**所有工具都不执行**——read/search 虽只读无害但没用
+      // （用户决策未到——结果无意义——做了白做）——模型停（maybeContinue releaseWorking）等用户决策
+      if (confirmPending(streamingRef.current.content, [tc])) {
         setMessages((prev) => {
           const last = prev[prev.length - 1]
           if (!last || last.role !== 'assistant') return prev
           const calls = (last.toolCalls ?? []).map((c) => c.name === tc.name && c.status === 'pending'
-            ? { ...c, status: 'done' as const, result: `${tc.name} 等待你的决策——此动作未执行（点「确认执行」卡后模型会重新执行）` }
+            ? { ...c, status: 'done' as const, result: `${tc.name} 等待你的决策——此动作未执行（点确认卡后模型会重新执行）` }
             : c)
           return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
         })
