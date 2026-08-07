@@ -11,7 +11,7 @@ import { buildAuthHint, canMergeApprove, toolRisk } from './authModel'
 // 2026-08-04：cleanContent 回复正文展示清洗（字面转义/连续换行杂音）
 import { cleanContent, stripMarkdown } from './textClean'
 // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层纯逻辑，双源调研驱动）
-import { evaluateTurnProgress, detectStuck, initialStuckState } from './domain/agentLoop'
+import { evaluateTurnProgress, detectStuck, initialStuckState, isQuestionLike, isCommunicationLike, isDoneLike } from './domain/agentLoop'
 // 2026-08-07 DDD 落地（坑 89 forceTool/advanceChat 领域化——Conversation BC 轮次执行保障 + AgentChain BC 产品阶段流转）
 import { decideTurnPolicy, type TurnKind } from './domain/turnPolicy'
 import { stageByIndex, buildAdvanceInstruction, type ProductStageName } from './domain/stageFlow'
@@ -102,11 +102,10 @@ export function isActionPromise(content: string): boolean {
   if (!content) return false
   const t = content.trim()
   if (!t) return false
-  if (/[?？]$/.test(t) || /(吗|呢|吧)[。.!！]?$|可以吗|行不行/.test(t)) return false // 问句/征求同意——模型在等用户，不是承诺
-  // 沟通/澄清/确认类（模型在对话不是在干活）
-  if (/(确认|复述|说明|解释|总结|澄清|商量|理解|明白|知道|收到|确认一下|跟你确认|和你确认|跟您确认|介绍一下|跟你聊|和你聊)/.test(t)) return false
-  // 完成态/收尾词（有限集）——模型在汇报成果（「改好了/做好了/解决了」= 已行动完成，不需要再催）；检测「完成」易（有限），检测「承诺」难（无限）
-  if (/(完成|做好|搞定|改好|解决|处理完|已写好|已修改|已删除|已添加|已加|可以了|能玩了|没问题|修好了|加好了|实现了|就绪|收工|结束|达标|通过了|在跑|能跑|弄好|好了，|好的，|就是这些|就这样|先说这么多)/.test(t)) return false
+  // 2026-08-07 质量把关 C 类：判定合并到领域层 agentLoop（isQuestionLike/isCommunicationLike/isDoneLike——唯一实现，防双源）
+  if (isQuestionLike(t)) return false // 问句/征求同意——模型在等用户，不是承诺
+  if (isCommunicationLike(t)) return false // 沟通/澄清/确认类（模型在对话不是在干活）
+  if (isDoneLike(t)) return false // 完成态/收尾词（有限集）——模型在汇报成果（「改好了/做好了/解决了」= 已行动完成，不需要再催）；检测「完成」易（有限），检测「承诺」难（无限）
   return true
 }
 
