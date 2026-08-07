@@ -216,12 +216,14 @@ export function detectExternalCapabilities(rootPath: string, env?: ProjectEnviro
     id: 'python-runtime', category: 'external', status: py.status,
     implementations: ['python3', 'python'], detail: py.status === 'ready' ? py.version : (py.status === 'failed' ? 'python 在 PATH 但不可用' : 'python3 未安装')
   })
-  // 电子表格能力（任一实现即可——openpyxl 或 exceljs——不绑定具体工具：坑 74 教训）——python 可用才检测库（非 runtime 重复）
+  // 电子表格能力（任一实现即可——openpyxl 或 exceljs——不绑定具体工具：坑 74 教训）——实现检测按各自 runtime 门控（openpyxl←python、exceljs←node）
   let spreadsheetImpls: string[] = []
   if (py.status === 'ready') {
     const hasOpenpyxl = !!tryExec('python3', ['-c', 'import openpyxl'])
-    const hasExceljs = !!(rootPath && fsExists(path.join(rootPath, 'node_modules', 'exceljs'))) || !!tryExec('node', ['-e', 'require("exceljs")'])
     if (hasOpenpyxl) spreadsheetImpls.push('openpyxl')
+  }
+  if (node.status === 'ready') { // 2026-08-08 门控修正：exceljs 是 node 库——原被 py 门控（逻辑瑕疵）——按 node 状态检测
+    const hasExceljs = !!(rootPath && fsExists(path.join(rootPath, 'node_modules', 'exceljs'))) || !!tryExec('node', ['-e', 'require("exceljs")'])
     if (hasExceljs) spreadsheetImpls.push('exceljs')
   }
   caps.push({
@@ -250,10 +252,12 @@ export function detectExternalCapabilities(rootPath: string, env?: ProjectEnviro
 
 // 能力检测汇总（平台原生 + 外部扩展——check-capability 能力视图）
 // 2026-08-07 Ledger 应用（坑 83 ⑥——自学习）：本会话内有执行失败记录的能力 → status 降级 failed（真实可用性从执行结果学习）
-export function detectCapabilities(rootPath: string, platform: NodeJS.Platform = process.platform): Capability[] {
+// 2026-08-08 单源修复（HANDOFF §3 环境/能力双源）：接受可选 env——调用方已检测（checkEnvironment/ensureEnvironment）则复用，
+// 不重复 detectEnvironment（原 check-capability 一次调用 exec node/python 各 2 次——入口重复检测）
+export function detectCapabilities(rootPath: string, platform: NodeJS.Platform = process.platform, env?: ProjectEnvironment): Capability[] {
   const system = SYSTEM_CAPABILITIES[platform] ?? SYSTEM_CAPABILITIES.darwin
-  const env = detectEnvironment(rootPath) // 2026-08-07 能力对齐：一次环境检测——能力从 env 推导（双源消除）
-  const caps = [...system, ...detectExternalCapabilities(rootPath, env)]
+  const e = env ?? detectEnvironment(rootPath) // 环境是事实来源——能力是视图；已检测则复用（单源）
+  const caps = [...system, ...detectExternalCapabilities(rootPath, e)]
   const failed = capabilityFailedRefs.get(rootPath)
   if (failed && failed.size > 0) {
     for (const c of caps) {
