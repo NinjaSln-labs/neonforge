@@ -322,7 +322,9 @@ class SessionDriver {
     const settled = async () => {
       await this.page.waitForTimeout(1500)
       const t = await this.readTranscript()
-      const msgs = t.filter((m) => m.content.trim())
+      // 2026-08-08 waitSettled bug 修复（同源——冒烟脚本先发现）：只取 assistant 消息——
+      // 用户消息（如确认按钮 send）不能当模型回复返回（主循环拿到用户消息就误判模型回复完成）
+      const msgs = t.filter((m) => m.role === 'assistant' && m.content.trim())
       const lastMsg = msgs[msgs.length - 1]
       sb = await this.page.locator('.nf-statusbar').innerText().catch(() => '')
       const working = await this.page.locator('.nf-statusbar__dot--working').count().catch(() => 0)

@@ -6,9 +6,9 @@ import os from 'node:os'
 // ============================================================================
 // NeonForge 无阶段流程 —— 真实 API 冒烟验证（2026-08-07 v50 无阶段重构后）
 // ============================================================================
-// 观察 5 点（HANDOFF §3 无阶段新流程验证点）：
+// 观察 4 点（HANDOFF §3 无阶段新流程验证点；O2 已由环境注入替代——2026-08-08 O2 处理结论：
+// envHint 内部预检注入系统提示，模型无需显式调 check-capability（且静默化后工具卡隐藏 DOM 检测不到）——从验证点移除）：
 //   O1 目标确认：模型是否输出【目标确认：】标记（UI 识别目标已确认）
-//   O2 能力检查：是否调 check-capability（能力视图）
 //   O3 执行方案：是否输出【执行方案】块（含文件清单）
 //   O4 动手产出：执行确认后是否真正产出（write/edit done / 文件出现）
 //   O5 达成汇报：是否输出【已达成】
@@ -29,7 +29,6 @@ const LOCK_DIR = path.join(os.homedir(), 'Library/Application Support/neonforge-
 // ---- 观察点 ----
 const obs = {
   O1_goalConfirm: { hit: false, at: '' },
-  O2_checkCapability: { hit: false, at: '' },
   O3_execPlan: { hit: false, at: '' },
   O4_produced: { hit: false, at: '' },
   O5_doneReport: { hit: false, at: '' },
@@ -75,7 +74,9 @@ class Driver {
     const settled = async () => {
       await this.page.waitForTimeout(1500)
       const t = await this.transcript()
-      const msgs = t.filter((m) => m.content.trim())
+      // 2026-08-08 waitSettled bug 修复：只取 assistant 消息——用户消息（如确认按钮 send 的「确认，按方案执行」）
+      // 不能当模型回复返回（否则主循环拿到用户消息就 break，模型实际产出被跳过——O4 假 miss）
+      const msgs = t.filter((m) => m.role === 'assistant' && m.content.trim())
       const lastMsg = msgs[msgs.length - 1]
       sb = await this.page.locator('.nf-statusbar').innerText().catch(() => '')
       const working = await this.page.locator('.nf-statusbar__dot--working').count().catch(() => 0)
@@ -154,7 +155,6 @@ function checkObservations(content, toolsText, obs) {
   if (!obs.O1_goalConfirm.hit && /【目标确认/.test(content)) { obs.O1_goalConfirm.hit = true; obs.O1_goalConfirm.at = content.slice(0, 60) }
   if (!obs.O3_execPlan.hit && /【执行方案/.test(content)) { obs.O3_execPlan.hit = true; obs.O3_execPlan.at = content.slice(0, 80) }
   if (!obs.O5_doneReport.hit && /【已达成/.test(content)) { obs.O5_doneReport.hit = true; obs.O5_doneReport.at = content.slice(0, 60) }
-  if (!obs.O2_checkCapability.hit && /check-capability/.test(toolsText)) { obs.O2_checkCapability.hit = true; obs.O2_checkCapability.at = toolsText.slice(0, 80) }
   if (!obs.O4_produced.hit && /已写入|已修改|写入|修改.*成功/.test(toolsText) && /write|edit/.test(toolsText)) { obs.O4_produced.hit = true; obs.O4_produced.at = toolsText.slice(0, 80) }
 }
 
@@ -190,13 +190,32 @@ async function main() {
     const MAX_ROUNDS = 40
     let goalConfirmedClicked = false
     let execConfirmed = false
+    const startTime = Date.now()
     const deadline = Date.now() + 900000 // 15 分钟总超时
+    // 2026-08-08 waitSettled bug 修复：lastProcessed 去重 + idleStreak 停住判定——
+    // 模型停住（每轮返回同一条旧消息——「静止当稳定回复」）→ 连续 2 次同消息 = 无新动作 → break（不再假 40 轮空转）
+    let lastProcessed = ''
+    let idleStreak = 0
+    const MAX_IDLE = 2
 
     console.log('── 开始无阶段流程（目标确认 → 能力检查 → 执行方案 → 执行确认 → 达成）──\n')
     while (Date.now() < deadline && rounds < MAX_ROUNDS) {
       rounds++
       const msg = await driver.waitSettled(120000)
       if (!msg) { await driver.page.waitForTimeout(2000); continue }
+      // 同消息去重（坑 53 教训——同消息重复处理）：模型停住无新回复 → 连续 MAX_IDLE 次 → 判定流程结束
+      if (msg.content === lastProcessed) {
+        idleStreak++
+        log('⏳', `模型停住（同一条消息连续 ${idleStreak} 次无新回复）——等待后仍无动作则结束本轮`)
+        if (idleStreak >= MAX_IDLE) {
+          log('🏁', `模型已停住（${MAX_IDLE} 轮无新回复）——无阶段流程到此结束（剩余观察点未命中）`)
+          break
+        }
+        await driver.page.waitForTimeout(3000)
+        continue
+      }
+      idleStreak = 0
+      lastProcessed = msg.content
       const toolsText = msg.tools.join(' | ')
       checkObservations(msg.content, toolsText, obs)
       // 打印本轮
@@ -279,7 +298,6 @@ async function main() {
     console.log('\n\n══════════ 无阶段流程真实 API 验证报告 ══════════')
     const checks = [
       ['O1 目标确认【目标确认：】标记', obs.O1_goalConfirm],
-      ['O2 能力检查 check-capability', obs.O2_checkCapability],
       ['O3 执行方案【执行方案】块', obs.O3_execPlan],
       ['O4 执行确认后动手产出（write/edit）', obs.O4_produced],
       ['O5 达成汇报【已达成】', obs.O5_doneReport],
@@ -290,7 +308,7 @@ async function main() {
       if (!ok) allOk = false
       console.log(`  ${ok ? '✅' : '❌'} ${name}${o.at ? `\n      ↳ ${o.at}` : ''}`)
     }
-    console.log(`\n${allOk ? '✅ 无阶段流程 5 点全通过' : '⚠️ 有观察点未命中——见上方明细'}（${Math.round((Date.now() - (Date.now() - 0)) / 1000)}s，${rounds} 轮）`)
+    console.log(`\n${allOk ? '✅ 无阶段流程 4 点全通过' : '⚠️ 有观察点未命中——见上方明细'}（${Math.round((Date.now() - startTime) / 1000)}s，${rounds} 轮）`)
     return allOk
   } catch (e) {
     console.log(`\n❌ 冒烟异常: ${String(e).slice(0, 300)}`)
