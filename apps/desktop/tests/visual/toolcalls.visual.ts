@@ -18,7 +18,8 @@ async function mockBridge(page: import('@playwright/test').Page) {
         execute: async (name: string, args: Record<string, unknown>, opts?: { approved?: boolean }) => {
           if (name === 'read') return { ok: true, data: '{"name":"neonforge-desktop","version":"0.1.0"}' }
           if (name === 'write' && opts?.approved) return { ok: true, data: { file: '/test/notes.txt', snapshot: true } }
-          return { ok: false, error: `「${name}」需要授权（L3）——approved=true 后执行` }
+          // 2026-08-07 T2（regex-todo）：needApproval 结构化字段——renderer 读字段判定授权卡（不再 includes('授权') 文本）
+          return { ok: false, needApproval: true, error: `「${name}」需要授权（L3）——approved=true 后执行` }
         },
         revert: async () => ({ ok: true })
       }
