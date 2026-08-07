@@ -1,5 +1,6 @@
 // 对话日志（2026-08-04 用户诉求：对话内容全导出/专有日志——方便用户反馈时 AI 能看实际对话）
 // main 进程：renderer 上报每条消息 → 追加 JSONL（userData/logs/chat-YYYY-MM-DD.jsonl）；导出 → 合并生成可读 .md 到 Downloads
+// 2026-08-08 会话级文件：进入对话生成 UUID 会话 ID → chat-<会话ID>.jsonl（每会话独立；无会话 ID 降级按日期）
 import { appendFileSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
@@ -10,22 +11,27 @@ export interface ChatLogEntry {
   content?: string
   toolCalls?: Array<{ name: string; status: string }>
   error?: string // 2026-08-04：错误状态标记（key-invalid/service/unknown——原仅 done 记录，错误消息无法追溯）
+  session?: string // 2026-08-08：会话 ID（UUID——进入对话生成）——决定写入哪个会话文件
 }
 
 export function logDir(base: string): string {
   return path.join(base, 'logs')
 }
 
-export function todayLogFile(base: string): string {
-  const d = new Date().toISOString().slice(0, 10)
-  return path.join(logDir(base), `chat-${d}.jsonl`)
+function safeName(s: string): string {
+  return s.replace(/[^a-zA-Z0-9-_]/g, '_')
+}
+
+export function todayLogFile(base: string, session?: string): string {
+  const name = session ? `chat-${safeName(session)}.jsonl` : `chat-${new Date().toISOString().slice(0, 10)}.jsonl`
+  return path.join(logDir(base), name)
 }
 
 // 追加一条对话记录（失败静默——日志不影响对话）
 export function appendChatLog(base: string, entry: ChatLogEntry): void {
   try {
     mkdirSync(logDir(base), { recursive: true })
-    appendFileSync(todayLogFile(base), JSON.stringify(entry) + '\n', 'utf-8')
+    appendFileSync(todayLogFile(base, entry.session), JSON.stringify(entry) + '\n', 'utf-8')
   } catch { /* 日志失败不影响对话 */ }
 }
 

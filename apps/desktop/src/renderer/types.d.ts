@@ -31,7 +31,7 @@ export interface NeonForgeBridge {
     updateProjectTitle: (path: string, title: string) => Promise<{ ok: boolean; error?: string }>
   }
   chatLog: {
-    log: (entry: { ts: string; role: 'user' | 'assistant'; content?: string; toolCalls?: Array<{ name: string; status: string }>; error?: string }) => Promise<void>
+    log: (entry: { ts: string; role: 'user' | 'assistant'; content?: string; toolCalls?: Array<{ name: string; status: string }>; error?: string; session?: string }) => Promise<void>
     export: () => Promise<{ ok: boolean; path?: string; error?: string }>
   }
   // 2026-08-07 会话时间线（单会话所有步骤统一日志——用户/搭档/工具/授权/状态）
@@ -98,7 +98,7 @@ export interface ProblemInstance {
 // ToolRegistry（ticket 10/14）：renderer 侧工具接口（risk：none=L1 观察 / low=L3 文件操作 / high=L3 命令执行）
 export interface NeonForgeTools {
   list: () => Promise<Array<{ name: string; source: 'core' | 'lsp'; requiresApproval: boolean; risk: 'none' | 'low' | 'high' }>>
-  execute: (name: string, args: Record<string, unknown>, opts?: { approved?: boolean; rootPath?: string }) => Promise<{ ok: boolean; data?: { file?: string; snapshot?: boolean } | unknown; error?: string; needApproval?: boolean }>
+  execute: (name: string, args: Record<string, unknown>, opts?: { approved?: boolean; rootPath?: string; sessionId?: string }) => Promise<{ ok: boolean; data?: { file?: string; snapshot?: boolean } | unknown; error?: string; needApproval?: boolean }>
   revert: (filePath: string) => Promise<{ ok: boolean; error?: string }>
   // ticket 14 可撤销：停止当前活动命令（bash 高危——任何时刻可停，不卡死）
   cancel: () => Promise<{ ok: boolean; error?: string }>

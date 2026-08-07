@@ -122,10 +122,11 @@ export function registerIpc(): void {
   ipcMain.handle('tools:list', () => toolRegistry.list())
   // 2026-08-04 规划级授权强制：renderer 批准 plan_approval 后通知 main（write/edit 放行）
   ipcMain.handle('tools:plan-approved', () => { markPlanApproved(); return { ok: true } })
-  ipcMain.handle('tools:execute', async (_e, opts: { name: string; args: Record<string, unknown>; approved?: boolean; rootPath?: string }) => {
+  ipcMain.handle('tools:execute', async (_e, opts: { name: string; args: Record<string, unknown>; approved?: boolean; rootPath?: string; sessionId?: string }) => {
     const res = await toolRegistry.execute(opts.name, opts.args ?? {}, {
       approved: opts.approved ?? false,
-      rootPath: opts.rootPath ?? workspace.getCurrentRoot() ?? undefined
+      rootPath: opts.rootPath ?? workspace.getCurrentRoot() ?? undefined,
+      sessionId: opts.sessionId
     })
     // 2026-08-04 诊断日志（用户反馈「刚才出错了」无法追溯——工具执行结果落日志；定位后清理或降噪保留）
     // 2026-08-06 补充：记录命令/参数摘要（用户反馈「读取文件弹授权卡/起服务没弹卡」——需定位具体命令判定授权）

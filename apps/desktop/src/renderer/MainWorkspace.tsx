@@ -110,11 +110,15 @@ export default function MainWorkspace({
   // 2026-08-04：目标确认回写——模型【目标确认：xxx】→ 更新台账标题/快照 goal + 项目 README（目录名不变）
   // 2026-08-07 无阶段重构 S4：requirementConfirmed → goalConfirmed（目标确认——无阶段下确认「达成什么」）；删 inferFlowModel（模型风格随阶段体系移除）
   const [goalSeq, setGoalSeq] = useState(0) // 2026-08-07 无阶段重构 S4：目标确认次数——每次确认 = 任务边界（信任清除驱动；goalConfirmed 恒 true 后靠它感知新目标）
+  // 2026-08-08 会话日志（用户「每次应该是单独的会话日志」）：当前会话 ID——ConversationPanel 挂载（进入对话）生成后上报
+  // （MainWorkspace 侧 timeline 事件 goal-confirmed/exec-confirmed 归属同一会话）
+  const sessionIdRef = useRef('')
+  const handleSessionStart = (id: string) => { sessionIdRef.current = id }
   const handleGoalConfirmed = (title: string) => {
     setGoalConfirmed(true) // 目标已确认 → 解锁执行确认卡
     setGoalSeq((s) => s + 1) // 任务边界递增——ConversationPanel clearTrust（授权收回）
     // 2026-08-07 会话时间线（Session Timeline BC）：目标确认事件（来源：模型标记 onGoalConfirmed / 用户打字确认词）
-    try { void window.neonforge.timeline?.log?.({ session: rootPath ?? undefined, type: 'goal-confirmed', role: 'system', detail: { goalText: title } }) } catch { /* 日志失败不影响 */ }
+    try { void window.neonforge.timeline?.log?.({ session: sessionIdRef.current || (rootPath ?? undefined), type: 'goal-confirmed', role: 'system', detail: { goalText: title } }) } catch { /* 日志失败不影响 */ }
     if (activeProblem) {
       setProblems((prev) => prev.map((p) => p.id === activeProblem
         ? { ...updateProblemSnapshot(p, { goal: title }), title: title.length > 20 ? title.slice(0, 20) + '…' : title }
@@ -133,7 +137,7 @@ export default function MainWorkspace({
   const handleExecutionConfirmed = () => {
     if (!goalConfirmed) handleGoalConfirmed(goalTextRef.current || initialPrompt || '目标已确认')
     setExecutionConfirmed(true)
-    try { void window.neonforge.timeline?.log?.({ session: rootPath ?? undefined, type: 'exec-confirmed', role: 'system', detail: { source: 'confirm-card' } }) } catch { /* 日志失败不影响 */ }
+    try { void window.neonforge.timeline?.log?.({ session: sessionIdRef.current || (rootPath ?? undefined), type: 'exec-confirmed', role: 'system', detail: { source: 'confirm-card' } }) } catch { /* 日志失败不影响 */ }
   }
   const handleUserMessage = (text: string) => {
     lastPromptRef.current = text
@@ -264,7 +268,7 @@ function initProblems(): ProblemInstance[] {
             确认流程全部走对话（模型【目标确认】标记 / 用户打字确认词）——dock 无任何卡片残留 */}
         <div className="nf-panel__body">
           {chatTab === 'chat' ? (
-            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} onApprovalChange={setPendingApproval} onActionPromiseHint={setActionHint} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} onGoalConfirmed={handleGoalConfirmed} onExecutionConfirmed={handleExecutionConfirmed} goalConfirmed={goalConfirmed} executionConfirmed={executionConfirmed} goalSeq={goalSeq} recentFilesExternal={projectFiles} initialPrompt={initialPrompt} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} />
+            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} onApprovalChange={setPendingApproval} onActionPromiseHint={setActionHint} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} onGoalConfirmed={handleGoalConfirmed} onExecutionConfirmed={handleExecutionConfirmed} goalConfirmed={goalConfirmed} executionConfirmed={executionConfirmed} goalSeq={goalSeq} recentFilesExternal={projectFiles} initialPrompt={initialPrompt} onSessionStart={handleSessionStart} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} />
           ) : (
             <TaskPanel />
           )}
