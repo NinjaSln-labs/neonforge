@@ -364,7 +364,7 @@ test('0-1 从零开始：模型需求确认 → 回写台账标题 + updateProje
         streamChat: async () => {
           // 延迟触发流式（等 initProject 完成——rootPath 就绪后需求确认才能回写 README）
           setTimeout(() => {
-            streamCb?.({ type: 'content', text: '你指的是 3D 射击小游戏，对吧？【需求确认：3D射击小游戏】' })
+            streamCb?.({ type: 'content', text: '你指的是 3D 射击小游戏，对吧？【目标确认：3D射击小游戏】' })
             streamCb?.({ type: 'done' })
           }, 50)
           return { ok: true }
