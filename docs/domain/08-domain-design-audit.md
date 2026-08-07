@@ -54,6 +54,8 @@
 
 **Task 降级为会话内子状态机**：只管三个任务级确认点（clarifying → goal-confirmed → executing → achieved-reported → resolved）——**不承载 pending**（工具级授权等待是会话级 pending 的一部分）。
 
+**调研交叉验证（2026-08-07）**：对齐决策状态机类（OpenHands AWAITING_USER_CONFIRMATION/USER_CONFIRMED/USER_REJECTED + brightlume 等待态约束跳转 + 自主性停止点 + Medium exactly once）；**Reddit/FSM 活动状态机（working/waiting——UI 层呼吸条）是不同层——非领域 PENDING 对照**；OpenHands 多等待态（input vs confirmation）为粒度先例——我们统一单一 PENDING（来源=卡类型——场景适配：等待都是「等用户是/否」）。
+
 ### 3. 执行保障（通过）
 
 | 规则 | 设计 |

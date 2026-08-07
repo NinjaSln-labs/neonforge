@@ -83,6 +83,15 @@ Task = Goal → Execution → Achievement
 - **pending 下模型动作无效**——模型后续任何工具调用不执行（做了白做）——**用户决策是下一个状态的唯一输入**
 - **用户「是」→ 模型根据决策重新做**（不是恢复 pending 前的动作——决策改变状态，动作跟随状态重新生成）
 
+**设计对齐与差异说明（2026-08-07 调研交叉验证）**：
+
+| 对照 | 结论 |
+|------|------|
+| **决策状态机 vs 活动状态机** | 行业 FSM 主流（Reddit/工程实践——"Waiting for User Input"/"Calling an API"）是**活动状态机**（agent 在做什么——操作/UI 层）——**不是本领域 PENDING 的对照**；我们的 UI 层已有活动状态（呼吸光条 working/waiting——product/00 §3.3）——领域层 PENDING 是**决策状态机**（自主性边界——何时停/何时继续）——不同层互补 |
+| **OpenHands 多等待态先例** | OpenHands `AgentState` 区分 `AWAITING_USER_INPUT` / `AWAITING_USER_CONFIRMATION`（输入 vs 确认——粒度区分）——**我们统一单一 PENDING**（来源=卡类型——子信息——非独立状态）——**场景适配**：我们的等待都是「等用户是/否」（确认卡/授权卡——行为一致——冻结+决策驱动）——统一更简（OpenHands 区分是不同响应语义的先例——我们场景不需要）|
+| **对齐锚点（决策状态机类）** | OpenHands AWAITING_*（等待用户=状态机一等公民）+ brightlume「不能从 awaiting 跳到 confirming——必须经过中间状态」（等待态约束跳转）+ LinkedIn「knowing when autonomy should stop」（等待=自主性停止）+ Medium「executes exactly once」（决策后精确执行一次）——**全部对齐** |
+| **授权卡也 pending** | Codex `ExecApprovalRequirement`（工具批准阻塞）+ OpenHands confirmation——对齐（工具批准=等待——影响后续推进）|
+
 ```
 目标澄清 ─[用户确认目标]→ 能力检查/执行方案 ─[用户确认执行]→ 动手产出(自推进工具链) → 达成汇报 ─[用户确认解决]→ 收敛
 ```
