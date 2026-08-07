@@ -171,6 +171,30 @@ interface Environment {
 }
 ```
 
+### 2.8 DeliveryPackage（交付包——值对象）
+
+```typescript
+interface DeliveryPackage {
+  id: string
+  files: { path: FilePath; diff: string }[]   // 产物清单 + 变更预览
+  acceptance: { item: string; passed: boolean }[] // 验收对照（DoD/AC）
+  status: 'delivered' | 'closed' | 'adjusting'   // 交付 ≠ 解决——closed=用户确认终态
+  snapshot?: string[]                            // 写前快照（.nf-bak——回滚）
+}
+```
+
+### 2.9 DeliveryService（数字交付——领域服务）
+
+```typescript
+interface DeliveryService {
+  alignDoD(goal: string): Acceptance[]           // 动手前复述问题 + 验收标准（用户认可才动手）
+  buildPackage(files: { path: FilePath; diff: string }[]): DeliveryPackage  // 交付包组装
+  confirmClose(pkg: DeliveryPackage): void       // 用户确认关闭（终态——验收打勾）
+  revert(pkg: DeliveryPackage, file: FilePath): void  // 快照回滚（交付不满意恢复原样）
+}
+```
+
+不变式：交付 ≠ 解决（closed 需用户确认关闭）；写前快照（可回滚）。
 ### 2.6 TaskTrust（任务级信任——值对象/集合）
 
 ```typescript
