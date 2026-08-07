@@ -24,6 +24,8 @@ import {
 } from './icons'
 // 2026-08-04 启动页方案 A：场景卡数据共享（启动页 + 对话空态共用）
 import { SCENES } from './scenes'
+// 2026-08-07 T1（regex-todo）：聊天错误分类纯函数——原 includes('5') 过宽（token-limit-50/5000/x5x 误归 service）
+import { classifyChatError } from './errorClassify'
 
 // ticket 04：对话最小闭环（D0 §2/§3.4）——输入发送 → Gateway 流式 → 消息/呼吸光条/推理展示
 // 消费 02：streamChat（四档 basic）+ ModelRouter（默认 Flash）；错误分支：Key 失效内嵌更新 / 服务故障提示
@@ -1014,13 +1016,12 @@ export default function ConversationPanel({
     // 2026-08-04 体验修复：错误分类 + 日志记录在 updater 外（坑 32——StrictMode updater 双调；原仅 done 记录错误无法追溯）
     // 2026-08-05 用户反馈（第二轮候选点选后卡住）：runChat 提前 return（gateway 错误/网络错误/key 失效）走 finishError 不经过 maybeContinue——
     // working 释放点已移到 maybeContinue（0e12ea6）→ finishError 不释放 → working 卡 true → 状态栏「搭档处理中」→ 卡住；此处统一释放
-    let errorType: 'key-invalid' | 'service' | 'unknown' = 'unknown'
+    // 2026-08-07 T1（regex-todo）：分类逻辑移入 errorClassify 纯函数（原 String(err).includes('5') 过宽——token-limit-50/5000/x5x 误归 service）
+    const errorType = classifyChatError(err)
     let content = '刚才出错了，请再试一次。'
-    if (err === 'key-invalid' || String(err).includes('401')) {
-      errorType = 'key-invalid'
+    if (errorType === 'key-invalid') {
       content = 'API Key 好像失效了，换个 Key 试试。'
-    } else if (String(err).includes('5') || err === 'timeout' || err === 'network' || String(err).includes('gateway')) {
-      errorType = 'service'
+    } else if (errorType === 'service') {
       content = '服务暂时不可用，稍后再试。'
     }
     setWorking(false)
