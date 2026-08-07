@@ -10,7 +10,7 @@ import { buildAuthHint, canMergeApprove, toolRisk } from './authModel'
 // 2026-08-04：cleanContent 回复正文展示清洗（字面转义/连续换行杂音）
 import { cleanContent, stripMarkdown } from './textClean'
 // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层纯逻辑，双源调研驱动）
-import { evaluateTurnProgress, detectStuck, initialStuckState, isQuestionLike, isCommunicationLike, isDoneLike } from './domain/agentLoop'
+import { evaluateTurnProgress, detectStuck, initialStuckState, isQuestionLike, isCommunicationLike, isDoneLike, parseExecutionPlan } from './domain/agentLoop'
 // 2026-08-07 DDD 落地（坑 89 forceTool/advanceChat 领域化——Conversation BC 轮次执行保障 + AgentChain BC 产品阶段流转）
 import { decideTurnPolicy } from './domain/turnPolicy'
 // 2026-08-07 无阶段重构 S4：buildAdvanceInstruction/stageFlow import 删除（advanceChat 随阶段体系移除）
@@ -319,6 +319,11 @@ export default function ConversationPanel({
       // 2026-08-07 无阶段重构 S4：onAdvanceHint（推进按钮高亮）删除——无阶段无推进按钮；
       // 【目标确认】标记仍同步 goalConfirmedRef（门控放行——目标确认后直接执行）
       if (content.includes('【目标确认')) goalConfirmedRef.current = true
+      // 2026-08-07 无阶段重构 S5：执行方案清单解析——模型输出【执行方案】块 → 并入 plannedFiles（任务完成度——deepcode unimplemented_files 借鉴）
+      const planFiles = parseExecutionPlan(content)
+      if (planFiles.length > 0) {
+        planFiles.forEach((f) => plannedFilesRef.current.add(f))
+      }
       // 2026-08-05 体验反馈（用户「最后一条像卡住」）：模型承诺行动（「我先…再…」）但没调工具 → 提示用户可回复「继续」
       // （非卡死——working 已释放；判定收紧：问句/征求同意/「确认/思考」类对话行为不触发；不限于开发阶段——任何阶段说了要看/读/写就该做）
       // 2026-08-05 自动化实测发现（需求阶段偶发误判）：需求阶段（flowStage=0）模型「我先…再确认/再问」是问答引导（STAGE_HINT 需求阶段禁止工具），
@@ -682,7 +687,7 @@ export default function ConversationPanel({
   const clearTrust = (): void => {
     taskTrustRef.current = []
     setTaskTrust([])
-    // 2026-08-05：阶段推进 = 任务边界——plan_approval 幂等标记同步重置（新阶段需重新规划授权）
+    // 2026-08-05：阶段推进 = 任务边界；2026-08-07 无阶段重构 S4/S5：目标确认（goalSeq）= 任务边界——plan_approval 幂等标记同步重置（新任务需重新规划授权）
     planApprovedRef.current = false
   }
   // 2026-08-04 修复（用户「游戏成的3是D」错位）：流式链互斥——一次只跑一条链（send/advanceChat/授权续聊），其他链排队；
