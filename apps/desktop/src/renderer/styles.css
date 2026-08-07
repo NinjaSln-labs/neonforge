@@ -562,6 +562,9 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-candidates__idx { color: var(--nf-accent-text); font-weight: 600; flex-shrink: 0; }
 .nf-candidates__btn:hover { border-color: var(--nf-accent); background: var(--nf-accent-soft); color: var(--nf-accent); }
 .nf-candidates__btn:active { transform: scale(0.99); }
+/* 2026-08-08 B 修复：候选已选态（决策点走完——淡色 + 不可点） */
+.nf-candidates__btn--chosen { opacity: 0.55; cursor: default; border-color: var(--nf-accent); }
+.nf-candidates__btn--chosen:hover { background: none; color: var(--nf-text); }
 
 /* 数字产物交付（ticket 13）：文件清单 + 任务选择 + 变更预览 */
 .nf-digital { display: flex; flex-direction: column; gap: var(--nf-space-3); padding: var(--nf-space-3); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md); background: var(--nf-bg-elevated); }
