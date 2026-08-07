@@ -73,13 +73,13 @@ TurnExecutionPolicy（领域层——纯函数）
 Gateway.forceTool 传递 → DeepSeek API（tool_choice）
 ```
 
-## 4. 宿主强制边界管线（模型漂移防护 + 单一 PENDING 状态机）
+## 4. 宿主强制边界管线（模型漂移防护 + 会话级单一 PENDING 状态机）
 
 ```
 模型调任何工具(read/write/edit/bash/…)
     │
     ▼
-ProgressionGate（领域层——单一 PENDING 状态机）
+ProgressionGate（领域层——会话级单一 PENDING——Conversation 聚合承载）
     ├─ ①【PENDING：等用户决策】──→ 模型动作全部无效（所有工具都不放行——做了白做——不执行不生效）
     │     └─ 卡来源：目标确认卡 / 执行确认卡 / 达成确认卡 / 授权卡（小阶段——影响大阶段后续）
     │（用户「是」→ 状态推进 → 模型根据决策重新做；用户「否」→ 状态回退 → 模型调整）
