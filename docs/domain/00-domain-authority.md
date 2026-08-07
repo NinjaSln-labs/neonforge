@@ -70,9 +70,9 @@
 - 确认点未处理（未确认未拒绝）= **等待**（blocking——模型停在该确认点——不推进、不默认放行）
 - 确认/拒绝显式三态（对齐 OpenHands USER_CONFIRMED/USER_REJECTED、Cline allow/always/reject）
 
-### 3.2 单一 PENDING 状态机（等用户决策——领域核心）
+### 3.2 单一 PENDING 状态机（会话级——等用户决策——领域核心）
 
-**任何需要用户决策的点（卡弹出）→ 【PENDING——等用户决策】**：
+**任何需要用户决策的点（卡弹出）→ 会话进入【PENDING——等用户决策】——pending 是会话级（Conversation 聚合承载——2026-08-07 领域定论），Task（会话内执行单元）不承载 pending（工具级授权等待是会话级 pending 的一部分）**：
 
 ```
 任何需要用户决策的点（卡弹出）──→ 【PENDING——等用户决策】
