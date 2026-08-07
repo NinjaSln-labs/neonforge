@@ -309,11 +309,11 @@ test('0-1 从零开始：确认推进 → 对话区出现阶段推进反馈消�
   await page.locator('.nf-start__input').fill('帮我做个网页游戏')
   await page.locator('.nf-start__input').press('Enter')
   await page.getByRole('button', { name: /快速迭代/ }).click()
-  // P0 门控：需求未确认 → 推进按钮禁用（文案「确认需求后可推进」）
+  // 2026-08-07 质量把关修复：原断言「需求未确认→按钮禁用」过时——坑 51（1653f8f）改后需求阶段按钮不禁用（用户显式点击=确认需求）；
+  // disabled 仅 busy/开发产物门控（坑 43）；此处等待 busy 结束后的状态（enabled）
   const advance = page.locator('.nf-flow__advance button')
-  await expect(advance).toBeDisabled()
-  // 2026-08-04：等自动发送的 working 结束（runChat 尾部等 1s）——否则需求卡确认后的 advanceChat 被 working 守卫跳过（streamChat 不调用）
-  await page.waitForTimeout(1200)
+  await page.waitForTimeout(1200) // 2026-08-04：等自动发送的 working 结束（runChat 尾部等 1s）——否则需求卡确认后的 advanceChat 被 working 守卫跳过（streamChat 不调用）
+  await expect(advance).toBeEnabled()
   // P2 需求卡：输入后出现（initialPrompt 非空）→ 点选 4 项 → 确认 → 自动推进到设计（对话区出现「已进入【设计】阶段」）
   await expect(page.locator('.nf-reqcard')).toBeVisible()
   await page.locator('.nf-reqcard__chip', { hasText: '射击游戏' }).click()
