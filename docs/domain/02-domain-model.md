@@ -184,6 +184,11 @@ Conversation
   └── prefixState: PrefixState
 ```
 
+> **轮次执行保障（2026-08-07 领域化——坑 89）**：对话轮次的「该不该强制模型产出」是 Conversation BC 的领域规则。
+> 领域服务 `TurnExecutionPolicy`（`src/renderer/domain/turnPolicy.ts`）——输入（阶段、轮次类型 `TurnKind`、纯确认、产出状态、深度）→ 决策 `forceTool`。
+> `TurnKind` 区分触发语义：`user-turn`（用户指令轮——坑 80 原意：必须动手到产出）/ `advance-turn`（阶段推进轮——按阶段工作模式）/ `tool-loop`（工具循环轮——auto，StuckDetector 兜底）。
+> 与 `agentLoop`（TurnProgress/StuckDetector——轮次卡住检测）同 BC 并列（deepcode loop_detector 行业对标）。
+
 ### AgentChain（核心域聚合根）
 ```
 AgentChain
@@ -195,6 +200,11 @@ AgentChain
   │     └── thinkingLevel
   └── createdAt
 ```
+
+> **产品六阶段 = 产品级流水线（2026-08-07 领域化——坑 89）**：产品 0-1 交付流（需求→设计→开发→测试→部署→交付）此前游离于领域模型外（A0 只有 agent 角色 Stage），
+> 依据 A0 §2「流水线编排（角色/模板/Stage）→ AgentChain」补建模为 **`ProductStage`**（`src/renderer/domain/stageFlow.ts`）——每个阶段带**工作模式**（`StageOutputMode`：
+> 需求=clarify 问答澄清 / 设计=text-proposal 方案文本 / 开发=artifacts 动手产出 / 测试=verify / 部署=deploy / 交付=report）。
+> 阶段推进 = `StageTransition`（领域事件）+ `AdvanceInstruction`（推进指令生成——advanceChat 的领域化）。
 
 ### ChangeSet（支撑域聚合根）
 ```

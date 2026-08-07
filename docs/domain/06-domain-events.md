@@ -38,6 +38,8 @@
 
 chain.loaded / chain.started / stage.started / stage.reasoning / stage.reasoning_block / stage.tool_call / stage.tool_result / stage.completed / stage.failed / chain.completed / chain.failed — 共 11 个。
 
+> **产品阶段推进（2026-08-07 领域化——坑 89）**：`stage.transition`（产品六阶段推进——需求→设计→开发→测试→部署→交付；载荷：`fromStage/toStage/requirement`）——advanceChat 的领域事件；`advance.instruction_generated`（AdvanceInstruction 生成——推进轮内部指令注入模型）。
+
 ### 1.5 Plugin 事件
 
 plugin.registered / plugin.activated / plugin.deactivated / plugin.error / plugin.hook_triggered — 共 5 个。
