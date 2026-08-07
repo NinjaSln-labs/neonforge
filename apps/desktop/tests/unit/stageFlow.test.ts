@@ -3,7 +3,6 @@ import {
   PRODUCT_STAGES,
   PRODUCT_STAGE_DEFS,
   stageByIndex,
-  stageIndex,
   isLastStage,
   buildAdvanceInstruction,
 } from '../../src/renderer/domain/stageFlow'
@@ -49,8 +48,7 @@ describe('StageFlow（阶段映射）', () => {
     expect(stageByIndex(6)).toBeNull()
   })
 
-  it('stageIndex / isLastStage', () => {
-    expect(stageIndex('开发')).toBe(2)
+  it('isLastStage', () => {
     expect(isLastStage(4)).toBe(false)
     expect(isLastStage(5)).toBe(true)
   })

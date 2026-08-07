@@ -14,7 +14,7 @@ import { cleanContent, stripMarkdown } from './textClean'
 import { evaluateTurnProgress, detectStuck, initialStuckState } from './domain/agentLoop'
 // 2026-08-07 DDD 落地（坑 89 forceTool/advanceChat 领域化——Conversation BC 轮次执行保障 + AgentChain BC 产品阶段流转）
 import { decideTurnPolicy, type TurnKind } from './domain/turnPolicy'
-import { stageByIndex, buildAdvanceInstruction } from './domain/stageFlow'
+import { stageByIndex, buildAdvanceInstruction, type ProductStageName } from './domain/stageFlow'
 // 2026-08-05 方案 3：结构化候选按钮——<candidates> 块解析/剥离（点选文本替代序号，消除模型序号解析漂移）
 import { parseCandidates, stripCandidates, stripTags } from './candidates'
 // 2026-08-03 视觉审计 P1-6：内联 SVG 图标（替换 emoji 图标）
@@ -435,7 +435,9 @@ export default function ConversationPanel({
         return
       }
       // 2026-08-06 设计阶段 write/edit 门控（真实 API 实测：模型设计阶段调 edit → 弹授权卡卡住——设计阶段不改文件，机制拦截非弹卡）
-      if (flowStage === 1 && (tc.name === 'write' || tc.name === 'edit')) {
+      // 2026-08-07 质量把关 P1 修复：advance-turn（阶段推进轮）不拦——advanceChat 触发时 applyChunk 闭包 flowStage 滞后（推进到开发仍显示设计），
+      // 推进轮的 write 按授权流走（弹卡用户可批/拒）；仅模型主动（user-turn/tool-loop）设计阶段改文件才拦（坑 48 语义——L3 440 暴露）
+      if (flowStage === 1 && (tc.name === 'write' || tc.name === 'edit') && turnKindRef.current !== 'advance-turn') {
         setMessages((prev) => {
           const last = prev[prev.length - 1]
           if (!last || last.role !== 'assistant') return prev
@@ -447,7 +449,10 @@ export default function ConversationPanel({
         return
       }
       // 2026-08-06 需求阶段门控（用户「需求阶段不是不会实际动手吗」——需求未确认不改文件；【需求确认】输出 → requirementConfirmedRef 放行——B 类确认后直接执行）
-      if (flowStage === 0 && (tc.name === 'write' || tc.name === 'edit') && !requirementConfirmedRef.current) {
+      // 2026-08-07 质量把关 P1 修复：补 initialPrompt 条件（对齐坑 71 bash 门控）——只拦 0-1 流程；
+      // 打开已有项目（非 0-1，initialPrompt 空）用户明确要求写文件 → 弹授权卡让用户决定（c57d987 引入时漏条件——L5 write 卡测试失败暴露）
+      // + advance-turn 排除（推进轮不拦——flowStage 闭包滞后同设计门控）
+      if (flowStage === 0 && (tc.name === 'write' || tc.name === 'edit') && initialPrompt && turnKindRef.current !== 'advance-turn' && !requirementConfirmedRef.current) {
         setMessages((prev) => {
           const last = prev[prev.length - 1]
           if (!last || last.role !== 'assistant') return prev
@@ -857,7 +862,7 @@ export default function ConversationPanel({
     const msgs: Array<{ role: 'user' | 'system'; content: string }> = [{
       role: 'user',
       // 2026-08-07 坑 89：阶段推进指令生成抽象到领域层（AgentChain BC——buildAdvanceInstruction）
-      content: buildAdvanceInstruction({ stage, hint, requirement })
+      content: buildAdvanceInstruction({ stage: stage as ProductStageName, hint, requirement }) // stage 来自 FLOW_STAGES 恒为合法阶段名——断言收窄
     }]
     if (stageHint) msgs.unshift({ role: 'system', content: stageHint })
     // 追加 streaming 占位——模型回复直接流式显示（内部指令不显示为用户消息）
