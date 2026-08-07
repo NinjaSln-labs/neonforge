@@ -93,6 +93,22 @@ describe('CapabilityRegistry（能力模型——平台原生 + 外部扩展 Sta
     expect(caps.find((c) => c.id === 'filesystem')?.category).toBe('system')
     expect(caps.find((c) => c.id === 'node-runtime')?.category).toBe('external')
   })
+
+  it('单源：detectCapabilities 复用传入 env（能力 status 从 env.systemRuntime 推导——不重复检测）', () => {
+    // 2026-08-08 环境/能力双源修复：check-capability 已调 checkEnvironment（检测一次）→ detectCapabilities 传 env 复用——
+    // node-runtime status 应来自传入 env（而非重新 detectEnvironment 的真实系统状态）
+    const fakeEnv = {
+      rootPath: '/proj/env-reuse', runtime: 'node', runtimeVersion: 'v99.0.0',
+      hasPackageJson: true, hasNodeModules: true, packageManager: 'npm', toolchain: ['vite'],
+      servicePort: 0, signature: 'x',
+      systemRuntime: { node: { version: 'v99.0.0', status: 'failed' as const }, python: { version: '', status: 'missing' as const } }
+    }
+    const caps = detectCapabilities('/proj/env-reuse', 'darwin', fakeEnv)
+    // node-runtime 用传入 env 的 failed（若重新检测会是本机真实 node 状态——多为 ready）
+    expect(caps.find((c) => c.id === 'node-runtime')?.status).toBe('failed')
+    expect(caps.find((c) => c.id === 'node-runtime')?.detail).toContain('不可用')
+    expect(caps.find((c) => c.id === 'python-runtime')?.status).toBe('missing')
+  })
 })
 
 // 2026-08-07 Ledger 结果回填（坑 83 ⑥——能力真实可用性从执行结果学习，自进化闭环）
