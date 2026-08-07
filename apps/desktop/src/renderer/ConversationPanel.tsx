@@ -157,8 +157,13 @@ export default function ConversationPanel({
   const messagesRef = useRef<Msg[]>([])
   useEffect(() => { messagesRef.current = messages }, [messages])
   // 2026-08-04 审计修复（D2）：有待批准工具操作 → 上报状态栏提示（need-approval 出现/消失）
+  // 2026-08-07 无阶段修复（输入≠打断）：pendingApprovalRef 同步——send 排队判定用（待授权时模型停住等批准，
+  // 用户输入直接处理不排队——排队会卡在授权等待；模型产出中才排队衔接）
+  const pendingApprovalRef = useRef(false)
   useEffect(() => {
-    onApprovalChange?.(messages.some((m) => m.toolCalls?.some((c) => c.status === 'need-approval')) ?? false)
+    const pending = messages.some((m) => m.toolCalls?.some((c) => c.status === 'need-approval')) ?? false
+    pendingApprovalRef.current = pending
+    onApprovalChange?.(pending)
   }, [messages, onApprovalChange])
   // 断点续做（ticket 06/基线 §21）：挂载恢复上次会话（onNew 已 clearSession → 空）
   useEffect(() => {
@@ -712,15 +717,43 @@ export default function ConversationPanel({
     setWorkingStage('已停止')
   }
 
+  // 2026-08-07 无阶段修复（用户「输入≠打断」）：排队衔接机制——模型产出中用户发送 → 存 pending，
+  // 当前轮（流式+工具链）完成后自动发送（不打断）；打断 = 显式停止按钮（.nf-chat__stop）
+  const pendingSendRef = useRef('')
+  const flushPendingSend = () => {
+    const pending = pendingSendRef.current
+    if (!pending) return
+    pendingSendRef.current = ''
+    inputRef.current = pending
+    // 等 workingRef 更新（setWorking(false) effect 渲染后）——避免 send 开头误判 working 又排队
+    setTimeout(() => void sendRef.current(), 50)
+  }
+
   // 2026-08-06 只说不做第 5 次升级（用户反馈「最后又卡住了」）：send 支持 silent（自动续聊用——不显示/不记录用户消息，避免用户看到「自己发的」困惑）
   const send = async (opts?: { silent?: boolean }) => {
     const text = inputRef.current.trim()
     if (!text) return
-    // 2026-08-05 用户反馈 3（处理中可发送）+ 反馈 4（无打断能力）：处理中发送 = 打断当前 + 新指令优先
-    // （竞品共识：Claude Code Esc+新输入 / Devin 中断保留状态恢复——不是排队，不是禁止）
+    // 2026-08-07 无阶段修复（用户「输入≠打断」——竞品共识：Claude Code Esc / Cursor 停止按钮 / Devin 中断都是显式动作）：
+    // 模型产出中发送 = 排队衔接（不打断当前流式/工具链，当前轮完成后自动发送）；打断 = 显式停止按钮（.nf-chat__stop）
+    // 待授权（模型停住等批准）时发送 = 直接处理（用户未批准给新指令——排队会卡在授权等待）
     if (workingRef.current) {
-      console.log('[conversation] 处理中发送——打断当前，新指令优先')
-      await stopGeneration()
+      if (opts?.silent) {
+        // 系统自动消息（StuckDetector escalate/执行确认触发——非用户输入）：直接处理（打断当前——内部机制干预卡住，
+        // 不受「输入≠打断」约束；排队会让修正消息延迟到当前轮完成——卡住时正是要立即干预）
+        console.log('[conversation] 处理中 silent 发送——打断当前（系统自动续聊/修正）')
+        await stopGeneration()
+      } else if (!pendingApprovalRef.current) {
+        // 用户输入：排队衔接（不打断当前流式/工具链——输入≠打断，竞品共识：打断=显式停止按钮）
+        console.log('[conversation] 处理中发送——排队衔接（当前轮完成后自动发送；要停请点停止按钮）')
+        pendingSendRef.current = text
+        onUserMessage?.(text)
+        window.neonforge.chatLog?.log?.({ ts: new Date().toISOString(), role: 'user', content: text })
+        setMessages((p) => [...p, { role: 'user', content: text, status: 'done' }])
+        inputRef.current = ''
+        setInput('')
+        return
+      }
+      console.log('[conversation] 待授权中发送——新指令直接处理（未批准给新指令）')
     }
     inputRef.current = ''
     setInput('')
@@ -801,6 +834,8 @@ export default function ConversationPanel({
     } finally {
       setWorking(false)
       onWorkingChange?.(false)
+      // 2026-08-07 无阶段修复（输入≠打断）：当前轮（流式+工具链）完成 → 排队消息自动衔接发送
+      flushPendingSend()
     }
   }
   // 05 B：sendRef 同步最新 send（externalRequest 触发用）
