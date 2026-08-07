@@ -73,6 +73,19 @@ export function isServerCommand(cmd: string): boolean {
   return SERVER_COMMAND_WHITELIST.some((s) => s.test(cmd.trim()))
 }
 
+// 2026-08-07 T3（regex-todo）：DEV_SERVER_RE/INSTALL_RE 从 tools.ts 移入——命令类型识别单源（服务命令判定一处）
+// 分工：isServerCommand = 严格白名单（start-server 工具命令选择——锚定开头）；isServerLikeCommand = 宽松检测
+// （bash 超时/端口保护/ServiceState——命令可能在 shell 复合串中，非锚定——行为与原 DEV_SERVER_RE 完全一致）
+const SERVER_CMD_LOOSE_RE = /(npm|pnpm|yarn) run (dev|start|serve|preview)|vite( |$)|next dev|react-scripts start|node .*(server|listen)/
+export function isServerLikeCommand(cmd: string): boolean {
+  return SERVER_CMD_LOOSE_RE.test(cmd)
+}
+
+const INSTALL_CMD_RE = /(npm|pnpm|yarn|bun) (i|install|add)( |$)|pip install|go mod download|brew install/
+export function isInstallCommand(cmd: string): boolean {
+  return INSTALL_CMD_RE.test(cmd)
+}
+
 // 启动开发服务器（rootPath 已有服务 → 直接返回；否则起进程并等地址）
 export async function startServer(rootPath: string, command?: string): Promise<{ ok: true; data: { url: string; port: number } } | { ok: false; error: string }> {
   const existing = services.get(rootPath)
