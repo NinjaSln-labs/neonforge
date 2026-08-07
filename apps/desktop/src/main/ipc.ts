@@ -1,7 +1,7 @@
 // IPC handlers：renderer 经 preload → 主进程 gateway/configStore/workspace
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { parseUnifiedDiff, applyDiffToFile, snapshot, revert } from './applyDiff.js'
-import { gateway } from './gateway.js'
+import { gateway, classifyGatewayError } from './gateway.js'
 import { configStore } from './configStore.js'
 import { workspace } from './workspace.js'
 import { initTools, toolRegistry, revertToolFile, cancelActiveCommand, markPlanApproved } from './tools.js'
@@ -55,7 +55,8 @@ export function registerIpc(): void {
       return { ok: true }
     } catch (e) {
       console.log('[ipc] stream error:', e instanceof Error ? e.message : String(e))
-      return { ok: false, error: e instanceof Error ? e.message : 'gateway-error' }
+      // 2026-08-07 T1 根因补强：结构化 errorType 分类透传（renderer 读字段——不再 includes('5')/正则抠文本）
+      return { ok: false, error: e instanceof Error ? e.message : 'gateway-error', errorType: classifyGatewayError(e) }
     }
   })
 

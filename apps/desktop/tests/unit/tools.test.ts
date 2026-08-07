@@ -22,12 +22,20 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     rmSync(TMP, { recursive: true, force: true })
   })
 
-  it('write：未授权拒绝（L3）——不写文件', async () => {
+  it('write：未授权拒绝（L3）——不写文件 + 结构化 needApproval 标记', async () => {
     const file = path.join(TMP, 'a.txt')
     const r = await toolRegistry.execute('write', { path: file, content: 'x' }, {})
     expect(r.ok).toBe(false)
+    // 2026-08-07 T2（regex-todo）：needApproval 结构化字段——原 renderer includes('授权') 文本耦合（main 改文案/英文 → 授权卡变 error）
+    expect(r.needApproval).toBe(true)
     expect(r.error).toContain('授权')
     expect(existsSync(file)).toBe(false)
+  })
+
+  it('非授权错误不带 needApproval 字段（未知工具——T2 协议边界）', async () => {
+    const r = await toolRegistry.execute('nonexistent-tool', {}, {})
+    expect(r.ok).toBe(false)
+    expect(r.needApproval).toBeUndefined()
   })
 
   it('write：授权后写文件 + 写前快照 .nf-bak + 回滚恢复原样', async () => {

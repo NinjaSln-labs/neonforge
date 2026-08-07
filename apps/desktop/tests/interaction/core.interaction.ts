@@ -194,7 +194,8 @@ test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 1
         execute: async (name: string, args: Record<string, unknown>, opts?: { approved?: boolean }) => {
           if (name === 'read') return { ok: true, data: 'x' }
           if ((name === 'write' || name === 'edit') && opts?.approved) return { ok: true, data: { file: '/test/' + String(args.path).split('/').pop(), snapshot: true } }
-          return { ok: false, error: `「${name}」需要授权（L3）——approved=true 后执行` }
+          // 2026-08-07 T2（regex-todo）：mock 同步真实契约——needApproval 结构化字段（renderer 读字段不再 includes('授权') 文本）
+          return { ok: false, needApproval: true, error: `「${name}」需要授权（L3）——approved=true 后执行` }
         },
         revert: async () => ({ ok: true }),
         cancel: async () => ({ ok: false, error: '无活动命令' })
@@ -631,7 +632,8 @@ test('0-1 授权 v4 完整路径：允许并记住 → 同文件自动 → 确�
       tools: {
         execute: async (_n: string, args: Record<string, unknown>, opts?: { approved?: boolean }) => {
           // 模拟 main preApproval：write 需授权（approved=false → need-approval）；approved=true → 执行成功
-          if (!opts?.approved) return { ok: false, error: '「write」需要授权（L3）——approved=true 后执行' }
+          // 2026-08-07 T2（regex-todo）：needApproval 结构化字段——renderer 读字段不再 includes('授权') 文本
+          if (!opts?.approved) return { ok: false, needApproval: true, error: '「write」需要授权（L3）——approved=true 后执行' }
           return { ok: true, data: { file: String(args.path), snapshot: true } }
         },
         list: async () => []

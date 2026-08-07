@@ -60,6 +60,9 @@ export interface ToolResult {
   ok: boolean
   data?: unknown
   error?: string
+  // 2026-08-07 T2（regex-todo）：needApproval 结构化字段——renderer 不再 includes('授权') 文本匹配
+  //（main 改文案/英文 → 授权卡变 error 的脆弱耦合）；仅授权拦截返回时出现
+  needApproval?: boolean
 }
 
 class ToolRegistry {
@@ -102,7 +105,8 @@ class ToolRegistry {
       // 2026-08-04 授权架构重构：preApproval 裁决（如 bash 只读命令自动执行）——原一律 need-approval（授权疲劳根因：ls/cat 也弹卡）
       const pre = tool.preApproval?.(args, opts)
       if (!pre?.auto) {
-        return { ok: false, error: `「${name}」需要授权（L3）——approved=true 后执行` }
+        // 2026-08-07 T2（regex-todo）：needApproval 结构化标记——renderer 读字段判定授权卡（不再 includes('授权') 文本匹配）
+        return { ok: false, needApproval: true, error: `「${name}」需要授权（L3）——approved=true 后执行` }
       }
     }
     try {
