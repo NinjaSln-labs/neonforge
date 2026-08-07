@@ -11,11 +11,19 @@
 // produced           = 已有产出（write/edit 成功——read 不算产出，activity≠progress 坑 81）
 // lastToolFailed     = 上一轮工具执行失败（bash exit≠0 / write/edit 失败）——释放强制（用户「错误要抛出来，
 //                     模型自己修正」——required 模式压制模型的文本诊断能力 → 被迫重试失败命令死循环，冒烟实测 37 轮）
+// goalAchieved       = 模型已汇报达成（输出【已达成】标记）——produced 后仍需此才释放强制：
+//                     写 1 个文件 ≠ 任务达成（竞品 Codex/OpenHands 任务完成度语义——冒烟 11 实测：
+//                     模型 write 1 文件后 produced 释放 → 停住 → O5 达成汇报未达成）
+// plannedComplete    = 计划文件全部写完（producedFiles 覆盖 plannedFiles）——写完即释放（模型可输出达成汇报）——
+//                     竞品对齐：任务完成度按计划文件写完判定（不依赖模型自报——required 模式下模型被逼调工具
+//                     无法输出【已达成】文本——冒烟 12 实测：写完计划文件后仍强制 → 重复写文件 3 次被死循环掐断）
 export interface TurnPolicyInput {
   goalConfirmed: boolean
   executionConfirmed: boolean
   produced: boolean
   lastToolFailed?: boolean
+  goalAchieved?: boolean
+  plannedComplete?: boolean
 }
 
 export interface TurnPolicyDecision {
@@ -42,15 +50,24 @@ export function decideTurnPolicy(input: TurnPolicyInput): TurnPolicyDecision {
   if (!executionConfirmed) {
     return { forceTool: false, reason: 'awaiting-exec-confirm' }
   }
-  // 已有产出 → auto（收敛到文本结束；StuckDetector 检测无产出循环兜底）
-  if (produced) {
-    return { forceTool: false, reason: 'produced-auto' }
-  }
   // 2026-08-07 失败感知（用户「错误要抛出来，模型自己修正」——冒烟实测：bash exit-1 后模型被 required
   // 强制必须调工具 → 无法停下输出诊断/修正策略 → 被迫重试同一失败命令 37 轮死循环）：
   // 上一轮工具执行失败 → 释放强制（auto）——模型可停下看到 stderr 诊断修正，修好后下一轮恢复
+  // 优先于任务完成度强制（失败时诊断优先，不逼继续产出）
   if (input.lastToolFailed) {
     return { forceTool: false, reason: 'tool-failed-diagnose' }
+  }
+  // 2026-08-07 任务完成度（竞品 Codex/OpenHands 语义——写 1 个文件 ≠ 任务达成）：
+  // produced 但计划文件未写完且未汇报【已达成】→ 仍强制（逼模型继续完成计划文件——冒烟 11 实测：
+  // 模型 write package.json 后 produced 释放 → 停住 → O5 达成汇报未达成）
+  // plannedComplete（计划文件写完）→ 释放——模型可输出达成汇报（required 模式逼工具导致无法输出文本——
+  // 冒烟 12 实测：写完计划文件后仍强制 → 模型重复写文件 3 次被死循环检测掐断）
+  if (produced && !input.plannedComplete && !input.goalAchieved) {
+    return { forceTool: true, reason: 'goal-exec-until-achieved' }
+  }
+  // 已有产出且（计划写完或已汇报达成）→ auto（收敛到对话结束；StuckDetector 检测无产出循环兜底）
+  if (produced) {
+    return { forceTool: false, reason: 'produced-auto' }
   }
   // 目标+执行已确认但无产出 → 强制（B 类语义延续：read 不算产出持续强制，直到 write/edit）
   return { forceTool: true, reason: 'goal-exec-until-produced' }

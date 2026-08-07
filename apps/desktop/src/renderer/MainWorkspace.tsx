@@ -128,21 +128,17 @@ export default function MainWorkspace({
   const [executionConfirmed, setExecutionConfirmed] = useState(false) // 2026-08-07 无阶段重构 S4：执行方案确认（ExecutionConfirmCard）
   // 2026-08-04 体验修复：需求阶段用户需求文本暂存（无阶段重构 S4：目标文本暂存——「确认目标」兜底回写/注入用——不依赖模型【目标确认：】标记）
   const goalTextRef = useRef('')
+  // 2026-08-07 用户决策（行业共识——显式结构化确认，非确认词匹配）：确认全部走对话内嵌确认/拒绝卡片（像授权卡）
+  // 目标确认卡【确认目标】→ handleGoalConfirmed；执行确认卡【确认执行】→ handleExecutionConfirmed；达成确认卡【已解决】→ goalAchieved
+  const handleExecutionConfirmed = () => {
+    if (!goalConfirmed) handleGoalConfirmed(goalTextRef.current || initialPrompt || '目标已确认')
+    setExecutionConfirmed(true)
+    try { void window.neonforge.timeline?.log?.({ session: rootPath ?? undefined, type: 'exec-confirmed', role: 'system', detail: { source: 'confirm-card' } }) } catch { /* 日志失败不影响 */ }
+  }
   const handleUserMessage = (text: string) => {
     lastPromptRef.current = text
-    // 2026-08-07 无阶段重构：无执行确认卡（dock 顶部全清——用户「最上面的那块都不需要了」）——用户打字确认 = 执行确认：
-    // 目标未确认 + 确认词 → 确认目标（原 GoalCard 外兜底——坑 51 用户显式确认=最强信号）
-    // 目标已确认 + 确认词 → 确认执行（executionConfirmed=true——forceTool 生效防只说不做，坑 80）
-    // 词表：执行意图确认词（「好/OK」太宽——正常对话常用，误触发强制产出风险 > 确认触发收益，剔除）
-    if (/确认|可以|没问题|就按|就这么做|开工|开始吧|就这么办/.test(text)) {
-      if (!goalConfirmed) handleGoalConfirmed(goalTextRef.current || text)
-      else {
-        setExecutionConfirmed(true)
-        // 2026-08-07 会话时间线：执行确认事件（用户打字确认词——无执行确认卡后的确认通道）
-        try { void window.neonforge.timeline?.log?.({ session: rootPath ?? undefined, type: 'exec-confirmed', role: 'system', detail: { source: 'user-word' } }) } catch { /* 日志失败不影响 */ }
-      }
-      return
-    }
+    // 2026-08-07 用户决策：确认词正则匹配删除（「可以撤销吗」也触发等误触发——行业共识是结构化确认动作）——
+    // 确认只走卡片按钮（目标/执行/达成）+ 授权卡
     if (!goalConfirmed) goalTextRef.current = text // 目标未确认时用户说的话即目标描述
     // ticket 07：从零开始 → 首条消息创建真实项目目录（0-1 交付真实执行地基——后续模型在真实项目内 write/read）
     if (!rootPath && onProjectCreated) {
@@ -268,7 +264,7 @@ function initProblems(): ProblemInstance[] {
             确认流程全部走对话（模型【目标确认】标记 / 用户打字确认词）——dock 无任何卡片残留 */}
         <div className="nf-panel__body">
           {chatTab === 'chat' ? (
-            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} onApprovalChange={setPendingApproval} onActionPromiseHint={setActionHint} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} onGoalConfirmed={handleGoalConfirmed} goalConfirmed={goalConfirmed} executionConfirmed={executionConfirmed} goalSeq={goalSeq} recentFilesExternal={projectFiles} initialPrompt={initialPrompt} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} />
+            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} onApprovalChange={setPendingApproval} onActionPromiseHint={setActionHint} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} onGoalConfirmed={handleGoalConfirmed} onExecutionConfirmed={handleExecutionConfirmed} goalConfirmed={goalConfirmed} executionConfirmed={executionConfirmed} goalSeq={goalSeq} recentFilesExternal={projectFiles} initialPrompt={initialPrompt} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} />
           ) : (
             <TaskPanel />
           )}

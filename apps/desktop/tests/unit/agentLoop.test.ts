@@ -117,3 +117,44 @@ describe('StuckDetector（卡住检测——连续无进展升级）', () => {
     expect(r.event).toBeUndefined()
   })
 })
+
+// 2026-08-07 根因 2（冒烟 13）：待授权轮（need-approval——模型停住等用户批准）不算停滞——不 escalate（授权流不许打断）
+describe('StuckDetector 待授权轮排除（根因 2——write 授权卡被当无产出 escalate 打断授权流）', () => {
+  const baseInput = {
+    toolCalls: [],
+    content: 'text',
+    prevReadFiles: new Set<string>(),
+    plannedFiles: new Set<string>(['/p/a.js']),
+    producedFiles: new Set<string>()
+  }
+  it('need-approval 工具（write 授权卡）→ 连续多轮不 escalate（重置——等用户批准不是卡住）', () => {
+    let state = initialStuckState
+    for (let i = 0; i < 5; i++) {
+      const turn = evaluateTurnProgress({ ...baseInput, toolCalls: [{ name: 'write', status: 'need-approval', file: '/p/a.js' }] })
+      const r = detectStuck({ turn, prev: state })
+      state = r.state
+      expect(r.event?.type ?? 'none').not.toBe('escalate')
+      expect(r.event?.type ?? 'none').not.toBe('needs-human')
+    }
+  })
+  it('plan-approval 卡同理（plan_approval 待批准——不 escalate）', () => {
+    let state = initialStuckState
+    for (let i = 0; i < 4; i++) {
+      const turn = evaluateTurnProgress({ ...baseInput, toolCalls: [{ name: 'plan_approval', status: 'plan-approval' }] })
+      const r = detectStuck({ turn, prev: state })
+      state = r.state
+      expect(r.event?.type ?? 'none').not.toBe('escalate')
+    }
+  })
+  it('对照：无工具纯文本（无待授权）连续 2 轮 → 仍 escalate（原行为保留——真卡住检测不退化）', () => {
+    let state = initialStuckState
+    let escalated = false
+    for (let i = 0; i < 3; i++) {
+      const turn = evaluateTurnProgress({ ...baseInput, toolCalls: [] })
+      const r = detectStuck({ turn, prev: state })
+      state = r.state
+      if (r.event?.type === 'escalate') escalated = true
+    }
+    expect(escalated).toBe(true)
+  })
+})

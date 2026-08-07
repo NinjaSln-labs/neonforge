@@ -803,3 +803,23 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-plan__file { display: flex; gap: 8px; font-size: 11px; line-height: 1.4; }
 .nf-plan__path { font-family: var(--nf-font-mono); color: var(--nf-accent); flex-shrink: 0; }
 .nf-plan__reason { color: var(--nf-text-dim); }
+
+/* 2026-08-07 确认/拒绝卡片（用户决策——行业共识：显式结构化确认，替代确认词匹配；对话流内嵌——像授权卡）
+   三卡：目标确认（确认目标/重新描述）、执行确认（确认执行/修改方案）、达成确认（已解决/还要改） */
+.nf-confirmcard {
+  margin-top: 8px; padding: var(--nf-space-2) var(--nf-space-3);
+  border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md);
+  background: var(--nf-bg-elevated); display: flex; flex-direction: column; gap: 6px;
+  max-width: 420px;
+}
+.nf-confirmcard__head { font-size: var(--nf-font-sm); font-weight: 600; color: var(--nf-accent); }
+.nf-confirmcard__goal { font-size: 12px; color: var(--nf-text); line-height: 1.5; }
+.nf-confirmcard__actions { display: flex; gap: 6px; }
+.nf-confirmcard__btn {
+  flex: 1; background: none; border: 1px solid var(--nf-border); color: var(--nf-text);
+  border-radius: var(--nf-radius-sm); padding: 5px var(--nf-space-2); font-size: 12px; cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+.nf-confirmcard__btn--ok { border-color: var(--nf-accent); color: var(--nf-accent); }
+.nf-confirmcard__btn--ok:hover { background: var(--nf-accent-soft); }
+.nf-confirmcard__btn--no:hover { background: var(--nf-border); }
