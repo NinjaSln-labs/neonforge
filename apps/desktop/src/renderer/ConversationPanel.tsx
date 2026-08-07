@@ -10,7 +10,7 @@ import { buildAuthHint, canMergeApprove, toolRisk } from './authModel'
 // 2026-08-04：cleanContent 回复正文展示清洗（字面转义/连续换行杂音）
 import { cleanContent, stripMarkdown } from './textClean'
 // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层纯逻辑，双源调研驱动）
-import { evaluateTurnProgress, detectStuck, initialStuckState, isQuestionLike, isCommunicationLike, isDoneLike, parseExecutionPlan } from './domain/agentLoop'
+import { evaluateTurnProgress, detectStuck, initialStuckState, isQuestionLike, isCommunicationLike, isDoneLike, parseExecutionPlan, summarizeCapability } from './domain/agentLoop'
 // 2026-08-07 DDD 落地（坑 89 forceTool/advanceChat 领域化——Conversation BC 轮次执行保障 + AgentChain BC 产品阶段流转）
 import { decideTurnPolicy } from './domain/turnPolicy'
 // 2026-08-07 无阶段重构 S4：buildAdvanceInstruction/stageFlow import 删除（advanceChat 随阶段体系移除）
@@ -38,6 +38,7 @@ export interface ToolCallMsg {
   rawResult?: string // 2026-08-05：API 回填用完整结果（UI 展示用 result 摘要）——read 完整内容防模型反复读同文件
   file?: string       // write/edit 成功写入的文件路径（回滚目标）
   canRevert?: boolean // 写前已快照——可回滚
+  hidden?: boolean    // 2026-08-08 O2：UI 隐藏（如 check-capability 能力齐备时默认不展示——结果仍回填模型上下文）
 }
 interface Msg {
   role: 'user' | 'assistant'
@@ -571,6 +572,12 @@ export default function ConversationPanel({
             if (c.name !== tc.name || c.status !== 'pending') return c
             return r.ok
               ? (() => {
+                  // 2026-08-08 O2：check-capability 检测结果——能力齐备 → 工具卡隐藏（hidden——用户不被打扰，结果仍回填模型）；
+                  // 缺失/异常（needsUser）→ 展示（用户需实质决策：安装/换方案）
+                  if (tc.name === 'check-capability') {
+                    const cap = summarizeCapability(r.data as { capabilities?: Array<{ id: string; status: string; detail?: string }> })
+                    return { ...c, status: 'done' as const, result: cap.summary, hidden: !cap.needsUser, rawResult: typeof r.data === 'string' ? r.data.slice(0, 16000) : JSON.stringify(r.data ?? '').slice(0, 16000) }
+                  }
                   // 2026-08-06 修正重写可见性（用户「第二次 write 很快不知道发生了什么——只需知道第二次是 fix bug」）：
                   // write 且该文件之前已写过（producedFilesRef 已有）→ 卡上标记「修正重写」——用户看到第二次是修正不是重复
                   const isRewrite = tc.name === 'write' && !!data?.file && producedFilesRef.current.has(data.file)
@@ -1261,7 +1268,8 @@ export default function ConversationPanel({
                 <p className="nf-reasoning">{stripMarkdown(m.reasoning)}</p>
               </details>
             )}
-            {m.toolCalls && m.toolCalls.length > 0 && (
+            {/* 2026-08-08 O2：全 hidden（如 check-capability 能力齐备）→ 不渲染空容器；map 保留原始索引（key/revert 定位一致——hidden 卡返回 null） */}
+            {m.toolCalls && m.toolCalls.some((c) => !c.hidden) && (
               <div className="nf-toolcalls">
                 {/* 2026-08-04 授权架构 v4：批量授权条——一条消息多个待授权文件（fix bug 场景）→ 一次批准整批 + 记住 */}
                 {m.toolCalls.filter((c) => c.status === 'need-approval').length > 1 && (
@@ -1273,6 +1281,8 @@ export default function ConversationPanel({
                   </div>
                 )}
                 {m.toolCalls.map((tc, i) => {
+                  // 2026-08-08 O2：check-capability 能力齐备 → hidden（不展示；保持原始索引——revert/patch 定位用 i）
+                  if (tc.hidden) return null
                   // ticket 14：授权卡风险明示——等级 + 影响（写哪个文件/执行什么命令）+ 快照提示
                   const hint = buildAuthHint(tc.name, tc.args)
                   return (
