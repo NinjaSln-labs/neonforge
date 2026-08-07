@@ -15,7 +15,7 @@ export interface NeonForgeBridge {
   }
   gateway: {
     validate: (apiKey: string) => Promise<{ ok: boolean; error?: string }>
-    streamChat: (opts: { apiKey: string; level?: string; tools?: boolean; forceTool?: boolean; messages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; reasoning_content?: string }> }) => Promise<{ ok: boolean; error?: string }>
+    streamChat: (opts: { apiKey: string; level?: string; tools?: boolean; forceTool?: boolean; messages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; reasoning_content?: string }> }) => Promise<{ ok: boolean; error?: string; errorType?: 'key-invalid' | 'service' | 'unknown' }>
     onStreamChunk: (cb: (chunk: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) => () => void
   }
   delivery: {
@@ -94,7 +94,7 @@ export interface ProblemInstance {
 // ToolRegistry（ticket 10/14）：renderer 侧工具接口（risk：none=L1 观察 / low=L3 文件操作 / high=L3 命令执行）
 export interface NeonForgeTools {
   list: () => Promise<Array<{ name: string; source: 'core' | 'lsp'; requiresApproval: boolean; risk: 'none' | 'low' | 'high' }>>
-  execute: (name: string, args: Record<string, unknown>, opts?: { approved?: boolean; rootPath?: string }) => Promise<{ ok: boolean; data?: { file?: string; snapshot?: boolean } | unknown; error?: string }>
+  execute: (name: string, args: Record<string, unknown>, opts?: { approved?: boolean; rootPath?: string }) => Promise<{ ok: boolean; data?: { file?: string; snapshot?: boolean } | unknown; error?: string; needApproval?: boolean }>
   revert: (filePath: string) => Promise<{ ok: boolean; error?: string }>
   // ticket 14 可撤销：停止当前活动命令（bash 高危——任何时刻可停，不卡死）
   cancel: () => Promise<{ ok: boolean; error?: string }>

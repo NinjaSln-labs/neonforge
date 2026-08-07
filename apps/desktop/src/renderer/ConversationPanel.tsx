@@ -24,8 +24,9 @@ import {
 } from './icons'
 // 2026-08-04 启动页方案 A：场景卡数据共享（启动页 + 对话空态共用）
 import { SCENES } from './scenes'
-// 2026-08-07 T1（regex-todo）：聊天错误分类纯函数——原 includes('5') 过宽（token-limit-50/5000/x5x 误归 service）
-import { classifyChatError } from './errorClassify'
+// 2026-08-07 T1（regex-todo）：聊天错误分类纯函数——原 includes('5') 过宽（token-limit-50/5000/x5x 误归 service）；
+// 根因补强：ipc 已返回结构化 errorType（gateway 源头分类）——classifyChatError 降级为兜底（字面量/未知格式）
+import { classifyChatError, type ChatErrorType } from './errorClassify'
 
 // ticket 04：对话最小闭环（D0 §2/§3.4）——输入发送 → Gateway 流式 → 消息/呼吸光条/推理展示
 // 消费 02：streamChat（四档 basic）+ ModelRouter（默认 Flash）；错误分支：Key 失效内嵌更新 / 服务故障提示
@@ -509,7 +510,7 @@ export default function ConversationPanel({
                   const isRewrite = tc.name === 'write' && !!data?.file && producedFilesRef.current.has(data.file)
                   return { ...c, status: 'done' as const, result: (isRewrite ? '⚠️ 修正重写——' : '') + fmtToolResult(r), rawResult: typeof r.data === 'string' ? r.data.slice(0, 16000) : JSON.stringify(r.data ?? '').slice(0, 16000), file: data?.file, canRevert: !!(data?.file && data.snapshot) }
                 })()
-              : { ...c, status: (r.error ?? '').includes('授权') ? ('need-approval' as const) : ('error' as const), result: r.error }
+              : { ...c, status: r.needApproval ? ('need-approval' as const) : ('error' as const), result: r.error }
           })
           return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
         })
@@ -642,7 +643,7 @@ export default function ConversationPanel({
         forceTool,
         messages: [sysHint, ...msgs]
       })
-      if (!res.ok) { finishError(res.error ?? 'gateway-error'); return }
+      if (!res.ok) { finishError(res.error ?? 'gateway-error', res.errorType); return }
     } catch { finishError('network'); return }
 
     // 记录本轮上下文 → 由 maybeContinue 轮询工具完成（自动执行）→ 续聊
@@ -1012,12 +1013,12 @@ export default function ConversationPanel({
     calls.forEach((tc, i) => { if (tc.status === 'need-approval') approveToolCall(calls, i, tc) })
   }
 
-  const finishError = (err: string) => {
+  const finishError = (err: string, errorTypeHint?: ChatErrorType) => {
     // 2026-08-04 体验修复：错误分类 + 日志记录在 updater 外（坑 32——StrictMode updater 双调；原仅 done 记录错误无法追溯）
     // 2026-08-05 用户反馈（第二轮候选点选后卡住）：runChat 提前 return（gateway 错误/网络错误/key 失效）走 finishError 不经过 maybeContinue——
     // working 释放点已移到 maybeContinue（0e12ea6）→ finishError 不释放 → working 卡 true → 状态栏「搭档处理中」→ 卡住；此处统一释放
-    // 2026-08-07 T1（regex-todo）：分类逻辑移入 errorClassify 纯函数（原 String(err).includes('5') 过宽——token-limit-50/5000/x5x 误归 service）
-    const errorType = classifyChatError(err)
+    // 2026-08-07 T1 根因补强：ipc 返回结构化 errorType 优先（gateway 源头分类）——classifyChatError 仅兜底（字面量/未知格式）
+    const errorType = errorTypeHint ?? classifyChatError(err)
     let content = '刚才出错了，请再试一次。'
     if (errorType === 'key-invalid') {
       content = 'API Key 好像失效了，换个 Key 试试。'
