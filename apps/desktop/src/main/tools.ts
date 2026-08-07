@@ -370,14 +370,15 @@ export function initTools(): void {
   })
   // 2026-08-06 设计层升级（服务生命周期独立）：start/check/stop-server——模型不用 bash 起服务（端口冲突/超时杀进程/进程残留）也不用 curl 验证（弹卡）
   // 授权：全部自动（start 白名单命令 + NeonForge 管生命周期可停；check 只读；stop 只停自己起的）
+  // 2026-08-06 能力模型（坑 83）；2026-08-07 无阶段重构 S2：check-env → check-capability（能力检查——不绑开发阶段）
   toolRegistry.register({
-    name: 'check-env',
+    name: 'check-capability',
     source: 'core',
     requiresApproval: false,
     risk: 'none',
     execute: async (args) => {
       const dir = String(args.dir ?? args.rootPath ?? '')
-      if (!dir) return { ok: false, error: 'check-env: 缺少 dir（项目目录绝对路径）' }
+      if (!dir) return { ok: false, error: 'check-capability: 缺少 dir（项目目录绝对路径）' }
       const env = checkEnvironment(dir)
       // 2026-08-06 能力视图（坑 83 能力模型——用户「能力才是要检测的东西」）：返回能力清单（平台原生 + 外部扩展 Status）
       // 模型按「用户需求 → 所需能力」从清单匹配（reasonix semantic 路由思路——模型理解判断，非词匹配）
