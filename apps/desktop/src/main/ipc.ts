@@ -12,6 +12,7 @@ import { buildStandardPrefix, planPreheat, prefixCache, preheating } from './pre
 import { initPlugins, pluginRegistry } from './pluginSystem.js'
 import { compaction } from './compact.js'
 import { appendChatLog, exportChatLog } from './chatLog.js'
+import { logTimeline } from './timelineLogger.js'
 
 export function registerIpc(): void {
   initTools()
@@ -114,6 +115,8 @@ export function registerIpc(): void {
   // 2026-08-04：对话日志（自动记录 + 导出——用户反馈时可提供完整对话给 AI）
   ipcMain.handle('chat:log', (_e, entry: Parameters<typeof appendChatLog>[1]) => appendChatLog(app.getPath('userData'), entry))
   ipcMain.handle('chat:export', () => exportChatLog(app.getPath('userData')))
+  // 2026-08-07 会话时间线（单会话所有步骤统一日志——用户/搭档/工具/授权/状态）
+  ipcMain.handle('timeline:log', (_e, evt: Parameters<typeof logTimeline>[0]) => logTimeline(evt))
 }
   // ticket 10：ToolRegistry（工具清单 + 执行分发——write/edit/bash 需 approved）
   ipcMain.handle('tools:list', () => toolRegistry.list())
