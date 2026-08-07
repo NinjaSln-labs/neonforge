@@ -76,13 +76,14 @@ ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ node install.js
 
 **技术栈**：Electron 36 + React 19 + TypeScript + Vite + esbuild + Monaco（产物查看） + Vitest + Playwright
 
-**四层领域架构**：
+**领域架构（无阶段·目标驱动）**：
 
 ```
-Engineering   — AgentChain 流水线 → DiffApply → ChangeSet 交付
-Orchestrate   — Compaction · PrefixCache · ContextEngine · Preheating
-Design        — 信任阶梯授权 · 推理可视化 · 交付包验收
-Code          — ToolRegistry · DeepSeekGateway · PluginSystem · LSP
+Conversation BC（核心域） — 目标状态机 · 确认点（目标/执行/达成确认卡）· 执行保障（forceTool）· 会话级单一 PENDING
+Capability BC            — 环境检测（事实来源）· 能力视图（从环境推导）
+Workspace BC             — 项目文件 · 计划清单（宿主强制边界）· 授权裁决 + 任务级信任
+Delivery BC              — 交付包（产物+验收对照+确认关闭）· DoD 对齐 · 快照回滚
+Session Timeline BC      — 全步骤统一记录（可观测性）
 ```
 
 ## 文档

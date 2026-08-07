@@ -128,7 +128,7 @@ neonforge/
 
 11. 实现产物区（工程/产物 Tab）+ 问题台账（`product/02-components.md` §6, §7）
 12. 实现 Diff 审核视图（`product/02-components.md` §8, `product/01-user-flows.md` Flow 6）
-13. 实现三步工作流状态机（`product/01-user-flows.md` Flow 5）
+13. 实现无阶段确认驱动状态机（目标确认/执行确认/达成确认卡——`product/01-user-flows.md` Flow 5）
 14. 实现任务列表 + 多任务（`product/02-components.md` §5, `product/01-user-flows.md` Flow 7）
 
 ### Phase 5 — 完善（Day 22-28）
