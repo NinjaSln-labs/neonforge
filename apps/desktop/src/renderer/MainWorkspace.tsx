@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import SessionPanel from './SessionPanel'
 import SettingsPanel from './SettingsPanel'
 // 2026-08-07 无阶段重构 S4：DeliveryFlowPanel（阶段卡/推进按钮/STAGE_HINT）删除——阶段体系移除
-import ExecutionConfirmCard from './ExecutionConfirmCard'
 import OutputPanel from './OutputPanel'
 import ConversationPanel from './ConversationPanel'
 import type { DeliveryPackage, ProblemInstance } from './types'
@@ -127,19 +126,15 @@ export default function MainWorkspace({
   const [executionConfirmed, setExecutionConfirmed] = useState(false) // 2026-08-07 无阶段重构 S4：执行方案确认（ExecutionConfirmCard）
   // 2026-08-04 体验修复：需求阶段用户需求文本暂存（无阶段重构 S4：目标文本暂存——「确认目标」兜底回写/注入用——不依赖模型【目标确认：】标记）
   const goalTextRef = useRef('')
-  // 2026-08-07 无阶段重构修复（目标确认选项卡不见根因——goalConfirmed 依赖模型【目标确认：】标记，模型拖沓/不输出时确认链断裂）：
-  // 执行确认卡改为「对话中常驻确认入口」——点击 = 确认目标（若未确认）+ 确认执行（坑 51 教训：用户显式操作=最强确认信号）
-  const handleExecutionConfirmed = () => {
-    if (!goalConfirmed) handleGoalConfirmed(goalTextRef.current || initialPrompt || '目标已确认')
-    setExecutionConfirmed(true)
-  }
   const handleUserMessage = (text: string) => {
     lastPromptRef.current = text
-    // 2026-08-07 无阶段重构 S4：无阶段推进（「确认推进」是阶段术语——不再特殊处理）
-    // 目标未确认时用户说确认/应答词 → 确认目标（GoalCard 外打字兜底——确定性收敛，坑 51 教训：用户显式确认=最强信号）
-    // 2026-08-07 修复：词表扩「就这么做/开工/开始吧」等模型「可以吗」常见应答——12:21 实测模型「你点头我就开始写」用户回任意确认词即触发
-    if (!goalConfirmed && /确认|可以|没问题|就按|就这么做|开工|开始吧|就这么办|OK|好/.test(text)) {
-      handleGoalConfirmed(goalTextRef.current || text)
+    // 2026-08-07 无阶段重构：无执行确认卡（dock 顶部全清——用户「最上面的那块都不需要了」）——用户打字确认 = 执行确认：
+    // 目标未确认 + 确认词 → 确认目标（原 GoalCard 外兜底——坑 51 用户显式确认=最强信号）
+    // 目标已确认 + 确认词 → 确认执行（executionConfirmed=true——forceTool 生效防只说不做，坑 80）
+    // 词表：执行意图确认词（「好/OK」太宽——正常对话常用，误触发强制产出风险 > 确认触发收益，剔除）
+    if (/确认|可以|没问题|就按|就这么做|开工|开始吧|就这么办/.test(text)) {
+      if (!goalConfirmed) handleGoalConfirmed(goalTextRef.current || text)
+      else setExecutionConfirmed(true)
       return
     }
     if (!goalConfirmed) goalTextRef.current = text // 目标未确认时用户说的话即目标描述
@@ -262,18 +257,9 @@ function initProblems(): ProblemInstance[] {
           </div>
         </header>
         {/* 2026-08-04 UX 修复：0-1 交付流面板移出滚动容器（原在 .nf-panel__body 内被对话内容滚出视口）
-            2026-08-07 无阶段重构 S4：阶段卡/推进按钮删除 → 目标确认卡 + 执行确认卡（无阶段交互） */}
-        {zeroToOne && (
-          <div className="nf-flow__dock">
-            {/* 2026-08-07 无阶段重构 S4：执行确认卡——目标确认后、执行确认前显示（能力检查 → 执行方案 → 确认执行）
-                2026-08-07 修复（用户实测反馈澄清——「目标确认选项卡」指对话内 <candidates> 候选按钮，非此卡）：
-                回退为 goalConfirmed 前置——过早常驻导致目标未确认就误点执行（冒烟实测轮 1 误点教训）；
-                目标确认由 模型【目标确认】标记 / 用户打字确认词 / GoalCard 三通道置位（不依赖单一概率行为） */}
-            {goalConfirmed && !executionConfirmed && (
-              <ExecutionConfirmCard onConfirm={handleExecutionConfirmed} goalText={goalTextRef.current || initialPrompt} />
-            )}
-          </div>
-        )}
+            2026-08-07 无阶段重构 S4：阶段卡/推进按钮删除 → 目标确认卡 + 执行确认卡（无阶段交互）
+            2026-08-07 无阶段修复（用户「最上面的那块都不需要了」）：dock 顶部全清——GoalCard/执行确认卡都删除，
+            确认流程全部走对话（模型【目标确认】标记 / 用户打字确认词）——dock 无任何卡片残留 */}
         <div className="nf-panel__body">
           {chatTab === 'chat' ? (
             <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} onApprovalChange={setPendingApproval} onActionPromiseHint={setActionHint} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} onGoalConfirmed={handleGoalConfirmed} goalConfirmed={goalConfirmed} executionConfirmed={executionConfirmed} goalSeq={goalSeq} recentFilesExternal={projectFiles} initialPrompt={initialPrompt} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} />
