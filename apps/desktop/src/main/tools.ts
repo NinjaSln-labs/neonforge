@@ -4,7 +4,8 @@ import { execSync } from 'child_process'
 import { snapshot as takeSnapshot, revert as revertFile } from './applyDiff.js'
 import { codeRag } from './codeRag.js'
 // 2026-08-06 设计层升级（服务生命周期独立——用户「白名单匹配不完」）：模型用 start/check/stop-server 管服务，不用 bash 起服务/curl 验证
-import { startServer, checkServer, stopServer, checkEnvironment } from './serviceManager.js'
+// 2026-08-07 T3（regex-todo）：命令类型识别单源化——isServerLikeCommand/isInstallCommand 从 serviceManager 导入（原 DEV_SERVER_RE/INSTALL_RE 散落 tools.ts 已删）
+import { startServer, checkServer, stopServer, checkEnvironment, isServerLikeCommand, isInstallCommand } from './serviceManager.js'
 // 2026-08-06 能力模型（坑 83）：check-env 返回能力视图（平台原生 + 外部扩展 Status——模型按需求选能力）
 import { detectCapabilities } from './envManager.js'
 
@@ -218,7 +219,6 @@ export function killAllSubprocesses(): void {
 // NeonForge 保留端口：5173（dev）/ 5175（自动化测试）——模型起的项目 dev server 必须避开
 // 2026-08-05（用户反馈「不应绑定固定端口」）：除保留端口外**不限制**——vite 默认 strictPort:false 端口被占自动递增
 const RESERVED_PORTS = new Set([5173, 5175])
-const DEV_SERVER_RE = /(npm|pnpm|yarn) run (dev|start|serve|preview)|vite( |$)|next dev|react-scripts start|node .*(server|listen)/
 
 async function bashExecutor(args: Record<string, unknown>, ctx: { rootPath?: string }): Promise<unknown> {
   // V1 真实执行：授权（approved=true）后执行命令（child_process）——在项目根目录执行
@@ -227,7 +227,7 @@ async function bashExecutor(args: Record<string, unknown>, ctx: { rootPath?: str
   const cmd = String(args.command ?? '')
   if (!cmd.trim()) throw new Error('bash: 缺少 command')
   // 2026-08-04 端口冲突检测：服务类命令显式指定保留端口 → 友好错误（防静默撞车——NeonForge 5173/5175 被抢占）
-  if (DEV_SERVER_RE.test(cmd)) {
+  if (isServerLikeCommand(cmd)) {
     const m = cmd.match(/--port[= ](\d+)|PORT=(\d+)/)
     const port = m ? Number(m[1] ?? m[2]) : null
     if (port && RESERVED_PORTS.has(port)) {
@@ -262,7 +262,7 @@ async function bashExecutor(args: Record<string, unknown>, ctx: { rootPath?: str
         // 2026-08-05 ServiceState（轻量服务记忆）：起服务类命令且 stdout 含实际地址 → 结果注一条（模型跨轮记得，不用重新探查端口）
         // 竞品对照：Claude/Codex 不主动记忆——工具结果回填是最轻方案；不注入全量（~30 token）
         let note = ''
-        if (DEV_SERVER_RE.test(cmd)) {
+        if (isServerLikeCommand(cmd)) {
           const m = (stdout + stderr).match(/https?:\/\/localhost:\d+|https?:\/\/127\.0\.0\.1:\d+|Local:\s*http:\/\/[^\s]+/)
           if (m) note = `【服务状态】已启动 ${m[0].replace(/^Local:\s*/, '')}（本命令已返回，服务在后台运行）`
           else if (/localhost:\d+/.test(cmd)) note = '【服务状态】命令含端口启动（以实际输出/浏览器为准）'
@@ -275,9 +275,9 @@ async function bashExecutor(args: Record<string, unknown>, ctx: { rootPath?: str
     })
     // 超时（防挂死）：安装类命令（npm/pnpm/yarn/pip install——网络慢常超 30s）放宽到 120s；其他 30s
     // 2026-08-05 e2e 实测：npm install 30s 被杀 → 模型重试 → 体验卡（用户 11:32 起服务反复的同族问题）
-    const INSTALL_RE = /(npm|pnpm|yarn|bun) (i|install|add)( |$)|pip install|go mod download|brew install/
-    const isDevServer = DEV_SERVER_RE.test(cmd)
-    const timeoutMs = INSTALL_RE.test(cmd) ? 120000 : (isDevServer ? 15000 : 30000)
+    // 2026-08-07 T3（regex-todo）：isServerLikeCommand/isInstallCommand 单源自 serviceManager（原 INSTALL_RE/DEV_SERVER_RE 散落 tools.ts 已删）
+    const isDevServer = isServerLikeCommand(cmd)
+    const timeoutMs = isInstallCommand(cmd) ? 120000 : (isDevServer ? 15000 : 30000)
     timer = setTimeout(() => {
       // 2026-08-06 用户反馈「工具执行很多次」（模型起服务反复失败重试）：起服务（长驻进程）30s 超时杀进程组 → 服务被杀 → 模型反复重试（07:35 日志实证「每次 bash 调用结束时把进程组杀了」）；
       // 修复：起服务命令超时后**不杀进程**（服务本就该长驻），返回已收集输出 + ServiceState note（提示 curl 确认端口）；

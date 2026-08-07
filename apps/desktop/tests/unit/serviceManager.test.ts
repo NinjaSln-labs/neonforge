@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseLocalUrl, isServerCommand } from '../../src/main/serviceManager'
+import { parseLocalUrl, isServerCommand, isServerLikeCommand, isInstallCommand } from '../../src/main/serviceManager'
 // 2026-08-06 环境单源（d4c6e2c）：normalizeServerCommand/HOST_RESERVED_PORTS 移到 envManager（显式端口替换 --port 0——坑 77 vite 忽略 0）
 import { normalizeServerCommand, HOST_RESERVED_PORTS } from '../../src/main/envManager'
 
@@ -23,6 +23,34 @@ describe('ServiceManager 服务管理（2026-08-06 设计层升级）', () => {
     expect(isServerCommand('rm -rf /')).toBe(false) // 非服务命令拒绝
     expect(isServerCommand('curl http://x.com')).toBe(false)
     expect(isServerCommand('')).toBe(false)
+  })
+
+  // 2026-08-07 T3（regex-todo）：DEV_SERVER_RE/INSTALL_RE 从 tools.ts 移入——命令类型识别单源（服务命令判定一处）
+  it('isServerLikeCommand：宽松服务命令检测（bash 超时/端口保护/ServiceState——命令可在 shell 复合串中，非锚定）', () => {
+    expect(isServerLikeCommand('npm run dev')).toBe(true)
+    expect(isServerLikeCommand('vite')).toBe(true)
+    expect(isServerLikeCommand('cd app && npm run dev')).toBe(true) // 宽松——shell 复合串
+    expect(isServerLikeCommand('npx vite')).toBe(true)
+    expect(isServerLikeCommand('next dev')).toBe(true)
+    expect(isServerLikeCommand('react-scripts start')).toBe(true)
+    expect(isServerLikeCommand('node server.js')).toBe(true)
+    expect(isServerLikeCommand('node src/listen.js')).toBe(true)
+    expect(isServerLikeCommand('npm install')).toBe(false) // 安装不是服务
+    expect(isServerLikeCommand('ls')).toBe(false)
+    expect(isServerLikeCommand('')).toBe(false)
+  })
+
+  it('isInstallCommand：安装命令识别（120s 超时类型感知）', () => {
+    expect(isInstallCommand('npm install')).toBe(true)
+    expect(isInstallCommand('npm i')).toBe(true)
+    expect(isInstallCommand('pnpm add react')).toBe(true)
+    expect(isInstallCommand('yarn install')).toBe(true)
+    expect(isInstallCommand('bun i')).toBe(true)
+    expect(isInstallCommand('pip install numpy')).toBe(true)
+    expect(isInstallCommand('go mod download')).toBe(true)
+    expect(isInstallCommand('brew install git')).toBe(true)
+    expect(isInstallCommand('npm run dev')).toBe(false)
+    expect(isInstallCommand('rm -rf node_modules && npm install')).toBe(true) // 宽松语义（原 INSTALL_RE 非锚定）——复合串含 install 即 120s 超时
   })
 
   it('normalizeServerCommand：vite 类命令注入/替换显式端口（--port 0 无效——vite 忽略 0 落默认 5173，坑 77 实测；显式端口有效）', () => {
