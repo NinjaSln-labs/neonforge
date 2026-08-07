@@ -76,14 +76,17 @@ Gateway.forceTool 传递 → DeepSeek API（tool_choice）
 ## 4. 宿主强制边界管线（模型漂移防护）
 
 ```
-模型调 write(file)
+模型调 write/edit/bash(file)
     │
     ▼
-ProgressionGate（领域层）
-    ├─ 执行未确认 → 挂起（等确认执行卡——模型停住）
-    ├─ file ∈ 计划清单 → 放行执行
-    └─ file ∉ 计划清单 → 拒绝 + 拒绝带边界（「X 不在批准清单（批准的是：A/B/C）」）
-    │
+ProgressionGate（领域层——门控优先级：先执行级后文件级）
+    ├─ ① 执行未确认 → 全部执行动作挂起（不管文件在不在清单——等「确认执行」卡；模型停住）
+    │     信息类（read/search/check-capability/plan_approval）放行——模型可继续给方案
+    │（用户点「确认执行」→ 挂起工具恢复执行）
+    ▼
+    ├─ ② 执行已确认 → 按计划清单判定（文件级边界）：
+    │     ├─ file ∈ 计划清单 → 放行执行
+    │     └─ file ∉ 计划清单 → 拒绝 + 拒绝带边界（「X 不在批准清单（批准的是：A/B/C）」）
     ▼
 Workspace 执行（快照→写入→可回滚）
 ```
