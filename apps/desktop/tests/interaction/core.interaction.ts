@@ -306,9 +306,8 @@ test('0-1 从零开始：目标确认卡确认 → 目标确认 + 执行确认�
   await expect(page.locator('.nf-reqcard')).toHaveCount(0)
   // 模型输出【目标确认：】标记 → 目标确认（dock 顶部全清——无执行确认卡，确认走对话）
   await expect(page.locator('.nf-exec-card')).toHaveCount(0)
-  // 用户打字确认词「可以」→ 确认执行（executionConfirmed——forceTool 生效防只说不做）
-  await page.locator('.nf-chat__input textarea').fill('可以')
-  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  // 目标确认卡出现 → 点「确认目标」（结构化确认——行业共识，替代确认词）
+  await page.getByRole('button', { name: '确认目标' }).click()
   // 无阶段：对话区不再出现「已进入【X】阶段」提示（阶段推进反馈删除）
   await expect(page.locator('.nf-chat__list .nf-msg--assistant').filter({ hasText: '已进入【设计】阶段' })).toHaveCount(0)
   // 无阶段：无阶段机 active 概念（.nf-flow__stage--active 删除）
@@ -357,9 +356,11 @@ test('0-1 从零开始：模型需求确认 → 回写台账标题 + updateProje
   // 输入模糊需求（「3d设计」——可能是输入法/错别字，实际想要 3D 射击）
   await page.locator('.nf-chat__input textarea').fill('我想做一个3d设计小游戏')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
-  // 等流式 done → 需求确认回写
+  // 等流式 done → 目标确认卡出现
   await expect(page.locator('.nf-chat__list .nf-msg--assistant')).toHaveCount(1)
   await page.waitForTimeout(400)
+  // 2026-08-07 显式确认（行业共识——替代自报确认）：点「确认目标」→ 用户确认才回写台账
+  await page.getByRole('button', { name: '确认目标' }).click()
   // 台账标题被校正为确认后的需求
   await expect(page.locator('.nf-ledger__item').first()).toContainText('3D射击小游戏')
   // updateProjectTitle 被调用（项目 README 回写——目录名不变）
@@ -480,9 +481,8 @@ test('0-1 对话确认需求：用户发「确认推进」→ 自动确认 + 推
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
   await expect(page.locator('.nf-chat__list .nf-msg--assistant')).toHaveCount(1)
   await page.waitForTimeout(1000) // 等 working 释放（mock 需求链 ≈530ms——不足则「确认」被 working 守卫拦截）
-  // 用户打字「确认推进」→ 自动确认目标（不依赖模型【目标确认：】标记——「确认推进」含确认词）
-  await page.locator('.nf-chat__input textarea').fill('确认推进')
-  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  // 模型无【目标确认】标记 → 目标确认卡兜底（最后一条 assistant 消息下——显示 initialPrompt 目标）→ 点「确认目标」
+  await page.getByRole('button', { name: '确认目标' }).click()
   // 目标已确认（dock 顶部全清——无执行确认卡，确认走对话）
   await expect(page.locator('.nf-exec-card')).toHaveCount(0)
 })
@@ -592,12 +592,9 @@ test('0-1 授权 v4 完整路径：允许并记住 → 同文件自动 → 新�
   await page.locator('.nf-chat__input textarea').fill('做个网页游戏')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
   await page.waitForTimeout(600)
-  await page.locator('.nf-chat__input textarea').fill('确认推进')
-  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
-  await page.waitForTimeout(600)
-  // 用户打字确认词「可以」→ 确认执行 → forceTool 自动触发模型执行 → 第一个 write → 授权卡出现（含「允许并记住」）
-  await page.locator('.nf-chat__input textarea').fill('可以')
-  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  // 目标确认卡点「确认目标」→ 执行确认卡点「确认执行」→ forceTool 自动触发模型执行 → 第一个 write → 授权卡出现（含「允许并记住」）
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await page.getByRole('button', { name: '确认执行' }).click()
   await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(1, { timeout: 8000 })
   await expect(page.getByRole('button', { name: '允许并记住' })).toBeVisible()
   await page.getByRole('button', { name: '允许并记住' }).click()
@@ -717,9 +714,8 @@ test('目标无【目标确认】标记：用户打字「确认推进」→ 确�
   await expect(page.locator('.nf-chat__list .nf-msg--assistant')).toHaveCount(1)
   // 等回复完成（模型无【目标确认】标记——goalConfirmed 仍 false）
   await expect(page.locator('.nf-statusbar')).toContainText('就绪', { timeout: 8000 })
-  // 用户显式「确认推进」= 确认目标（不依赖模型标记——死锁修复：模型提示点按钮但没标记时用户仍可确认）
-  await page.locator('.nf-chat__input textarea').fill('确认推进')
-  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  // 模型无【目标确认】标记 → 目标确认卡兜底（最后一条 assistant 消息下）→ 点「确认目标」（死锁修复：结构化按钮替代确认词）
+  await page.getByRole('button', { name: '确认目标' }).click()
   // 目标确认（dock 顶部全清——无执行确认卡）+ 目标回写（updateProjectTitle 被调——handleGoalConfirmed 兜底确认）
   await expect(page.locator('.nf-exec-card')).toHaveCount(0)
   await page.waitForTimeout(200)
