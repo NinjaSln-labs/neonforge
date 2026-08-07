@@ -102,6 +102,6 @@ export interface NeonForgeTools {
   revert: (filePath: string) => Promise<{ ok: boolean; error?: string }>
   // ticket 14 可撤销：停止当前活动命令（bash 高危——任何时刻可停，不卡死）
   cancel: () => Promise<{ ok: boolean; error?: string }>
-  // 2026-08-04 规划级授权强制：plan_approval 批准后通知 main（write/edit 放行）
-  planApproved: () => Promise<{ ok: boolean }>
+  // 2026-08-04 规划级授权强制：approve-files 批准后通知 main（write/edit 放行）
+  filesApproved: () => Promise<{ ok: boolean }>
 }

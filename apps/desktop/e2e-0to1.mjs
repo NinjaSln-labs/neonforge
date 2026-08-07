@@ -707,7 +707,7 @@ class StageMachine {
 
   // ---- 开发阶段：真实用户——批准清单 → 看着模型逐个写 → 模型说完成 → 检查文件齐全 → 缺则补齐 → 推进 ----
   async development() {
-    let planned = [] // 批准的文件清单（plan_approval）
+    let planned = [] // 批准的文件清单（approve-files）
     let lastProcessed = '' // 已处理消息（防同一条重复打印/处理）
     const deadline = Date.now() + 480000
     while (Date.now() < deadline) {
@@ -717,7 +717,7 @@ class StageMachine {
       const msg = await this.driver.waitSettled(120000)
       if (msg.content === lastProcessed) { await this.driver.page.waitForTimeout(3000); continue }
       lastProcessed = msg.content
-      // 授权卡（plan_approval/bash/单卡）——批准并记录清单
+      // 授权卡（approve-files/bash/单卡）——批准并记录清单
       const ap = await this.driver.approvePending()
       if (ap) {
         console.log(`   🔓 授权：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`)
@@ -727,7 +727,7 @@ class StageMachine {
         }
         continue
       }
-      // 模型请求批准文件清单（二次 plan_approval 被 UI 幂等处理不弹卡——模型以为在等批准）→ 显式放行
+      // 模型请求批准文件清单（二次 approve-files 被 UI 幂等处理不弹卡——模型以为在等批准）→ 显式放行
       if (/(请求你批准|请批准|等你批准|需要你批准|请求批准)/.test(msg.content)) {
         printModel(msg)
         console.log(`   🧑 模型请求批准（UI 幂等无新卡）——显式放行「批准，继续写」`)

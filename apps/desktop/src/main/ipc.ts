@@ -120,8 +120,8 @@ export function registerIpc(): void {
 }
   // ticket 10：ToolRegistry（工具清单 + 执行分发——write/edit/bash 需 approved）
   ipcMain.handle('tools:list', () => toolRegistry.list())
-  // 2026-08-04 规划级授权强制：renderer 批准 plan_approval 后通知 main（write/edit 放行）
-  ipcMain.handle('tools:plan-approved', () => { markPlanApproved(); return { ok: true } })
+  // 2026-08-04 规划级授权强制：renderer 批准 approve-files 后通知 main（write/edit 放行）
+  ipcMain.handle('tools:files-approved', () => { markPlanApproved(); return { ok: true } })
   ipcMain.handle('tools:execute', async (_e, opts: { name: string; args: Record<string, unknown>; approved?: boolean; rootPath?: string; sessionId?: string }) => {
     const res = await toolRegistry.execute(opts.name, opts.args ?? {}, {
       approved: opts.approved ?? false,

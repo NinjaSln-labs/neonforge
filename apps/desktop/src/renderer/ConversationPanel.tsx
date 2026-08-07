@@ -33,7 +33,7 @@ import { classifyChatError, type ChatErrorType } from './errorClassify'
 export interface ToolCallMsg {
   name: string
   args: Record<string, unknown>
-  status: 'pending' | 'done' | 'need-approval' | 'plan-approval' | 'error' | 'reverted'
+  status: 'pending' | 'done' | 'need-approval' | 'file-approval' | 'error' | 'reverted'
   result?: string
   rawResult?: string // 2026-08-05：API 回填用完整结果（UI 展示用 result 摘要）——read 完整内容防模型反复读同文件
   file?: string       // write/edit 成功写入的文件路径（回滚目标）
@@ -75,7 +75,7 @@ function fmtToolArgs(tc: { name: string; args: Record<string, unknown> }): strin
     case 'edit': return a.path ? `修改 ${String(a.path)}` : '修改文件'
     case 'bash': return a.command ? `执行 ${String(a.command).slice(0, 60)}` : '执行命令'
     case 'search': return a.query ? `搜索 ${String(a.query)}` : '搜索代码'
-    case 'plan_approval': return `规划 ${((a.files ?? []) as unknown[]).length} 个文件`
+    case 'approve-files': return `批量授权 ${((a.files ?? []) as unknown[]).length} 个文件`
     // 2026-08-06 用户反馈「get_diagnostics 具体干什么了不知道」：LSP 工具名技术化 → 人类化描述（工具卡显示）
     case 'get_diagnostics': return a.path ? `检查代码错误：${String(a.path)}` : '检查代码错误'
     case 'get_imports': return a.path ? `查看文件依赖：${String(a.path)}` : '查看文件依赖'
@@ -243,7 +243,7 @@ export default function ConversationPanel({
   // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层状态）：连续无进展计数 + 升级次数（不可变 StuckState）+ 已读文件集合
   const stuckStateRef = useRef(initialStuckState)
   const prevReadFilesRef = useRef<Set<string>>(new Set())
-  // 2026-08-06 任务完成度（deepcode unimplemented_files 借鉴）：plan_approval 规划文件清单 + write/edit 产出文件（approvePlan 时保存/重置）
+  // 2026-08-06 任务完成度（deepcode unimplemented_files 借鉴）：approve-files 规划文件清单 + write/edit 产出文件（approvePlan 时保存/重置）
   const plannedFilesRef = useRef<Set<string>>(new Set())
   const producedFilesRef = useRef<Set<string>>(new Set())
   // 2026-08-07 用户决策（行业共识——显式确认）：达成确认卡【已解决】→ true（替代「模型【已达成】自报即释放」——
@@ -254,7 +254,7 @@ export default function ConversationPanel({
     // 2026-08-08 会话归属：session 用会话 ID（UUID——本组件挂载生成）——写入对应会话 timeline 文件
     try { void window.neonforge.timeline?.log?.({ session: sessionId, type, role, detail }) } catch { /* 日志失败不影响 */ }
   }
-  // 2026-08-08 卡弹出打点（用户「加一个确认/授权等卡弹出的点」）：确认卡（目标/执行/达成）+ 授权卡/plan_approval 卡——卡从无到有打一次
+  // 2026-08-08 卡弹出打点（用户「加一个确认/授权等卡弹出的点」）：确认卡（目标/执行/达成）+ 授权卡/approve-files 卡——卡从无到有打一次
   const cardShownRef = useRef<Set<string>>(new Set())
   useEffect(() => {
     const last = messages[messages.length - 1]
@@ -270,12 +270,12 @@ export default function ConversationPanel({
       if ((content.includes('【执行方案') || (goalConfirmed && !executionConfirmed)) && goalConfirmed && !executionConfirmed) show('exec-confirm')
       if (content.includes('【已达成') && producedFilesRef.current.size > 0 && !goalAchievedRef.current) show('achieve-confirm')
     }
-    // 授权卡 / plan_approval 卡（工具卡 need-approval/plan-approval 状态）——每次弹卡独立记录（同工具不同 args 是新的授权决策）
+    // 授权卡 / approve-files 卡（工具卡 need-approval/plan-approval 状态）——每次弹卡独立记录（同工具不同 args 是新的授权决策）
     for (const m of messages) {
       for (const c of m.toolCalls ?? []) {
-        if (c.status === 'need-approval' || c.status === 'plan-approval') {
+        if (c.status === 'need-approval' || c.status === 'file-approval') {
           const key = `approval:${c.name}:${JSON.stringify(c.args ?? {}).slice(0, 60)}`
-          show(key, { card: c.status === 'plan-approval' ? 'plan-approval' : 'approval', name: c.name, args: c.args })
+          show(key, { card: c.status === 'file-approval' ? 'file-approval' : 'approval', name: c.name, args: c.args })
         }
       }
     }
@@ -292,8 +292,8 @@ export default function ConversationPanel({
   // 2026-08-07 无阶段修复（用户「错误要抛出来，模型自己修正」）：工具执行失败标志——bash exit≠0/write 失败
   // → turnPolicy lastToolFailed 释放强制（模型可停下诊断——防 required 压制修正被迫重试死循环，冒烟实测 37 轮）
   const lastToolFailedRef = useRef(false)
-  // 2026-08-05：renderer 侧「已规划」标记——approvePlan 置 true（幂等：本任务内再调 plan_approval 不弹卡）；阶段推进（clearTrust）重置
-  const planApprovedRef = useRef(false)
+  // 2026-08-05：renderer 侧「已规划」标记——approvePlan 置 true（幂等：本任务内再调 approve-files 不弹卡）；阶段推进（clearTrust）重置
+  const filesApprovedRef = useRef(false)
   const goalConfirmedRef = useRef(false) // 2026-08-06 需求阶段门控：模型输出【目标确认】→ true（无阶段重构 S3：需求确认→目标确认——确认后 write/edit/bash 放行——直接执行）
   useEffect(() => { if (goalConfirmed) goalConfirmedRef.current = true }, [goalConfirmed]) // 用户确认（MainWorkspace state）→ 同步（无阶段重构 S4：prop 改名 goalConfirmed）
   // 2026-08-07 执行确认门控（用户「确认卡不选就不执行后续」——与授权卡同语义）：执行未确认 → write/edit/bash 不执行
@@ -408,7 +408,7 @@ export default function ConversationPanel({
       //    升级 2 次仍无产出 → needs-human 状态栏提示（对齐行业——不再固定配额「耗尽」问题）
       // 2026-08-07 无阶段重构 S3：目标确认后才启用 StuckDetector（原 flowStage>=1——目标确认前模型澄清问答/探索是正常行为，不检测停滞）
       if (goalConfirmedRef.current) {
-        // 2026-08-06 任务完成度：write/edit 成功标记产出（plan_approval 规划文件 vs 已产出——deepcode unimplemented_files 借鉴）
+        // 2026-08-06 任务完成度：write/edit 成功标记产出（approve-files 规划文件 vs 已产出——deepcode unimplemented_files 借鉴）
         streamingRef.current.toolCalls.forEach((c) => {
           if ((c.name === 'write' || c.name === 'edit') && c.status === 'done' && c.file) producedFilesRef.current.add(c.file)
         })
@@ -418,7 +418,7 @@ export default function ConversationPanel({
           prevReadFiles: prevReadFilesRef.current,
           plannedFiles: plannedFilesRef.current,
           producedFiles: producedFilesRef.current,
-          // 2026-08-06 补充（用户「清单来源不只 plan_approval」——③ projectFiles 项目文件树）：产出校验（规划文件出现在文件树=已产出）
+          // 2026-08-06 补充（用户「清单来源不只 approve-files」——③ projectFiles 项目文件树）：产出校验（规划文件出现在文件树=已产出）
           projectFiles: new Set(recentFilesExternal ?? [])
         })
         streamingRef.current.toolCalls.forEach((c) => { if (c.name === 'read' && c.file) prevReadFilesRef.current.add(c.file) })
@@ -467,27 +467,28 @@ export default function ConversationPanel({
         doneNotifierRef.current?.()
       }
       if (chunk.type === 'tool-call' && chunk.toolCall) {
-        // 2026-08-04 规划级授权：plan_approval 不执行（虚拟工具）——状态 plan-approval 弹规划授权卡（等用户批准文件清单）
-        // 2026-08-05 体验反馈（用户实测「规划授权出来两次」）：幂等——本任务已批准过不再弹卡
-        // 2026-08-07 无阶段重构 S3：删除阶段门控（原 flowStage<2 设计阶段不弹卡——无阶段无阶段概念；plan_approval 语义更新见 S5）
-        let status: 'pending' | 'done' | 'plan-approval' = 'pending'
-        if (chunk.toolCall.name === 'plan_approval') {
-          status = planApprovedRef.current ? 'done' : 'plan-approval'
+        // 2026-08-04 批量授权：approve-files 不执行（虚拟工具）——状态 file-approval 弹批量授权卡（等用户批准文件清单）
+        // 2026-08-05 体验反馈（用户实测「批量授权出来两次」）：幂等——本任务已批准过不再弹卡
+        // 2026-08-07 无阶段重构 S3：删除阶段门控（原 flowStage<2 设计阶段不弹卡——无阶段无阶段概念；approve-files 语义更新见 S5）
+        // 2026-08-08 改名 + 语义澄清（坑 95）：approve-files = 批量授权（确认执行后的粒度优化），非「规划批准」
+        let status: 'pending' | 'done' | 'file-approval' = 'pending'
+        if (chunk.toolCall.name === 'approve-files') {
+          status = filesApprovedRef.current ? 'done' : 'file-approval'
         }
         next.toolCalls = [...(next.toolCalls ?? []), {
           name: chunk.toolCall.name,
           args: chunk.toolCall.args,
           status,
-          result: status === 'done' && chunk.toolCall.name === 'plan_approval'
-            ? '规划已批准（本任务不重复授权）'
+          result: status === 'done' && chunk.toolCall.name === 'approve-files'
+            ? '文件已批量授权（本任务不重复授权）'
             : undefined
         }]
       }
       return [...prev.slice(0, target), next, ...prev.slice(target + 1)]
     })
     // 工具执行副作用（移出 updater——StrictMode 双调会执行两次；真实工具写文件等不可重复）
-    // 2026-08-04 规划级授权：plan_approval 跳过执行（虚拟工具——批准由 renderer approvePlan 处理）
-    if (chunk.type === 'tool-call' && chunk.toolCall && chunk.toolCall.name !== 'plan_approval') {
+    // 2026-08-04 规划级授权：approve-files 跳过执行（虚拟工具——批准由 renderer approvePlan 处理）
+    if (chunk.type === 'tool-call' && chunk.toolCall && chunk.toolCall.name !== 'approve-files') {
       const tc = chunk.toolCall
       // 2026-08-06 用户反馈「第一句话就有一个工具执行」：目标确认前工具门控——目标没澄清前不执行任何工具
       // （目标都没澄清，看目录/写文件都没意义）；工具直接 done + 提示（maybeContinue 回填给模型 → 模型停止调工具继续澄清目标）
@@ -534,15 +535,15 @@ export default function ConversationPanel({
         return
       }
       // 2026-08-06 偏离清单拦截（基于事实：06:03 已规划但写「正确路径」偏离批准清单 → 逐个弹授权/规划外文件——用户「相同文件弹授权」根因）：
-      // 已规划（planApprovedRef）但文件不在批准清单 → 不弹逐个卡——拒绝 + 引导补充 plan_approval（清单与实际始终一致）
-      if (tc.name === 'write' && planApprovedRef.current && !inPlannedFiles(tc.args.path)) { // 2026-08-06 edit 豁免（改现有文件=操作明确——B 类文件操作直接改）；write 新建强制规划
+      // 已规划（filesApprovedRef）但文件不在批准清单 → 不弹逐个卡——拒绝 + 引导补充 approve-files（清单与实际始终一致）
+      if (tc.name === 'write' && filesApprovedRef.current && !inPlannedFiles(tc.args.path)) { // 2026-08-06 edit 豁免（改现有文件=操作明确——B 类文件操作直接改）；write 新建强制规划
         setMessages((prev) => {
           const last = prev[prev.length - 1]
           if (!last || last.role !== 'assistant') return prev
           const calls = (last.toolCalls ?? []).map((c) => c.name === tc.name && c.status === 'pending'
             ? (() => {
                 const approved = [...plannedFilesRef.current].map((p) => p.split('/').pop()).join('、')
-                return { ...c, status: 'done' as const, result: `${tc.args.path} 不在批准清单（已批准：${approved || '无'}）——不要重复尝试；改写清单内文件，或再次调 plan_approval 补充该文件（列出文件+原因）` }
+                return { ...c, status: 'done' as const, result: `${tc.args.path} 不在批准清单（已批准：${approved || '无'}）——不要重复尝试；改写清单内文件，或再次调 approve-files 补充该文件（列出文件+原因）` }
               })()
             : c)
           return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
@@ -551,7 +552,7 @@ export default function ConversationPanel({
       }
       // 2026-08-08 根因 3 修复③：write 门控与【执行方案】块联动——用户确认执行（executionConfirmedRef）后，
       // 【执行方案】块解析的清单内文件（plannedFilesRef）视为已批准（approved=true）→ 绕过 main 规划门控
-      // （模型已列清单 + 用户已确认执行 = 认可这批文件——无需再点 plan_approval 卡；清单外文件仍被 main 门控拦）
+      // （模型已列清单 + 用户已确认执行 = 认可这批文件——无需再点 approve-files 卡；清单外文件仍被 main 门控拦）
       const execPlanApproved = tc.name === 'write' && executionConfirmedRef.current && inPlannedFiles(tc.args.path)
       const autoApproved = execPlanApproved || (delegateLowRisk && toolRisk(tc.name) === 'low') || isTrusted(tc.args)
       void (window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: autoApproved, rootPath: rootPath ?? undefined, sessionId }) ?? Promise.resolve({ ok: false, error: 'tools 通道未就绪' })).then((r) => {
@@ -559,7 +560,7 @@ export default function ConversationPanel({
         // 13 交付包联动：真实文件操作成功（write/edit 返回 file）→ 上报变更（产物区展示）
         if (r.ok && data?.file) onToolResult?.({ name: tc.name, file: data.file, ok: true })
         // 2026-08-07 失败感知：成功执行 → 清除失败标志（模型修正成功恢复强制判定）；失败（非待授权）→ 置失败标志
-        // 2026-08-08 根因 3 修复②：policy（策略引导——如 write 规划门控「先 plan_approval 再写」）≠ 执行失败——
+        // 2026-08-08 根因 3 修复②：policy（策略引导——如 write 规划门控「先 approve-files 再写」）≠ 执行失败——
         // 不置 lastToolFailed（否则 forceTool 恒释放 → 模型纯文本承诺后停住——冒烟 O4/O5 根因）
         if (r.ok) lastToolFailedRef.current = false
         else if (!r.needApproval && !r.policy) lastToolFailedRef.current = true
@@ -618,7 +619,7 @@ export default function ConversationPanel({
       const lastMsg = latest[latest.length - 1]
       if (!lastMsg || !lastMsg.toolCalls || lastMsg.toolCalls.length === 0) { releaseWorking(); return }
       const pending = lastMsg.toolCalls.filter((c) => c.status === 'pending')
-      const needsApproval = lastMsg.toolCalls.some((c) => c.status === 'need-approval' || c.status === 'plan-approval')
+      const needsApproval = lastMsg.toolCalls.some((c) => c.status === 'need-approval' || c.status === 'file-approval')
       // 2026-08-07 会话级单一 PENDING（重构——确认卡待决策 → 模型停——动作无效——用户决策是唯一输入）
       const lastContent = lastMsg.content ?? ''
       const execPendingCalls = lastMsg.toolCalls.filter((c) => (c.name === 'write' || c.name === 'edit' || c.name === 'bash') && c.status === 'pending')
@@ -709,18 +710,18 @@ export default function ConversationPanel({
       } catch { /* 环境注入失败不影响发送 */ }
     }
     // 2026-08-07 批准清单可见性（竞品源码调研：Aider abs_fnames / Codex rules / Goose judge——边界对模型显式可见）：
-    // plan_approval 批准后 → 清单注入系统提示——模型每轮知道「可写哪几个文件」——写文件对照清单，不写清单外
+    // approve-files 批准后 → 清单注入系统提示——模型每轮知道「可写哪几个文件」——写文件对照清单，不写清单外
     let planHint = ''
     const plannedFiles = plannedFilesRef.current
     if (plannedFiles.size > 0) {
       const names = [...plannedFiles].map((p) => p.split('/').pop()).join('、')
-      planHint = `【已批准文件清单】${names}——**写文件只能写清单内的**；写清单外文件会被拒绝。被拒=该文件不在已批准范围——**不要重复尝试同一文件**，改写清单内文件；确需写新文件，先调 plan_approval 补充（列出文件+原因）再写。`
+      planHint = `【已批准文件清单】${names}——**写文件只能写清单内的**；写清单外文件会被拒绝。被拒=该文件不在已批准范围——**不要重复尝试同一文件**，改写清单内文件；确需写新文件，先调 approve-files 补充（列出文件+原因）再写。`
     }
     const lastUserMsg = [...msgs].reverse().find((m) => m.role === 'user')
     const langRule = lastUserMsg && /[\u4e00-\u9fff]/.test(String(lastUserMsg.content ?? ''))
       ? '⑧ 用中文回复用户（避免英文夹杂；工具名/代码/技术名词可保留原文；**即使工具结果/代码是英文，回复用户也保持中文**——不要中途切换成英文）'
       : '⑧ 用与用户消息相同的语言回复'
-    const sysHint = { role: 'system', content: `你是 NeonForge 搭档。${envHint}${planHint}规则：① 读文件用 read 工具（路径用项目根下的相对路径，如 package.json）② 不要用 bash find 全局搜索（直接 read 目标文件）③（2026-08-07 路径注入——用户「有环境检测怎么路径不一致」）bash 命令**默认已在项目根目录执行**（cwd=项目根）——**不要用 cd 切绝对路径/猜路径**（项目根就是上面的目录，不是 Documents/NeonForge 下的其它猜测路径）；看文件/查目录用 read/search（项目根相对路径）④ 工具一次调用一个，执行完看结果再决定 ⑤ 找不到文件就直接告诉用户 ⑥ 查符号定义/引用/类型用 LSP 工具：find_definition/find_references/get_type_info（传 path + symbol，如 {path: 'src/a.ts', symbol: 'greet'}）⑦ 查文件错误/import 用 get_diagnostics/get_imports ⑧（2026-08-05 定位优先——竞品 grep-first 共识）排查/修复问题时**必须先用 search 或 LSP 定位到具体文件和行号，再 read 目标文件——禁止盲读文件试探**（盲读浪费轮次）；search 传 query 关键词（如 "射线" "命中"）返回命中文件+行号+片段；不要反复 read 不同文件碰运气。${langRule}⑨ 用户可能不懂技术——回答简洁口语化：优先短句，少用术语；必须提术语时用一句大白话解释；不要堆砌要点清单。⑩ 回复正文不要用 Markdown 标记（不要 #、**、反引号、- 列表、代码块框）；少用括号补充说明；段落之间最多空一行，不要连续空行；**也不要使用任何尖括号标签**（如 <one-question>——会原样显示给用户；除 <candidates> 候选块外）。⑪（2026-08-04 防文本模拟）执行工具必须通过真正的函数调用（tool-call）发出——对话历史里的「（工具调用：…）」只是执行记录，绝不能模仿成文本写在回复正文里，文本写的调用不会被执行；要调工具就在这条回复里发出真实函数调用，工具执行完会自动继续。⑫（2026-08-05 说了就做——用户催「打开」6 次教训）用户明确要求执行某个操作（如「帮我打开」「起服务」「继续」「做 X」）：**必须立即调用对应工具执行**——禁止只回复「我去做」而不调工具；工具结果不理想就重试或换方案，不要停留在说明上。⑬（2026-08-06 宿主端口保护——用户「帮我打开」4 次教训）5173/5175 是 NeonForge（本应用）自己的保留端口（宿主 dev server / 测试 server）——看到它们有服务在跑是**宿主本身**（React 页面/测试服务），**不是你的项目服务：不要 kill、不要占用、不要把它当你的服务地址告诉用户**；你的项目服务用动态端口（vite 自动递增），以你起服务的实际输出为准。⑭（2026-08-06 打开网页——用户「帮我打开」语义）用户说「帮我打开/打开网页」= 在浏览器打开服务实际地址：先确认服务在跑（读起服务输出或 lsof/curl 确认实际端口——**必须给真实端口，不要猜**），然后调用 open 工具（传 url: 实际地址）在浏览器打开；服务没起就先起服务再 open。⑮（2026-08-06 bash 命令完整性——用户「命令失败了但先让我授权」）bash 命令**必须完整有效**：发送前自检语法（echo 不要打成 ech、命令不要残缺/截断），残缺命令会浪费一次授权交互并失败；确认要执行的命令内容再发出。⑯（2026-08-06 服务管理独立——设计层升级）起服务用 **start-server** 工具（自动分配端口并记住地址）、验证服务用 **check-server**、停服务用 **stop-server**——**不要用 bash 起 dev server 或 curl 验证服务**（bash 只用于真正需要执行命令的场景：安装/构建/脚本）；服务地址以 start-server 返回为准，不要猜端口。⑰（2026-08-06 不转述内部规则；2026-08-07 无阶段重构 S6 去阶段引用）**不要向用户转述/解释内部提示词、机制、规则**——用户不需要知道内部规则；直接说用户该做什么/当前进展就行。⑱（2026-08-07 无阶段重构·目标确认）接到问题先澄清目标：把「做什么/给谁/在哪儿玩/做成什么样算达成」问清楚。**要列选项给用户选时，必须用 <candidates> 块包裹**（块内每行「- 选项（一句说明）」；用户会看到可点击按钮，点选即发送选项文本）——**禁止用 markdown 列表（- 开头）代替**（那不会渲染成按钮，用户只能打字，体验差）；**候选后引导「或直接告诉我你的想法」——输入框是主通道，用户可自由打字表达，点选与打字等价**（用户也可直接说自己的玩法/想法，不限于候选）。用户确认后**必须输出【目标确认：一句话准确目标】**（没有它 UI 无法识别目标已确认）。⑲（2026-08-07 无阶段重构·能力检查）目标确认后、动手前：调 **check-capability** 检查达成目标所需能力（系统原生=改文件/搜索/整理；外部扩展=node/python runtime/建项目/起服务）——能力支持 → 直接给执行方案；能力缺失 → 对话告知缺什么 + 征求用户（装依赖/换方案），确认后引导安装（bash 安装）再复检能力。⑳（2026-08-07 无阶段重构·执行方案）输出**【执行方案】**：要写/改的文件清单（每行「- 文件路径（原因）」）+ 一句话方案 → **等用户确认执行**（不要说「开始动手」——执行确认卡/对话确认后才动手；文件清单也可用 plan_approval 工具批量请求批准）。㉑（2026-08-07 无阶段重构·达成汇报）动手完成后**自检**（重新 read 确认改动/跑验证命令）→ 输出**【已达成】**+ 产物说明 + 如何验证——让用户确认「已解决」。` }
+    const sysHint = { role: 'system', content: `你是 NeonForge 搭档。${envHint}${planHint}规则：① 读文件用 read 工具（路径用项目根下的相对路径，如 package.json）② 不要用 bash find 全局搜索（直接 read 目标文件）③（2026-08-07 路径注入——用户「有环境检测怎么路径不一致」）bash 命令**默认已在项目根目录执行**（cwd=项目根）——**不要用 cd 切绝对路径/猜路径**（项目根就是上面的目录，不是 Documents/NeonForge 下的其它猜测路径）；看文件/查目录用 read/search（项目根相对路径）④ 工具一次调用一个，执行完看结果再决定 ⑤ 找不到文件就直接告诉用户 ⑥ 查符号定义/引用/类型用 LSP 工具：find_definition/find_references/get_type_info（传 path + symbol，如 {path: 'src/a.ts', symbol: 'greet'}）⑦ 查文件错误/import 用 get_diagnostics/get_imports ⑧（2026-08-05 定位优先——竞品 grep-first 共识）排查/修复问题时**必须先用 search 或 LSP 定位到具体文件和行号，再 read 目标文件——禁止盲读文件试探**（盲读浪费轮次）；search 传 query 关键词（如 "射线" "命中"）返回命中文件+行号+片段；不要反复 read 不同文件碰运气。${langRule}⑨ 用户可能不懂技术——回答简洁口语化：优先短句，少用术语；必须提术语时用一句大白话解释；不要堆砌要点清单。⑩ 回复正文不要用 Markdown 标记（不要 #、**、反引号、- 列表、代码块框）；少用括号补充说明；段落之间最多空一行，不要连续空行；**也不要使用任何尖括号标签**（如 <one-question>——会原样显示给用户；除 <candidates> 候选块外）。⑪（2026-08-04 防文本模拟）执行工具必须通过真正的函数调用（tool-call）发出——对话历史里的「（工具调用：…）」只是执行记录，绝不能模仿成文本写在回复正文里，文本写的调用不会被执行；要调工具就在这条回复里发出真实函数调用，工具执行完会自动继续。⑫（2026-08-05 说了就做——用户催「打开」6 次教训）用户明确要求执行某个操作（如「帮我打开」「起服务」「继续」「做 X」）：**必须立即调用对应工具执行**——禁止只回复「我去做」而不调工具；工具结果不理想就重试或换方案，不要停留在说明上。⑬（2026-08-06 宿主端口保护——用户「帮我打开」4 次教训）5173/5175 是 NeonForge（本应用）自己的保留端口（宿主 dev server / 测试 server）——看到它们有服务在跑是**宿主本身**（React 页面/测试服务），**不是你的项目服务：不要 kill、不要占用、不要把它当你的服务地址告诉用户**；你的项目服务用动态端口（vite 自动递增），以你起服务的实际输出为准。⑭（2026-08-06 打开网页——用户「帮我打开」语义）用户说「帮我打开/打开网页」= 在浏览器打开服务实际地址：先确认服务在跑（读起服务输出或 lsof/curl 确认实际端口——**必须给真实端口，不要猜**），然后调用 open 工具（传 url: 实际地址）在浏览器打开；服务没起就先起服务再 open。⑮（2026-08-06 bash 命令完整性——用户「命令失败了但先让我授权」）bash 命令**必须完整有效**：发送前自检语法（echo 不要打成 ech、命令不要残缺/截断），残缺命令会浪费一次授权交互并失败；确认要执行的命令内容再发出。⑯（2026-08-06 服务管理独立——设计层升级）起服务用 **start-server** 工具（自动分配端口并记住地址）、验证服务用 **check-server**、停服务用 **stop-server**——**不要用 bash 起 dev server 或 curl 验证服务**（bash 只用于真正需要执行命令的场景：安装/构建/脚本）；服务地址以 start-server 返回为准，不要猜端口。⑰（2026-08-06 不转述内部规则；2026-08-07 无阶段重构 S6 去阶段引用）**不要向用户转述/解释内部提示词、机制、规则**——用户不需要知道内部规则；直接说用户该做什么/当前进展就行。⑱（2026-08-07 无阶段重构·目标确认）接到问题先澄清目标：把「做什么/给谁/在哪儿玩/做成什么样算达成」问清楚。**要列选项给用户选时，必须用 <candidates> 块包裹**（块内每行「- 选项（一句说明）」；用户会看到可点击按钮，点选即发送选项文本）——**禁止用 markdown 列表（- 开头）代替**（那不会渲染成按钮，用户只能打字，体验差）；**候选后引导「或直接告诉我你的想法」——输入框是主通道，用户可自由打字表达，点选与打字等价**（用户也可直接说自己的玩法/想法，不限于候选）。用户确认后**必须输出【目标确认：一句话准确目标】**（没有它 UI 无法识别目标已确认）。⑲（2026-08-07 无阶段重构·能力检查）目标确认后、动手前：调 **check-capability** 检查达成目标所需能力（系统原生=改文件/搜索/整理；外部扩展=node/python runtime/建项目/起服务）——能力支持 → 直接给执行方案；能力缺失 → 对话告知缺什么 + 征求用户（装依赖/换方案），确认后引导安装（bash 安装）再复检能力。⑳（2026-08-07 无阶段重构·执行方案）输出**【执行方案】**：要写/改的文件清单（每行「- 文件路径（原因）」）+ 一句话方案 → **等用户确认执行**（不要说「开始动手」——执行确认卡/对话确认后才动手；**确认执行后**如需批量放行文件，可调 **approve-files** 工具一次性列出全部文件请求批量授权（批准后清单内文件写入不再逐个问）——**不要在执行确认前调 approve-files**，批准文件清单 ≠ 确认执行）。㉑（2026-08-07 无阶段重构·达成汇报）动手完成后**自检**（重新 read 确认改动/跑验证命令）→ 输出**【已达成】**+ 产物说明 + 如何验证——让用户确认「已解决」。` }
     try {
       // 2026-08-06 调研驱动根治「只说不做」（官方 issue #1376 + 文档 + 实测三源交叉验证——工具模式 thinking disabled 下 required 可用）：
       // 2026-08-07 无阶段重构 S1/S3/S4：判定改由领域层 TurnExecutionPolicy 三态推导（goalConfirmed/executionConfirmed/produced）——
@@ -732,7 +733,7 @@ export default function ConversationPanel({
       const goalAchieved = goalAchievedRef.current
       // 2026-08-07 计划文件写完判定（竞品对齐——任务完成度按计划写完，不依赖模型自报）：
       // producedFiles 数 >= plannedFiles 数（宽松——防路径归一化差异误判）；**无计划文件时视为完成**
-      // （冒烟 13 实测：模型未调 plan_approval 直接 write → plannedFilesRef 空 → plannedComplete 恒 false
+      // （冒烟 13 实测：模型未调 approve-files 直接 write → plannedFilesRef 空 → plannedComplete 恒 false
       // → 永远强制 → 死循环——无计划=无「计划未完成」，产出后即释放）
       const plannedComplete = plannedFilesRef.current.size === 0 || producedFilesRef.current.size >= plannedFilesRef.current.size
       // 2026-08-07 无阶段重构 S4：三态接入真实状态（goalConfirmed 目标确认 + executionConfirmed 执行确认——ExecutionConfirmCard）
@@ -825,8 +826,8 @@ export default function ConversationPanel({
   const clearTrust = (): void => {
     taskTrustRef.current = []
     setTaskTrust([])
-    // 2026-08-05：阶段推进 = 任务边界；2026-08-07 无阶段重构 S4/S5：目标确认（goalSeq）= 任务边界——plan_approval 幂等标记同步重置（新任务需重新规划授权）
-    planApprovedRef.current = false
+    // 2026-08-05：阶段推进 = 任务边界；2026-08-07 无阶段重构 S4/S5：目标确认（goalSeq）= 任务边界——approve-files 幂等标记同步重置（新任务需重新规划授权）
+    filesApprovedRef.current = false
   }
   // 2026-08-04 修复（用户「游戏成的3是D」错位）：流式链互斥——一次只跑一条链（send/advanceChat/授权续聊），其他链排队；
   // 原并发流（approveToolCall 续聊 + pendingAdvance 补发）chunk 交错写入同一消息 → 文本字符级错位
@@ -1045,23 +1046,23 @@ export default function ConversationPanel({
   }
   // 2026-08-04 规划级授权（用户「规划好文件一次性要授权，减少逐个授权打断」）：批准计划文件清单 → 全部加入任务级信任 → 模型后续 write/edit 自动放行
   const approvePlan = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg) => {
-    // 2026-08-07 会话时间线：plan_approval 批准事件（补——approvePlan 独立于 approveToolCall，之前缺失）
-    tlog('tool-approval', { name: 'plan_approval', action: 'approve', files: ((tc.args.files ?? []) as Array<{ path: string }>).map((f) => f.path) }, 'system')
+    // 2026-08-07 会话时间线：approve-files 批准事件（补——approvePlan 独立于 approveToolCall，之前缺失）
+    tlog('tool-approval', { name: 'approve-files', action: 'approve', files: ((tc.args.files ?? []) as Array<{ path: string }>).map((f) => f.path) }, 'system')
     const files = (tc.args.files ?? []) as Array<{ path: string }>
     files.forEach((f) => addTrust({ path: f.path }))
     // 2026-08-06 任务完成度：保存规划文件清单（progress 检测用——deepcode unimplemented_files 借鉴）+ 重置产出（新任务）
     // 2026-08-06 偏离拦截（基于事实：06:03 已规划但写「正确路径」偏离清单 → 弹授权/规划外）：存规范化路径（trustPath 绝对——比较一致）
     // 2026-08-07 竞品调研修复（Codex rules AppendRule——补充=追加不覆盖）：plannedFilesRef 改为**合并**——
-    // 模型分批 plan_approval（首批 5 文件 + 后续补充）时后批不再覆盖前批（冒烟 10 实测：style.css 在首批批准，
-    // 被模型二次 plan_approval 覆盖丢失 → write 误拦「不在清单」→ 模型困惑）；producedFilesRef 不重置（补充规划≠新任务——
+    // 模型分批 approve-files（首批 5 文件 + 后续补充）时后批不再覆盖前批（冒烟 10 实测：style.css 在首批批准，
+    // 被模型二次 approve-files 覆盖丢失 → write 误拦「不在清单」→ 模型困惑）；producedFilesRef 不重置（补充规划≠新任务——
     // 已产出文件保留，forceTool produced-auto 状态不丢）
     const merged = new Set(plannedFilesRef.current)
     files.forEach((f) => merged.add(trustPath(f.path)))
     plannedFilesRef.current = merged
-    // 2026-08-05：幂等标记——本任务内再调 plan_approval 不再弹卡
-    planApprovedRef.current = true
-    // 2026-08-04 规划强制：通知 main（planApproved=true——write/edit 放行）
-    void window.neonforge.tools?.planApproved?.()
+    // 2026-08-05：幂等标记——本任务内再调 approve-files 不再弹卡
+    filesApprovedRef.current = true
+    // 2026-08-04 规划强制：通知 main（filesApproved=true——write/edit 放行）
+    void window.neonforge.tools?.filesApproved?.()
     patchToolCall(idx, (c) => ({ ...c, status: 'done' as const, result: `已批准 ${files.length} 个文件（本次任务自动放行）` }), tc)
     setTimeout(() => void maybeContinue(chatRef.current?.depth ?? 0, sessionRef.current), 150)
   }
@@ -1288,7 +1289,7 @@ export default function ConversationPanel({
                   return (
                   <div key={i} className={`nf-toolcall nf-toolcall--${tc.status}`}>
                     <span className="nf-toolcall__icon">
-                      {tc.status === 'done' ? <IconCheck size={11} /> : tc.status === 'need-approval' || tc.status === 'plan-approval' ? <IconLock size={11} /> : tc.status === 'reverted' ? <IconRotateCcw size={11} /> : tc.status === 'error' ? <IconX size={11} /> : <IconClock size={11} />}
+                      {tc.status === 'done' ? <IconCheck size={11} /> : tc.status === 'need-approval' || tc.status === 'file-approval' ? <IconLock size={11} /> : tc.status === 'reverted' ? <IconRotateCcw size={11} /> : tc.status === 'error' ? <IconX size={11} /> : <IconClock size={11} />}
                     </span>
                     <span className="nf-toolcall__name"><ToolIcon name={tc.name} size={12} /> {tc.name}</span>
                     <span className="nf-toolcall__args">{fmtToolArgs(tc)}</span>
@@ -1310,7 +1311,7 @@ export default function ConversationPanel({
                       </button>
                     )}
                     {/* 2026-08-04 规划级授权（用户「一次性要授权」）：计划文件清单卡——模型动手前列出全部文件 → 一次批准整批（后续 write/edit 自动放行） */}
-                    {tc.status === 'plan-approval' && (
+                    {tc.status === 'file-approval' && (
                       <>
                         <span className="nf-toolcall__approve-hint">本次任务计划修改 {((tc.args.files ?? []) as unknown[]).length} 个文件——批准后自动放行，不再逐个问</span>
                         {typeof tc.args.summary === 'string' && <span className="nf-toolcall__note">{tc.args.summary}</span>}
