@@ -113,6 +113,8 @@ export default function MainWorkspace({
   const handleGoalConfirmed = (title: string) => {
     setGoalConfirmed(true) // 目标已确认 → 解锁执行确认卡
     setGoalSeq((s) => s + 1) // 任务边界递增——ConversationPanel clearTrust（授权收回）
+    // 2026-08-07 会话时间线（Session Timeline BC）：目标确认事件（来源：模型标记 onGoalConfirmed / 用户打字确认词）
+    try { void window.neonforge.timeline?.log?.({ session: rootPath ?? undefined, type: 'goal-confirmed', role: 'system', detail: { goalText: title } }) } catch { /* 日志失败不影响 */ }
     if (activeProblem) {
       setProblems((prev) => prev.map((p) => p.id === activeProblem
         ? { ...updateProblemSnapshot(p, { goal: title }), title: title.length > 20 ? title.slice(0, 20) + '…' : title }
@@ -134,7 +136,11 @@ export default function MainWorkspace({
     // 词表：执行意图确认词（「好/OK」太宽——正常对话常用，误触发强制产出风险 > 确认触发收益，剔除）
     if (/确认|可以|没问题|就按|就这么做|开工|开始吧|就这么办/.test(text)) {
       if (!goalConfirmed) handleGoalConfirmed(goalTextRef.current || text)
-      else setExecutionConfirmed(true)
+      else {
+        setExecutionConfirmed(true)
+        // 2026-08-07 会话时间线：执行确认事件（用户打字确认词——无执行确认卡后的确认通道）
+        try { void window.neonforge.timeline?.log?.({ session: rootPath ?? undefined, type: 'exec-confirmed', role: 'system', detail: { source: 'user-word' } }) } catch { /* 日志失败不影响 */ }
+      }
       return
     }
     if (!goalConfirmed) goalTextRef.current = text // 目标未确认时用户说的话即目标描述
