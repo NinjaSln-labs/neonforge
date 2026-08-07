@@ -42,10 +42,6 @@ export function stageByIndex(index: number): ProductStage | null {
   return index >= 0 && index < PRODUCT_STAGES.length ? PRODUCT_STAGE_DEFS[PRODUCT_STAGES[index]] : null
 }
 
-export function stageIndex(name: ProductStageName): number {
-  return PRODUCT_STAGES.indexOf(name)
-}
-
 export function isLastStage(index: number): boolean {
   return index >= PRODUCT_STAGES.length - 1
 }
@@ -54,7 +50,7 @@ export function isLastStage(index: number): boolean {
 // advanceChat 的「内部指令」生成（原硬编码于 ConversationPanel.tsx:843——抽象到领域层，
 // 推进轮的指令语义固化：阶段切换告知 + 按阶段工作模式引导 + 完成时提示点「确认推进」）
 export function buildAdvanceInstruction(input: {
-  stage: string // 阶段名（应用层传入——指令组装不依赖强类型索引，保持宽松）
+  stage: ProductStageName // 阶段名（强类型——调用方 advanceChat 传 FLOW 阶段值，类型断言处见 ConversationPanel）
   hint: string // 阶段规则提示（STAGE_HINT——提示词体系保留在 DeliveryFlowPanel，此处只组装指令）
   requirement?: string // 需求确认摘要（需求卡确认时注入——模型按确认结果工作）
 }): string {

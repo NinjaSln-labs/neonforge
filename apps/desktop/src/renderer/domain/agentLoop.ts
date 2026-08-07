@@ -1,4 +1,5 @@
-// 领域层：agent 循环卡住检测（progress-aware——2026-08-06 双源调研 tavily+serper 交叉验证：
+// 领域层：agent 循环卡住检测（Conversation BC——多轮对话子域；2026-08-07 质量把关补 BC 归属）
+// progress-aware——2026-08-06 双源调研 tavily+serper 交叉验证：
 // 行业共识「activity ≠ progress」（dev.to StuckDetector / stackademic）+ 连续无进展升级 + needs-human 转用户 + arXiv 实时失败检测）
 // DDD 落地：Value Object（TurnProgress/StuckState）+ Domain Service（ProgressEvaluator/StuckDetector）+ Domain Event
 // 纯逻辑无 React 依赖——L1 可测；ConversationPanel（Application 层）调用

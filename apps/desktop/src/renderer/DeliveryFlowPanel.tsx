@@ -4,7 +4,8 @@ import { IconCheck, IconDot, IconRocket } from './icons'
 // 0-1 交付流（ticket 07）：说需求 → 软件工程模型/敏捷 → 分步推进 → 交付部署
 // V2：阶段状态提升——onStageChange/onModelSelect 通知 MainWorkspace（注入对话阶段指引）
 // v3：当前步骤聚焦——对话区内嵌（固定布局），当前阶段大卡片突出
-export const FLOW_STAGES = ['需求', '设计', '开发', '测试', '部署', '交付']
+// 2026-08-07 单源化（质量把关 S1）：阶段定义权威 = 领域层 domain/stageFlow（PRODUCT_STAGES）——组件引用，防双源
+import { PRODUCT_STAGES } from './domain/stageFlow'
 // 2026-08-05 体验反馈（用户「页卡内容太多冗余 + 出现标签」）：UI 阶段卡展示用户版一句话摘要——STAGE_HINT 是给模型的完整系统提示（含 <candidates> 示例/规则长文），不得直接显示给用户
 export const USER_STAGE_HINT: Record<string, string> = {
   需求: '确认你到底想要什么——搭档会问你几个问题，也可用上方「快速确认需求」点选',
@@ -65,7 +66,7 @@ export default function DeliveryFlowPanel({
   }, [stageOverride, stage])
 
   const advance = () => {
-    if (stage < FLOW_STAGES.length - 1) {
+    if (stage < PRODUCT_STAGES.length - 1) {
       const next = stage + 1
       setStage(next)
       onStageChange?.(next)
@@ -85,17 +86,17 @@ export default function DeliveryFlowPanel({
       </div>
 
       {/* 当前步骤聚焦卡（2026-08-04：加「当前阶段」标签——原「需求」大字似输入框误导；明确是状态指示非输入区） */}
-      {model && stage < FLOW_STAGES.length - 1 && (
+      {model && stage < PRODUCT_STAGES.length - 1 && (
         <div className="nf-flow__focus">
           <span className="nf-flow__focus-tag">当前阶段</span>
-          <span className="nf-flow__focus-step">{FLOW_STAGES[stage]}</span>
-          <span className="nf-flow__focus-hint">{USER_STAGE_HINT[FLOW_STAGES[stage]] ?? STAGE_HINT[FLOW_STAGES[stage]]}</span>
+          <span className="nf-flow__focus-step">{PRODUCT_STAGES[stage]}</span>
+          <span className="nf-flow__focus-hint">{USER_STAGE_HINT[PRODUCT_STAGES[stage]] ?? STAGE_HINT[PRODUCT_STAGES[stage]]}</span>
         </div>
       )}
 
       {/* 阶段机 */}
       <div className="nf-flow__stages">
-        {FLOW_STAGES.map((name, i) => (
+        {PRODUCT_STAGES.map((name, i) => (
           <span key={name} className={`nf-flow__stage${i < stage ? ' nf-flow__stage--done' : ''}${i === stage ? ' nf-flow__stage--active' : ''}`}>
             {i < stage ? <IconCheck size={12} /> : i === stage ? <IconDot size={12} /> : <IconDot size={12} className="nf-flow__stage-idle" />} {name}
           </span>
@@ -118,9 +119,9 @@ export default function DeliveryFlowPanel({
 
       {/* 分步推进（2026-08-04：按钮文案统一为「确认推进」——与模型阶段指引提示一致；P0 门控：需求阶段未确认需求 → 禁用提示）
           2026-08-04 体验修复：未选模型也常驻显示（模型说「点确认推进」时用户能看到按钮——灰 + 提示先选方式） */}
-      {stage < FLOW_STAGES.length - 1 && (
+      {stage < PRODUCT_STAGES.length - 1 && (
         <div className="nf-flow__advance">
-          <span className="nf-flow__stage-label">当前阶段：{FLOW_STAGES[stage]}——完成就点「确认推进」</span>
+          <span className="nf-flow__stage-label">当前阶段：{PRODUCT_STAGES[stage]}——完成就点「确认推进」</span>
           {!model && (
             <span className="nf-flow__gate-hint">没选做项目的方式也不影响推进——选了（稳扎稳打/快速迭代）搭档会按对应风格工作</span>
           )}
@@ -146,7 +147,7 @@ export default function DeliveryFlowPanel({
           </button>
         </div>
       )}
-      {model && stage === FLOW_STAGES.length - 1 && (
+      {model && stage === PRODUCT_STAGES.length - 1 && (
         <div className="nf-flow__done"><IconCheck size={12} /> 交付完成——产物在「产物」区，验收后确认关闭</div>
       )}
     </div>

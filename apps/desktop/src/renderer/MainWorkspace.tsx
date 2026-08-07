@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import SessionPanel from './SessionPanel'
 import SettingsPanel from './SettingsPanel'
-import DeliveryFlowPanel, { FLOW_STAGES, STAGE_HINT, USER_STAGE_HINT, inferFlowModel } from './DeliveryFlowPanel'
+import DeliveryFlowPanel, { STAGE_HINT, USER_STAGE_HINT, inferFlowModel } from './DeliveryFlowPanel'
+// 2026-08-07 单源化（质量把关 S1）：阶段定义权威 = 领域层 domain/stageFlow（PRODUCT_STAGES/isLastStage）——组件引用，防双源
+import { PRODUCT_STAGES, isLastStage } from './domain/stageFlow'
 import RequirementCard from './RequirementCard'
 import OutputPanel from './OutputPanel'
 import ConversationPanel from './ConversationPanel'
@@ -140,7 +142,7 @@ export default function MainWorkspace({
         const reqText = reqTextRef.current || text
         handleRequirementConfirmed(reqText)
         handleStageChange(1, reqText)
-      } else if (flowStage < FLOW_STAGES.length - 1) {
+      } else if (flowStage < PRODUCT_STAGES.length - 1) {
         // 其他阶段：推进到下一阶段（设计→开发 / 开发→测试 / 测试→部署 / 部署→交付）
         handleStageChange(flowStage + 1)
       }
@@ -237,7 +239,7 @@ function initProblems(): ProblemInstance[] {
   // 2026-08-04 修复：flowModel 未选时也注入阶段提示（talk.txt 实测——用户未选模型 → stageHint undefined → 需求澄清强规则丢失，模型自由发挥没按 4 点澄清/没往同音词猜）
   const [flowStage, setFlowStage] = useState(0)
   const [flowModel, setFlowModel] = useState<'traditional' | 'agile' | null>(null)
-  const stageName = FLOW_STAGES[flowStage]
+  const stageName = PRODUCT_STAGES[flowStage]
   // 0-1 模式才注入阶段指引（非 0-1 对话不污染）；flowModel 未选也注入（需求阶段澄清强规则——talk.txt 实测缺失根因）
   const stageHint = zeroToOne
     ? `【0-1 交付 · ${flowModel ? (flowModel === 'agile' ? '敏捷（迭代）' : '传统软件工程') + ' · ' : ''}${stageName} 阶段】${STAGE_HINT[stageName]}——按本阶段工作；阶段完成请提示用户点「确认推进」。`
@@ -257,12 +259,12 @@ function initProblems(): ProblemInstance[] {
     setFlowStage(stage)
     setAdvanceHint(false) // 2026-08-06 推进后清除按钮高亮
     // 2026-08-06 用户反馈「已进入阶段下面一堆定义的话」：对话区提示用 USER_STAGE_HINT（用户版一句话）——STAGE_HINT 是给模型的完整规则长文（含 <candidates> 示例/编号规则），不得显示给用户（坑 49 只修了阶段卡，漏了这里）
-    setStageAdvance((prev) => ({ seq: (prev?.seq ?? 0) + 1, stage: FLOW_STAGES[stage], hint: USER_STAGE_HINT[FLOW_STAGES[stage]] ?? STAGE_HINT[FLOW_STAGES[stage]], requirement }))
-    // 2026-08-06 用户反馈「交付推进后产物已解决但验收对照没完成」：交付是最后阶段——推进到交付 = 项目完成 → acceptance 全 done（与产物「已解决」一致）
-    const isLastStage = stage >= FLOW_STAGES.length - 1
-    const acceptance = FLOW_STAGES.map((s, i) => ({
-      label: i < stage || isLastStage ? `${s} 阶段已完成` : i === stage ? `${s} 阶段进行中` : `${s} 待开始`,
-      done: i < stage || isLastStage
+    setStageAdvance((prev) => ({ seq: (prev?.seq ?? 0) + 1, stage: PRODUCT_STAGES[stage], hint: USER_STAGE_HINT[PRODUCT_STAGES[stage]] ?? STAGE_HINT[PRODUCT_STAGES[stage]], requirement }))
+    // 2026-08-07 单源化（质量把关 S1）：isLastStage 改调领域层（原局部重名逻辑）
+    const lastStage = isLastStage(stage)
+    const acceptance = PRODUCT_STAGES.map((s, i) => ({
+      label: i < stage || lastStage ? `${s} 阶段已完成` : i === stage ? `${s} 阶段进行中` : `${s} 待开始`,
+      done: i < stage || lastStage
     }))
     setDeliveryPkg((prev) => ({
       status: 'delivered',
