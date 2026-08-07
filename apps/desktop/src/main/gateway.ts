@@ -4,6 +4,28 @@
 
 export type ThinkingLevel = 'none' | 'basic' | 'medium' | 'high'
 
+// 2026-08-07 T1 根因补强（regex-todo）：网关错误结构化透传——原 streamChat throw 文本
+// `gateway: http-${status}` → ipc 文本 → renderer 正则抠状态码（文本重建=打地鼠）；
+// 改为 GatewayHttpError 携带 status 结构化透传 + classifyGatewayError 在 ipc 层分类
+// （分类结果 errorType 字段给 renderer——同 validateKey 'key-invalid'/'service-error' 结构化先例）
+export type GatewayErrorType = 'key-invalid' | 'service' | 'unknown'
+
+export class GatewayHttpError extends Error {
+  constructor(public readonly status: number) {
+    super(`gateway: http-${status}`) // 文本 message 保留——展示/日志兼容
+    this.name = 'GatewayHttpError'
+  }
+}
+
+export const classifyGatewayError = (e: unknown): GatewayErrorType => {
+  if (e instanceof GatewayHttpError) return e.status === 401 ? 'key-invalid' : 'service'
+  const msg = e instanceof Error ? e.message : ''
+  if (msg.startsWith('gateway')) return 'service' // gateway: no-body 等我方网关层错误
+  if (e instanceof DOMException && e.name === 'TimeoutError') return 'service' // AbortSignal.timeout(45000)
+  if (e instanceof TypeError) return 'service' // fetch 网络错误（'fetch failed' 等）
+  return 'unknown'
+}
+
 export interface DeepSeekThinkingParams {
   thinking: { type: 'enabled' | 'disabled' }
   reasoning_effort?: 'high' | 'max'
@@ -154,7 +176,8 @@ export class DeepSeekGateway {
     if (!res.ok) {
       const bodyText = await res.text().catch(() => '')
       console.log('[gateway] error body:', bodyText.slice(0, 500))
-      throw new Error(`gateway: http-${res.status}`)
+      // 2026-08-07 T1 根因补强：结构化状态码透传（ipc 层 classifyGatewayError 分类——不再靠文本 gateway: http-xxx 正则重建）
+      throw new GatewayHttpError(res.status)
     }
     if (!res.body) throw new Error('gateway: no-body')
 
