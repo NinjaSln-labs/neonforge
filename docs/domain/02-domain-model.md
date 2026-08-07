@@ -205,6 +205,7 @@ AgentChain
 > 依据 A0 §2「流水线编排（角色/模板/Stage）→ AgentChain」补建模为 **`ProductStage`**（`src/renderer/domain/stageFlow.ts`）——每个阶段带**工作模式**（`StageOutputMode`：
 > 需求=clarify 问答澄清 / 设计=text-proposal 方案文本 / 开发=artifacts 动手产出 / 测试=verify / 部署=deploy / 交付=report）。
 > 阶段推进 = `StageTransition`（领域事件）+ `AdvanceInstruction`（推进指令生成——advanceChat 的领域化）。
+> **共享内核（2026-08-07 质量把关 S5）**：`PRODUCT_STAGE_DEFS`（阶段工作模式）被 Conversation BC 的 `turnPolicy`（读取 `forceToolOnAdvance`）与 AgentChain BC 的推进逻辑共用——阶段是跨 BC 通用语言，属**共享内核**（对齐 A0「共享原语」例：Money）——单向依赖（turnPolicy → stageFlow，无环）。
 
 ### ChangeSet（支撑域聚合根）
 ```
