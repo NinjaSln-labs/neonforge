@@ -171,6 +171,29 @@ interface Environment {
 }
 ```
 
+### 2.6 TaskTrust（任务级信任——值对象/集合）
+
+```typescript
+interface TaskTrust {
+  paths: FilePath[]          // 任务内信任的文件路径（允许并记住）
+  scope: 'sandbox-only'      // 只信任沙箱内（项目根内）——沙箱外永不进入
+  clearedBy: TaskBoundary    // 任务边界（goalSeq 递增——新目标确认）→ 清空
+}
+```
+
+### 2.7 AuthorizationService（授权裁决——领域服务）
+
+```typescript
+interface AuthorizationService {
+  preApprove(tool: string, args: Record<string, unknown>, ctx: { rootPath?: string }):
+    { auto: boolean; reason?: string }    // 规则引擎 deny>allow>ask——fail-closed——main 进程裁决
+  addTrust(args: Record<string, unknown>): void   // 允许并记住（仅文件路径类 + 沙箱内）
+  isTrusted(args: Record<string, unknown>): boolean // 任务信任集合命中 → write/edit 自动
+  clearTrust(): void                        // 任务边界（新目标确认）→ 清空信任 + 计划批准重置
+}
+```
+
+不变式：bash 无 path 永不进入信任（高危永远单独确认）；沙箱外永不进入信任（安全底线）；信任不跨任务（clearTrust）。
 ### 2.6 TimelineEvent（时间线事件）
 
 ```typescript
