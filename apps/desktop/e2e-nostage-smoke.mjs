@@ -211,14 +211,13 @@ async function main() {
         log('🔓', `批准授权：${ap ?? '(无按钮)'}`)
         continue
       }
-      // 1. 执行确认卡（目标确认后出现——确认执行；仅当模型已输出【目标确认】标记才点——防目标未确认过早确认）
-      if (!execConfirmed && obs.O1_goalConfirm.hit && await driver.execCardVisible()) {
-        const ok = await driver.clickExecConfirm()
-        if (ok) {
-          execConfirmed = true
-          log('✅', '点击「确认，开始执行」——观察模型是否动手产出（O4）')
-          continue
-        }
+      // 1. 执行确认（2026-08-07 无阶段修复：执行确认卡已删——O1 目标确认标记命中后打字确认词「可以」= 确认执行；
+      //    模型【目标确认】= 目标已确认 → 用户确认执行 → executionConfirmed → forceTool 强制产出（O4 观察））
+      if (!execConfirmed && obs.O1_goalConfirm.hit) {
+        log('✅', 'O1 命中——打字确认执行「可以」——观察模型是否动手产出（O4）')
+        await driver.send('可以')
+        execConfirmed = true
+        continue
       }
       // 2. 候选按钮（目标澄清）——优先点「射击/网页/朋友/能玩」相关，否则第一个
       if (msg.candidates.length > 0) {
