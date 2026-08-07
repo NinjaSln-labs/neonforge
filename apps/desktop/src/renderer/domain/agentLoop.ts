@@ -37,6 +37,26 @@ export function isDoneLike(t: string): boolean {
   return /(完成|做好|搞定|改好|解决|处理完|已写好|已修改|已删除|已添加|已加|可以了|能玩了|没问题|修好了|加好了|实现了|就绪|收工|结束|达标|通过了|在跑|能跑|弄好|好了，|好的，|就是这些|就这样|先说这么多)/.test(t)
 }
 
+// === Domain Service: 执行方案清单解析（2026-08-07 无阶段重构 S5——TurnProgress.plannedFiles 来源调整） ===
+// plannedFiles = plan_approval 批准 ∪ 执行方案清单（模型输出【执行方案】块——S6 提示词引导格式）：
+//   【执行方案】
+//   - 文件路径（原因）
+//   - 文件路径2（原因）
+// 行首 `- `/`• ` 提取路径（去括号原因注释）；无【执行方案】标记或空块 → 返回 []
+export function parseExecutionPlan(text: string): string[] {
+  const block = text.match(/【执行方案】([\s\S]*?)(?:【|$)/)
+  if (!block) return [] // 无【执行方案】标记 → 不解析（防误抓正文 - 行）
+  const region = block[1]
+  const files: string[] = []
+  for (const line of region.split('\n')) {
+    const m = line.match(/^\s*[-•]\s*(.+?)(?:\s*[（(].*?[）)])?\s*$/)
+    if (!m) continue
+    const p = m[1].trim()
+    if (p) files.push(p)
+  }
+  return files
+}
+
 // === Domain Service: ProgressEvaluator——从 AgentTurn（toolCalls + content）评估 TurnProgress ===
 // 排除判定沿用坑 79 结构判定（问句/沟通/完成态——有限集，不匹配措辞）
 export function evaluateTurnProgress(input: {

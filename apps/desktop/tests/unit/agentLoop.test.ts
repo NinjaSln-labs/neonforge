@@ -1,7 +1,25 @@
 import { describe, it, expect } from 'vitest'
-import { evaluateTurnProgress, detectStuck, initialStuckState } from '../../src/renderer/domain/agentLoop'
+import { evaluateTurnProgress, detectStuck, initialStuckState, parseExecutionPlan } from '../../src/renderer/domain/agentLoop'
 
 // 领域层：progress-aware 卡住检测（2026-08-06 DDD 落地——行业调研 tavily+serper 双源：activity≠progress + 连续无进展升级 + needs-human）
+
+// 2026-08-07 无阶段重构 S5：执行方案清单解析（plannedFiles 来源 ∪ 执行方案清单）
+describe('parseExecutionPlan（执行方案清单解析）', () => {
+  it('【执行方案】块内 - 行提取文件路径（去括号原因）', () => {
+    const text = '以下是执行方案：【执行方案】\n- index.html（页面骨架）\n- src/main.js（游戏逻辑）\n- style.css\n确认后开始。'
+    expect(parseExecutionPlan(text)).toEqual(['index.html', 'src/main.js', 'style.css'])
+  })
+  it('无【执行方案】标记 → 返回空数组（防误抓正文 - 行）', () => {
+    expect(parseExecutionPlan('我会先读一下文件结构，再给出方案。')).toEqual([])
+  })
+  it('块后还有内容（其他【标记）→ 只取块内', () => {
+    const text = '【执行方案】\n- a.js\n【目标确认】xxx'
+    expect(parseExecutionPlan(text)).toEqual(['a.js'])
+  })
+  it('• 符号行同样解析（容错）', () => {
+    expect(parseExecutionPlan('【执行方案】\n• b.js（改配置）')).toEqual(['b.js'])
+  })
+})
 
 describe('ProgressEvaluator（单轮进展评估）', () => {
   const empty = new Set<string>()
