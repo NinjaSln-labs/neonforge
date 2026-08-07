@@ -146,7 +146,7 @@ export default function ConversationPanel({
   onExternalConsumed?: () => void
   onToolResult?: (r: { name: string; file?: string; ok: boolean }) => void
   onUserMessage?: (text: string) => void
-  // 2026-08-04：需求确认回写——模型输出【需求确认：xxx】→ 上报 MainWorkspace（更新台账标题/快照 + 项目 README）
+  // 2026-08-04：目标确认回写——模型输出【目标确认：xxx】→ 上报 MainWorkspace（更新台账标题/快照 + 项目 README）
   onRequirementConfirmed?: (title: string) => void
   requirementConfirmed?: boolean // 2026-08-06 需求阶段门控：用户确认（MainWorkspace state）→ 同步 ref——确认后 B 类直接执行（write/edit/bash 放行）
   recentFilesExternal?: string[]
@@ -233,8 +233,8 @@ export default function ConversationPanel({
   const producedFilesRef = useRef<Set<string>>(new Set())
   // 2026-08-05：renderer 侧「已规划」标记——approvePlan 置 true（幂等：本任务内再调 plan_approval 不弹卡）；阶段推进（clearTrust）重置
   const planApprovedRef = useRef(false)
-  const requirementConfirmedRef = useRef(false) // 2026-08-06 需求阶段门控：模型输出【需求确认】→ true（B 类确认后 write/edit/bash 放行——直接执行）
-  useEffect(() => { if (requirementConfirmed) requirementConfirmedRef.current = true }, [requirementConfirmed]) // 用户确认（MainWorkspace state）→ 同步
+  const goalConfirmedRef = useRef(false) // 2026-08-06 需求阶段门控：模型输出【目标确认】→ true（无阶段重构 S3：需求确认→目标确认——确认后 write/edit/bash 放行——直接执行）
+  useEffect(() => { if (requirementConfirmed) goalConfirmedRef.current = true }, [requirementConfirmed]) // 用户确认（MainWorkspace state）→ 同步（无阶段重构 S3：requirementConfirmed prop 保持原名——S4 与 MainWorkspace 一并改名 goalConfirmed）
   useEffect(() => {
     if (initialPrompt && initialPrompt.trim()) {
       inputRef.current = initialPrompt.trim()
@@ -309,16 +309,16 @@ export default function ConversationPanel({
     // 事件层累积（每事件一次——双调安全）
     if (chunk.type === 'content') {
       streamingRef.current.content += chunk.text ?? ''
-      // 2026-08-06 需求确认提前检测（不等 done——工具调用可能在 done 前）：【需求确认】标记 → 门控放行（B 类确认后直接执行）
-      if (streamingRef.current.content.includes('【需求确认')) requirementConfirmedRef.current = true
+      // 2026-08-06 目标确认提前检测（不等 done——工具调用可能在 done 前）：【目标确认】标记 → 门控放行（确认后直接执行）
+      if (streamingRef.current.content.includes('【目标确认')) goalConfirmedRef.current = true
     }
     if (chunk.type === 'tool-call' && chunk.toolCall) {
       streamingRef.current.toolCalls.push({ name: chunk.toolCall.name, args: chunk.toolCall.args, status: 'pending' })
     }
     if (chunk.type === 'done') {
-      // 副作用移出 updater：需求确认回写 + 对话日志（updater 双调会重复记录）
+      // 副作用移出 updater：目标确认回写 + 对话日志（updater 双调会重复记录）
       const content = streamingRef.current.content
-      const confirm = content?.match(/【需求确认[:：]\s*([^】]+)/)
+      const confirm = content?.match(/【目标确认[:：]\s*([^】]+)/)
       if (confirm?.[1]) onRequirementConfirmed?.(confirm[1].trim())
       window.neonforge.chatLog?.log?.({
         ts: new Date().toISOString(),
@@ -327,9 +327,9 @@ export default function ConversationPanel({
         toolCalls: streamingRef.current.toolCalls.map((t) => ({ name: t.name, status: t.status }))
       })
       // 2026-08-06 阶段推进设计层（用户反馈「测试阶段不会自动或提示进入部署」）：模型输出「确认推进」→ 推进按钮高亮（用户注意到该点了）
-      // 2026-08-06 修正（用户「需求确认后点推进按钮但没看到高亮」）：需求阶段模型输出【需求确认】后常不说「点确认推进」（违反规则⑤）→ 高亮不触发；
-      // 需求确认 = 该推进了 → 【需求确认】标记同样触发高亮（不依赖模型措辞）
-      if (/确认推进|【需求确认/.test(content)) { onAdvanceHint?.(true); requirementConfirmedRef.current = true }
+      // 2026-08-06 修正（用户「需求确认后点推进按钮但没看到高亮」）：需求阶段模型输出【目标确认】后常不说「点确认推进」（违反规则⑤）→ 高亮不触发；
+      // 目标确认 = 该推进了 → 【目标确认】标记同样触发高亮（不依赖模型措辞）
+      if (/确认推进|【目标确认/.test(content)) { onAdvanceHint?.(true); goalConfirmedRef.current = true }
       // 2026-08-05 体验反馈（用户「最后一条像卡住」）：模型承诺行动（「我先…再…」）但没调工具 → 提示用户可回复「继续」
       // （非卡死——working 已释放；判定收紧：问句/征求同意/「确认/思考」类对话行为不触发；不限于开发阶段——任何阶段说了要看/读/写就该做）
       // 2026-08-05 自动化实测发现（需求阶段偶发误判）：需求阶段（flowStage=0）模型「我先…再确认/再问」是问答引导（STAGE_HINT 需求阶段禁止工具），
@@ -345,7 +345,8 @@ export default function ConversationPanel({
       //    替换散落的 isActionPromise/isTextSimulation/autoNudge 3 次配额——领域层 ProgressEvaluator + StuckDetector 判定；
       //    只处理工具循环轮（首轮已 forceTool API 强制——不重复）；连续 2 轮无产出（无 write/edit/新 read）→ escalate 自动续聊指出没动手；
       //    升级 2 次仍无产出 → needs-human 状态栏提示（对齐行业——不再固定配额「耗尽」问题）
-      if ((flowStage ?? 0) >= 1) {
+      // 2026-08-07 无阶段重构 S3：目标确认后才启用 StuckDetector（原 flowStage>=1——目标确认前模型澄清问答/探索是正常行为，不检测停滞）
+      if (goalConfirmedRef.current) {
         // 2026-08-06 任务完成度：write/edit 成功标记产出（plan_approval 规划文件 vs 已产出——deepcode unimplemented_files 借鉴）
         streamingRef.current.toolCalls.forEach((c) => {
           if ((c.name === 'write' || c.name === 'edit') && c.status === 'done' && c.file) producedFilesRef.current.add(c.file)
@@ -404,17 +405,18 @@ export default function ConversationPanel({
       }
       if (chunk.type === 'tool-call' && chunk.toolCall) {
         // 2026-08-04 规划级授权：plan_approval 不执行（虚拟工具）——状态 plan-approval 弹规划授权卡（等用户批准文件清单）
-        // 2026-08-05 体验反馈（用户实测「规划授权出来两次」+「设计阶段没找我确认」）：① 幂等——本任务已批准过不再弹卡 ② 阶段门控——设计阶段（flowStage<2 设计未确认）不弹卡，模型误调无害
+        // 2026-08-05 体验反馈（用户实测「规划授权出来两次」）：幂等——本任务已批准过不再弹卡
+        // 2026-08-07 无阶段重构 S3：删除阶段门控（原 flowStage<2 设计阶段不弹卡——无阶段无阶段概念；plan_approval 语义更新见 S5）
         let status: 'pending' | 'done' | 'plan-approval' = 'pending'
         if (chunk.toolCall.name === 'plan_approval') {
-          status = (planApprovedRef.current || (flowStage ?? 0) < 2) ? 'done' : 'plan-approval'
+          status = planApprovedRef.current ? 'done' : 'plan-approval'
         }
         next.toolCalls = [...(next.toolCalls ?? []), {
           name: chunk.toolCall.name,
           args: chunk.toolCall.args,
           status,
           result: status === 'done' && chunk.toolCall.name === 'plan_approval'
-            ? (planApprovedRef.current ? '规划已批准（本任务不重复授权）' : '设计确认后进入开发阶段再规划')
+            ? '规划已批准（本任务不重复授权）'
             : undefined
         }]
       }
@@ -424,44 +426,28 @@ export default function ConversationPanel({
     // 2026-08-04 规划级授权：plan_approval 跳过执行（虚拟工具——批准由 renderer approvePlan 处理）
     if (chunk.type === 'tool-call' && chunk.toolCall && chunk.toolCall.name !== 'plan_approval') {
       const tc = chunk.toolCall
-      // 2026-08-06 用户反馈「第一句话就有一个工具执行」：需求阶段（flowStage=0）工具门控——需求未确认前不执行任何工具
-      // （需求都没澄清，看目录/写文件都没意义）；工具直接 done + 提示（maybeContinue 回填给模型 → 模型停止调工具继续澄清需求）
-      // 严格 flowStage === 0（undefined=演示/测试通道不拦截——demo 场景工具需正常执行）
-      if (flowStage === 0 && tc.name === 'bash' && initialPrompt && !requirementConfirmedRef.current) {
+      // 2026-08-06 用户反馈「第一句话就有一个工具执行」：目标确认前工具门控——目标没澄清前不执行任何工具
+      // （目标都没澄清，看目录/写文件都没意义）；工具直接 done + 提示（maybeContinue 回填给模型 → 模型停止调工具继续澄清目标）
+      // 2026-08-07 无阶段重构 S3：flowStage===0 → !goalConfirmedRef.current（目标未确认不探索）
+      if (!goalConfirmedRef.current && tc.name === 'bash' && initialPrompt) {
         setMessages((prev) => {
           const last = prev[prev.length - 1]
           if (!last || last.role !== 'assistant') return prev
           const calls = (last.toolCalls ?? []).map((c) => c.name === tc.name && c.status === 'pending'
-            ? { ...c, status: 'done' as const, result: '需求确认前先不执行命令——先把需求问清楚（进入设计/开发阶段再动手）' }
+            ? { ...c, status: 'done' as const, result: '目标确认前先不执行命令——先把目标问清楚再动手' }
             : c)
           return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
         })
         return
       }
-      // 2026-08-06 设计阶段 write/edit 门控（真实 API 实测：模型设计阶段调 edit → 弹授权卡卡住——设计阶段不改文件，机制拦截非弹卡）
-      // 2026-08-07 质量把关 P1 修复：advance-turn（阶段推进轮）不拦——advanceChat 触发时 applyChunk 闭包 flowStage 滞后（推进到开发仍显示设计），
-      // 推进轮的 write 按授权流走（弹卡用户可批/拒）；仅模型主动（user-turn/tool-loop）设计阶段改文件才拦（坑 48 语义——L3 440 暴露）
-      if (flowStage === 1 && (tc.name === 'write' || tc.name === 'edit') && turnKindRef.current !== 'advance-turn') {
+      // 2026-08-06 目标确认前 write/edit 门控（用户「需求阶段不是不会实际动手吗」——目标未确认不改文件；【目标确认】输出 → goalConfirmedRef 放行——确认后直接执行）
+      // 2026-08-07 无阶段重构 S3：flowStage===0 → !goalConfirmedRef.current；删除设计阶段门控（无阶段无设计阶段——方案确认前改写文件由执行确认门控 S4 兜底，当前弹授权卡由用户决定）
+      if (!goalConfirmedRef.current && (tc.name === 'write' || tc.name === 'edit') && initialPrompt) {
         setMessages((prev) => {
           const last = prev[prev.length - 1]
           if (!last || last.role !== 'assistant') return prev
           const calls = (last.toolCalls ?? []).map((c) => c.name === tc.name && c.status === 'pending'
-            ? { ...c, status: 'done' as const, result: '设计阶段不改文件——先把方案说完整让用户确认（进入开发阶段再动手写/改）' }
-            : c)
-          return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
-        })
-        return
-      }
-      // 2026-08-06 需求阶段门控（用户「需求阶段不是不会实际动手吗」——需求未确认不改文件；【需求确认】输出 → requirementConfirmedRef 放行——B 类确认后直接执行）
-      // 2026-08-07 质量把关 P1 修复：补 initialPrompt 条件（对齐坑 71 bash 门控）——只拦 0-1 流程；
-      // 打开已有项目（非 0-1，initialPrompt 空）用户明确要求写文件 → 弹授权卡让用户决定（c57d987 引入时漏条件——L5 write 卡测试失败暴露）
-      // + advance-turn 排除（推进轮不拦——flowStage 闭包滞后同设计门控）
-      if (flowStage === 0 && (tc.name === 'write' || tc.name === 'edit') && initialPrompt && turnKindRef.current !== 'advance-turn' && !requirementConfirmedRef.current) {
-        setMessages((prev) => {
-          const last = prev[prev.length - 1]
-          if (!last || last.role !== 'assistant') return prev
-          const calls = (last.toolCalls ?? []).map((c) => c.name === tc.name && c.status === 'pending'
-            ? { ...c, status: 'done' as const, result: '需求阶段不改文件——先输出【需求确认：…】【任务类型：A/B】让用户确认，确认后再动手' }
+            ? { ...c, status: 'done' as const, result: '目标确认前不改文件——先输出【目标确认：…】让用户确认，确认后再动手' }
             : c)
           return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
         })
@@ -621,20 +607,13 @@ export default function ConversationPanel({
     const sysHint = { role: 'system', content: `你是 NeonForge 搭档。当前项目根目录：${rootPath ?? '(未指定)'}。规则：① 读文件用 read 工具（路径用项目根下的相对路径，如 package.json）② 不要用 bash find 全局搜索（直接 read 目标文件）③ 工具一次调用一个，执行完看结果再决定 ④ 找不到文件就直接告诉用户 ⑤ 查符号定义/引用/类型用 LSP 工具：find_definition/find_references/get_type_info（传 path + symbol，如 {path: 'src/a.ts', symbol: 'greet'}）⑥ 查文件错误/import 用 get_diagnostics/get_imports ⑦（2026-08-05 定位优先——竞品 grep-first 共识）排查/修复问题时**必须先用 search 或 LSP 定位到具体文件和行号，再 read 目标文件——禁止盲读文件试探**（盲读浪费轮次）；search 传 query 关键词（如 "射线" "命中"）返回命中文件+行号+片段；不要反复 read 不同文件碰运气。${langRule}⑨ 用户可能不懂技术——回答简洁口语化：优先短句，少用术语；必须提术语时用一句大白话解释；不要堆砌要点清单。⑩ 回复正文不要用 Markdown 标记（不要 #、**、反引号、- 列表、代码块框）；少用括号补充说明；段落之间最多空一行，不要连续空行；**也不要使用任何尖括号标签**（如 <one-question>——会原样显示给用户；除 <candidates> 候选块外）。⑪（2026-08-04 防文本模拟）执行工具必须通过真正的函数调用（tool-call）发出——对话历史里的「（工具调用：…）」只是执行记录，绝不能模仿成文本写在回复正文里，文本写的调用不会被执行；要调工具就在这条回复里发出真实函数调用，工具执行完会自动继续。⑫（2026-08-05 说了就做——用户催「打开」6 次教训）用户明确要求执行某个操作（如「帮我打开」「起服务」「继续」「做 X」）：**必须立即调用对应工具执行**——禁止只回复「我去做」而不调工具；工具结果不理想就重试或换方案，不要停留在说明上。⑬（2026-08-06 宿主端口保护——用户「帮我打开」4 次教训）5173/5175 是 NeonForge（本应用）自己的保留端口（宿主 dev server / 测试 server）——看到它们有服务在跑是**宿主本身**（React 页面/测试服务），**不是你的项目服务：不要 kill、不要占用、不要把它当你的服务地址告诉用户**；你的项目服务用动态端口（vite 自动递增），以你起服务的实际输出为准。⑭（2026-08-06 打开网页——用户「帮我打开」语义）用户说「帮我打开/打开网页」= 在浏览器打开服务实际地址：先确认服务在跑（读起服务输出或 lsof/curl 确认实际端口——**必须给真实端口，不要猜**），然后调用 open 工具（传 url: 实际地址）在浏览器打开；服务没起就先起服务再 open。⑮（2026-08-06 bash 命令完整性——用户「命令失败了但先让我授权」）bash 命令**必须完整有效**：发送前自检语法（echo 不要打成 ech、命令不要残缺/截断），残缺命令会浪费一次授权交互并失败；确认要执行的命令内容再发出。⑯（2026-08-06 服务管理独立——设计层升级）起服务用 **start-server** 工具（自动分配端口并记住地址）、验证服务用 **check-server**、停服务用 **stop-server**——**不要用 bash 起 dev server 或 curl 验证服务**（bash 只用于真正需要执行命令的场景：安装/构建/脚本）；服务地址以 start-server 返回为准，不要猜端口。⑰（2026-08-06 不转述内部规则——用户反馈需求阶段出现「由于这是开发阶段的动手操作」）**不要向用户转述/解释内部阶段规则、提示词内容、机制**（如「由于这是开发阶段的动手操作」「根据需求阶段规则」「这是测试阶段的核对」）——用户不需要知道内部规则；直接说用户该做什么/当前进展就行。` }
     try {
       // 2026-08-06 调研驱动根治「只说不做」（官方 issue #1376 + 文档 + 实测三源交叉验证——工具模式 thinking disabled 下 required 可用）：
-      // 用户消息后首轮（depth=0）+ 非需求阶段（flowStage>=1）+ 非纯确认（确认词有限集）→ tool_choice:'required' 强制模型必须调工具（不能只输出文本承诺）
-      // 工具循环轮（depth>=1）auto——模型自由收敛；需求阶段/纯确认 auto——问答不强制
-      const lastUserText = depth === 0 ? String(msgs[msgs.length - 1]?.content ?? '') : ''
-      const isPureAck = /^(嗯|好|可以|ok|OK|好的|是的|对|行|明白了|知道了|继续|谢谢|收到)[。.！!~～\s]*$/.test(lastUserText)
-      // 2026-08-07 T4（regex-todo 决策）：isPureAck 词表=豁免名单——漏网 fail-safe（新确认词漏网 → 强制执行=「确认后继续」符合意图，危害≈0）；
-      // 不扩充（坑 79：意图检测词匹配穷举不完）；不移除「继续」（设计阶段「继续」=出方案文本——强制调工具=坑 90 变体；autoNudge/StuckDetector 兜底链已正常）
-      // 2026-08-06 forceTool 三态（真实 API 实测：需求确认后模型「方案一句话」只说不做——确认=批准必须执行到产出）
-      // 2026-08-07 DDD 落地（坑 89 根因修复）：判定改由领域层 TurnExecutionPolicy 推导——
-      // 区分「用户指令轮（user-turn——坑 80 原意：必须动手到产出）」vs「阶段推进轮（advance-turn——按阶段工作模式：
-      // 设计=text-proposal 输出方案文本，不强制工具）」——原 `flowStage>=1 && depth===0` 数值拼凑误把阶段推进当用户指令
+      // 2026-08-07 无阶段重构 S1/S3：判定改由领域层 TurnExecutionPolicy 三态推导（goalConfirmed/executionConfirmed/produced）——
+      // 目标+执行确认但无产出 → required 强制模型必须调工具（不能只输出文本承诺）；其余 auto（澄清/等确认/已有产出）
+      // isPureAck 词表随无阶段终结（S3——T4「保持现状」决策被取代：纯确认进入目标/执行确认状态流转，无需独立豁免名单）
       const produced = producedFilesRef.current.size > 0
       // 2026-08-07 无阶段重构 S1：三态判定（goalConfirmed/executionConfirmed/produced）
-      // 临时桥接——S3 接入真实 goalConfirmed/executionConfirmed 状态（MainWorkspace state）；
-      // 当前语义：需求确认即目标+执行确认（无阶段下「执行方案确认」概念 S4 ExecutionConfirmCard 落地）
+      // 临时桥接——S4 接入真实 executionConfirmed 状态（ExecutionConfirmCard 确认执行方案）；
+      // 当前语义：目标确认即执行确认（无阶段下「执行方案确认」概念 S4 落地前保持旧 B 类语义）
       const goalConfirmed = requirementConfirmed ?? false // prop 可选（demo）——领域层要求必填 boolean
       const { forceTool } = decideTurnPolicy({
         goalConfirmed,
