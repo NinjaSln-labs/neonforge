@@ -86,7 +86,8 @@ test('真实执行 → 产物区交付包联动（write 授权后）', async ({ 
         execute: async (name: string, _args: Record<string, unknown>, opts?: { approved?: boolean }) =>
           name === 'write' && opts?.approved
             ? { ok: true, data: { file: '/test/notes.txt', snapshot: true } }
-            : { ok: false, error: `「${name}」需要授权（L3）——approved=true 后执行` },
+            // 2026-08-07 T2（regex-todo）：needApproval 结构化字段
+            : { ok: false, needApproval: true, error: `「${name}」需要授权（L3）——approved=true 后执行` },
         revert: async () => ({ ok: true })
       }
     }

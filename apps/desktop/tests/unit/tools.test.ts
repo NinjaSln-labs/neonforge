@@ -192,4 +192,14 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     expect(isReadOnlyBash('ls -la /x && cat package.json')).toBe(true) // ls/cat 白名单复合
     expect(isReadOnlyBash('npm run dev')).toBe(false) // 高风险命令需授权
   })
+
+  // 2026-08-07 无阶段重构 S2：check-env → check-capability（能力检查工具改名——注册名 + 能力视图）
+  it('check-capability：注册 + 有 dir 返回能力视图（工具改名回归）', async () => {
+    const r = await toolRegistry.execute('check-capability', { dir: TMP }, {})
+    expect(r.ok).toBe(true)
+    expect(r.data).toBeTruthy() // 能力视图（capabilities/runtime/missing）
+    // 旧名 check-env 不再注册（改名后旧名应 404——防双名双源）
+    const old = await toolRegistry.execute('check-env', {}, {})
+    expect(old.needApproval).toBeUndefined()
+  })
 })
