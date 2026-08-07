@@ -20,8 +20,14 @@ describe('TurnExecutionPolicy（三态——无阶段重构 S1）', () => {
     expect(r.reason).toBe('goal-exec-until-produced')
   })
 
-  it('目标+执行已确认 + 有产出 → auto（收敛到文本结束，StuckDetector 兜底）', () => {
+  it('目标+执行已确认 + 有产出但未汇报【已达成】→ 仍强制（任务完成度——竞品语义：写 1 文件≠达成）', () => {
     const r = decideTurnPolicy(base)
+    expect(r.forceTool).toBe(true)
+    expect(r.reason).toBe('goal-exec-until-achieved')
+  })
+
+  it('有产出 + 已汇报【已达成】→ auto（收敛到对话结束，StuckDetector 兜底）', () => {
+    const r = decideTurnPolicy({ ...base, goalAchieved: true })
     expect(r.forceTool).toBe(false)
     expect(r.reason).toBe('produced-auto')
   })
@@ -48,10 +54,22 @@ describe('TurnExecutionPolicy（三态——无阶段重构 S1）', () => {
   })
 
   // === 已产出优先（状态优先级：produced 生效早于 awaiting——但 reason 按状态机顺序） ===
-  it('全部 true → produced-auto（已产出收敛）', () => {
-    const r = decideTurnPolicy({ goalConfirmed: true, executionConfirmed: true, produced: true })
+  it('全部 true + goalAchieved → produced-auto（已产出且已汇报达成收敛）', () => {
+    const r = decideTurnPolicy({ goalConfirmed: true, executionConfirmed: true, produced: true, goalAchieved: true })
     expect(r.forceTool).toBe(false)
     expect(r.reason).toBe('produced-auto')
+  })
+
+  it('全部 true 但未达成 → 强制（goal-exec-until-achieved）', () => {
+    const r = decideTurnPolicy({ goalConfirmed: true, executionConfirmed: true, produced: true })
+    expect(r.forceTool).toBe(true)
+    expect(r.reason).toBe('goal-exec-until-achieved')
+  })
+
+  it('工具失败优先于任务完成度（lastToolFailed → 释放诊断，即使 produced 未达成）', () => {
+    const r = decideTurnPolicy({ goalConfirmed: true, executionConfirmed: true, produced: true, lastToolFailed: true })
+    expect(r.forceTool).toBe(false)
+    expect(r.reason).toBe('tool-failed-diagnose')
   })
 
   it('全部 false → goal-clarify', () => {
@@ -74,7 +92,8 @@ describe('TurnExecutionPolicy（三态——无阶段重构 S1）', () => {
     ]
     cases.forEach((c) => {
       const r = decideTurnPolicy(c)
-      expect(r.forceTool).toBe(c.goalConfirmed && c.executionConfirmed && !c.produced)
+      // 2026-08-07 任务完成度：produced 未达成也强制（goal-exec-until-achieved）
+      expect(r.forceTool).toBe(c.goalConfirmed && c.executionConfirmed && (!c.produced || !c.goalAchieved))
     })
   })
 })

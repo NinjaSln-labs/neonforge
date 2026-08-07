@@ -23,6 +23,10 @@ export interface TurnProgress {
   isQuestion: boolean       // 问句/征求同意——模型在等用户，不算停滞
   isCommunication: boolean  // 沟通/澄清/确认——模型在对话，不算停滞
   isDone: boolean           // 完成态汇报——模型已完成，不算停滞
+  needsApproval: boolean    // 2026-08-07 待授权轮（need-approval/plan-approval）——模型停住**等用户批准**
+                            // （设计语义：maybeContinue releaseWorking + return）——不是卡住，不算停滞——
+                            // 根因 2（冒烟 13）：write 授权卡（need-approval）被 StuckDetector 当「无产出」→ escalate
+                            // → silent 打断授权流 → 轮 4 授权处理混乱 + 轮 5 重写（此前缺失此排除）
 }
 
 // === Domain Service: 文本分类（问句/沟通/完成态——坑 79 结构判定：有限集，不匹配措辞） ===
@@ -87,7 +91,9 @@ export function evaluateTurnProgress(input: {
   const isQuestion = isQuestionLike(t)
   const isCommunication = isCommunicationLike(t)
   const isDone = isDoneLike(t)
-  return { artifactProduced, readNewFile, hasPlannedFiles, hasRemainingPlanned, remainingCount, isQuestion, isCommunication, isDone }
+  // 2026-08-07 待授权轮（根因 2）：need-approval/plan-approval 卡 = 模型停住等用户批准（正常状态）——不算停滞
+  const needsApproval = toolCalls.some((c) => c.status === 'need-approval' || c.status === 'plan-approval')
+  return { artifactProduced, readNewFile, hasPlannedFiles, hasRemainingPlanned, remainingCount, isQuestion, isCommunication, isDone, needsApproval }
 }
 
 // === Value Object: 卡住状态（连续无进展轮数 + 已升级次数）——不可变，每次变化生成新实例 ===
@@ -116,7 +122,8 @@ export function detectStuck(input: {
   const noProgressThreshold = input.config?.noProgressThreshold ?? 2
   const escalationLimit = input.config?.escalationLimit ?? 2
   // 问句/沟通/完成态 = 正常对话（非停滞）——重置（模型在等用户/在对话/已完成）
-  if (turn.isQuestion || turn.isCommunication || turn.isDone) {
+  // 2026-08-07 待授权轮（根因 2）：need-approval = 模型停住等用户批准——重置（不 escalate——授权流不许打断）
+  if (turn.isQuestion || turn.isCommunication || turn.isDone || turn.needsApproval) {
     return { state: initialStuckState, event: undefined }
   }
   // 有进展（write/edit 产出）→ 重置（行业：恢复即重置）
