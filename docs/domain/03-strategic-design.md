@@ -1,278 +1,114 @@
-# 03 — 战略设计
+# 03 — 战略设计（无阶段·目标驱动版）
 
-> 限界上下文详细建模。新增 ContextEngine（LSP + CodeRAG 三层），DeepSeek-first。
-> ⚠️ **实现权威更新（2026-08-01）**：本文为**历史参考**——唯一权威为 [00-领域权威总纲](./00-domain-authority.md)（A0：4 层 16 BC、模型策略 V1=DeepSeek-only、AgentChain 规格化）。本文三层分类（核心/支撑/通用）为早期模型，BC 清单/类型/AgentChain 以 A0 §2/§3 为准；本文 §1 上下文映射图为**历史 15 BC 视图**（A0 为 16 BC，差异在 MCPBridge 单列/合并），以 A0 为准。
-
----
+> 2026-08-07 重新生成——限界上下文划分与核心域声明，基于无阶段目标驱动领域模型（02 领域模型）。
+> 替代旧六阶段版（Compaction/AgentChain/ContextEngine 等围绕产品流水线的 BC 划分）。
 
 ## 1. 限界上下文全景
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Deep IDE 领域全景                              │
-│                                                                     │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ │
-│  │Compaction│ │Thinking  │ │PrefixCache│ │AgentChain│ │Reasoning │ │
-│  │ (核心域)  │ │Level     │ │ (核心域)  │ │ (核心域)  │ │Viz       │ │
-│  │          │ │ (核心域)  │ │ +预热     │ │          │ │ (核心域)  │ │
-│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ │
-│       │            │            │            │             │       │
-│       ▼            ▼            ▼            ▼             ▼       │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │                  Conversation (支撑域)                        │   │
-│  │  · CompactionTrigger  · ThinkingLevel 绑定                  │   │
-│  │  · PrefixState  · RuntimeContext                            │   │
-│  └──────────────────────────┬──────────────────────────────────┘   │
-│                             │                                      │
-│  ┌──────────────────────────┼──────────────────────────────────┐   │
-│  │                          ▼                                    │   │
-│  │  ┌──────────────────────────────────────┐                     │   │
-│  │  │        DeepSeekGateway (通用域)       │                     │   │
-│  │  │  · DeepSeekClient · StreamParser     │                     │   │
-│  │  │  · ToolCallRepair · ModelRouter      │                     │   │
-│  │  └──────────────────────────────────────┘                     │   │
-│  │                                                                │   │
-│  │  ┌────────────────┐ ┌──────────┐ ┌──────────┐                 │   │
-│  │  │ ContextEngine  │ │Plugin    │ │MCPBridge │                 │   │
-│  │  │ (支撑域) ★新增  │ │System    │ │ (通用域)  │                 │   │
-│  │  │ LSP→CodeRAG     │ │ (支撑域)  │ │          │                 │   │
-│  │  │ →Agent探索      │ │          │ │          │                 │   │
-│  │  └───────┬────────┘ └────┬─────┘ └──────────┘                 │   │
-│  │          │               │                                     │   │
-│  │  ┌───────┴───────┐ ┌────┴─────┐ ┌──────────┐                   │   │
-│  │  │  Editor       │ │Workspace │ │ShellAgent│                   │   │
-│  │  │  (支撑域)      │ │(支撑域)   │ │(支撑域)   │                   │   │
-│  │  │  Monaco       │ │+LSP集成  │ │          │                   │   │
-│  │  └───────────────┘ └──────────┘ └──────────┘                   │   │
-│  │                                                                │   │
-│  │  ┌────────────────┐ ┌──────────────────┐                       │   │
-│  │  │ TokenTracker   │ │ Configuration    │                       │   │
-│  │  │ (通用域)        │ │ (通用域)          │                       │   │
-│  │  └────────────────┘ └──────────────────┘                       │   │
-│  └────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                      NeonForge 搭档 领域全景（无阶段·目标驱动）              │
+│                                                                        │
+│  ┌────────────────────────────────────────────────────────────────┐    │
+│  │              Conversation BC（核心域）——目标驱动主战场              │    │
+│  │  · 目标状态机（Goal → Execution → Achievement）                  │    │
+│  │  · 确认点（目标/执行/达成——用户确认=推进门槛）                      │    │
+│  │  · 执行保障策略（TurnExecutionPolicy——forceTool）               │    │
+│  │  · 推进门控（ProgressionGate——模型活动边界）                      │    │
+│  │  · 模型活动边界（确认点未确认 → 停在该确认点）                      │    │
+│  └────────────────────────────────────────────────────────────────┘    │
+│                            │ 依赖                                     │
+│  ┌──────────────┐  ┌───────┴──────┐  ┌──────────────────┐             │
+│  │ Capability BC │  │ Workspace BC  │  │ Session Timeline  │             │
+│  │（支撑域）      │  │（支撑域）      │  │ BC（支撑域）        │             │
+│  │ 环境检测(事实) │  │ 项目文件       │  │ 全步骤统一记录      │             │
+│  │ 能力视图(推导) │  │ 快照/回滚      │  │（可观测性）        │             │
+│  │ 能力检查       │  │ 计划清单(批准)  │  └──────────────────┘             │
+│  └──────────────┘  └──────────────┘                                    │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
----
+## 2. 核心域声明：Conversation BC（目标驱动）
 
-## 2. 核心域
+**为什么是核心域**：搭档的差异化价值 = 目标驱动的执行（确认驱动推进、防只说不做、宿主强制边界）——这是与其它工具/代理区别的壁垒。
 
-### 2.1 Compaction
+**核心职责**：
 
-**职责**：自动管理上下文窗口。**1M 窗口解放了压缩的紧急性**——从"紧急措施"变为"优化手段"。
+| 职责 | 说明 |
+|------|------|
+| 目标状态机 | Goal → Execution → Achievement——三个确认点驱动状态转换 |
+| 确认点管理 | 目标/执行/达成三处用户确认——结构化确认卡（确认/拒绝）|
+| 执行保障 | 确认后防只说不做（forceTool）；失败释放（诊断修正）；任务完成度（计划写完/达成确认释放）|
+| 推进门控 | 确认点未确认 → 模型活动边界限制在该确认点（不越级推进）|
+| 宿主强制边界 | 计划清单（写文件边界）+ 拒绝回填边界（模型回到边界内）|
 
-| 旧策略 | 新策略 |
-|--------|--------|
-| 触发阈值: 30条 / 64K tokens | 触发阈值: **100条 / 200K tokens** |
-| 保留最近 10 条 | 保留最近 **20 条** |
-| 频繁触发压缩 | 大多数对话不需要压缩 |
-| 压缩时 PrefixCache 全 miss | 压缩后 20 条保留消息形成新缓存基线 |
-
-**关键业务规则**：触发阈值 **100 条 / 200K**、保留最近 **20 条**（A0 §5 与 03/04/06/07 对齐）；压缩后 20 条保留消息形成新缓存基线。
-
-### 2.2 ThinkingLevel
-
-**职责**：控制推理深度。更新为使用 DeepSeek V4 `reasoning_effort` 参数。
-
-| Level | API 参数 | 推理 budget | 典型场景 |
-|-------|---------|------------|---------|
-| `none` | `thinking: disabled` | 0 | 简单问答 |
-| `basic` | `thinking: enabled` (默认) | ~100-300 | 常规编码 |
-| `medium` | `thinking: enabled, reasoning_effort: high` | ~300-800 | 架构设计 |
-| `high` | `thinking: enabled, reasoning_effort: max` | ~800-2000 | 算法分析 |
-
-### 2.3 PrefixCache
-
-**职责**：Append-only + **预热**，最大化缓存命中。
-
-**新增：预热（Preheating）**
-
-```
-打开项目
-  → 后台构建"超级前缀"（system prompt + tool defs + 项目元信息）
-  → 发送虚拟请求到 DeepSeek API（静默，不显示给用户）
-  → API 缓存前缀的 KV 计算
-  → 用户第一次真实请求 → 已经是缓存命中状态
-  → 首字延迟从 ~2s 降至 ~0.3s
-```
-
-**超级前缀内容**（固定 5-10K tokens）：
-- System prompt (~200 tokens)
-- Tool definitions
-- 项目文件树摘要
-- 常用文件路径的 AST 签名
-
-**关键约束**：预热请求使用 Flash 模型 + thinking=disabled，成本极低。
-
-### 2.4 AgentChain
-
-声明式 YAML 流水线，6 种 Agent 角色（analyst/architect/implementer/reviewer/researcher/compactor），4 个内置模板（single-agent/analyze-implement/implement-review/analyze-implement-review，A0 §3 规格化）。
-
-**Stage 间 handoff 格式**：结构化 JSON（不是 A2A 协议——理由：Stage 同进程运行，不需要分布式协议）。
-
-### 2.5 ReasoningViz
-
-reasoning_content 捕获 → 结构化 → 按 ThinkingLevel 四档（none/basic/medium/high）分级展示（A0 §2 Layer 2）。
-
----
+**核心域衡量指标**：目标确认到执行确认的转化率（用户是否理解并确认）；执行确认到产出率（确认后是否真正产出）；达成确认率（用户是否认可完成）。
 
 ## 3. 支撑域
 
-### 3.1 ContextEngine ★ 重新设计
+### 3.1 Capability BC（能力/环境）
 
-**职责**：为 Agent 提供当前任务所需的精准代码上下文。三层管线。
+**职责**：
+- 环境检测（事实来源）——一次检测（runtime/依赖/工具链/宿主 runtime）
+- 能力视图（从环境推导——ready/missing/failed——不独立二次检测）
+- 能力检查（模型/系统查询能力状态）
+- Ledger 回填（执行结果 → 能力状态自学习）
 
-```
-用户指令: "修改 authMiddleware 的逻辑"
+**与 Conversation 的关系**：Conversation 在确认点后调用能力检查（确认目标 → 检查达成目标所需能力 → 给方案）；环境快照注入系统提示（模型开箱即知）。
 
-┌─ Layer 1: LSP + 依赖图 ──────────────────────────────┐
-│                                                        │
-│  find_definition("authMiddleware")                     │
-│    → src/middleware/auth.ts:42                         │
-│  find_references("authMiddleware")                     │
-│    → app.ts:15, routes/api.ts:8, routes/admin.ts:22   │
-│  get_imports("src/middleware/auth.ts")                 │
-│    → jwt.ts, config.ts, types.ts                      │
-│  get_call_chain("authMiddleware")                      │
-│    → authMiddleware → validateToken → checkPermission │
-│                                                        │
-│  输出: 5 个精准文件, 共 ~8K tokens                     │
-│  成本: 0 tokens, ~50ms                                 │
-│  精度: 100% (确定性的)                                  │
-└────────────────────────────────────────────────────────┘
-                              │
-                              ▼ 不够？还有模糊查询
-┌─ Layer 2: CodeRAG ────────────────────────────────────┐
-│                                                        │
-│  "项目中有没有其他地方做类似的权限检查？"                   │
-│    → 语义搜索 "permission check pattern"               │
-│    → 返回 3 个相关代码片段                               │
-│                                                        │
-│  成本: 需要维护向量索引                                  │
-│  精度: ~85-95%                                         │
-└────────────────────────────────────────────────────────┘
-                              │
-                              ▼ 还不够？
-┌─ Layer 3: Agent 自主探索 ──────────────────────────────┐
-│                                                        │
-│  LLM: "我读了 auth.ts，发现它导入了 jwt.ts              │
-│        让我看看 jwt.ts..."                              │
-│  → read("src/utils/jwt.ts")                            │
-│  → read("src/config/security.ts")                      │
-│                                                        │
-│  成本: token 消耗                                       │
-│  适用: 前两层都解决不了的复杂场景                         │
-└────────────────────────────────────────────────────────┘
-```
+### 3.2 Workspace BC（工作区）
 
-**CodeRAG 角色重新定位**：从"默认上下文引擎" → **降级为 Layer 2 语义精筛器**。代码有结构，不需要用猜的。
+**职责**：
+- 项目文件操作（read/write/edit）
+- 写入快照/回滚（安全闭环）
+- 计划清单（plan_approval 批准文件集合——宿主强制边界的数据源）
 
-**LSP 层提供的工具**（注册到 ToolRegistry）：
-- `find_definition(path, symbol)` → 精确跳转
-- `find_references(path, symbol)` → 所有引用点
-- `get_imports(path)` → 依赖关系
-- `get_call_chain(start)` → 调用链
-- `get_type_info(path, position)` → 类型
-- `get_diagnostics(path)` → 错误/警告
+**与 Conversation 的关系**：Conversation 的推进门控读取计划清单（写文件边界）；写操作经 Workspace 执行（快照/回滚）。
 
-### 3.2 PluginSystem
+### 3.3 Session Timeline BC（会话时间线）
 
-插件注册/生命周期/事件钩子/沙箱。内置 5 个插件（code-rag/mcp-bridge/git/stats/language-server，A0 §2 Layer 4 + 05 模块树）；PluginSystem 为支撑域（A0 §2 类型判定）。
+**职责**：单会话所有步骤统一记录（用户/搭档/工具/授权/确认/状态——时间顺序完整）——可观测性（分析一步到位、断点续做、审计）。
 
-### 3.3 Conversation
-
-职责：多轮对话聚合点。绑定 ThinkingLevel + PrefixState + CompactionConfig。
-
-### 3.4 Editor
-
-Monaco Editor + DiffPanel + ChangeSet。Electron 架构下运行。
-
-### 3.5 ShellAgent
-
-命令执行沙箱。Electron Main Process 中执行。
-
-### 3.6 Workspace
-
-项目文件管理 + **LSP 客户端集成**。文件监听 → 触发 ContextEngine 增量更新。
-
----
+**与 Conversation 的关系**：Conversation 所有状态转换/工具执行发布事件 → Timeline 记录。
 
 ## 4. 通用域
 
-### 4.1 DeepSeekGateway
-
-| 元素 | 说明 |
-|------|------|
-| DeepSeekClient | HTTP/SSE 客户端 |
-| StreamParser | reasoning_content → content → tool_calls 状态机 |
-| ToolCallRepair | 4 轮自动修复 |
-| ModelRouter | Flash↔Pro 自动切换 |
-
-**新增：PreheatingClient** — 后台静默调用 DeepSeek API 预热缓存。
-
-### 4.2 TokenTracker
-
-实时 token/缓存/费用统计。新增：缓存预热命中率独立显示。
-
-### 4.3 MCPBridge
-
-MCP 协议外部工具集成。不引入 A2A。
-
-### 4.4 Configuration
-
-用户 & 项目配置管理。
-
----
+| BC | 职责 |
+|----|------|
+| Gateway（模型网关）| DeepSeek API 通信、流式解析、forceTool 传递、工具调用修复 |
+| ToolRegistry（工具注册）| 工具注册、发现、执行分发（read/write/edit/bash/check-capability/plan_approval…）|
+| Configuration | 用户与项目配置 |
 
 ## 5. 上下文映射
 
+| 关系 | 模式 | 说明 |
+|------|------|------|
+| Conversation → Capability | 调用（OHS）| 确认目标后调能力检查；环境快照注入 |
+| Conversation → Workspace | 调用（OHS）| 写文件经 Workspace（快照/回滚）；计划清单读取 |
+| Conversation → Timeline | 发布事件 | 所有状态转换/工具执行发布 |
+| Conversation → Gateway | 调用 | forceTool 传递、流式对话 |
+| Capability → Workspace | 调用 | 环境检测读项目文件 |
+
+```mermaid
+graph LR
+    CONV[Conversation BC<br/>核心域<br/>目标状态机/确认点/执行保障/推进门控]
+    CAP[Capability BC<br/>支撑域<br/>环境事实/能力视图]
+    WS[Workspace BC<br/>支撑域<br/>文件/快照/计划清单]
+    TL[Session Timeline BC<br/>支撑域<br/>可观测性]
+    GW[Gateway<br/>通用域<br/>模型通信]
+    CONV -->|能力检查/环境注入| CAP
+    CONV -->|写文件/计划清单| WS
+    CONV -->|发布事件| TL
+    CONV -->|forceTool/流式| GW
+    CAP -->|读项目文件| WS
 ```
-                          U/S
-┌──────────┐              ┌──────────┐
-│AgentChain│─────────────►│Conversation│◄─────────────┐
-│ (核心域)  │              │ (支撑域)    │              │
-└──────────┘              └─────┬──────┘              │
-                               │                      │
-              ┌────────────────┼────────────────┐     │
-              │                │                │     │
-              ▼                ▼                ▼     │
-      ┌──────────┐    ┌──────────┐     ┌──────────┐   │
-      │Compaction│    │Thinking  │     │PrefixCache│   │
-      │ (核心域)  │    │Level     │     │ (核心域)   │   │
-      └──────────┘    │(核心域)   │     │ +预热     │   │
-                      └──────────┘     └──────────┘   │
-                               │                       │
-                               ▼                       │
-                      ┌──────────────┐                 │
-                      │DeepSeekGateway│◄────────────────┘
-                      │  (通用域)     │    ReasoningViz
-                      └──────┬───────┘    (核心域)
-                             │
-              ┌──────────────┼──────────────┐
-              │              │              │
-              ▼              ▼              ▼
-      ┌──────────┐   ┌──────────┐   ┌──────────┐
-      │Token     │   │MCPBridge │   │ToolCall  │
-      │Tracker   │   │ (通用域)  │   │Repair    │
-      └──────────┘   └──────────┘   └──────────┘
-                             │
-                    ┌────────┴────────┐
-                    │                 │
-                    ▼                 ▼
-            ┌──────────────┐  ┌──────────────┐
-            │PluginSystem  │  │ContextEngine │
-            │ (支撑域)      │  │ (支撑域) ★    │
-            └──────┬───────┘  └──────┬───────┘
-                   │                 │
-       ┌───────────┼───────┐         │
-       │           │       │         │
-       ▼           ▼       ▼         ▼
-┌──────────┐ ┌──────────┐ ┌──────────┐
-│  Editor  │ │Workspace │ │ShellAgent│
-│ (支撑域)  │ │(支撑域)   │ │(支撑域)   │
-│ Monaco   │ │+LSP集成  │ │          │
-└──────────┘ └──────────┘ └──────────┘
-```
+
+## 6. 核心域演进方向
+
+1. **确认点扩展**：能力缺失/装依赖等决策点结构化（当前对话式 → 确认卡）
+2. **推进门控强化**：确认点未确认的模型活动边界细化（每确认点的允许动作清单）
+3. **执行保障自适应**：forceTool 决策从规则演进到任务级自适应（模型行为历史）
+4. **宿主边界可配置**：计划清单粒度（文件级 → 目录级 → 工具级——用户可调）
 
 ---
 
