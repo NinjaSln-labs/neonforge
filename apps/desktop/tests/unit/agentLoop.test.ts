@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { evaluateTurnProgress, detectStuck, initialStuckState, parseExecutionPlan } from '../../src/renderer/domain/agentLoop'
+import { evaluateTurnProgress, detectStuck, initialStuckState, parseExecutionPlan, summarizeCapability } from '../../src/renderer/domain/agentLoop'
 
 // 领域层：progress-aware 卡住检测（2026-08-06 DDD 落地——行业调研 tavily+serper 双源：activity≠progress + 连续无进展升级 + needs-human）
 
@@ -115,6 +115,36 @@ describe('StuckDetector（卡住检测——连续无进展升级）', () => {
     expect(turn.hasRemainingPlanned).toBe(false) // 树中已有 → 无剩余
     const r = detectStuck({ turn, prev: { consecutiveNoProgress: 1, escalations: 0 } })
     expect(r.event).toBeUndefined()
+  })
+})
+
+// 2026-08-08 O2 处理（用户「check-capability 默认不向用户展示，只有检测后需要用户实质确认的时候展示」）：
+// 能力检测结果判定——是否需要用户实质决策（missing/failed）+ 人类化摘要（领域层纯函数——L1 可测）
+describe('summarizeCapability（能力检测结果——是否需用户决策）', () => {
+  it('能力全部 ready → 无需用户决策（needsUser=false——工具卡默认隐藏）', () => {
+    const r = summarizeCapability({ capabilities: [
+      { id: 'text-edit', status: 'ready' },
+      { id: 'node-runtime', status: 'ready' }
+    ] })
+    expect(r.needsUser).toBe(false)
+    expect(r.summary).toContain('能力齐备')
+  })
+
+  it('存在 missing/failed → 需要用户决策（needsUser=true——工具卡展示）+ 摘要列出缺失', () => {
+    const r = summarizeCapability({ capabilities: [
+      { id: 'text-edit', status: 'ready' },
+      { id: 'node-runtime', status: 'missing', detail: 'node 未安装' },
+      { id: 'dev-tools', status: 'failed' }
+    ] })
+    expect(r.needsUser).toBe(true)
+    expect(r.summary).toContain('node-runtime')
+    expect(r.summary).toContain('dev-tools')
+    expect(r.summary).toContain('缺失')
+  })
+
+  it('无 capabilities 字段 → 视为无需决策（防御）', () => {
+    expect(summarizeCapability({}).needsUser).toBe(false)
+    expect(summarizeCapability(undefined).needsUser).toBe(false)
   })
 })
 

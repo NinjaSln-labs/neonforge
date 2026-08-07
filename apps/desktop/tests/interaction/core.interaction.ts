@@ -631,6 +631,82 @@ test('0-1 工具链自主推进：连续 3 轮 read → 自动续聊 → 最终�
   await expect(page.locator('.nf-chat__list .nf-msg--assistant').filter({ hasText: '设计完成，方案定了。' })).toHaveCount(1, { timeout: 15000 })
 })
 
+// 2026-08-08 O2 处理（用户「check-capability 默认不向用户展示，只有检测后需要用户实质确认的时候展示」）：
+// 能力齐备 → 工具卡隐藏（hidden——执行但 UI 静默，结果仍回填模型）；缺失/异常 → 展示（需用户决策）
+test('O2：check-capability 能力齐备 → 工具卡隐藏；能力缺失 → 展示需用户决策', async ({ page }) => {
+  await page.addInitScript(() => {
+    let streamCb: ((c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) | null = null
+    let chatCount = 0
+    let capCalls = 0
+    let capabilityData: { capabilities?: Array<{ id: string; status: string; detail?: string }> } | null = null
+    const bridge = {
+      version: 'test',
+      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
+      workspace: { openFolder: async () => '/test', listDir: async () => [], readFile: async (p: string) => ({ ok: true, content: '// ' + p }), readNotebook: async () => null, initProject: async () => ({ ok: true, path: '/test', title: 't' }), updateProjectTitle: async () => ({ ok: true }) },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        // 按轮次自动发 chunk（时序可靠——streaming 消息存在时 tool-call 才渲染）：
+        // chat#1（检查环境）/chat#3（继续）→ tool-call check-capability；chat#2/#4 → content 收敛
+        streamChat: async () => {
+          chatCount++
+          setTimeout(() => {
+            if (chatCount === 1 || chatCount === 3) {
+              streamCb?.({ type: 'tool-call', toolCall: { name: 'check-capability', args: { dir: '/test' } } })
+            } else {
+              streamCb?.({ type: 'content', text: '完成。' })
+            }
+            streamCb?.({ type: 'done' })
+          }, 30)
+          return { ok: true }
+        },
+        onStreamChunk: (cb: (c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) => { streamCb = cb; return () => {} }
+      },
+      tools: {
+        list: async () => [],
+        execute: async (name: string) => {
+          if (name === 'check-capability') {
+            capCalls++
+            return { ok: true, data: capabilityData ?? { capabilities: [] } }
+          }
+          if (name === 'read') return { ok: true, data: 'x' }
+          return { ok: true, data: {} }
+        },
+        revert: async () => ({ ok: true })
+      },
+      context: { resolve: async () => ({ fragments: [] }) },
+      compaction: { compact: async () => ({ ok: false }) },
+      plugins: { list: async () => [], toggle: async () => true },
+      chatLog: { log: async () => {}, export: async () => ({ ok: true, path: '/tmp/x.md' }) }
+    }
+    ;(window as unknown as { neonforge: unknown }).neonforge = bridge
+    ;(window as unknown as { __setCapData: (d: unknown) => void }).__setCapData = (d) => { capabilityData = d as { capabilities?: Array<{ id: string; status: string; detail?: string }> } | null }
+    Object.defineProperty(window, '__capCalls', { get: () => capCalls })
+  })
+  await page.goto('http://localhost:5175/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.getByRole('button', { name: '打开已有项目' }).click()
+  // 场景 A：能力齐备 → check-capability 执行（capCalls=1）但工具卡隐藏（UI 静默——结果仍回填模型上下文）
+  await page.evaluate(() => (window as unknown as { __setCapData: (d: unknown) => void }).__setCapData({ capabilities: [
+    { id: 'text-edit', status: 'ready' },
+    { id: 'node-runtime', status: 'ready' }
+  ] }))
+  await page.locator('.nf-chat__input textarea').fill('检查一下环境')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  await expect.poll(async () => page.evaluate(() => (window as unknown as { __capCalls: number }).__capCalls)).toBe(1)
+  await expect(page.locator('.nf-toolcall')).toHaveCount(0) // 能力齐备 → 隐藏（capCalls=1 证明执行过——非「未执行」假绿）
+  // 场景 B：能力缺失 → 工具卡展示（需用户决策——摘要含缺失明细）
+  await page.evaluate(() => (window as unknown as { __setCapData: (d: unknown) => void }).__setCapData({ capabilities: [
+    { id: 'text-edit', status: 'ready' },
+    { id: 'node-runtime', status: 'missing', detail: 'node 未安装' }
+  ] }))
+  await page.locator('.nf-chat__input textarea').fill('继续')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  await expect.poll(async () => page.evaluate(() => (window as unknown as { __capCalls: number }).__capCalls)).toBe(2)
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(1, { timeout: 10000 }) // 缺失 → 展示
+  await expect(page.locator('.nf-toolcall')).toContainText('缺失')
+  await expect(page.locator('.nf-toolcall')).toContainText('node-runtime')
+})
+
 // 2026-08-04 授权架构 v4 用户路径实测：记住后同文件自动 → 信任清除 → 重新弹授权
 // 2026-08-07 无阶段重构 S4：信任清除时机 = 新目标确认（任务边界——原阶段推进清除）
 test('0-1 授权 v4 完整路径：允许并记住 → 同文件自动 → 新目标确认清除信任', async ({ page }) => {
