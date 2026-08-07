@@ -391,7 +391,8 @@ export function initTools(): void {
       const env = checkEnvironment(dir)
       // 2026-08-06 能力视图（坑 83 能力模型——用户「能力才是要检测的东西」）：返回能力清单（平台原生 + 外部扩展 Status）
       // 模型按「用户需求 → 所需能力」从清单匹配（reasonix semantic 路由思路——模型理解判断，非词匹配）
-      const caps = detectCapabilities(dir)
+      // 2026-08-08 单源修复：detectCapabilities 复用 env（不重复 detectEnvironment——原一次 check-capability exec node/python 各 2 次）
+      const caps = detectCapabilities(dir, process.platform, env)
       const missing = caps.filter((c) => c.status === 'missing').map((c) => c.id)
       return {
         ok: true,
