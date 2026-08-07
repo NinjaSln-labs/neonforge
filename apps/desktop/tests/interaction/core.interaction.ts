@@ -454,6 +454,90 @@ test('执行确认门控：目标+执行确认后无产出 → 强制工具产�
   await expect(page.locator('.nf-toolcall--done')).toHaveCount(1, { timeout: 15000 })
 })
 
+// 2026-08-08 根因 3 修复①③（HANDOFF §3——冒烟 O4/O5 不稳根因：forceTool 判定链断裂——prop 滞后 + 策略拦截置失败 + 门控不认执行方案块）：
+// ① 确认卡按钮同事件触发 send（onClick 内 setState 异步 + sendRef 同步调用）——forceTool 判定必须读到**最新确认状态**
+//   （修复前读 prop 闭包旧值 → forceTool 恒 auto → 模型纯文本承诺后停住）
+// ② 确认执行后【执行方案】块清单内 write 自动放行（approved=true——用户确认执行 = 认可清单，无需再点 plan_approval 卡）
+test('根因 3：点「确认执行」按钮 → 同事件 send 读到已确认状态 → forceTool 强制 + 清单内 write 自动放行', async ({ page }) => {
+  await page.addInitScript(() => {
+    let streamCb: ((c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) | null = null
+    let chatCount = 0
+    const forceToolCalls: boolean[] = []
+    const approvedFlags: boolean[] = []
+    const bridge = {
+      version: 'test',
+      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
+      workspace: { openFolder: async () => '/test', listDir: async () => [], readFile: async (p: string) => ({ ok: true, content: '// ' + p }), readNotebook: async () => null, initProject: async () => ({ ok: true, path: '/test', title: 't' }), updateProjectTitle: async () => ({ ok: true }) },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        streamChat: async (opts: { forceTool?: boolean } = {}) => {
+          chatCount++
+          forceToolCalls.push(!!opts.forceTool)
+          setTimeout(() => {
+            if (chatCount === 1) {
+              streamCb?.({ type: 'content', text: '好的。【目标确认：做一个能打开的网页射击游戏】' })
+            } else if (chatCount === 2) {
+              streamCb?.({ type: 'content', text: '【执行方案】\n- game.js（主逻辑）\n- index.html（页面）\n先做能玩的第一版。' })
+            } else if (chatCount === 3) {
+              // 确认执行后的强制轮：模型调 write 清单内文件
+              streamCb?.({ type: 'tool-call', toolCall: { name: 'write', args: { path: 'game.js', content: 'x' } } })
+            } else {
+              streamCb?.({ type: 'content', text: '完成，第一版能玩了。' })
+            }
+            streamCb?.({ type: 'done' })
+          }, 50)
+          return { ok: true }
+        },
+        onStreamChunk: (cb: (c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) => { streamCb = cb; return () => {} }
+      },
+      tools: {
+        list: async () => [],
+        execute: async (name: string, args: Record<string, unknown>, opts?: { approved?: boolean }) => {
+          if (name === 'read') return { ok: true, data: 'x' }
+          // 只记录 write/edit 的授权标记（check-capability 等内部预调用无害放行——不污染断言数组）
+          if (name === 'write' || name === 'edit') {
+            approvedFlags.push(!!opts?.approved)
+            if (opts?.approved) return { ok: true, data: { file: '/test/' + String(args.path).split('/').pop(), snapshot: true } }
+            return { ok: false, needApproval: true, error: '「write」需要授权（L3）——approved=true 后执行' }
+          }
+          return { ok: true, data: {} }
+        },
+        revert: async () => ({ ok: true })
+      },
+      context: { resolve: async () => ({ fragments: [] }) },
+      compaction: { compact: async () => ({ ok: false }) },
+      plugins: { list: async () => [], toggle: async () => true },
+      chatLog: { log: async () => {}, export: async () => ({ ok: true, path: '/tmp/x.md' }) }
+    }
+    ;(window as unknown as { neonforge: unknown }).neonforge = bridge
+    ;(window as unknown as { __nfForceToolCalls?: boolean[] }).__nfForceToolCalls = forceToolCalls
+    ;(window as unknown as { __nfApprovedFlags?: boolean[] }).__nfApprovedFlags = approvedFlags
+  })
+  await page.goto('http://localhost:5175/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  // 启动页输入需求（0-1 流程）
+  await page.locator('.nf-start__input').fill('做个射击游戏')
+  await page.locator('.nf-start__input').press('Enter')
+  // 模型【目标确认：】→ 目标确认卡 → 点「确认目标」（同事件触发 send「确认，目标清楚了」）
+  // 注意时序（坑 63 教训）：模型 done 后 maybeContinue 有 500ms working 窗口——按钮点击的 send 会被排队延迟
+  // 发送（不丢失）→ 每步必须等上一步用户消息实际落地（flush 完成）再继续，防排队覆盖丢消息
+  await expect(page.getByRole('button', { name: '确认目标' })).toBeVisible({ timeout: 10000 })
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expect(page.locator('.nf-chat__list')).toContainText('确认，目标清楚了', { timeout: 10000 })
+  // 模型【执行方案】→ 执行确认卡 → 点「确认执行」（同事件触发 send「确认，按方案执行」）
+  await expect(page.getByRole('button', { name: '确认执行' })).toBeVisible({ timeout: 10000 })
+  await page.getByRole('button', { name: '确认执行' }).click()
+  await expect(page.locator('.nf-chat__list')).toContainText('确认，按方案执行', { timeout: 10000 })
+  // 修复①：确认执行后的那次 streamChat（chat#3）forceTool 必须为 true（修复前 prop 滞后 → false → 模型不被强制 → 纯文本停住）
+  // 修复③：清单内 write（game.js——【执行方案】块解析）自动放行 approved=true → 工具卡直接 done（无授权卡）
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(1, { timeout: 15000 })
+  await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(0)
+  const forceCalls = await page.evaluate(() => (window as unknown as { __nfForceToolCalls?: boolean[] }).__nfForceToolCalls ?? [])
+  expect(forceCalls[2]).toBe(true)
+  const approved = await page.evaluate(() => (window as unknown as { __nfApprovedFlags?: boolean[] }).__nfApprovedFlags ?? [])
+  expect(approved[0]).toBe(true)
+})
+
 // 2026-08-04 体验修复（用户实测「确认了需求但上面还停在需求确认」）：需求阶段用户打字「确认推进」→ 自动确认需求 + 推进到设计——
 // 模型可能只说「需求已确认」不带【需求确认：】标记（UI 识别不到）——用户明确确认 → 确定性收敛，不依赖模型标记
 test('0-1 对话确认需求：用户发「确认推进」→ 自动确认 + 推进到设计（不依赖模型标记）', async ({ page }) => {
