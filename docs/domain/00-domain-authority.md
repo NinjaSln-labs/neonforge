@@ -51,6 +51,7 @@
 | **Conversation（推进门控） vs Capability（环境）** | 模型活动边界/确认点 → Conversation；环境检测/能力推导 → Capability | 能力是环境的事实视图，不是推进决策 |
 | **Workspace（计划清单） vs Conversation（写边界）** | 计划清单存储/批准记录 → Workspace；写边界判定（是否清单内）→ Conversation 推进门控读取清单 | PlannedFiles 是数据源，门控是决策者 |
 | **Gateway（工具修复） vs ToolRegistry（执行）** | 工具调用修复（畸形/未知）→ Gateway；工具执行分发 → ToolRegistry | 修复是模型输出清洗（网关防腐），执行是注册分发 |
+| **授权裁决/任务级信任 vs Conversation（确认点）** | 授权裁决（preApproval deny>allow>ask）+ 任务级信任（允许并记住）→ Workspace；确认点状态机（授权卡=会话级 pending）→ Conversation | 授权是工具执行批准机制（Workspace 安全面）；确认点是状态机（Conversation 推进面）——授权卡触发会话 pending，批准结果进信任集合 |
 
 ---
 
