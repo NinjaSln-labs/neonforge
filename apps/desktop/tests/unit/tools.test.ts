@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { initTools, toolRegistry, revertToolFile, cancelActiveCommand, markPlanApproved, isValidOpenUrl, isReadOnlyBash } from '../../src/main/tools'
+import { initTools, toolRegistry, revertToolFile, cancelActiveCommand, markPlanApproved, resetPlanApproved, isValidOpenUrl, isReadOnlyBash } from '../../src/main/tools'
 
 // 2026-08-06 open 工具（用户「帮我打开」）：mock electron shell——vitest node 环境无 electron
 const { openExternalMock } = vi.hoisted(() => ({ openExternalMock: vi.fn(async () => {}) }))
@@ -36,6 +36,19 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     const r = await toolRegistry.execute('nonexistent-tool', {}, {})
     expect(r.ok).toBe(false)
     expect(r.needApproval).toBeUndefined()
+  })
+
+  // 2026-08-08 根因 3 修复②：write 规划门控（先 plan_approval 再写）是**策略引导**不是「工具执行失败」——
+  // policy 标记让 renderer 不置 lastToolFailed（否则 forceTool 恒释放 → 模型纯文本承诺后停住——冒烟 O4/O5 根因）
+  it('write：未规划拒绝 = 策略引导（policy 标记）——非执行失败，不弹授权卡', async () => {
+    resetPlanApproved() // 模拟用户未批准过 plan_approval
+    const file = path.join(TMP, 'p.txt')
+    const r = await toolRegistry.execute('write', { path: file, content: 'x' }, {})
+    expect(r.ok).toBe(false)
+    expect(r.policy).toBe(true) // 策略拦截——模型收到引导应先调 plan_approval，不应被误判「工具失败」
+    expect(r.needApproval).toBeUndefined() // 不是授权请求（引导先规划，不逐个授权）
+    expect(r.error).toContain('plan_approval')
+    expect(existsSync(file)).toBe(false)
   })
 
   it('write：授权后写文件 + 写前快照 .nf-bak + 回滚恢复原样', async () => {
