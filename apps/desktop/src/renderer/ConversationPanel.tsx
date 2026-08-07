@@ -1203,17 +1203,22 @@ export default function ConversationPanel({
               // （一个决策点一个决策点地走——确认卡接管决策，候选收起）
               const opts = parseCandidates(m.content)
               if (!opts) return null
+              // 2026-08-08 候选例外（用户「输入内容也可以解除 pending——本来就是支持选或输入」）：
+              // 候选之后出现用户消息（无论点选还是打字）= 用户已回应决策点 → 候选完成
+              // 点选路径：chosen 标记已选；输入路径：replied 标记已回复（两条路径都解除 pending）
+              const replied = messages.slice(i + 1).some((mm) => mm.role === 'user')
               const NUMS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧']
               return (
                 <div className="nf-candidates" role="group" aria-label="选择一项">
                   {opts.map((o, j) => {
                     const chosen = chosenCandidates[i] === j
+                    const done = chosen || replied
                     return (
                       <button
                         key={j}
                         type="button"
-                        disabled={chosen}
-                        className={`nf-candidates__btn${chosen ? ' nf-candidates__btn--chosen' : ''}`}
+                        disabled={done}
+                        className={`nf-candidates__btn${done ? ' nf-candidates__btn--chosen' : ''}`}
                         onClick={() => {
                           // 2026-08-08 B 修复：点击后标记已选（决策点走完——按钮变已选态，不再可点）
                           setChosenCandidates((p) => ({ ...p, [i]: j }))
@@ -1221,8 +1226,8 @@ export default function ConversationPanel({
                           void sendRef.current()
                         }}
                       >
-                        <span className="nf-candidates__idx" aria-hidden="true">{chosen ? '✓' : (NUMS[j] ?? `${j + 1}.`)}</span>
-                        <span>{chosen ? `${o}（已选）` : o}</span>
+                        <span className="nf-candidates__idx" aria-hidden="true">{chosen ? '✓' : replied ? '·' : (NUMS[j] ?? `${j + 1}.`)}</span>
+                        <span>{chosen ? `${o}（已选）` : replied ? `${o}（已回复）` : o}</span>
                       </button>
                     )
                   })}
