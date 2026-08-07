@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import SessionPanel from './SessionPanel'
 import SettingsPanel from './SettingsPanel'
-import DeliveryFlowPanel, { STAGE_HINT, USER_STAGE_HINT, inferFlowModel } from './DeliveryFlowPanel'
-// 2026-08-07 单源化（质量把关 S1）：阶段定义权威 = 领域层 domain/stageFlow（PRODUCT_STAGES/isLastStage）——组件引用，防双源
-import { PRODUCT_STAGES, isLastStage } from './domain/stageFlow'
-import RequirementCard from './RequirementCard'
+// 2026-08-07 无阶段重构 S4：DeliveryFlowPanel（阶段卡/推进按钮/STAGE_HINT）删除——阶段体系移除
+import GoalCard from './GoalCard'
+import ExecutionConfirmCard from './ExecutionConfirmCard'
 import OutputPanel from './OutputPanel'
 import ConversationPanel from './ConversationPanel'
 import type { DeliveryPackage, ProblemInstance } from './types'
@@ -110,11 +109,12 @@ export default function MainWorkspace({
       }))
     }
   }
-  // 2026-08-04：需求确认回写——模型【需求确认：xxx】→ 更新台账标题/快照 goal + 项目 README（目录名不变）
-  const handleRequirementConfirmed = (title: string) => {
-    setRequirementConfirmed(true) // P0 门控：需求已确认 → 解锁推进
-    // 2026-08-04 体验修复：模型风格自动推导（用户不用手选——从需求文本判断，已选则不覆盖）
-    setFlowModel((cur) => cur ?? inferFlowModel(title))
+  // 2026-08-04：目标确认回写——模型【目标确认：xxx】→ 更新台账标题/快照 goal + 项目 README（目录名不变）
+  // 2026-08-07 无阶段重构 S4：requirementConfirmed → goalConfirmed（目标确认——无阶段下确认「达成什么」）；删 inferFlowModel（模型风格随阶段体系移除）
+  const [goalSeq, setGoalSeq] = useState(0) // 2026-08-07 无阶段重构 S4：目标确认次数——每次确认 = 任务边界（信任清除驱动；goalConfirmed 恒 true 后靠它感知新目标）
+  const handleGoalConfirmed = (title: string) => {
+    setGoalConfirmed(true) // 目标已确认 → 解锁执行确认卡
+    setGoalSeq((s) => s + 1) // 任务边界递增——ConversationPanel clearTrust（授权收回）
     if (activeProblem) {
       setProblems((prev) => prev.map((p) => p.id === activeProblem
         ? { ...updateProblemSnapshot(p, { goal: title }), title: title.length > 20 ? title.slice(0, 20) + '…' : title }
@@ -122,48 +122,35 @@ export default function MainWorkspace({
     }
     if (rootPath) void window.neonforge.workspace.updateProjectTitle(rootPath, title)
   }
-  // 2026-08-04 P2：需求确认卡确认 → 回写 + 自动推进到设计（确定性收敛，不依赖模型标记）
-  const [requirementConfirmed, setRequirementConfirmed] = useState(false)
-  const handleRequirementCardConfirm = (summary: string) => {
-    handleRequirementConfirmed(summary)
-    // 推进到设计（stageAdvance → 对话区提示 + 搭档自动开始设计工作）；summary 随 stageAdvance 注入对话上下文——
-    // 模型在设计阶段能拿到需求卡确认结果（2026-08-04 接手复验：原实现仅回写台账/README，模型看不到 4 项选择）
-    handleStageChange(1, summary)
+  // 2026-08-04 P2：目标确认卡确认 → 回写（确定性收敛，不依赖模型标记）
+  // 2026-08-07 无阶段重构 S4：不再 handleStageChange（无阶段无推进）——确认目标即结束澄清，进入能力检查/执行方案
+  const [goalConfirmed, setGoalConfirmed] = useState(false)
+  const [executionConfirmed, setExecutionConfirmed] = useState(false) // 2026-08-07 无阶段重构 S4：执行方案确认（ExecutionConfirmCard）
+  const handleGoalCardConfirm = (summary: string) => {
+    handleGoalConfirmed(summary)
   }
-  // 2026-08-04 体验修复：需求阶段用户需求文本暂存（「确认推进」自动确认时回写/注入用——不依赖模型【需求确认：】标记）
-  const reqTextRef = useRef('')
+  const handleExecutionConfirmed = () => {
+    setExecutionConfirmed(true)
+  }
+  // 2026-08-04 体验修复：需求阶段用户需求文本暂存（无阶段重构 S4：目标文本暂存——「确认目标」兜底回写/注入用——不依赖模型【目标确认：】标记）
+  const goalTextRef = useRef('')
   const handleUserMessage = (text: string) => {
     lastPromptRef.current = text
-    // 2026-08-04 体验修复（用户「设计完该开发了上面还停设计」）：任何阶段的「确认推进」都推进阶段机——
-    // 原仅需求阶段自动推进，设计/开发/测试阶段用户确认只当普通消息（模型口头说进下一阶段、UI 不动）
-    if (/确认推进/.test(text)) {
-      if (flowStage === 0 && !requirementConfirmed) {
-        // 需求阶段：确认需求 + 推进到设计
-        const reqText = reqTextRef.current || text
-        handleRequirementConfirmed(reqText)
-        handleStageChange(1, reqText)
-      } else if (flowStage < PRODUCT_STAGES.length - 1) {
-        // 其他阶段：推进到下一阶段（设计→开发 / 开发→测试 / 测试→部署 / 部署→交付）
-        handleStageChange(flowStage + 1)
-      }
+    // 2026-08-07 无阶段重构 S4：无阶段推进（「确认推进」是阶段术语——不再特殊处理）
+    // 目标未确认时用户说「确认/可以/没问题/就按」→ 确认目标（GoalCard 外打字兜底——确定性收敛）
+    if (!goalConfirmed && /确认|可以|没问题|就按/.test(text)) {
+      handleGoalConfirmed(goalTextRef.current || text)
       return
     }
-    // 2026-08-04 体验修复（用户实测「确认了需求但上面还停在需求确认」）：需求阶段用户说「确认/可以」→ 自动确认需求 + 推进到设计
-    if (flowStage === 0 && !requirementConfirmed && /确认|可以|没问题|就按/.test(text)) {
-      const reqText = reqTextRef.current || text
-      handleRequirementConfirmed(reqText)
-      handleStageChange(1, reqText)
-      return
-    }
-    if (flowStage === 0 && !requirementConfirmed) reqTextRef.current = text // 需求阶段用户说的话即需求描述
-    // ticket 07：从零开始 → 首条消息创建真实项目目录（0-1 交付真实执行地基——后续阶段模型在真实项目内 write/read）
+    if (!goalConfirmed) goalTextRef.current = text // 目标未确认时用户说的话即目标描述
+    // ticket 07：从零开始 → 首条消息创建真实项目目录（0-1 交付真实执行地基——后续模型在真实项目内 write/read）
     if (!rootPath && onProjectCreated) {
       void window.neonforge.workspace.initProject(text).then((r) => {
         if (r.ok) onProjectCreated(r.path)
       })
     }
     // 06 问题台账：发送 → 创建问题实例（持久化——断点续做基础；同标题复跑 → 更新状态不新增）
-    // 2026-08-04 修复：setActiveProblem 移出 setProblems updater（React 严格模式 updater 双调 + updater 内 setState 反模式——activeProblem 设置不可靠，导致需求确认回写台账失败）
+    // 2026-08-04 修复：setActiveProblem 移出 setProblems updater（React 严格模式 updater 双调 + updater 内 setState 反模式——activeProblem 设置不可靠，导致目标确认回写台账失败）
     const inst = createProblem(text)
     const dup = problems.find((x) => x.title === inst.title)
     setActiveProblem(dup ? dup.id : inst.id)
@@ -235,45 +222,8 @@ function initProblems(): ProblemInstance[] {
   }, [])
 
   const zeroToOne = zeroToOneMode
-  // ticket 07 阶段机：阶段/模型状态提升——注入对话阶段指引（模型按阶段产出）
-  // 2026-08-04 修复：flowModel 未选时也注入阶段提示（talk.txt 实测——用户未选模型 → stageHint undefined → 需求澄清强规则丢失，模型自由发挥没按 4 点澄清/没往同音词猜）
-  const [flowStage, setFlowStage] = useState(0)
-  const [flowModel, setFlowModel] = useState<'traditional' | 'agile' | null>(null)
-  const stageName = PRODUCT_STAGES[flowStage]
-  // 0-1 模式才注入阶段指引（非 0-1 对话不污染）；flowModel 未选也注入（需求阶段澄清强规则——talk.txt 实测缺失根因）
-  const stageHint = zeroToOne
-    ? `【0-1 交付 · ${flowModel ? (flowModel === 'agile' ? '敏捷（迭代）' : '传统软件工程') + ' · ' : ''}${stageName} 阶段】${STAGE_HINT[stageName]}——按本阶段工作；阶段完成请提示用户点「确认推进」。`
-    : undefined
-  // 07 阶段产物编排：阶段推进 → 交付包验收项（阶段确认列表——确定性，不依赖模型）
-  // 2026-08-04：推进反馈——seq 递增通知 ConversationPanel 追加「已进入【X】阶段」对话提示（用户反馈「推进按钮没有实际功能」）
-  const [stageAdvance, setStageAdvance] = useState<{ seq: number; stage: string; hint: string; requirement?: string } | null>(null)
-  // 2026-08-06 阶段推进设计层（用户反馈「测试阶段不会自动或提示进入部署」）：模型输出「确认推进」→ 推进按钮高亮（用户注意到该点了）
-  const [advanceHint, setAdvanceHint] = useState(false)
-  // 2026-08-04 方案 A：requirement 可选——需求卡确认时携带确认摘要（注入对话上下文，模型按确认结果工作）
-  const handleStageChange = (stage: number, requirement?: string) => {
-    // 2026-08-05 第六轮修复：需求阶段推进 = 用户显式确认需求（按钮已解锁——不依赖模型【需求确认】标记；
-    // 模型没输出标记时原按钮禁用 = 死锁：模型提示「点确认推进」却点不了）——点击即确认（reqTextRef 暂存的需求文本/卡确认摘要）
-    if (stage > 0 && flowStage === 0 && !requirementConfirmed) {
-      handleRequirementConfirmed(reqTextRef.current || requirement || '需求已确认')
-    }
-    setFlowStage(stage)
-    setAdvanceHint(false) // 2026-08-06 推进后清除按钮高亮
-    // 2026-08-06 用户反馈「已进入阶段下面一堆定义的话」：对话区提示用 USER_STAGE_HINT（用户版一句话）——STAGE_HINT 是给模型的完整规则长文（含 <candidates> 示例/编号规则），不得显示给用户（坑 49 只修了阶段卡，漏了这里）
-    setStageAdvance((prev) => ({ seq: (prev?.seq ?? 0) + 1, stage: PRODUCT_STAGES[stage], hint: USER_STAGE_HINT[PRODUCT_STAGES[stage]] ?? STAGE_HINT[PRODUCT_STAGES[stage]], requirement }))
-    // 2026-08-07 单源化（质量把关 S1）：isLastStage 改调领域层（原局部重名逻辑）
-    const lastStage = isLastStage(stage)
-    const acceptance = PRODUCT_STAGES.map((s, i) => ({
-      label: i < stage || lastStage ? `${s} 阶段已完成` : i === stage ? `${s} 阶段进行中` : `${s} 待开始`,
-      done: i < stage || lastStage
-    }))
-    setDeliveryPkg((prev) => ({
-      status: 'delivered',
-      summary: prev?.summary ?? '0-1 交付进行中',
-      artifacts: prev?.artifacts ?? [],
-      acceptance,
-      nextSteps: []
-    }))
-  }
+  // 2026-08-07 无阶段重构 S4：阶段机（flowStage/flowModel/stageHint/stageAdvance/advanceHint/handleStageChange）全部移除——
+  // 无阶段流程：目标确认 → 能力检查 → 执行确认 → 达成循环（状态由 goalConfirmed/executionConfirmed 表达）
 
   return (
     <div className="nf-app">
@@ -311,21 +261,25 @@ function initProblems(): ProblemInstance[] {
             <button type="button" className="nf-session__new" onClick={onBackStart}>启动页</button>
           </div>
         </header>
-        {/* 2026-08-04 UX 修复：0-1 交付流面板移出滚动容器——对话滚动时「模型选择/确认推进」常驻可见（原在 .nf-panel__body 内被对话内容滚出视口——用户找不到推进按钮） */}
+        {/* 2026-08-04 UX 修复：0-1 交付流面板移出滚动容器（原在 .nf-panel__body 内被对话内容滚出视口）
+            2026-08-07 无阶段重构 S4：阶段卡/推进按钮删除 → 目标确认卡 + 执行确认卡（无阶段交互） */}
         {zeroToOne && (
           <div className="nf-flow__dock">
-            <DeliveryFlowPanel onStageChange={handleStageChange} onModelSelect={setFlowModel} model={flowModel} requirementConfirmed={requirementConfirmed} artifactsReady={realChanges.length > 0} busy={working} stageOverride={flowStage} advanceHint={advanceHint} />
-            {/* 2026-08-04 P2：需求确认卡——需求阶段未确认时显示（点选 4 项 → 确认 → 自动进设计；确定性收敛不依赖模型标记）
+            {/* 2026-08-04 P2：目标确认卡——目标未确认时显示（点选 4 项 → 确认目标；确定性收敛不依赖模型标记）
                 2026-08-04 体验修复：initialPrompt 首句关键词预选「做什么」（用户已说过的类型不用重选）
-                2026-08-04 体验修复：无输入（initialPrompt 空——用户空 Enter 进入）不显示需求卡——没说过需求，卡片选项对用户没意义（用户困惑「你怎么知道我要做什么」），让对话引导 */}
-            {flowStage === 0 && !requirementConfirmed && initialPrompt && (
-              <RequirementCard onConfirm={handleRequirementCardConfirm} initialPrompt={initialPrompt} />
+                2026-08-04 体验修复：无输入（initialPrompt 空——用户空 Enter 进入）不显示卡片——没说过目标，卡片选项对用户没意义，让对话引导 */}
+            {!goalConfirmed && initialPrompt && (
+              <GoalCard onConfirm={handleGoalCardConfirm} initialPrompt={initialPrompt} />
+            )}
+            {/* 2026-08-07 无阶段重构 S4：执行确认卡——目标确认后、执行确认前显示（能力检查 → 执行方案 → 确认执行） */}
+            {goalConfirmed && !executionConfirmed && (
+              <ExecutionConfirmCard onConfirm={handleExecutionConfirmed} goalText={goalTextRef.current || initialPrompt} />
             )}
           </div>
         )}
         <div className="nf-panel__body">
           {chatTab === 'chat' ? (
-            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} onApprovalChange={setPendingApproval} onActionPromiseHint={setActionHint} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} onRequirementConfirmed={handleRequirementConfirmed} requirementConfirmed={requirementConfirmed} recentFilesExternal={projectFiles} stageHint={stageHint} flowStage={flowStage} stageAdvance={stageAdvance} initialPrompt={initialPrompt} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} onAdvanceHint={setAdvanceHint} />
+            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} onApprovalChange={setPendingApproval} onActionPromiseHint={setActionHint} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} onGoalConfirmed={handleGoalConfirmed} goalConfirmed={goalConfirmed} executionConfirmed={executionConfirmed} goalSeq={goalSeq} recentFilesExternal={projectFiles} initialPrompt={initialPrompt} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} />
           ) : (
             <TaskPanel />
           )}
