@@ -30,6 +30,7 @@
 | **Capability BC** | 环境检测（事实来源——一次检测）、能力视图（从环境推导——ready/missing/failed）、能力检查、Ledger 回填（执行结果自学习）| CapabilityRegistry |
 | **Workspace BC** | 项目文件、写入快照/回滚、**计划清单（PlannedFiles——宿主强制边界数据源）** | PlannedFiles |
 | **Session Timeline BC** | 单会话所有步骤统一记录（用户/搭档/工具/授权/确认/状态——时间顺序完整）| Timeline |
+| **Delivery BC** | 交付包（产物+验收对照+状态）、DoD 对齐（验收标准前置）、确认关闭（交付≠解决——用户确认终态）、快照回滚 | DeliveryPackage |
 
 ### 通用域
 
@@ -175,6 +176,8 @@ PENDING（执行未确认）──→ 所有动作无效（不管文件在不在
 | 环境快照注入 | 后台（系统提示注入）| ✅ V1 |
 | 会话时间线 | 日志（logs/timeline-*.jsonl）| ✅ V1 |
 | 结构化确认卡 | 对话流内嵌（确认/拒绝——像授权卡）| ✅ V1 |
+| 数字交付（交付包/DoD 对齐/确认关闭）| 交付面板（产物+验收对照+确认关闭）+ 回滚 | ✅ V1 |
+| 信任阶梯（任务级信任）| 授权记录可视化 + 允许并记住（沙箱内自动）| ✅ V1 |
 | 多 Agent / Worktree / MCP | 范围外 | ⏸ V2+ |
 
 ---
