@@ -1,406 +1,289 @@
-# 04 — 战术设计
+# 04 — 战术设计（无阶段·目标驱动版）
 
-> 聚合、实体、值对象、领域服务。新增 ContextEngine、Preheating、更新 ThinkingLevel。
-> 已补齐全部占位内容，无"同旧版"引用。四层权威架构见 [02-领域模型](./02-domain-model.md) §6。
-
----
-
-## 1. 聚合
-
-### 1.1 Conversation 聚合
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│ Conversation (聚合根)                                              │
-│                                                                  │
-│ id / title / status / thinkingLevel / prefixState                │
-│                                                                  │
-│ ◆ messages: Message[]                                            │
-│ ◆ compactionSnapshots: CompactionSnapshot[]                      │
-│ ◆ compactionConfig: CompactionConfig                             │
-│     └── triggerMessageCount: 100    // ← 从 30 提升              │
-│     └── triggerTokenThreshold: 200K // ← 从 64K 提升              │
-│     └── preserveLastMessages: 20    // ← 从 10 提升              │
-│ ◆ runtimeContext: RuntimeContext ★ 新增                           │
-│     └── currentFile?: string        // 编辑器当前焦点文件          │
-│     └── selectedCode?: string       // 用户选中的代码段            │
-│     └── recentTools: ToolCall[]     // 最近的工具调用              │
-│     └── lspContext?: LSPContext     // LSP 层注入的上下文          │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-### 1.2 AgentChain 聚合
-
-YAML 声明式多 Agent 流水线。Stage handoff 使用结构化 JSON，不引入 A2A。DAG 无环约束。
-
-### 1.3 PluginRegistry 聚合
-
-插件注册、激活、停用生命周期管理。权限检查与沙箱。
-
-### 1.4 ChangeSet 聚合
-
-文件变更追踪：proposed → accepted/rejected。冲突检测。
-
-### 1.5 ContextEngine ★ 重新设计
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│ ContextEngine (聚合根)                                             │
-│ ┌──────────────────────────────────────────────────────────────┐ │
-│ │ resolve(task: TaskContext, workspace: Workspace): ContextPayload│
-│ │                                                               │ │
-│ │ 内部管线:                                                      │ │
-│ │   Layer 1: resolveLSP(task) → CodeContext[]                   │ │
-│ │     if result.isSufficient → return                            │ │
-│ │   Layer 2: resolveCodeRAG(task) → CodeContext[]               │ │
-│ │     if result.isSufficient → return                            │ │
-│ │   Layer 3: return AgentExplorationHint                        │ │
-│ └──────────────────────────────────────────────────────────────┘ │
-│                                                                  │
-│ ◆ LSPResolver (Layer 1)                                          │
-│     ├── findDefinition(path, symbol)                             │
-│     ├── findReferences(path, symbol)                             │
-│     ├── getImports(path)                                         │
-│     ├── getCallChain(path, symbol)                               │
-│     ├── getTypeInfo(path, position)                              │
-│     └── getDiagnostics(path)                                     │
-│                                                                  │
-│ ◆ CodeRAGResolver (Layer 2)                                      │
-│     ├── semanticSearch(query, topK)                              │
-│     └── findSimilarCode(snippet)                                 │
-│                                                                  │
-│ ◆ ContextAssembler                                              │
-│     ├── assemble(contexts: CodeContext[]): string                │
-│     │   // 将找到的代码片段格式化为 LLM 可读的上下文              │
-│     └── estimateTokens(contexts): number                         │
-│                                                                  │
-│ ◆ CodeContext (值对象)                                            │
-│     ├── source: 'lsp' | 'coderag' | 'agent'                     │
-│     ├── filePath: string                                         │
-│     ├── content: string                                          │
-│     ├── relevance: number (0-1)                                  │
-│     └── reason: string  // 为什么这段代码被包含                    │
-│                                                                  │
-│ ◆ ContextPayload (值对象)                                         │
-│     ├── contexts: CodeContext[]                                  │
-│     ├── totalTokens: number                                      │
-│     ├── layerBreakdown: { lsp: N, coderag: N, agent: N }        │
-│     └── suggestion?: string  // 如果不足，建议 Agent 下一步做什么  │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-### 1.6 PrefixCacheState ★ 新增预热
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│ PrefixCacheState (聚合根)                                         │
-│                                                                  │
-│ ◆ state: PrefixState                                             │
-│ ◆ preheatingStatus: idle | warming | ready ★ 新增                │
-│ ◆ standardPrefix: string         // 固定的"超级前缀"              │
-│ ◆ preheatHistory: PreheatRecord[]                                 │
-│                                                                  │
-│ ◆ StandardPrefix (值对象) ★ 新增                                  │
-│     ├── systemPrompt: string      // ~200 tokens                 │
-│     ├── toolDefinitions: string   // 工具描述                     │
-│     ├── projectMetadata: string   // 文件树 + 常用 AST 签名       │
-│     └── hash: string              // 前缀的哈希，用于判断是否变化   │
-│                                                                  │
-│ ◆ PreheatRecord (值对象) ★ 新增                                   │
-│     ├── timestamp: DateTime                                      │
-│     ├── tokensSent: number                                       │
-│     ├── cacheHit: boolean                                        │
-│     └── cost: Money                                              │
-└──────────────────────────────────────────────────────────────────┘
-```
+> 2026-08-07 重新生成——聚合、值对象、领域服务，基于无阶段目标驱动领域模型（02 领域模型 / 03 战略设计）。
+> 替代旧六阶段版（ContextEngine/Compaction/PrefixCache 等围绕产品流水线的战术设计）。
 
 ---
 
-## 2. 值对象
+## 1. 聚合（Aggregates）
 
-### 2.1 ThinkingLevel ★ 更新
+### 1.1 Task 聚合（Conversation BC——核心域聚合根）
+
+目标驱动的执行单元——目标到达成的状态机。
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Task (聚合根)                                                  │
+│                                                             │
+│ id / goalText / status: clarifying|goal-confirmed|executing  │
+│      |achieved-reported|resolved                             │
+│                                                             │
+│ ◆ goal: Goal              // 目标（值对象——目标确认后锁定）     │
+│ ◆ executionPlan: ExecutionPlan | null  // 执行方案（值对象）   │
+│ ◆ confirmations: Confirmation[]        // 确认记录（时间线）   │
+│ ◆ plannedFiles: PlannedFiles           // 计划清单（宿主边界） │
+│ ◆ producedFiles: Set<FilePath>         // 已产出文件          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**状态机（确认点驱动）**：
+
+```
+clarifying ─[用户确认目标]→ goal-confirmed ─[用户确认执行]→ executing
+    ↑ [重新描述]              ↑ [修改方案]                      │
+    │                                                         ↓
+    └──── 持续澄清 ←──────── achievement-rejected ←── achieved-reported
+                                                ↑ [还要改]        │
+                                                └───[用户确认解决]→ resolved
+```
+
+**不变式**：
+- 未确认目标 → 不进入 executing（模型只澄清）
+- 未确认执行 → 不产生执行动作（write/edit/bash）
+- 未确认解决 → 不收敛（forceTool 保持）
+
+### 1.2 Conversation 聚合（Conversation BC）
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Conversation (聚合根)                                          │
+│ id / messages: Message[]                                    │
+│ ◆ activeTask: Task | null        // 当前任务（目标驱动）        │
+│ ◆ environmentSnapshot: EnvSnapshot // 注入模型的环境事实        │
+│ ◆ timelineRef: TimelineRef       // 会话时间线引用             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 1.3 PlannedFiles 聚合（Workspace BC）
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ PlannedFiles (聚合根——宿主强制边界的数据源)                     │
+│ id / taskId                                                   │
+│ ◆ files: Set<FilePath>             // 批准可写文件（追加语义）   │
+│ ◆ approvalRecords: ApprovalRecord[] // 批准记录（谁批了什么）   │
+│ ◆ boundaryVisible: boolean          // 清单对模型显式可见        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+不变式：追加不覆盖（分批 plan_approval 合并）；写清单外文件被拒 + 拒绝带边界内容。
+
+### 1.4 CapabilityRegistry 聚合（Capability BC）
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ CapabilityRegistry (聚合根——环境单源)                          │
+│ id / projectRoot                                               │
+│ ◆ environment: Environment        // 事实来源（一次检测）       │
+│ ◆ capabilities: Capability[]      // 语义视图（从环境推导）     │
+│ ◆ ledger: Ledger                 // 执行结果回填（自学习）      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+不变式：环境是事实来源（能力不独立二次检测）；Ledger 失败降级/成功恢复。
+
+## 2. 值对象（Value Objects）
+
+### 2.1 Goal
 
 ```typescript
-type ThinkingLevel = 'none' | 'basic' | 'medium' | 'high'
+interface Goal {
+  text: string          // 目标描述（用户确认后锁定）
+  status: 'proposed' | 'confirmed' | 'rejected'
+}
+```
 
-function toDeepSeekParams(level: ThinkingLevel): DeepSeekThinkingParams {
-  switch (level) {
-    case 'none':
-      return { thinking: { type: 'disabled' } }
-    case 'basic':
-      return { thinking: { type: 'enabled' } }
-    case 'medium':
-      return { thinking: { type: 'enabled' }, reasoning_effort: 'high' }
-    case 'high':
-      return { thinking: { type: 'enabled' }, reasoning_effort: 'max' }
+### 2.2 Confirmation（确认记录）
+
+```typescript
+interface Confirmation {
+  point: 'goal' | 'execution' | 'achievement'
+  action: 'confirm' | 'reject'
+  source: 'confirm-card' | 'approval-card' | 'user-word'
+  timestamp: number
+}
+```
+
+### 2.3 ExecutionPlan
+
+```typescript
+interface ExecutionPlan {
+  summary: string          // 一句话方案
+  files: FilePath[]        // 文件清单（可并入计划清单）
+  status: 'proposed' | 'confirmed' | 'rejected'
+}
+```
+
+### 2.4 Capability（能力视图）
+
+```typescript
+interface Capability {
+  id: string
+  category: 'system' | 'external'
+  status: 'ready' | 'missing' | 'failed'   // missing=未装 / failed=装了但不可用
+  implementations: string[]
+  requires?: string[]
+  detail?: string
+}
+```
+
+### 2.5 Environment（环境快照——事实来源）
+
+```typescript
+interface Environment {
+  rootPath: string
+  runtime: 'node' | 'python' | 'none'
+  runtimeVersion: string
+  hasPackageJson: boolean
+  hasNodeModules: boolean
+  packageManager: string
+  toolchain: string[]            // node_modules/.bin 工具
+  systemRuntime: {               // 宿主 runtime（能力推导依据）
+    node: { version: string; status: 'ready' | 'missing' | 'failed' }
+    python: { version: string; status: 'ready' | 'missing' | 'failed' }
   }
 }
+```
 
-type DeepSeekThinkingParams = {
-  thinking: { type: 'enabled' | 'disabled' }
-  reasoning_effort?: 'high' | 'max'
+### 2.6 TimelineEvent（时间线事件）
+
+```typescript
+interface TimelineEvent {
+  ts: string          // ISO 时间戳
+  seq: number         // 会话内序号
+  session: string     // 会话标识
+  type: TimelineEventType  // user-message / assistant-start+done / tool-call / tool-exec /
+                           // tool-result / tool-approval / goal-confirmed / exec-confirmed /
+                           // achievement-confirmed / status-change / stuck-escalate / error
+  role?: 'user' | 'assistant' | 'system' | 'tool'
+  detail: Record<string, unknown>
 }
 ```
 
-### 2.2 LSPTool ★ 新增
+## 3. 领域服务（Domain Services）
+
+### 3.1 TurnExecutionPolicy（执行保障策略）
+
+输入（确认状态/产出/失败/完成度）→ forceTool 决策。
 
 ```typescript
-// 注册到 ToolRegistry 的 LSP 工具
-const LSP_TOOLS: SystemTool[] = [
-  {
-    name: 'find_definition',
-    description: 'Find where a symbol is defined',
-    source: 'builtin',
-    parameters: { path: 'string', symbol: 'string' }
-  },
-  {
-    name: 'find_references',
-    description: 'Find all usages of a symbol',
-    source: 'builtin',
-    parameters: { path: 'string', symbol: 'string' }
-  },
-  {
-    name: 'get_imports',
-    description: 'Get all imports of a file and where they lead',
-    source: 'builtin',
-    parameters: { path: 'string' }
-  },
-  {
-    name: 'get_call_chain',
-    description: 'Trace the call chain from a function',
-    source: 'builtin',
-    parameters: { path: 'string', symbol: 'string' }
-  },
-  {
-    name: 'get_type_info',
-    description: 'Get type information at a position',
-    source: 'builtin',
-    parameters: { path: 'string', line: 'number', column: 'number' }
-  },
-  {
-    name: 'get_diagnostics',
-    description: 'Get errors and warnings for a file',
-    source: 'builtin',
-    parameters: { path: 'string' }
-  }
-]
-```
-
-### 2.3 RuntimeContext ★ 新增
-
-```typescript
-interface RuntimeContext {
-  currentFile?: string
-  selectedCode?: string
-  cursorPosition?: { line: number; column: number }
-  recentToolCalls: ToolCall[]
-}
-```
-
-### 2.4 CodeContext ★ 新增
-
-```typescript
-interface CodeContext {
-  source: 'lsp' | 'coderag' | 'agent'
-  filePath: string
-  content: string
-  relevance: number
-  reason: string
-}
-
-interface ContextPayload {
-  contexts: CodeContext[]
-  totalTokens: number
-  layerBreakdown: { lsp: number; coderag: number; agent: number }
-  suggestion?: string
-}
-```
-
----
-
-## 3. 领域服务
-
-### 3.1 ContextEngineService ★ 重新设计
-
-```typescript
-interface ContextEngineService {
-  /**
-   * 管道入口：根据任务返回精准上下文
-   * Layer 1 → Layer 2 → Layer 3 逐层降级
-   */
-  resolveContext(task: TaskContext, workspace: Workspace): Promise<ContextPayload>
-}
-
-// 内部实现管线:
-// 1. 从 RuntimeContext 提取目标符号
-// 2. Layer 1: LSPResolver → 定义 + 引用 + 调用链 + 导入
-// 3. 如果 token 已足够 → 返回
-// 4. Layer 2: CodeRAG → 语义搜索补充
-// 5. 如果仍不足 → 返回 AgentExplorationHint
-```
-
-### 3.2 PreheatingService ★ 新增
-
-```typescript
-interface PreheatingService {
-  /**
-   * 项目打开时调用
-   * 后台构建超级前缀，发送虚拟请求预热缓存
-   */
-  preheat(workspace: Workspace, prefix: StandardPrefix): Promise<void>
-  
-  /**
-   * 检查预热是否完成
-   */
-  isReady(): boolean
-  
-  /**
-   * 文件变更后增量预热
-   * (只在项目元信息变化时触发，成本极低)
-   */
-  reheatOnChange(changedFiles: string[]): Promise<void>
-}
-```
-
-### 3.3 CompactionService
-
-对话压缩服务。触发阈值 100 条消息 / 200K tokens。保留最近 20 条原始消息，其余生成结构化摘要。
-
-### 3.4 ChainExecutorService
-
-DAG 拓扑排序调度。Stage 依次执行，上游失败则下游 Skip。EventBus 推送进度。
-
-### 3.5 PluginService
-
-插件生命周期管理：加载、激活、停用。权限校验前置。
-
-### 3.6 ReasoningCaptureService
-
-reasoning_content 流式捕获。按 ThinkingLevel 结构化分组。
-
-### 3.7 DiffApplyService
-
-逐文件 / 逐处 accept/reject/applyAll。写入前冲突检测。
-
-### 3.8 PrefixCacheService ★ 更新
-
-```typescript
-interface PrefixCacheService {
-  updateCacheState(conversation: Conversation, prevMessages: Message[]): PrefixState
-  shouldUseAppendOnly(state: PrefixState): boolean
-  buildMessages(conversation: Conversation, state: PrefixState): ChatMessage[]
-  onCompactionCompleted(conversation: Conversation, snapshot: CompactionSnapshot): void
-  
-  /** ★ 新增 */
-  buildStandardPrefix(config: AppConfig, workspace: Workspace): StandardPrefix
-}
-```
-
-### 3.9 TurnExecutionPolicy（Conversation BC——2026-08-07 领域化，坑 89）
-
-对话轮次「该不该强制模型产出」的领域服务（`src/renderer/domain/turnPolicy.ts`——forceTool 决策从组件 if 移入领域层）。
-
-```typescript
-// TurnKind：轮次触发语义（user-turn=用户指令 / advance-turn=阶段推进 / tool-loop=工具循环）
 interface TurnExecutionPolicy {
   decide(input: {
-    stage: ProductStageName | null
-    turnKind: TurnKind
-    isPureAck: boolean
-    requirementConfirmed: boolean
-    produced: boolean
-    depth: number
+    goalConfirmed: boolean      // 目标确认（用户）
+    executionConfirmed: boolean // 执行确认（用户）
+    produced: boolean           // 已有产出（write/edit）
+    lastToolFailed?: boolean    // 上一轮工具失败 → 释放强制（诊断修正）
+    goalAchieved?: boolean      // 达成确认（用户）→ 释放
+    plannedComplete?: boolean   // 计划文件写完 → 释放
   }): { forceTool: boolean; reason: string }
 }
 ```
 
-不变式：advance-turn 按阶段工作模式（设计=text-proposal 不强制 / 开发=artifacts 强制）；user-turn 非需求阶段强制（坑 80 原意）；B 类（确认未产出）每轮强制；纯确认/工具循环不强制。
+不变式：
+- 目标未确认 → 不强制（澄清）
+- 执行未确认 → 不强制（等确认）
+- 目标+执行确认、无产出 → 强制（防只说不做）
+- 工具失败 → 释放（模型诊断修正——required 压制诊断是反模式）
+- 计划写完 或 达成确认 → 释放（模型可收敛）
 
-### 3.10 ProductStage / 阶段推进（AgentChain BC——2026-08-07 领域化，坑 89）
+### 3.2 ProgressionGate（推进门控）
 
-产品六阶段（需求→设计→开发→测试→部署→交付）产品级流水线（`src/renderer/domain/stageFlow.ts`——advanceChat 指令生成从组件移入领域层）。
+确认点状态机——当前确认点 → 模型活动边界。
 
 ```typescript
-// ProductStage（VO）：阶段 + 工作模式（StageOutputMode：clarify/text-proposal/artifacts/verify/deploy/report）
-// buildAdvanceInstruction({ stage, hint, requirement }): string —— 阶段推进内部指令（StageTransition 事件的应用侧载荷）
+interface ProgressionGate {
+  currentPoint(task: Task): 'goal' | 'execution' | 'achievement' | 'done'
+  allowedActions(point: string): Action[]  // 该确认点允许的模型动作
+  // 未确认目标 → 只澄清（无 write/edit/bash）
+  // 未确认执行 → 只给方案（无执行动作）
+  // 未确认解决 → 持续执行（不收敛）
+}
 ```
 
-不变式：设计=text-proposal（推进轮不强制工具）；开发=artifacts（推进轮强制工具）；阶段推进指令必须含「本阶段完成时提示用户点确认推进」。
+不变式：确认点未确认 → 模型活动边界被限制（状态机未到下一态——结构性，非拦截）。
 
----
+### 3.3 CapabilityChecker（能力检查）
 
-## 4. 仓库接口
+```typescript
+interface CapabilityChecker {
+  check(projectRoot: string): Capability[]
+  getMissing(caps: Capability[]): Capability[]   // 缺失清单（征求用户——装依赖/换方案）
+  recordResult(rootPath: string, capabilityId: string, ok: boolean): void  // Ledger 回填
+}
+```
 
-领域端口接口：IConversationRepository、IChainTemplateRepository、IPluginRepository、ICodeIndexRepository、IConfigurationRepository。均定义在领域层，实现在基础设施层。
+不变式：能力从环境推导（消除双源）；Ledger 失败降级/成功恢复。
 
----
+### 3.4 PlannedFilesService（计划清单）
 
-## 5. 不变性规则
+```typescript
+interface PlannedFilesService {
+  approve(files: FilePath[]): void         // 追加（不覆盖）
+  contains(file: FilePath): boolean
+  visibleList(): string[]                  // 注入模型的可见清单
+  rejectMessage(file: FilePath): string    // 拒绝带边界（「X 不在批准清单（批准的是：A/B/C）」）
+}
+```
 
-| 聚合 | 规则 |
+不变式：追加语义；清单显式可见；拒绝回填边界（模型回到边界内）。
+
+### 3.5 TimelineLogger（会话时间线）
+
+```typescript
+interface TimelineLogger {
+  append(event: Omit<TimelineEvent, 'ts' | 'seq'>): void
+  // 便捷方法：logUserMessage / logAssistantStart / logAssistantDone /
+  // logToolCall / logToolResult / logApproval / logConfirmation / logStatus
+}
+```
+
+不变式：时间顺序完整（ts+seq 升序）；单文件 JSONL（崩溃保留已写行）。
+
+## 4. 领域事件（Domain Events）
+
+| 事件 | 触发 | 发布者 |
+|------|------|--------|
+| GoalProposed / GoalConfirmed / GoalRejected | 目标提议 / 用户确认 / 重新描述 | Task |
+| ExecutionPlanProposed / ExecutionConfirmed / ExecutionRejected | 方案提议 / 用户确认 / 修改 | Task |
+| PlanApproved | 用户批准文件清单（追加）| PlannedFiles |
+| ToolApproved / ToolRejected / ToolExecuted / ToolFailed | 工具授权/执行结果 | ToolRegistry / Task |
+| AchievementProposed / AchievementConfirmed / AchievementRejected | 达成提议 / 用户确认解决 / 还要改 | Task |
+| CapabilityChecked / CapabilityLedgerUpdated | 能力检查 / Ledger 回填 | CapabilityRegistry |
+| EnvironmentInjected | 环境快照注入模型 | Conversation |
+| TaskResolved | 用户确认解决——任务收敛 | Task |
+
+## 5. 仓库接口（Repository Ports）
+
+| 端口 | 语义 |
 |------|------|
-| ContextEngine | Layer 1 结果已充分时，不进入 Layer 2（节省索引查询） |
-| ContextEngine | 注入的上下文总 token < 上下文窗口的 30%（给推理和对话留空间） |
-| PrefixCache | 预热仅在 idle 状态且前端不可见时执行 |
-| PrefixCache | 预热必须使用 Flash + thinking=disabled（最低成本） |
-| PrefixCache | 超级前缀 hash 变化 → 重新预热 |
-| Conversation | 压缩保留 20 条原始消息，维持局部缓存 |
-| AgentChain | dependsOn 无环 |
-| Plugin | 未声明权限操作 → SecurityError |
-
----
+| ITaskRepository | 任务加载/保存（断点续做）|
+| IConversationRepository | 会话持久化 |
+| IPlannedFilesRepository | 计划清单持久化 |
+| ITimelineRepository | 时间线追加/查询 |
 
 ## 6. 类型汇总
 
 ```typescript
 // ===== 标识符 =====
-type ConversationId = string & { readonly __brand: 'ConversationId' }
-type MessageId = string & { readonly __brand: 'MessageId' }
-type ChainId = string & { readonly __brand: 'ChainId' }
-type StageId = string & { readonly __brand: 'StageId' }
+type TaskId = string & { readonly __brand: 'TaskId' }
+type FilePath = string & { readonly __brand: 'FilePath' }
 
-// ===== ThinkingLevel ★ =====
-type ThinkingLevel = 'none' | 'basic' | 'medium' | 'high'
+// ===== 确认点 =====
+type ConfirmationPoint = 'goal' | 'execution' | 'achievement'
+type ConfirmationAction = 'confirm' | 'reject'
 
-// ===== CodeContext ★ =====
-interface CodeContext {
-  source: 'lsp' | 'coderag' | 'agent'
-  filePath: string; content: string
-  relevance: number; reason: string
-}
+// ===== 任务状态 =====
+type TaskStatus = 'clarifying' | 'goal-confirmed' | 'executing'
+  | 'achieved-reported' | 'resolved'
 
-// ===== ContextPayload ★ =====
-interface ContextPayload {
-  contexts: CodeContext[]
-  totalTokens: number
-  layerBreakdown: { lsp: number; coderag: number; agent: number }
-  suggestion?: string
-}
+// ===== 能力 =====
+type CapabilityStatus = 'ready' | 'missing' | 'failed'
 
-// ===== StandardPrefix ★ =====
-interface StandardPrefix {
-  systemPrompt: string
-  toolDefinitions: string
-  projectMetadata: string
-  hash: string
-}
-
-// ===== LSP Tools ★ =====
-type LSPToolName = 'find_definition' | 'find_references' | 'get_imports' 
-                 | 'get_call_chain' | 'get_type_info' | 'get_diagnostics'
-
-// ===== EventBus =====
-interface DomainEvent<T = unknown> {
-  readonly type: DomainEventType
-  readonly aggregateId: string
-  readonly timestamp: number
-  readonly payload: T
-}
-
-interface EventBusPort {
-  publish(event: DomainEvent): void
-  subscribe(type: DomainEventType, handler: (e: DomainEvent) => void): () => void
-}
+// ===== 时间线 =====
+type TimelineEventType = 'user-message' | 'assistant-start' | 'assistant-done'
+  | 'tool-call' | 'tool-exec' | 'tool-result' | 'tool-approval'
+  | 'goal-confirmed' | 'exec-confirmed' | 'achievement-confirmed'
+  | 'status-change' | 'stuck-escalate' | 'error'
 ```
 
 ---

@@ -1,149 +1,136 @@
-# 06 — 领域事件
+# 06 — 领域事件（无阶段·目标驱动版）
 
-> 完整事件目录。新增 ContextEngine、Preheating、LSP 工具事件。
-> 已补齐全部占位内容，无"同旧版"引用。
+> 2026-08-07 重新生成——事件目录基于无阶段目标驱动领域模型（02 领域模型 / 04 战术设计）。
+> 替代旧六阶段版（ContextEngine/Compaction/AgentChain 等产品流水线事件）。
 
 ---
 
 ## 1. 事件目录
 
-### 1.1 ContextEngine 事件 ★ 新增
+### 1.1 确认点事件（Conversation BC——核心）
 
 | 事件 | 触发时机 | 携带数据 | 消费方 |
 |------|---------|---------|--------|
-| `context.resolved` | 上下文管线完成 | taskId, payload, layerBreakdown | Conversation（注入上下文） |
-| `context.lsp_hit` | LSP 层命中 | taskId, fileCount, tokenCount | StatusBar |
-| `context.coderag_fallback` | 降级到 CodeRAG | taskId, reason | — |
-| `context.agent_explore_hint` | 前两层不够，建议 Agent 探索 | taskId, suggestion | Agent（读取建议文件） |
+| `task.goal_proposed` | 模型澄清后给出目标提议 | taskId, goalText | 确认卡渲染（UI）|
+| `task.goal_confirmed` | 用户点「确认目标」 | taskId, goalText, source | 状态机（→goal-confirmed）、Timeline |
+| `task.goal_rejected` | 用户点「重新描述」 | taskId | 状态机（→clarifying）、模型（重新澄清）|
+| `task.execution_plan_proposed` | 模型给出执行方案 | taskId, plan, files | 执行确认卡渲染（UI）|
+| `task.execution_confirmed` | 用户点「确认执行」 | taskId, source | 状态机（→executing）、forceTool 生效 |
+| `task.execution_rejected` | 用户点「修改方案」 | taskId | 状态机（→goal-confirmed）、模型（改方案）|
+| `task.achievement_proposed` | 模型汇报达成 | taskId, summary | 达成确认卡渲染（UI）|
+| `task.achievement_confirmed` | 用户点「已解决」 | taskId, source | 状态机（→resolved）、forceTool 释放 |
+| `task.achievement_rejected` | 用户点「还要改」 | taskId | 状态机（→executing 继续）|
+| `task.resolved` | 用户确认解决 | taskId | 任务收敛、Timeline |
 
-### 1.2 Preheating 事件 ★ 新增
-
-| 事件 | 触发时机 | 携带数据 | 消费方 |
-|------|---------|---------|--------|
-| `preheat.started` | 开始预热 | projectId, prefixHash | StatusBar（"预热中..."） |
-| `preheat.completed` | 预热完成 | projectId, cacheHit, cost, duration | StatusBar（🟢 就绪） |
-| `preheat.cache_hit` | 预热请求命中已有缓存 | projectId | — |
-| `preheat.failed` | 预热失败（网络等） | projectId, error | StatusBar（非阻塞，降级） |
-
-### 1.3 Compaction 事件
+### 1.2 计划清单事件（Workspace BC）
 
 | 事件 | 触发时机 | 携带数据 |
 |------|---------|---------|
-| `compaction.warning` | 剩余 < 20% (200K 中 < 40K) | conversationId, remaining |
-| `compaction.triggered` | 触发（100条 或 200K） | conversationId, messageCount |
-| `compaction.completed` | 完成 | conversationId, snapshot, savedTokens |
-| `compaction.failed` | 失败 | conversationId, error |
+| `plan.approved` | 用户批准文件清单 | taskId, files（追加）|
+| `plan.rejected` | 写清单外文件被拒 | taskId, file, approvedList（拒绝带边界）|
 
-### 1.4 AgentChain 事件
+### 1.3 工具授权/执行事件（Conversation/Workspace BC）
 
-chain.loaded / chain.started / stage.started / stage.reasoning / stage.reasoning_block / stage.tool_call / stage.tool_result / stage.completed / stage.failed / chain.completed / chain.failed — 共 11 个。
+| 事件 | 触发时机 | 携带数据 |
+|------|---------|---------|
+| `tool.approved` / `tool.rejected` | 用户批准/拒绝工具 | toolName, args, action |
+| `tool.executed` / `tool.failed` | 工具执行结果 | toolName, ok, error |
+| `tool.pending_confirmation` | 执行未确认时工具调用到达（挂起）| toolName, args |
 
-> **产品阶段推进（2026-08-07 领域化——坑 89；质量把关 S-事件标注）**：`stage.transition`（产品六阶段推进——需求→设计→开发→测试→部署→交付；载荷：`fromStage/toStage/requirement`）+ `advance.instruction_generated`（AdvanceInstruction 生成——推进轮内部指令注入模型）——**概念预留**：当前实现 advanceChat 直接调用领域服务（buildAdvanceInstruction）触发推进，未发布事件（EventBus 基础设施未实现——A0 §6 规则待基础设施落地后接入，届时事件名以本清单为准）。
+### 1.4 能力/环境事件（Capability BC）
 
-### 1.5 Plugin 事件
+| 事件 | 触发时机 | 携带数据 |
+|------|---------|---------|
+| `capability.checked` | 能力检查 | taskId, capabilities, missing |
+| `capability.ledger_updated` | Ledger 回填 | rootPath, capabilityId, ok |
+| `environment.injected` | 环境快照注入模型 | rootPath, envSnapshot |
 
-plugin.registered / plugin.activated / plugin.deactivated / plugin.error / plugin.hook_triggered — 共 5 个。
+### 1.5 执行保障事件（Conversation BC）
 
-### 1.6 Conversation 事件
+| 事件 | 触发时机 | 携带数据 |
+|------|---------|---------|
+| `execution.forced` | forceTool=true（确认后无产出强制）| taskId, reason |
+| `execution.released` | forceTool 释放（失败/计划写完/达成确认）| taskId, reason |
+| `stuck.escalated` | 连续无产出升级 | taskId, message |
+| `stuck.needs_human` | 升级仍无效转用户 | taskId, message |
+
+### 1.6 会话/消息事件
 
 | 事件 | 说明 |
 |------|------|
 | `conversation.created` / `archived` | 生命周期 |
-| `message.appended` / `edited` | 消息变更 → 触发 Compaction 检查 |
-| `thinking_level.changed` | Level 变更 |
-| `streaming.started` / `token` / `reasoning_token` / `completed` | 流式输出 |
-
-### 1.7 LSP 工具事件 ★ 新增
-
-| 事件 | 触发时机 | 携带数据 |
-|------|---------|---------|
-| `lsp.find_definition` | 查找定义 | filePath, symbol, result |
-| `lsp.find_references` | 查找引用 | filePath, symbol, count |
-| `lsp.get_imports` | 获取导入 | filePath, importCount |
-| `lsp.get_call_chain` | 调用链 | filePath, symbol, depth |
-
-### 1.8 PrefixCache 事件
-
-| 事件 | 说明 |
-|------|------|
-| `cache.hit` / `cache.missed` | 缓存命中/未命中 |
-| `cache.append_only_activated` / `broken` | append-only 模式变更 |
-| `cache.preheat_ready` ★ | 预热就绪 |
-
-### 1.9 CodeRAG 事件（降级为 Layer 2）
-
-| 事件 | 说明 |
-|------|------|
-| `coderag.index.ready` / `stale` | 索引状态 |
-| `coderag.retrieved` | 检索完成 |
-
-### 1.10 ChangeSet / Shell / Project
-
-change.proposed / change.accepted / change.rejected / changeset.applied。
-shell.command.executed / shell.command.failed。
-project.opened / project.closed / file.changed。
+| `message.appended` | 消息变更（用户/搭档/工具）|
+| `streaming.started` / `completed` | 流式输出 |
+| `user.message_sent` | 用户消息（含确认卡触发）|
 
 ---
 
 ## 2. 关键时序图
 
-### 2.1 ContextEngine 管线
+### 2.1 目标确认（确认卡——目标驱动原点）
 
 ```
-Agent          ContextEngine      LSPResolver      CodeRAGResolver
- │                  │                  │                  │
- │ resolve(task)    │                  │                  │
- ├─────────────────►│                  │                  │
- │                  │ Layer 1: LSP     │                  │
- │                  ├─────────────────►│                  │
- │                  │ find_definition  │                  │
- │                  │ find_references  │                  │
- │                  │ get_imports      │                  │
- │                  │ get_call_chain   │                  │
- │                  │                  │                  │
- │                  │ 5 files, 8K      │                  │
- │                  │◄─────────────────┤                  │
- │                  │                  │                  │
- │                  │ sufficient? YES  │                  │
- │                  │                  │                  │
- │ context.payload  │                  │                  │
- │◄─────────────────┤                  │                  │
- │                  │                  │                  │
- │  (如果 LSP 不够)  │                  │                  │
- │                  │ Layer 2: CodeRAG │                  │
- │                  ├──────────────────────────────────►│
- │                  │                  │  semanticSearch │
- │                  │ 3 snippets       │                  │
- │                  │◄──────────────────────────────────┤
+用户          模型          确认卡         Task状态机         Timeline
+ │            │             │             │                │
+ │ 输入需求    │             │             │                │
+ ├───────────►│             │             │                │
+ │            │ 澄清+候选    │             │                │
+ │ 点选候选    │             │             │                │
+ ├───────────►│             │             │                │
+ │            │ 【目标确认】提议            │                │
+ │            ├────────────►│             │                │
+ │            │             │ goal_proposed               │
+ │            │             ├────────────►│               │
+ │            │             │             │                │
+ │ 点「确认目标」│             │             │                │
+ ├───────────►│             │             │                │
+ │            │             │ goal_confirmed             │
+ │            │             ├────────────►│               │
+ │            │             │             │→goal-confirmed│
+ │            │             │             ├──────────────►│
+ │            │             │             │                │
+ │            │ 确认消息回填  │             │                │
+ │            │◄────────────┤             │                │
 ```
 
-### 2.2 预热 → 首次请求
+### 2.2 执行确认（确认卡——推进到动手）
 
 ```
-User           PreheatingSvc     DeepSeekAPI     PrefixCache
- │                  │                 │               │
- │ 打开项目          │                 │               │
- ├─────────────────►│                 │               │
- │                  │ buildPrefix()   │               │
- │                  │ POST /chat      │               │
- │                  │ (Flash,         │               │
- │                  │  thinking=none) │               │
- │                  ├────────────────►│               │
- │                  │  (静默, 丢弃)    │               │
- │                  │◄────────────────┤               │
- │                  │                 │ KV cached     │
- │                  │ preheat.completed               │
- │   🟢 就绪        │                 │               │
- │                  │                 │               │
- │  "帮我改..."     │                 │               │
- ├─────────────────►│                 │               │
- │                  │ POST /chat      │               │
- │                  │ (前缀匹配!)     │               │
- │                  ├────────────────►│               │
- │                  │                 │ cache.hit!    │
- │                  │ 0.3s 首字延迟   │               │
- │                  │◄────────────────┤               │
- │  极速响应        │                 │               │
+用户          模型           确认卡        Task状态机       forceTool
+ │            │             │             │                │
+ │ 确认目标后   │ 能力检查+方案 │             │                │
+ │            ├────────────►│             │                │
+ │            │ 方案提议      │ execution_plan_proposed     │
+ │            │             ├────────────►│               │
+ │            │             │             │                │
+ │ 点「确认执行」│             │             │                │
+ ├───────────►│             │ execution_confirmed          │
+ │            │             ├────────────►│               │
+ │            │             │             │→executing      │
+ │            │             │             ├───► forceTool=true
+ │            │             │             │（无产出强制）     │
+ │            │ 模型被强制产出 │             │                │
+ │            │◄────────────┤             │                │
+```
+
+### 2.3 达成确认（确认卡——收敛）
+
+```
+用户          模型            确认卡        Task状态机        forceTool
+ │            │              │             │                │
+ │ 动手产出    │ write/edit   │             │                │
+ │            ├─────────────►│             │                │
+ │            │ 【已达成】提议 │             │                │
+ │            │              │ achievement_proposed        │
+ │            │              ├────────────►│               │
+ │            │              │             │                │
+ │ 点「已解决」 │              │             │                │
+ ├───────────►│              │ achievement_confirmed       │
+ │            │              ├────────────►│               │
+ │            │              │             │→resolved       │
+ │            │              │             ├───► forceTool释放
+ │            │              │             │                │
+ │ 对话收敛     │              │             │                │
 ```
 
 ---
