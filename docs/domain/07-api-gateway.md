@@ -1,6 +1,7 @@
 # 07 — DeepSeek API 网关设计
 
 > Streaming 解析、Prefix-Cache + 预热、Compaction 协调、1M 上下文策略。DeepSeek-only。
+> 2026-08-07 无阶段对齐：新增 §1.1 forceTool 传递（执行保障的网关链路——确认点驱动）。
 
 ---
 
@@ -13,8 +14,32 @@
 | `reasoning_effort` ★ | `'high'` / `'max'`（仅 thinking=enabled 时有效） |
 | `messages` | OpenAI 兼容格式 |
 | `tools` | OpenAI 兼容格式 |
+| `tool_choice` ★ 2026-08-07 | `'required'`（执行保障 forceTool）/ `'auto'`（澄清/等确认/失败诊断） |
 | `stream` | SSE 流式输出 |
 | `max_tokens` | 最大输出 token |
+
+### 1.1 forceTool 传递（执行保障——无阶段目标驱动核心链路）
+
+```
+TurnExecutionPolicy（领域层——确认点状态 + 产出 + 失败 + 完成度）
+    │ 决策 { forceTool: boolean; reason: string }
+    ▼
+Gateway.buildRequest(forceTool)
+    │ forceTool=true → tool_choice: 'required'（模型必须调工具——防只说不做）
+    │ forceTool=false → tool_choice: 'auto'（澄清/等确认/失败诊断——模型自由）
+    ▼
+DeepSeek API
+```
+
+| 场景 | forceTool | tool_choice | 理由 |
+|------|-----------|-------------|------|
+| 目标未确认 | false | auto | 澄清（模型自由问答）|
+| 执行未确认 | false | auto | 等确认卡（模型只给方案）|
+| 确认+无产出 | **true** | **required** | 防只说不做（强制动手）|
+| 工具失败 | false | auto | 释放诊断（模型停下修正——required 压制诊断是反模式）|
+| 计划写完/达成确认 | false | auto | 收敛（模型可停下汇报）|
+
+**不变式**：forceTool 决策只来自领域层 TurnExecutionPolicy（网关不自行判定——单一事实来源）。
 
 ### ThinkingLevel → API 映射 ★
 

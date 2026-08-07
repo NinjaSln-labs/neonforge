@@ -1,7 +1,7 @@
-# 05 — 架构设计
+# 05 — 架构设计（无阶段·目标驱动版）
 
-> Electron + React、插件化、目录树。新增 ContextEngine（LSP 管线）、Preheating。
-> 模块目录树为架构参考，实现时以 `docs/product/` 产品设计规范为准。四层模型见 [02-领域模型](./02-domain-model.md) §6。
+> 2026-08-07 重新生成——架构基于无阶段目标驱动领域模型（00 权威总纲 v3.0 / 02 领域模型 / 03 战略设计 / 04 战术设计）。
+> 替代旧六阶段版（ContextEngine 管线 / Preheating / AgentChain 模块树）。
 
 ---
 
@@ -9,233 +9,118 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                       PLUGIN LAYER                                │
-│  ┌────────┐ ┌──────────┐ ┌────────┐ ┌────────┐ ┌──────────┐    │
-│  │CodeRAG │ │MCP Bridge│ │  Git   │ │  LSP   │ │  Stats   │ ...│
-│  │Plugin  │ │ Plugin   │ │Plugin  │ │Plugin  │ │ Plugin   │    │
-│  └───┬────┘ └────┬─────┘ └───┬────┘ └───┬────┘ └────┬─────┘    │
-│      │           │           │          │           │            │
-├──────┼───────────┼───────────┼──────────┼───────────┼────────────┤
-│  ┌───┴───────────┴───────────┴──────────┴───────────┴─────────┐ │
-│  │                    EVENT BUS (30+ events)                    │ │
-│  └─────────────────────────────────────────────────────────────┘ │
+│                       RENDERER（对话/确认/授权 UI）                  │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐             │
+│  │确认卡     │ │授权卡     │ │候选按钮   │ │工具卡     │             │
+│  │(目标/执行/│ │(允许/拒绝) │ │(candidates)│ │(执行/回滚)│             │
+│  │ 达成)    │ │          │ │          │ │          │             │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘             │
 ├──────────────────────────────────────────────────────────────────┤
-│                       CORE LAYER                                  │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐           │
-│  │Conversat.│ │AgentChain│ │Compaction│ │Prefix    │           │
-│  │          │ │          │ │          │ │Cache     │           │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘           │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐           │
-│  │Context   │ │Reasoning │ │DiffApply │ │Thinking  │           │
-│  │Engine ★  │ │Capture   │ │          │ │Level     │           │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘           │
-│  ┌──────────┐ ┌──────────┐                                      │
-│  │Tool      │ │Preheating│ ★                                    │
-│  │Registry  │ │          │                                      │
-│  └──────────┘ └──────────┘                                      │
-│                                                                  │
-│  4 核心工具: read | write | edit | bash                          │
-│  6 LSP 工具: find_definition | find_references | get_imports    │
-│              get_call_chain | get_type_info | get_diagnostics    │
+│                       DOMAIN（领域层——核心）                        │
+│  ┌──────────────────────────────────────────────────────────┐    │
+│  │ Conversation BC：Task 状态机 / 确认点 / 推进门控           │    │
+│  │  · TurnExecutionPolicy（forceTool 决策）                  │    │
+│  │  · ProgressionGate（模型活动边界）                        │    │
+│  │  · PlannedFiles（写文件边界——宿主强制）                    │    │
+│  └──────────────────────────────────────────────────────────┘    │
+│  ┌──────────────┐ ┌──────────────┐ ┌────────────────────────┐    │
+│  │ Capability BC │ │ Workspace BC  │ │ Session Timeline BC    │    │
+│  │ 环境检测(事实) │ │ 文件/快照/回滚 │ │ 全步骤统一记录（JSONL）  │    │
+│  │ 能力视图(推导) │ │ 计划清单(批准) │ │（main 进程落盘）        │    │
+│  │ Ledger 回填   │ └──────────────┘ └────────────────────────┘    │
+│  └──────────────┘                                               │
 ├──────────────────────────────────────────────────────────────────┤
-│                    INFRASTRUCTURE                                  │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐           │
-│  │Electron  │ │ Monaco   │ │ File     │ │ SQLite   │           │
-│  │(窗口)    │ │ Editor   │ │ System   │ │          │           │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘           │
+│                    APPLICATION（应用层——编排）                      │
+│  ConversationPanel / MainWorkspace（确认卡回调、状态同步、流式驱动） │
+├──────────────────────────────────────────────────────────────────┤
+│                      INFRASTRUCTURE                               │
+│  Electron（窗口）│ Gateway（DeepSeek API + forceTool 传递）│ 文件系统 │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
 **设计原则**：
-- 核心 < 5000 行
-- System prompt < 300 tokens
-- Electron（非 Tauri）— Monaco 硬约束
-- Event Bus 唯一跨模块通道
+- **确认点 = 推进门槛**（结构性——领域状态机未到下一态，模型不越级）
+- **宿主强制边界**（写文件受计划清单约束——不依赖模型自律）
+- **环境单源**（能力从环境推导——不重复检测）
+- **全步骤可观测**（时间线——分析一步到位）
 
 ---
 
-## 2. 上下文管线 ★ 新增
+## 2. 目标驱动管线（确认点驱动推进）
 
 ```
-用户输入 "修改 authMiddleware"
+用户输入 ─→ 目标澄清（模型+候选按钮）─→ 目标确认卡 ─[确认目标]→ 能力检查 ─→ 执行方案 ─→ 执行确认卡 ─[确认执行]
+    → 动手产出（自推进工具链——forceTool 保障）→ 达成汇报 ─→ 达成确认卡 ─[已解决]→ 收敛
+                 ↑                                      ↑
+           计划清单边界（write 受批准约束）         失败感知（工具失败→释放诊断）
+```
+
+## 3. 执行保障管线（forceTool 决策链）
+
+```
+确认状态(goal/execution) + 产出 + 失败 + 完成度
     │
     ▼
-┌──────────────────────────────────────────┐
-│        ContextEngine.resolve()            │
-│                                           │
-│  ┌─────────────────────────────────────┐ │
-│  │ Layer 1: LSP Resolver               │ │
-│  │  find_definition("authMiddleware")   │ │
-│  │  find_references("authMiddleware")   │ │
-│  │  get_imports("auth.ts")             │ │
-│  │  get_call_chain("authMiddleware")   │ │
-│  │                                     │ │
-│  │  → 5 files, ~8K tokens              │ │
-│  │  → sufficient? YES → return         │ │
-│  └─────────────────────────────────────┘ │
-│                                           │
-│  ┌─────────────────────────────────────┐ │
-│  │ Layer 2: CodeRAG (if needed)        │ │
-│  │  semanticSearch("permission check")  │ │
-│  │  → 3 more snippets                  │ │
-│  └─────────────────────────────────────┘ │
-│                                           │
-│  ┌─────────────────────────────────────┐ │
-│  │ Layer 3: Agent Exploration Hint     │ │
-│  │  "Try reading config/security.ts"   │ │
-│  └─────────────────────────────────────┘ │
-└──────────────────────────────────────────┘
+TurnExecutionPolicy（领域层——纯函数）
+    │
+    ├─ 目标未确认 → auto（澄清）
+    ├─ 执行未确认 → auto（等确认卡）
+    ├─ 确认+无产出 → required（强制动手）
+    ├─ 工具失败 → auto（释放诊断）
+    └─ 计划写完/达成确认 → auto（收敛）
     │
     ▼
-ContextPayload → 注入到 Conversation → 发送给 LLM
+Gateway.forceTool 传递 → DeepSeek API（tool_choice）
 ```
 
----
-
-## 3. 预热管线 ★ 新增
+## 4. 宿主强制边界管线（模型漂移防护）
 
 ```
-项目打开
+模型调 write(file)
     │
     ▼
-┌──────────────────────────────────┐
-│ PreheatingService.preheat()       │
-│                                   │
-│  1. buildStandardPrefix()         │
-│     system prompt (200 tokens)    │
-│     + tool defs                   │
-│     + 文件树 + AST 签名            │
-│     = ~5-10K tokens               │
-│                                   │
-│  2. DeepSeek API (后台, 静默)      │
-│     model: v4-flash               │
-│     thinking: disabled             │
-│     messages: [{role:'user',       │
-│       content: standardPrefix}]    │
-│                                   │
-│  3. 响应丢弃（不需要结果）           │
-│     但 KV 已被 DeepSeek 缓存       │
-│                                   │
-│  4. 用户首次真实请求                │
-│     → 前缀匹配 → 缓存命中           │
-│     → 首字延迟 ~0.3s               │
-└──────────────────────────────────┘
+ProgressionGate（领域层）
+    ├─ 执行未确认 → 挂起（等确认执行卡——模型停住）
+    ├─ file ∈ 计划清单 → 放行执行
+    └─ file ∉ 计划清单 → 拒绝 + 拒绝带边界（「X 不在批准清单（批准的是：A/B/C）」）
+    │
+    ▼
+Workspace 执行（快照→写入→可回滚）
 ```
 
----
-
-## 4. 模块目录树 ★ 更新
+## 5. 模块目录（无阶段对齐）
 
 ```
-neonforge/
-├── apps/
-│   ├── desktop/                          # Electron Main Process
-│   │   └── src/
-│   │       ├── main.ts
-│   │       ├── ipc/
-│   │       │   ├── fileHandlers.ts
-│   │       │   ├── shellHandlers.ts
-│   │       │   ├── lspHandlers.ts        ★ LSP 通信（主进程）
-│   │       │   └── preheatHandlers.ts    ★ 预热（主进程后台）
-│   │       └── adapters/
-│   │           ├── FileSystemAdapter.ts
-│   │           ├── ShellProcessAdapter.ts
-│   │           ├── LSPClientAdapter.ts   ★ LSP 客户端
-│   │           └── SqliteAdapter.ts
-│   │
-│   ├── renderer/
-│   │   └── src/
-│   │       ├── core/
-│   │       │   ├── event-bus/
-│   │       │   ├── conversation/
-│   │       │   ├── compaction/
-│   │       │   ├── thinking/
-│   │       │   ├── prefix-cache/
-│   │       │   │   ├── PrefixCacheService.ts
-│   │       │   │   ├── PreheatingService.ts  ★
-│   │       │   │   └── StandardPrefix.ts     ★
-│   │       │   ├── agent-chain/
-│   │       │   ├── reasoning/
-│   │       │   ├── context-engine/           ★ 新增模块
-│   │       │   │   ├── ContextEngine.ts
-│   │       │   │   ├── LSPResolver.ts
-│   │       │   │   ├── CodeRAGResolver.ts
-│   │       │   │   ├── ContextAssembler.ts
-│   │       │   │   └── CodeContext.ts
-│   │       │   ├── diff/
-│   │       │   ├── llm/
-│   │       │   │   ├── DeepSeekClient.ts
-│   │       │   │   ├── StreamParser.ts
-│   │       │   │   ├── ToolCallRepair.ts
-│   │       │   │   ├── ModelRouter.ts
-│   │       │   │   └── TokenUsage.ts
-│   │       │   ├── tools/
-│   │       │   │   ├── ToolRegistry.ts
-│   │       │   │   └── builtin/
-│   │       │   │       ├── read.ts / write.ts / edit.ts / bash.ts
-│   │       │   │       └── lsp-tools.ts    ★ 6 个 LSP 工具
-│   │       │   └── project/
-│   │       │
-│   │       ├── plugins/
-│   │       │   ├── PluginRegistry.ts
-│   │       │   └── builtin/
-│   │       │       ├── code-rag/           (降级为 Layer 2)
-│   │       │       ├── mcp-bridge/
-│   │       │       ├── git/
-│   │       │       ├── stats/
-│   │       │       └── language-server/    ★ LSP 插件
-│   │       │
-│   │       ├── ui/
-│   │       │   ├── chat/  editor/  diff/  reasoning/
-│   │       │   ├── agent-chain/  plugin-manager/
-│   │       │   ├── context-panel/          ★ 上下文可视化面板
-│   │       │   └── status-bar/
-│   │       │       └── (Cache% | Preheated? | Tokens | Cost)
-│   │       │
-│   │       └── store/
-│   │
-│   └── cli/
-│
-├── packages/shared/
-└── docs/
+apps/desktop/src/
+├── main/                          # Electron Main Process
+│   ├── envManager.ts              # Capability BC——环境检测/能力推导/Ledger
+│   ├── tools.ts                   # ToolRegistry——工具执行分发
+│   ├── gateway.ts                 # DeepSeek API（forceTool 传递/流式/修复）
+│   ├── timelineLogger.ts          # Session Timeline BC——JSONL 落盘
+│   ├── ipc.ts                     # 进程桥（timeline:log / tools:execute…）
+│   └── workspace.ts               # Workspace BC——项目/文件
+└── renderer/
+    └── src/
+        ├── domain/                # 领域层（纯逻辑——L1 可测）
+        │   ├── turnPolicy.ts      # TurnExecutionPolicy（forceTool 决策）
+        │   ├── agentLoop.ts       # ProgressEvaluator / StuckDetector / parseExecutionPlan
+        │   └── ...                # 确认点/推进门控领域规则
+        ├── ConversationPanel.tsx  # 应用层——对话/确认卡/授权卡/工具卡编排
+        ├── MainWorkspace.tsx      # 应用层——状态机接线（goalConfirmed/executionConfirmed）
+        ├── GoalCard/ExecutionConfirmCard → 已删除（dock 全清——确认走对话内嵌卡）
+        ├── ConfirmCard（.nf-confirmcard）  # 确认/拒绝卡片（目标/执行/达成）
+        └── styles.css             # .nf-confirmcard 等样式
 ```
-
----
-
-## 5. 工具注册 ★ 更新（含 LSP 工具）
-
-```typescript
-class ToolRegistry {
-  constructor() {
-    // 4 核心工具
-    this.register({ name: 'read',  source: 'builtin', ... })
-    this.register({ name: 'write', source: 'builtin', ... })
-    this.register({ name: 'edit',  source: 'builtin', ... })
-    this.register({ name: 'bash',  source: 'builtin', requiresApproval: true, ... })
-
-    // 6 LSP 工具 ★
-    this.register({ name: 'find_definition',  source: 'builtin', ... })
-    this.register({ name: 'find_references',  source: 'builtin', ... })
-    this.register({ name: 'get_imports',      source: 'builtin', ... })
-    this.register({ name: 'get_call_chain',   source: 'builtin', ... })
-    this.register({ name: 'get_type_info',    source: 'builtin', ... })
-    this.register({ name: 'get_diagnostics',  source: 'builtin', ... })
-  }
-}
-```
-
----
 
 ## 6. 关键选型
 
 | 层 | 技术 | 理由 |
 |----|------|------|
-| 桌面 | **Electron** | Monaco 硬约束，不可妥协 |
-| UI | React + Zustand | 轻量 |
-| 编辑器 | **Monaco Editor** | IDE 级体验，产品核心 |
-| 构建 | Vite 6 | Rolldown 加速 |
-| 存储 | SQLite | 对话 + 索引 |
-| LSP | vscode-languageserver-node | 成熟稳定 |
+| 桌面 | Electron | 桌面应用（Monaco 可选）|
+| UI | React | 组件化（确认卡/授权卡）|
+| 领域层 | TypeScript 纯函数 | L1 可测（turnPolicy/agentLoop）|
+| 日志 | JSONL 追加 | 时间线（崩溃保留已写行）|
+| 环境检测 | 一次检测 + 推导 | 消除双源（能力=环境视图）|
 
 ---
 

@@ -1,211 +1,152 @@
-# 00 — 领域权威总纲（重构版 v2.0）
+# 00 — 领域权威总纲（无阶段·目标驱动版 v3.0）
 
-> 版本：v2.0 · 2026-07-31
-> 状态：**实现权威**。本总纲为领域设计的唯一权威；A1–A7 降级为参考（冲突处以本总纲为准）。
-> 重构依据：A8（08-domain-design-audit）第 1 轮审计 8 项 Critical + 14 Major，产品文档（`docs/product/` 100/100）为产品门禁。
-> 方法：PRD 驱动领域建模——产品为问题空间，本总纲为解决方案空间权威；不逐文档修补，直接重构自洽。
-
----
-
-## 1. 模型策略（裁决 D-C1）
-
-**V1 = DeepSeek-only。** 对齐 README 与产品定位「专为 DeepSeek 打造，不是多模型兼容客户端」。
-
-- `DeepSeekGateway` 不引入 provider 抽象层（Gateway 简化的架构红利成立）；
-- 网关接口按单一 provider 设计，但**请求参数构造收敛在 `toDeepSeekParams()` 一处**——若 V2+ 需要多模型，只需在网关内新增 provider 适配，不扩散到领域层；
-- `01` 的「DeepSeek-first + 可扩展」表述标记为 **V2+ 方向**，不进入 V1 实现决策；
-- 产品文档（README/产品定位）已一致，无修改。
-
-**裁决表**：`07` 题头「DeepSeek-only」= 保留 ✅；`02`「唯一适配」= 表述为「V1 唯一适配，V2 可扩展（见 §1）」；`01` §6.3「可扩展」= 标 V2+。
+> 版本：v3.0 · 2026-08-07
+> 状态：**实现权威**。本总纲为领域设计的唯一权威；旧六阶段版（v2.0）及 A1–A7 降级为参考（冲突处以本总纲为准）。
+> 重构依据：无阶段重构（S1-S8——目标驱动 + 能力驱动 + 确认驱动）替代六阶段产品流水线；领域模型重新生成（02/03/04/06 无阶段版）。
+> 方法：领域模型驱动设计——从「确认驱动的执行代理」领域概念出发，不反推现有实现。
 
 ---
 
-## 2. 限界上下文清单（裁决 D-C2 / D-C3 / D-C8）
+## 1. 模型策略
 
-**唯一权威清单：4 层 16 个 BC。** 03 额外建模的 Workspace / ShellAgent / TokenTracker / Configuration / MCPBridge 全部纳入；02 的 Preheating 降级为 PrefixCache 内领域服务（非独立 BC）。
+**V1 = DeepSeek-only。** 网关接口按单一 provider 设计；请求参数构造收敛在 `toDeepSeekParams()` 一处（V2 多模型只动网关）。
 
-### Layer 1: Code（基础编码层）
+**forceTool 传递**：`tool_choice: required`（确认后强制产出）/ `auto`（澄清/等确认/失败诊断）——执行保障策略（§4）的输出经网关传递。
 
-| 限界上下文 | 类型 | 职责 | 聚合根 | 归属裁决 |
-|-----------|------|------|--------|---------|
-| **ToolRegistry** | 通用域 | 工具注册/发现/执行（4 核心 + 6 LSP） | ToolRegistry | 02 保留 |
-| **DeepSeekGateway** | 通用域（防腐层） | API 通信、StreamParser、ToolCallRepair、ModelRouter、**预热端口** | —（防腐层） | 02 保留 |
-| **Editor** | 支撑域 | Monaco、DiffApply、ChangeSet | ChangeSet | 02 保留 |
-| **Workspace** | 支撑域 | 项目文件 + LSP 客户端集成、文件监听 | Workspace | **03 晋升** |
-| **ShellAgent** | 支撑域 | 命令执行沙箱（Main Process） | — | **03 晋升** |
+---
 
-### Layer 2: Design（分析设计层）
+## 2. 限界上下文清单（无阶段·目标驱动）
 
-| 限界上下文 | 类型 | 职责 | 聚合根 |
-|-----------|------|------|--------|
-| **ThinkingLevel** | 核心域 | 推理深度四档 `none\|basic\|medium\|high` → reasoning_effort | ThinkingLevel（VO） |
-| **ReasoningViz** | 核心域 | reasoning_content 捕获 → 结构化 → 分级展示 | ReasoningCapture |
+### 核心域
 
-### Layer 3: Orchestrate（Agent 协作层）
+| 限界上下文 | 职责 | 聚合根 |
+|-----------|------|--------|
+| **Conversation BC** | 目标状态机（Goal → Execution → Achievement）、确认点（用户确认=推进门槛）、执行保障策略（forceTool）、推进门控（模型活动边界）、模型活动边界（确认点未确认 → 停在该确认点）| **Task** |
 
-| 限界上下文 | 类型 | 职责 | 聚合根 |
-|-----------|------|------|--------|
-| **Conversation** | 核心域 | 多轮对话聚合，承载 ThinkingLevel + PrefixState + CompactionConfig | Conversation |
-| **Compaction** | 核心域 | 触发阈值 100 条 / 200K，保留最近 20 条 | CompactionService |
-| **PrefixCache** | 核心域 | Append-Only + **Preheating 服务（归属此处）**，≥90% 命中率 | PrefixCacheState |
-| **ContextEngine** | 核心域 | LSP → CodeRAG → Agent 三层上下文管线 | ContextEngine |
+### 支撑域
 
-### Layer 4: Engineering（产品交付层）
+| 限界上下文 | 职责 | 聚合根 |
+|-----------|------|--------|
+| **Capability BC** | 环境检测（事实来源——一次检测）、能力视图（从环境推导——ready/missing/failed）、能力检查、Ledger 回填（执行结果自学习）| CapabilityRegistry |
+| **Workspace BC** | 项目文件、写入快照/回滚、**计划清单（PlannedFiles——宿主强制边界数据源）** | PlannedFiles |
+| **Session Timeline BC** | 单会话所有步骤统一记录（用户/搭档/工具/授权/确认/状态——时间顺序完整）| Timeline |
 
-| 限界上下文 | 类型 | 职责 | 聚合根 |
-|-----------|------|------|--------|
-| **AgentChain** | 核心域 | YAML 声明式流水线（规格化见 §3） | AgentChain |
-| **PluginSystem** | 支撑域 | 插件注册/生命周期/事件钩子/沙箱（内置 5 插件） | PluginRegistry |
+### 通用域
 
-### 通用支撑（跨层）
+| 限界上下文 | 职责 |
+|-----------|------|
+| **Gateway** | DeepSeek API 通信、流式解析、forceTool 传递、工具调用修复（防腐层）|
+| **ToolRegistry** | 工具注册/发现/执行分发（read/write/edit/bash/check-capability/plan_approval…）|
+| **Configuration** | 用户与项目配置 |
 
-| 限界上下文 | 类型 | 职责 | 聚合根 |
-|-----------|------|------|--------|
-| **TokenTracker** | 通用域 | token/缓存/费用统计（含预热命中率） | TokenTracker |
-| **Configuration** | 通用域 | 用户 & 项目配置 | Configuration |
-| **MCPBridge** | 通用域 | MCP 协议外部工具集成（V1 可选） | — |
+### 类型判定规则
 
-**类型判定规则**（解决 D-C3）：核心 = 产品差异化壁垒（上下文/推理/流水线）；支撑 = 核心的配合载体（编辑器/工作区/插件）；通用 = 无业务差异的基础设施（网关防腐/工具执行/配置/统计）。**PluginSystem 定为支撑域**（插件是产品形态核心配合，非纯通用设施）；**ContextEngine 定为核心域**（LSP 先行是产品独有壁垒）。
+核心 = 产品差异化壁垒（目标驱动的执行——确认驱动/防只说不做/宿主边界）；支撑 = 核心的配合载体（能力/工作区/可观测性）；通用 = 无业务差异的基础设施（网关/工具/配置）。
 
 ### BC 职责边界判定表（防实现期双源）
 
 | 边界对 | 归属判定 | 理由 |
 |--------|---------|------|
-| **Workspace（文件+LSP 集成） vs Editor（Monaco+Diff）** | 文件监听 → Workspace；Diff/ChangeSet 渲染 → Editor | 文件系统/LSP 是 Workspace 的输入面；Editor 只消费 ChangeSet 做展示与交互，不直接碰 LSP |
-| **ContextEngine（上下文管线） vs Workspace** | LSP 查询与上下文组装 → ContextEngine；LSP 连接/增量订阅 → Workspace | Workspace 管 LSP 客户端生命周期（连接/重连/文件变更事件）；ContextEngine 只调用其查询端口做 Layer 1-3 组装 |
-| **DeepSeekGateway.ModelRouter vs ThinkingLevel** | 档位定义 → ThinkingLevel；路由决策（档位+任务→模型）→ ModelRouter | ThinkingLevel 是值对象（四档定义），ModelRouter 是决策者（读档位+任务上下文）；ThinkingLevel 不依赖 ModelRouter |
-| **PrefixCache vs DeepSeekGateway** | 前缀构建/命中状态 → PrefixCache；实际 API 请求 → Gateway | PrefixCache 管状态与策略；Gateway 是唯一 API 出口（含预热请求，裁决 D-C7） |
-| **AgentChain vs Conversation** | 流水线编排（角色/模板/Stage）→ AgentChain；对话上下文/消息流 → Conversation | AgentChain 描述"怎么跑"，Conversation 承载"跑在什么上"；Conversation 引用链结果 |
-| **ToolRegistry vs ShellAgent** | 工具注册/执行分发 → ToolRegistry；命令执行沙箱（Main）→ ShellAgent | ToolRegistry 是目录与分发；ShellAgent 是 bash 执行者，ToolRegistry 调用其端口 |
-| **ToolRegistry vs DeepSeekGateway（ToolCallRepair）** | 工具执行分发 → ToolRegistry；工具调用**修复**（畸形 JSON/未知工具/截断/风暴，4 轮）→ DeepSeekGateway | 修复是模型输出的清洗，属网关防腐职责（对齐 07 §7 ToolCallRepair）；ToolRegistry 只负责"执行"，不负责"修"——调用顺序：Gateway 修好 → ToolRegistry 执行 |
-
-**使用规则**：实现新能力时，先查本表确定归属 BC；表未覆盖的边界，按「职责单一 + 输入面 vs 决策面」判定，并在本表追加一行（防漂移）。
+| **Conversation（确认点/推进） vs Workspace（文件）** | 确认点状态机 → Conversation；文件操作执行 → Workspace | Conversation 决定「能不能动」，Workspace 执行「怎么动」|
+| **Conversation（推进门控） vs Capability（环境）** | 模型活动边界/确认点 → Conversation；环境检测/能力推导 → Capability | 能力是环境的事实视图，不是推进决策 |
+| **Workspace（计划清单） vs Conversation（写边界）** | 计划清单存储/批准记录 → Workspace；写边界判定（是否清单内）→ Conversation 推进门控读取清单 | PlannedFiles 是数据源，门控是决策者 |
+| **Gateway（工具修复） vs ToolRegistry（执行）** | 工具调用修复（畸形/未知）→ Gateway；工具执行分发 → ToolRegistry | 修复是模型输出清洗（网关防腐），执行是注册分发 |
 
 ---
 
-## 3. AgentChain 规格化（裁决 D-C5 / D-M3）
+## 3. 确认点规格化（目标驱动核心）
 
-删除全部「同旧版」占位。V1 规格化如下：
+### 3.1 三个状态确认点
 
-### 6 种 Agent 角色
+| 确认点 | 含义 | 确认动作（结构化）| 未确认时模型活动边界 |
+|---|---|---|---|
+| **GoalConfirmed** | 用户确认「做什么」——目标驱动的原点 | 确认目标 / 重新描述 | 只澄清（不产生执行动作）|
+| **ExecutionConfirmed** | 用户确认「怎么做」 | 确认执行 / 修改方案 | 只给方案（不 write/edit/bash）|
+| **AchievementConfirmed** | 用户确认「做完了」 | 已解决 / 还要改 | 持续执行（不收敛）|
 
-| 角色 | 职责 | 默认模型 | 默认 ThinkingLevel |
-|------|------|---------|-------------------|
-| `analyst` | 分析问题、定位相关代码（ContextEngine 为主） | v4-flash | basic |
-| `architect` | 设计方案、权衡取舍、产出修改计划 | v4-pro | medium |
-| `implementer` | 执行修改（read/write/edit/bash） | v4-flash | basic |
-| `reviewer` | 审核 ChangeSet、校验不变式 | v4-pro | medium |
-| `researcher` | 外部调研（文档/API/竞品，V1 可选） | v4-flash | none |
-| `compactor` | 对话压缩摘要（thinking=none） | v4-flash | none |
+### 3.2 确认语义（行业共识）
 
-### 4 个内置模板（YAML）
+- 确认 = **结构化显式动作**（确认卡按钮）——非确认词匹配（误触发不可靠）
+- 确认点未处理（未确认未拒绝）= **等待**（blocking——模型停在该确认点——不推进、不默认放行）
+- 确认/拒绝显式三态（对齐 OpenHands USER_CONFIRMED/USER_REJECTED、Cline allow/always/reject）
 
-```yaml
-# 模板 1: single-agent —— 单 Agent 直答（V1 默认；产品三步工作流映射此链）
-stages:
-  - { agent: analyst, tools: [read, find_definition, get_diagnostics] }
+### 3.3 确认点 = 推进门槛（不变式）
 
-# 模板 2: analyze-implement —— 分析 → 实现
-stages:
-  - { agent: analyst,   tools: [read, find_definition, find_references] }
-  - { agent: implementer, tools: [read, write, edit, bash] }
-
-# 模板 3: implement-review —— 实现 → 审核
-stages:
-  - { agent: implementer, tools: [read, write, edit, bash] }
-  - { agent: reviewer,    tools: [read, get_diagnostics] }
-
-# 模板 4: analyze-implement-review —— 三步全链（V1 手动任务可选）
-stages:
-  - { agent: analyst,     tools: [read, find_definition, get_call_chain] }
-  - { agent: architect,   tools: [read, get_type_info], thinkingLevel: medium }
-  - { agent: implementer, tools: [read, write, edit, bash] }
-  - { agent: reviewer,    tools: [read, get_diagnostics], thinkingLevel: medium }
-```
-
-**V1 产品映射**：产品三步工作流（分析→确认→修改）由 **single-agent 链 + 用户确认闸门**实现（搭档单角色，不引入多 Agent 并行——对齐 D0 V1 范围「不做多 Agent 并行」）。多 Stage 模板为配置能力，V1 默认不启用多 Agent 并行编排。
+- 未确认目标 → 不进入执行（模型只澄清）
+- 未确认执行 → 不产生执行动作（write/edit/bash——结构性：状态机未到下一态）
+- 未确认解决 → 不收敛（forceTool 保持——不能自宣布完成停手）
 
 ---
 
-## 4. 工具面（裁决 D-C4）
+## 4. 执行保障规格化（TurnExecutionPolicy）
 
-**统一叙事：Agent 可见 10 工具 = 4 核心 + 6 LSP。**
-
-- 「叙述性 system prompt < 300 tokens」仅指 system 指令文本；tool defs 计入 StandardPrefix（总 5–10K）；
-- 4 核心：`read` / `write` / `edit` / `bash`（bash 需审批）；
-- 6 LSP：`find_definition` / `find_references` / `get_imports` / `get_call_chain` / `get_type_info` / `get_diagnostics`；
-- 02 原则 1 / UL 同步改为「10 工具（4+6），叙述性 prompt <300」。
-
----
-
-## 5. 上下文与 1M 预算（裁决 D-M10 / D-M11）
-
-**以 07 §4 为权威**（与 1M 战略资源原则一致）：
-
-```
-固定前缀    5-10K    缓存基石（system 叙述 <300 + tool defs + 项目元）
-LSP 上下文  5-30K    精准注入，仅相关文件（ContextEngine Layer 1）
-CodeRAG     0-20K    仅 LSP 不够时启用（Layer 2）
-对话历史    5-50K    压缩摘要 + 最近 20 条（Compaction 100条/200K 触发）
-推理空间    100-500K  Pro + reasoning_effort=max
-工具结果    不定      大文件读、bash 输出
-安全余量    200K+     永不满
-```
-
-Compaction 触发：**100 条 / 200K**，保留最近 20 条，压缩用 `compactor` 角色（thinking=none），压缩后 20 条形成新缓存基线（02 原则 5 补触发值）。
+| 输入 | 决策 |
+|------|------|
+| 目标未确认 | 不强制（澄清）|
+| 执行未确认 | 不强制（等确认）|
+| 目标+执行确认、无产出 | **强制**（防只说不做）|
+| 上一轮工具失败 | 释放（模型诊断修正——required 压制诊断是反模式）|
+| 计划文件写完 或 达成确认 | 释放（模型可收敛——写 1 文件 ≠ 任务达成）|
 
 ---
 
-## 6. Preheating 归属 + EventBus 规则（裁决 D-C7 / D-C8 / D-M8）
+## 5. 宿主强制边界（模型漂移防护——行业共识）
 
-**Preheating**：PrefixCache BC 内的**领域服务**（操作 `PrefixCacheState`），非独立 BC。状态字段：`preheatingStatus` / `standardPrefix` / `history`（以 04 为准）。
-
-**EventBus 唯一通道的精确规则**：
-1. 跨模块**通知**一律走 EventBus（`preheat.started/completed/failed` 等）；
-2. **数据/请求不经过 EventBus**——预热必须调用 `DeepSeekGateway` 的端口（`gateway.preheat(prefix)`），不得直连 `deepseek.streamChat`；
-3. `DeepSeekClient`/`PreheatingService` 网络侧收敛在 **Main Process**（Electron 主进程持 Gateway；renderer 经 IPC 调用），裁决 D-M8。
+- **计划清单（PlannedFiles）**：plan_approval 批准文件集合——模型只能写清单内——**清单对模型显式可见**（系统提示注入）
+- **追加语义**：分批 plan_approval 合并（Codex rules AppendRule 同理——不覆盖前批）
+- **拒绝回填边界**：写清单外被拒 → 拒绝信息带清单内容（「X 不在批准清单（批准的是：A/B/C）」）——模型回到边界内
 
 ---
 
-## 7. 产品 ↔ 领域 V1 矩阵（裁决 D-C6 / D-M14）
+## 6. 能力与环境（Capability BC）
 
-| 领域能力 | V1 产品形态 | 门禁 |
-|---------|------------|------|
-| AgentChain（single-agent 链） | 搭档三步工作流（分析→确认→修改） | ✅ V1 做 |
-| DiffApply / ChangeSet | Diff 审核（摘要→逐处→写入）| ✅ V1 做（产品核心） |
-| ContextEngine（LSP 三层） | 后台能力，无 UI；@引用文件优先 | ✅ V1 做（无 UI） |
-| PrefixCache + Preheating | 后台；「本轮用量」折叠显示 Cache% | ✅ V1 做（无 UI） |
-| Compaction | 后台自动 | ✅ V1 做（无 UI） |
-| ThinkingLevel | 无 UI；后台默认 `basic`（产品设置不含此档） | ✅ V1 后台，UI 进 V2 |
-| ReasoningViz | 详情面板「🧠 怎么看这个问题」推理展示 | ✅ V1 做（产品 §3.4 动效） |
-| TokenTracker | 「本轮用量」折叠（12K tokens/缓存命中 87%） | ✅ V1 做（无独立 StatusBar 项） |
-| StatusBar | 产品权威：`🟢 就绪 │ branch │ 待审核: N`；领域指标进「本轮用量」 | ✅ 产品 `00` §3.3 权威 |
-| PluginSystem | 内置插件（V1 无插件市场） | ✅ V1 做（无市场） |
-| MCPBridge | 不进 V1 产品门禁 | ⏸ V1 不做（领域预留） |
-| 多 Agent 并行 / Worktree | D0 范围外 | ❌ V2+ |
+- **环境是事实来源**（一次检测：runtime/依赖/工具链/宿主 runtime）——**能力是语义视图**（从环境推导——不独立二次检测——消除双源）
+- **Ledger 回填**：执行结果回填能力状态（bash 失败归因 → 降级 failed；成功恢复）——自学习
+- **环境快照注入模型**（项目根/runtime/依赖/能力——模型开箱即知——不需要探索确认环境）
 
 ---
 
-## 8. 术语表补充（裁决 D-M12）
+## 7. 工具面
 
-在 02 §11 基础上补充：`ChangeSet`（暂存改动集合，状态 proposed→accepted→applied）、`DiffApply`（原子 apply 到文件系统）、`ModelRouter`（Flash↔Pro 路由）、`ToolCallRepair`（4 轮修复）、`handoff`（Stage 间结构化 JSON 交接）、`StandardPrefix`（固定前缀，缓存基石）、`Preheating`（预热服务，属 PrefixCache）。
+| 工具 | 分类 | 说明 |
+|------|------|------|
+| read / write / edit / bash | 核心 | bash 需授权；write/edit 受执行确认 + 计划清单双重边界 |
+| check-capability | 能力 | 环境+能力视图（确认目标后调用）|
+| plan_approval | 规划 | 文件清单批准（追加——宿主边界）|
+| search / LSP 工具 | 信息 | 定位/查询（放行——不触发执行边界）|
 
 ---
 
-## 9. Critical 裁决追溯表
+## 8. 产品 ↔ 领域矩阵（无阶段）
 
-| ID | 裁决 | 落点 |
-|----|------|------|
-| D-C1 | V1 = DeepSeek-only；`01` 可扩展标 V2+ | §1 |
-| D-C2 | 唯一 BC 清单 4 层 16 个；03 额外 5 个纳入 | §2 |
-| D-C3 | 类型按壁垒/配合/通用判定；PluginSystem=支撑、ContextEngine=核心 | §2 |
-| D-C4 | 统一「10 工具（4+6）」；叙述性 prompt <300 | §4 |
-| D-C5 | 6 角色 / 4 模板规格化；V1=single-agent 链 | §3 |
-| D-C6 | 产品↔领域 V1 矩阵（做/无UI后台/不做） | §7 |
-| D-C7 | EventBus 只发通知；预热经 Gateway 端口 | §6 |
-| D-C8 | Preheating = PrefixCache 内服务，非独立 BC | §2/§6 |
+| 领域能力 | 产品形态 | 门禁 |
+|---------|---------|------|
+| 目标状态机 + 确认点 | 对话内嵌确认卡（目标/执行/达成——确认/拒绝按钮）| ✅ V1 |
+| 执行保障（forceTool）| 后台（确认后无产出强制模型动手）| ✅ V1 |
+| 推进门控（活动边界）| 后台（确认点未确认 → 模型停在该确认点）| ✅ V1 |
+| 宿主强制边界（计划清单）| 计划批准卡（批准/拒绝）+ 清单注入模型 | ✅ V1 |
+| 能力检查（check-capability）| 确认目标后自动 + 缺失征求用户 | ✅ V1 |
+| 环境快照注入 | 后台（系统提示注入）| ✅ V1 |
+| 会话时间线 | 日志（logs/timeline-*.jsonl）| ✅ V1 |
+| 结构化确认卡 | 对话流内嵌（确认/拒绝——像授权卡）| ✅ V1 |
+| 多 Agent / Worktree / MCP | 范围外 | ⏸ V2+ |
 
-**Major 处置**：D-M1 命名统一 NeonForge；D-M2 ThinkingLevel 四档（§2）；D-M3 已随 §3 清除占位；D-M4 保留 `preheat.completed`；D-M5 LSP 事件补全（见 `06` 修订）；D-M6 `05` 事件计数引用 `06`；D-M7 以 TS 合同为准；D-M8 见 §6；D-M9 不变式并入 `04`§5；D-M10 见 §5；D-M11 见 §5；D-M12 见 §8；D-M13 core 重定义为「领域核心模块（renderer/src/core）<5000 行」；D-M14 见 §7。
+---
+
+## 9. 术语表（无阶段）
+
+| 术语 | 定义 |
+|------|------|
+| 目标驱动（Goal-driven）| 任务围绕「达成什么」组织——目标确认是推进的原点 |
+| 确认点（Confirmation Point）| 推进的门槛——目标/执行/达成三处用户确认 |
+| 推进（Progression）| 跨确认点的状态转换——唯一通道是用户确认 |
+| 自推进（Self-progression）| 确认点内部的模型自主工作（工具链）|
+| 执行保障（Execution Policy）| 确认后防只说不做的 forceTool 决策 |
+| 计划清单（Planned Files）| plan_approval 批准的可写文件集合（宿主边界）|
+| 能力视图（Capability View）| 从环境推导的能力状态（ready/missing/failed）|
+| 环境快照（Environment Snapshot）| 一次检测的事实（runtime/依赖/工具链）——注入模型 |
+| 会话时间线（Session Timeline）| 单会话所有步骤统一日志（可观测性）|
+| 确认卡（Confirm Card）| 确认点的结构化 UI（确认/拒绝按钮）|
 
 ---
 
@@ -213,10 +154,9 @@ Compaction 触发：**100 条 / 200K**，保留最近 20 条，压缩用 `compac
 
 | 文档 | 处置 |
 |------|------|
-| 01 / 06 / 07 | 保留为参考（冲突以本总纲为准；07 仅 §1 模型策略与 §3.1 预热对齐总纲） |
-| 02 | 降级参考；BC 清单/原则/UL 以本总纲 §2/§4/§8 为权威 |
-| 03 | 降级参考；BC 全景以本总纲 §2 为权威（03 标注「早期模型」已自知） |
-| 04 / 05 | 保留为参考；Preheating 归属（04 已一致）、进程边界（§6）、模块树对齐 §2 |
-| 08（A8 审计） | 追加本总纲为「第 2 轮裁决产出」，Critical 全部闭合 |
+| 旧 00（v2.0 六阶段）/ 01 | 保留为历史参考（冲突以本总纲 v3.0 为准）|
+| 02 / 03 / 04 / 06 | 已重新生成（无阶段·目标驱动版）——权威 |
+| 05 架构 / 07 网关 / 08 审计 / 09 追溯 | 更新中（无阶段对齐）|
+| 产品文档（docs/product/）| 按无阶段对齐（目标驱动——确认卡/确认点）|
 
-**下一步**：按本总纲进入工程拆解（to-tickets）；实现时产品门禁仍先读 `product/00` + `04-alignment`。
+**下一步**：实现按本总纲 v3.0 对齐（确认点/执行保障/宿主边界/能力环境——领域层已就绪：turnPolicy/确认卡/计划清单/环境注入/时间线）。
