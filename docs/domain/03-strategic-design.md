@@ -89,6 +89,7 @@
 | Gateway（模型网关）| DeepSeek API 通信、流式解析、forceTool 传递、工具调用修复 |
 | ToolRegistry（工具注册）| 工具注册、发现、执行分发（read/write/edit/bash/check-capability/plan_approval…）|
 | Configuration | 用户与项目配置 |
+| 技术基础设施（六阶段时代保留）| compact（压缩）/ context（上下文）/ codeRag（语义搜索）/ preheat（缓存预热）/ pluginSystem（插件）/ lsp（LSP 工具）——通用技术载体——非领域核心（实现保留——不进入无阶段决策）|
 
 ## 5. 上下文映射
 
