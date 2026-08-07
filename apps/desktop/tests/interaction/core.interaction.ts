@@ -220,16 +220,28 @@ test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 1
     window.__emit({ type: 'tool-call', toolCall: { name: 'edit', args: { path: '/test/b.txt', old: 'a', new: 'b' } } })
     window.__emit({ type: 'done' })
   })
+  // 2026-08-07 会话级单一 PENDING（重构）：确认卡待决策 → 执行类工具动作无效（write 被拦——未执行）——
+  // 先点「确认目标」+「确认执行」→ 再 emit write（模型根据决策重新做）
+  await expect(page.getByRole('button', { name: '确认目标' })).toBeVisible()
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expect(page.getByRole('button', { name: '确认执行' })).toBeVisible()
+  await page.getByRole('button', { name: '确认执行' }).click()
+  await page.waitForTimeout(300)
+  await page.evaluate(() => {
+    window.__emit({ type: 'tool-call', toolCall: { name: 'write', args: { path: '/test/a.txt', content: 'x' } } })
+    window.__emit({ type: 'tool-call', toolCall: { name: 'edit', args: { path: '/test/b.txt', old: 'a', new: 'b' } } })
+    window.__emit({ type: 'done' })
+  })
   // 授权卡风险明示（ticket 14 / v31 B1 人类化）：需要授权·写入文件 + 影响路径 + 备份提示
   await expect(page.locator('.nf-toolcall__hint').first()).toContainText('需要授权 · 写入文件')
   await expect(page.locator('.nf-toolcall__impact').first()).toContainText('/test/a.txt')
   await expect(page.locator('.nf-toolcall__note').first()).toContainText('备份')
   // 疲劳防护：同批 ≥2 低危待授权 → 合并授权按钮出现
   await expect(page.locator('.nf-toolcall__approveall')).toBeVisible()
-  // 点击合并授权 → 两个卡全部执行完成
+  // 点击合并授权 → 授权卡消失（2 个执行完成 + 第一次 pending 拦截的 2 个「未执行」= 共 4 done——领域语义：确认前动作无效残留显示）
   await page.locator('.nf-toolcall__approveall').click()
   await page.waitForTimeout(600)
-  await expect(page.locator('.nf-toolcall--done')).toHaveCount(2)
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(4)
   await expect(page.locator('.nf-toolcall__approveall')).toHaveCount(0)
 })
 

@@ -246,6 +246,9 @@ export default function ConversationPanel({
   const planApprovedRef = useRef(false)
   const goalConfirmedRef = useRef(false) // 2026-08-06 需求阶段门控：模型输出【目标确认】→ true（无阶段重构 S3：需求确认→目标确认——确认后 write/edit/bash 放行——直接执行）
   useEffect(() => { if (goalConfirmed) goalConfirmedRef.current = true }, [goalConfirmed]) // 用户确认（MainWorkspace state）→ 同步（无阶段重构 S4：prop 改名 goalConfirmed）
+  // 2026-08-07 执行确认门控（用户「确认卡不选就不执行后续」——与授权卡同语义）：执行未确认 → write/edit/bash 不执行
+  const executionConfirmedRef = useRef(false)
+  useEffect(() => { if (executionConfirmed) executionConfirmedRef.current = true }, [executionConfirmed])
   useEffect(() => {
     if (initialPrompt && initialPrompt.trim()) {
       inputRef.current = initialPrompt.trim()
@@ -434,31 +437,6 @@ export default function ConversationPanel({
       const tc = chunk.toolCall
       // 2026-08-06 用户反馈「第一句话就有一个工具执行」：目标确认前工具门控——目标没澄清前不执行任何工具
       // （目标都没澄清，看目录/写文件都没意义）；工具直接 done + 提示（maybeContinue 回填给模型 → 模型停止调工具继续澄清目标）
-      // 2026-08-07 无阶段重构 S3：flowStage===0 → !goalConfirmedRef.current（目标未确认不探索）
-      if (!goalConfirmedRef.current && tc.name === 'bash' && initialPrompt) {
-        setMessages((prev) => {
-          const last = prev[prev.length - 1]
-          if (!last || last.role !== 'assistant') return prev
-          const calls = (last.toolCalls ?? []).map((c) => c.name === tc.name && c.status === 'pending'
-            ? { ...c, status: 'done' as const, result: '目标确认前先不执行命令——先把目标问清楚再动手' }
-            : c)
-          return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
-        })
-        return
-      }
-      // 2026-08-06 目标确认前 write/edit 门控（用户「需求阶段不是不会实际动手吗」——目标未确认不改文件；【目标确认】输出 → goalConfirmedRef 放行——确认后直接执行）
-      // 2026-08-07 无阶段重构 S3：flowStage===0 → !goalConfirmedRef.current；删除设计阶段门控（无阶段无设计阶段——方案确认前改写文件由执行确认门控 S4 兜底，当前弹授权卡由用户决定）
-      if (!goalConfirmedRef.current && (tc.name === 'write' || tc.name === 'edit') && initialPrompt) {
-        setMessages((prev) => {
-          const last = prev[prev.length - 1]
-          if (!last || last.role !== 'assistant') return prev
-          const calls = (last.toolCalls ?? []).map((c) => c.name === tc.name && c.status === 'pending'
-            ? { ...c, status: 'done' as const, result: '目标确认前不改文件——先输出【目标确认：…】让用户确认，确认后再动手' }
-            : c)
-          return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
-        })
-        return
-      }
       // 2026-08-03 v35：workingStage 人类化（原「调用工具 bash…」技术腔——按工具名映射自然描述）
       const stageMap: Record<string, string> = {
         read: '正在读取文件…', write: '正在写入文件…', edit: '正在修改文件…',
@@ -473,6 +451,28 @@ export default function ConversationPanel({
       setWorkingStage(stageMap[tc.name] ?? (tc.name.startsWith('find_') || tc.name.startsWith('get_') ? '正在查代码…' : '正在处理…'))
       // ticket 14 L4 委托：低危文件操作（write/edit）命中委托规则 → 免确认直接执行（仍快照可回滚）；bash 高危永远单独授权
       // 2026-08-04 授权架构 v4：任务级信任——「允许并记住」的文件 write/edit 自动（沙箱内）；read/bash 只读由 main preApproval 裁决（沙箱内自动/沙箱外 ask）
+      // 2026-08-07 会话级单一 PENDING 状态机（领域模型 §3.2/§3.4——重构：3 处分散 done 拦截合并为统一 pending 检测）：
+      // 卡弹出（确认卡/授权卡）→ 等用户决策——模型执行类动作（write/edit/bash——有副作用）无效（做了白做——不执行）；
+      // 信息类（read/search/check-capability——只读无副作用）放行（模型可准备方案/查证——「白做」对有副作用动作才有意义）
+      const confirmPending = (content: string, calls: Array<{ name: string; status?: string }>): boolean => {
+        const execPending = calls.some((c) => (c.name === 'write' || c.name === 'edit' || c.name === 'bash') && c.status === 'pending')
+        return (
+          (content.includes('【目标确认') && !goalConfirmedRef.current)  // 目标确认卡待决策
+          || (goalConfirmedRef.current && !executionConfirmedRef.current && (content.includes('【执行方案') || execPending))  // 执行确认卡（方案提议/要动手）
+          || (content.includes('【已达成') && !goalAchievedRef.current)  // 达成确认卡待决策
+        )
+      }
+      if (confirmPending(streamingRef.current.content, [tc]) && (tc.name === 'write' || tc.name === 'edit' || tc.name === 'bash')) {
+        setMessages((prev) => {
+          const last = prev[prev.length - 1]
+          if (!last || last.role !== 'assistant') return prev
+          const calls = (last.toolCalls ?? []).map((c) => c.name === tc.name && c.status === 'pending'
+            ? { ...c, status: 'done' as const, result: `${tc.name} 等待你的决策——此动作未执行（点「确认执行」卡后模型会重新执行）` }
+            : c)
+          return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
+        })
+        return
+      }
       // 2026-08-06 偏离清单拦截（基于事实：06:03 已规划但写「正确路径」偏离批准清单 → 逐个弹授权/规划外文件——用户「相同文件弹授权」根因）：
       // 已规划（planApprovedRef）但文件不在批准清单 → 不弹逐个卡——拒绝 + 引导补充 plan_approval（清单与实际始终一致）
       if (tc.name === 'write' && planApprovedRef.current && !plannedFilesRef.current.has(trustPath(tc.args.path))) { // 2026-08-06 edit 豁免（改现有文件=操作明确——B 类文件操作直接改）；write 新建强制规划
@@ -547,7 +547,15 @@ export default function ConversationPanel({
       if (!lastMsg || !lastMsg.toolCalls || lastMsg.toolCalls.length === 0) { releaseWorking(); return }
       const pending = lastMsg.toolCalls.filter((c) => c.status === 'pending')
       const needsApproval = lastMsg.toolCalls.some((c) => c.status === 'need-approval' || c.status === 'plan-approval')
-      if (needsApproval) { releaseWorking(); return } // 有待授权——等用户点允许（approveToolCall 后触发续聊）
+      // 2026-08-07 会话级单一 PENDING（重构——确认卡待决策 → 模型停——动作无效——用户决策是唯一输入）
+      const lastContent = lastMsg.content ?? ''
+      const execPendingCalls = lastMsg.toolCalls.filter((c) => (c.name === 'write' || c.name === 'edit' || c.name === 'bash') && c.status === 'pending')
+      const confirmPending = (
+        (lastContent.includes('【目标确认') && !goalConfirmedRef.current)  // 目标确认卡
+        || (goalConfirmedRef.current && !executionConfirmedRef.current && (lastContent.includes('【执行方案') || execPendingCalls.length > 0))  // 执行确认卡（方案提议/要动手）
+        || (lastContent.includes('【已达成') && !goalAchievedRef.current)  // 达成确认卡
+      )
+      if (needsApproval || confirmPending) { releaseWorking(); return } // 卡弹出（确认卡/授权卡）——等用户决策（模型停——不续聊）
       if (pending.length === 0) {
         // 2026-08-04 重构：同工具重复检测（同一 name+args 连续 3 次 = 死循环——防模型空转不产出；跨调用累积——原局部变量每轮重置失效）
         // 2026-08-05 体验反馈：只统计写工具（write/edit）——read/bash 只读重复是模型合理排查（曾因 read 摘要化反复读同文件被误伤），不触发；真正空转由 depth 40 兜底
