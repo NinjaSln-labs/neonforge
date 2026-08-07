@@ -235,8 +235,8 @@ test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 1
 
 // 2026-08-04 回归：0-1 从零开始「确认推进」按钮常驻可见（原 flow 面板在滚动容器内——对话一多按钮滚出视口，用户找不到）
 // 2026-08-07 无阶段重构 S4：推进按钮 → 目标确认卡（GoalCard——.nf-reqcard）——dock 常驻可见断言保持
-// 2026-08-07 无阶段修复（用户实测「快速确认开始还在」）：GoalCard 是空态快捷入口——用户回复模型（对话澄清接管）后隐藏
-test('0-1 从零开始：目标确认卡可见（不在滚动容器）→ 用户回复模型后隐藏', async ({ page }) => {
+// 2026-08-07 无阶段修复（用户「GoalCard 要删除」——目标确认走对话澄清，dock 快速确认卡是旧需求阶段残留）：GoalCard 删除回归
+test('0-1 从零开始：GoalCard 已删除（目标确认走对话澄清——dock 无快速确认卡）', async ({ page }) => {
   await page.addInitScript(() => {
     window.neonforge = {
       version: 'test',
@@ -258,21 +258,13 @@ test('0-1 从零开始：目标确认卡可见（不在滚动容器）→ 用户
   })
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
-  // 启动页输入需求（initialPrompt 非空 → 目标确认卡显示）
+  // 启动页输入需求（对话澄清路径——GoalCard 已删除，dock 不再出现快速确认卡）
   await page.locator('.nf-start__input').fill('做一个设计类小游戏')
   await page.locator('.nf-start__input').press('Enter')
-  const goalCard = page.locator('.nf-reqcard')
-  await expect(goalCard).toBeVisible()
-  // 修复验证：目标确认卡不在 .nf-panel__body（滚动容器）内——对话滚动不隐藏
-  const inScrollBody = await goalCard.evaluate((el) => !!el.closest('.nf-panel__body'))
-  expect(inScrollBody).toBe(false)
-  // 用户回复模型（对话澄清接管）→ 目标确认卡隐藏（不再赖着——12:21 实测「快速确认开始还在」根因修复）
-  await page.locator('.nf-chat__input textarea').fill('搭积木玩法')
-  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
   await page.waitForTimeout(300)
-  await expect(goalCard).toHaveCount(0)
-  // 对话主通道接管：执行确认卡出现（对话中常驻确认入口——目标确认选项卡可见）
-  await expect(page.locator('.nf-exec-card')).toBeVisible()
+  await expect(page.locator('.nf-reqcard')).toHaveCount(0)
+  // 目标未确认（mock 无模型回复）→ 执行确认卡也不出现（goalConfirmed 前置）
+  await expect(page.locator('.nf-exec-card')).toHaveCount(0)
 })
 
 // 2026-08-04 回归：点「确认推进」→ 对话区出现「已进入【X】阶段」反馈消息
@@ -294,8 +286,8 @@ test('0-1 从零开始：目标确认卡确认 → 目标确认 + 执行确认�
       },
       gateway: {
         validate: async () => ({ ok: true }),
-        streamChat: async (opts: { messages: Array<{ role: string; content: string }> }) => { (window as unknown as { __sentMsgs: Array<{ role: string; content: string }> }).__sentMsgs = opts.messages; setTimeout(() => streamCb?.({ type: 'done' }), 10); return { ok: true } },
-        onStreamChunk: (cb: (c: { type: string }) => void) => { streamCb = cb; return () => {} }
+        streamChat: async (opts: { messages: Array<{ role: string; content: string }> }) => { (window as unknown as { __sentMsgs: Array<{ role: string; content: string }> }).__sentMsgs = opts.messages; setTimeout(() => streamCb?.({ type: 'content', text: '【目标确认：做一个网页射击游戏，打开就能玩，发给朋友，先做能玩的版本】' }), 10); setTimeout(() => streamCb?.({ type: 'done' }), 20); return { ok: true } },
+        onStreamChunk: (cb: (c: { type: string; text?: string }) => void) => { streamCb = cb; return () => {} }
       },
       tools: { execute: async () => ({ ok: true }), list: async () => [] },
       context: { resolve: async () => ({ fragments: [] }) },
@@ -306,19 +298,13 @@ test('0-1 从零开始：目标确认卡确认 → 目标确认 + 执行确认�
   })
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
-  // 启动页输入需求（initialPrompt 非空 → 目标确认卡出现；避开「射击」等预选关键词，4 项需全点选）
+  // 启动页输入需求（GoalCard 已删除——目标确认走对话澄清：模型澄清 + 候选选项卡引导 + 自由输入）
   await page.locator('.nf-start__input').fill('帮我做个网页游戏')
   await page.locator('.nf-start__input').press('Enter')
   await page.waitForTimeout(300)
-  // 目标确认卡：输入后出现（initialPrompt 非空）→ 点选 4 项 → 确认目标
-  await expect(page.locator('.nf-reqcard')).toBeVisible()
-  await page.locator('.nf-reqcard__chip', { hasText: '射击游戏' }).click()
-  await page.locator('.nf-reqcard__chip', { hasText: '网页打开就能玩' }).click()
-  await page.locator('.nf-reqcard__chip', { hasText: '发给朋友玩' }).click()
-  await page.locator('.nf-reqcard__chip', { hasText: '先做个能玩的版本' }).click()
-  await page.locator('.nf-reqcard__actions button').click()
-  // 目标确认后：目标卡消失 + 执行确认卡出现（无阶段：目标确认 → 能力检查/执行方案 → 确认执行）
+  // GoalCard 已删除：dock 无快速确认卡
   await expect(page.locator('.nf-reqcard')).toHaveCount(0)
+  // 模型输出【目标确认：】标记 → 目标确认 → 执行确认卡出现（无阶段：目标确认 → 能力检查/执行方案 → 确认执行）
   await expect(page.locator('.nf-exec-card')).toBeVisible()
   // 无阶段：对话区不再出现「已进入【X】阶段」提示（阶段推进反馈删除）
   await expect(page.locator('.nf-chat__list .nf-msg--assistant').filter({ hasText: '已进入【设计】阶段' })).toHaveCount(0)
@@ -402,24 +388,8 @@ test('启动页方案 A：输入后按 Enter → 从零开始并自动发送', a
   await expect(page.locator('.nf-msg--user')).toContainText(/记账工具/)
 })
 
-// 2026-08-04 体验修复（用户实测：已说「3D射击」还要重选）：需求卡按首句关键词预选「做什么」
-test('需求卡：首句含「射击」→ 「做什么」自动预选射击游戏', async ({ page }) => {
-  await mockBridge(page)
-  await page.goto('http://localhost:5175/')
-  await expect(page.locator('.nf-start')).toBeVisible()
-  await page.locator('.nf-start__input').fill('我要做一个3D射击小游戏')
-  await page.getByRole('button', { name: '从零开始' }).click()
-  // 自动发送后（mock 无模型回复）需求未确认 → 需求卡显示；「射击游戏」chip 已预选
-  await expect(page.locator('.nf-reqcard')).toBeVisible()
-  const chip = page.locator('.nf-reqcard__chip', { hasText: '射击游戏' })
-  await expect(chip).toHaveAttribute('aria-pressed', 'true')
-  // 预选后无需再选「做什么」——点其他 3 项即可确认
-  await page.locator('.nf-reqcard__chip', { hasText: '网页打开就能玩' }).click()
-  await page.locator('.nf-reqcard__chip', { hasText: '发给朋友玩' }).click()
-  await page.locator('.nf-reqcard__chip', { hasText: '先做个能玩的版本' }).click()
-  await expect(page.locator('.nf-reqcard__actions button')).toBeEnabled()
-})
-
+// 2026-08-07 无阶段修复：GoalCard（需求确认卡——首句关键词预选逻辑）随用户「GoalCard 要删除」移除——
+// 目标确认走对话澄清（模型澄清 + 候选选项卡引导 + 自由输入主通道），无 dock 快速确认卡
 // 2026-08-04 体验修复（用户实测：开发阶段模型只问不产出、阶段空转）：开发产物门控——无真实文件产出不能推进到测试，产出后解锁
 // 2026-08-07 无阶段重构 S4：门控由阶段机改为 forceTool 三态（目标+执行确认无产出 → API 强制模型调工具产出）
 test('执行确认门控：目标+执行确认后无产出 → 强制工具产出（write 后收敛）', async ({ page }) => {
@@ -438,7 +408,7 @@ test('执行确认门控：目标+执行确认后无产出 → 强制工具产�
             if (chatCount === 2) {
               streamCb?.({ type: 'tool-call', toolCall: { name: 'write', args: { path: '/test/game.js', content: 'x' } } })
             } else {
-              streamCb?.({ type: 'content', text: '目标是射击游戏，先确认目标。' })
+              streamCb?.({ type: 'content', text: '【目标确认：做一个网页射击游戏，打开就能玩，发给朋友，先做能玩的版本】' })
             }
             streamCb?.({ type: 'done' })
           }, 60)
@@ -456,17 +426,11 @@ test('执行确认门控：目标+执行确认后无产出 → 强制工具产�
   })
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
-  // 启动页输入需求（initialPrompt 非空 → 目标确认卡出现）
+  // 启动页输入需求（GoalCard 已删除——目标确认走对话澄清）
   await page.locator('.nf-start__input').fill('做个射击游戏')
   await page.locator('.nf-start__input').press('Enter')
   await page.waitForTimeout(300)
-  // 目标确认卡确认（「做个射击游戏」命中预选 type=射击游戏；其余 3 项手动选）→ 目标确认 → 执行确认卡出现
-  await expect(page.locator('.nf-reqcard')).toBeVisible()
-  await page.locator('.nf-reqcard__chip', { hasText: '网页打开就能玩' }).click()
-  await page.locator('.nf-reqcard__chip', { hasText: '发给朋友玩' }).click()
-  await page.locator('.nf-reqcard__chip', { hasText: '先做个能玩的版本' }).click()
-  await page.locator('.nf-reqcard__actions button').click()
-  // 目标确认后：执行确认卡出现（无阶段——等待用户确认执行）
+  // 模型输出【目标确认：】标记 → 目标确认 → 执行确认卡出现（无阶段——等待用户确认执行）
   const execCard = page.locator('.nf-exec-card')
   await expect(execCard).toBeVisible()
   // 执行确认前：无强制产出（forceTool=awaiting-exec-confirm auto——模型不被逼工具）

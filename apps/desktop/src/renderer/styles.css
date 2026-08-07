@@ -546,32 +546,7 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-flow__gate-hint { font-size: 11px; color: var(--nf-accent-text); }
 .nf-flow__done { color: #22C55E; font-size: var(--nf-font-sm); font-weight: 600; }
 
-/* 2026-08-04 P2：需求确认卡（候选 chips 点选——意图消歧确定性收敛） */
-.nf-reqcard {
-  margin-top: var(--nf-space-2);
-  padding: var(--nf-space-2) var(--nf-space-3);
-  /* 2026-08-04 体验修复：需求卡醒目化——accent 边框 + 光晕（用户聊了几轮才发现「快速确认」的根因） */
-  border: 1px solid var(--nf-accent); border-radius: var(--nf-radius-md);
-  background: var(--nf-bg-elevated);
-  box-shadow: 0 0 16px rgba(99, 102, 241, 0.18);
-  display: flex; flex-direction: column; gap: var(--nf-space-2);
-}
-.nf-reqcard__head { font-size: var(--nf-font-sm); font-weight: 600; color: var(--nf-accent); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.nf-reqcard__title { font-size: 15px; font-weight: 700; color: var(--nf-accent-text); }
-.nf-reqcard__sub { font-size: 12px; font-weight: 400; color: var(--nf-text-dim); }
-.nf-reqcard__head svg { color: var(--nf-accent); }
-.nf-reqcard__field { display: flex; align-items: flex-start; gap: var(--nf-space-2); }
-.nf-reqcard__label { flex-shrink: 0; width: 64px; font-size: 12px; color: var(--nf-text); padding-top: 3px; }
-.nf-reqcard__chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.nf-reqcard__chip {
-  background: none; border: 1px solid var(--nf-border); color: var(--nf-text-dim);
-  border-radius: var(--nf-radius-sm); padding: 3px var(--nf-space-2); font-size: 12px; cursor: pointer;
-  display: inline-flex; align-items: center; gap: 4px;
-}
-.nf-reqcard__chip em { font-style: normal; font-size: 11px; color: var(--nf-text-tertiary); }
-.nf-reqcard__chip:hover { border-color: var(--nf-accent); color: var(--nf-accent); }
-.nf-reqcard__chip--on { background: var(--nf-accent-soft); border-color: var(--nf-accent); color: var(--nf-accent); }
-.nf-reqcard__actions { display: flex; justify-content: flex-end; }
+/* 2026-08-07 无阶段重构：GoalCard（.nf-reqcard 需求确认卡）已删除——目标确认走对话澄清（候选选项卡 + 自由输入） */
 
 /* 2026-08-07 无阶段重构 S4：执行确认卡（目标确认后——确认执行方案；Plan-and-Execute human approval） */
 .nf-exec-card {
