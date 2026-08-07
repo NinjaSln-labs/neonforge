@@ -9,10 +9,13 @@
 // goalConfirmed      = 目标已确认（无阶段下确认「达成什么」——原 requirementConfirmed 语义演进）
 // executionConfirmed = 执行已确认（能力检查后用户确认执行方案——无阶段新增）
 // produced           = 已有产出（write/edit 成功——read 不算产出，activity≠progress 坑 81）
+// lastToolFailed     = 上一轮工具执行失败（bash exit≠0 / write/edit 失败）——释放强制（用户「错误要抛出来，
+//                     模型自己修正」——required 模式压制模型的文本诊断能力 → 被迫重试失败命令死循环，冒烟实测 37 轮）
 export interface TurnPolicyInput {
   goalConfirmed: boolean
   executionConfirmed: boolean
   produced: boolean
+  lastToolFailed?: boolean
 }
 
 export interface TurnPolicyDecision {
@@ -42,6 +45,12 @@ export function decideTurnPolicy(input: TurnPolicyInput): TurnPolicyDecision {
   // 已有产出 → auto（收敛到文本结束；StuckDetector 检测无产出循环兜底）
   if (produced) {
     return { forceTool: false, reason: 'produced-auto' }
+  }
+  // 2026-08-07 失败感知（用户「错误要抛出来，模型自己修正」——冒烟实测：bash exit-1 后模型被 required
+  // 强制必须调工具 → 无法停下输出诊断/修正策略 → 被迫重试同一失败命令 37 轮死循环）：
+  // 上一轮工具执行失败 → 释放强制（auto）——模型可停下看到 stderr 诊断修正，修好后下一轮恢复
+  if (input.lastToolFailed) {
+    return { forceTool: false, reason: 'tool-failed-diagnose' }
   }
   // 目标+执行已确认但无产出 → 强制（B 类语义延续：read 不算产出持续强制，直到 write/edit）
   return { forceTool: true, reason: 'goal-exec-until-produced' }
