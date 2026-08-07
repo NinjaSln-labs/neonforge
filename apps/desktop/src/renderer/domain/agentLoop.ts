@@ -159,3 +159,24 @@ export function detectStuck(input: {
   }
   return { state: { consecutiveNoProgress, escalations: prev.escalations }, event: { type: 'no-progress' } }
 }
+
+// === 2026-08-08 O2 处理（用户「check-capability 默认不向用户展示，只有检测后需要用户实质确认的时候展示」） ===
+// 能力检测结果判定：缺失/异常（missing/failed）→ 需要用户实质决策（装依赖/换方案）——工具卡展示；
+// 全部就绪（ready）→ 无需用户决策——工具卡默认隐藏（结果仍回填模型上下文，仅 UI 静默）
+export interface CapabilityView {
+  id: string
+  status: string
+  detail?: string
+}
+
+export function summarizeCapability(data?: { capabilities?: CapabilityView[] }): { needsUser: boolean; summary: string } {
+  const caps = data?.capabilities ?? []
+  if (caps.length === 0) return { needsUser: false, summary: '能力齐备' }
+  const notReady = caps.filter((c) => c.status === 'missing' || c.status === 'failed')
+  const readyCount = caps.length - notReady.length
+  if (notReady.length === 0) {
+    return { needsUser: false, summary: `能力齐备（${readyCount} 项就绪）` }
+  }
+  const names = notReady.map((c) => `${c.id}${c.detail ? `（${c.detail}）` : ''}`).join('、')
+  return { needsUser: true, summary: `检测到能力缺失/异常：${names}——需要你决策（安装补齐或换方案）` }
+}
