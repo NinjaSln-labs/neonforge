@@ -623,6 +623,8 @@ export default function ConversationPanel({
       // 工具循环轮（depth>=1）auto——模型自由收敛；需求阶段/纯确认 auto——问答不强制
       const lastUserText = depth === 0 ? String(msgs[msgs.length - 1]?.content ?? '') : ''
       const isPureAck = /^(嗯|好|可以|ok|OK|好的|是的|对|行|明白了|知道了|继续|谢谢|收到)[。.！!~～\s]*$/.test(lastUserText)
+      // 2026-08-07 T4（regex-todo 决策）：isPureAck 词表=豁免名单——漏网 fail-safe（新确认词漏网 → 强制执行=「确认后继续」符合意图，危害≈0）；
+      // 不扩充（坑 79：意图检测词匹配穷举不完）；不移除「继续」（设计阶段「继续」=出方案文本——强制调工具=坑 90 变体；autoNudge/StuckDetector 兜底链已正常）
       // 2026-08-06 forceTool 三态（真实 API 实测：需求确认后模型「方案一句话」只说不做——确认=批准必须执行到产出）
       // 2026-08-07 DDD 落地（坑 89 根因修复）：判定改由领域层 TurnExecutionPolicy 推导——
       // 区分「用户指令轮（user-turn——坑 80 原意：必须动手到产出）」vs「阶段推进轮（advance-turn——按阶段工作模式：

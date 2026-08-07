@@ -29,6 +29,8 @@ export const STAGE_HINT: Record<string, string> = {
 
 // 2026-08-04 体验修复：模型风格自动推导——从需求文本判断（用户不用手选「稳扎稳打/快速迭代」）
 // 快速迭代：探索/先看效果/雏形/能玩就行；稳扎稳打：完整/正式/质量要求高；默认快速迭代（NeonForge 用户多为探索型）
+// 2026-08-07 T5（regex-todo 决策）：词表保持现状——① 漏网 fail-safe（默认 agile=探索型用户主流；模型选择 UI 用户可见可改——onModelSelect 手选）
+// ② 风格本质是模糊光谱，启发式二分是合理近似（「完整但快速」→ agile 优先敏捷信号——合理取舍）③ 扩充=穷举不完（坑 79：意图词匹配无限）
 export function inferFlowModel(reqText: string): 'traditional' | 'agile' {
   const t = reqText ?? ''
   const agile = /(能玩的版本|先看效果|雏形|最快|试试|练手|自娱|先做|原型|快速|简单|小样|探索|先跑起来|先能玩|玩着爽|粗糙)/.test(t)
