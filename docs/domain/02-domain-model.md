@@ -107,6 +107,20 @@ Task = Goal → Execution → Achievement
 - 确认点未处理（未确认未拒绝）= **等待**（blocking——模型停在该确认点——不推进、不默认放行）
 - 确认/拒绝是显式三态（等待/确认/拒绝）
 
+### 4.11 错误契约（Error Contract——错误分类协议）
+
+**错误必须抛出来，模型自己修正**（用户核心诉求）：
+
+- **结构化分类（errorType）**：gateway 源头分类（ipc 返回结构化 errorType——key-invalid/service/token-limit…）——renderer `classifyChatError` 仅兜底（字面量/未知格式——状态码边界匹配——T1 修复 includes('5') 过宽）
+- **bash 错误回填**：`exit-N: stderr`——错误信息回填模型（模型看到真实错误 → 诊断修正——不重试同一失败命令）
+- **失败感知**：工具失败 → turnPolicy 释放强制（模型可停下诊断——required 压制诊断是反模式——冒烟实测 37 轮死循环教训）
+
+### 4.12 用户输入衔接（Input Queue——输入 ≠ 打断）
+
+- **排队衔接**：模型产出中（流式+工具链）用户发送 → 存入 pending 队列——**当前轮完成后自动发送**（不打断当前流/工具链）
+- **打断 = 显式动作**：停止按钮（.nf-chat__stop）——用户显式打断（对齐竞品：Claude Code Esc / Cursor 停止按钮）
+- **silent 例外**：系统自动消息（StuckDetector escalate 等）直接打断（内部机制干预——非用户输入）
+
 ### 4.10 服务管理（Service Management）
 
 **开发服务器管理**（start-server/check-server/stop-server——非 bash 起服务）：
