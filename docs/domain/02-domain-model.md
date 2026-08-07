@@ -1,395 +1,158 @@
-# 02 — 领域模型
+# 02 — 领域模型（无阶段·目标驱动版）
 
-> 以 DDD-DESIGN-V2 四层架构为权威，融合领域愿景中的设计原则、融合策略和统一语言。
-
----
+> 2026-08-07 重新生成——基于无阶段重构（**目标驱动**为核心：目标确认 → 能力检查 → 执行方案 → 执行确认 → 达成确认；确认与能力检查是实现机制）的领域讨论，领域模型驱动设计，不反推现有实现。
+> 替代旧六阶段版（需求→设计→开发→测试→部署→交付——产品流水线范式）。
 
 ## 1. 一句话
 
-**唯一适配 DeepSeek 的开源桌面 AI 编程 IDE——用对了模型，所以每一个设计决策都不需要妥协。**
-
----
+搭档是一个**目标驱动的执行代理**：澄清用户目标 → 用户确认目标 → 检查能力 → 给出执行方案 → 用户确认执行 → 动手产出 → 汇报达成 → 用户确认解决——**目标确认是推进的原点，每个确认点都是推进的门槛，确认点内部模型自主推进**。
 
 ## 2. 我们是什么，不是什么
 
 | 我们是 | 我们不是 |
 |--------|---------|
-| DeepSeek-first 的深度优化 IDE | 多模型兼容的通用客户端 |
-| 开源 + 本地优先 | 闭源 + 云端绑定 |
-| 极简内核 + 插件扩展 | 大而全的单体应用 |
-| Agent + 编辑器一体 | 编辑器插件或终端工具 |
-| 桌面 IDE（Electron + Monaco） | 终端 CLI 或 VS Code 插件 |
-| 工程设计编排 IDE | 聊天工具 |
+| 目标驱动的任务执行代理（目标→执行→达成）| 阶段流水线（固定顺序推进）|
+| 用户在每个确认点显式决定推进 | 模型自报即确认（自说自话推进）|
+| 宿主强制执行边界（不依赖模型自律）| 靠提示词让模型自觉 |
+| 结构化确认动作（按钮）| 自由文本确认词匹配 |
+| 能力=环境视图（单源推导）| 能力独立重复检测 |
+| 全步骤可观测（时间线）| 事后拼凑日志 |
 
----
+## 3. 限界上下文（BC）
 
-## 3. 融合策略
+| BC | 职责 | 类型 |
+|---|---|---|
+| **Conversation BC**（对话）| 多轮对话、目标状态机、确认点、执行保障策略、模型活动边界、推进门控 | **核心域** |
+| **Capability BC**（能力/环境）| 环境检测（事实来源）、能力视图（从环境推导）、能力检查 | 支撑域 |
+| **Workspace BC**（工作区）| 项目文件、写入快照/回滚、计划清单（批准边界）| 支撑域 |
+| **Session Timeline BC**（会话时间线）| 单会话所有步骤统一记录（用户/搭档/工具/授权/确认/状态）——可观测性 | 支撑域 |
 
-```
-Pi 的基因                Reasonix 的基因            DeepCode 的基因          Cursor 的基因
-──────────              ───────────────            ──────────────          ──────────────
-✅ Compaction            ✅ Prefix-Cache 90%+       ✅ 多 Agent 角色         ✅ Diff Apply 体验
-✅ ThinkingLevel          ✅ DeepSeek 深度适配        ✅ MCP 协议              ✅ Monaco Editor
-✅ Agent-Chain YAML       ✅ Token 实时追踪           ❌ 7-Agent 固定流水线    ✅ 上下文感知 UI
-✅ Event Bus              ✅ Auto 模型切换            ❌ Python               ❌ 大 System Prompt
-✅ 插件体系               ✅ 工具调用修复             ❌ 无缓存优化             ❌ 闭源 + 付费
-✅ 4 工具极简             ❌ 单 Agent
-❌ Claude 优先            ❌ 无 Compaction
-❌ 终端 only              ❌ 无 CodeRAG
-```
+## 4. 核心概念模型
 
-**丢掉的东西**：Pi 的多模型适配、DeepCode 的固定 7-Agent、Cursor 的闭源/大 Prompt/Inline 补全
-
-**我们独有的东西**：LSP + 依赖图作为代码上下文主力、Compaction + PrefixCache 协调、reasoning_content 全流程可视化、缓存预热
-
----
-
-## 4. 为什么 DeepSeek-first
-
-| 顾虑 | 回应 |
-|------|------|
-| 锁死供应商 | DeepSeek V4 Flash/Pro 已经是成熟产品线。Reasonix 83K stars 证明市场买单 |
-| 用户要选择自由 | 选对模型的极致体验 > 所有模型都凑合 |
-| Prefix-Cache 依赖 | 这正是壁垒——我们把 Compaction + PrefixCache 协调做到极致 |
-
-DeepSeek-first 的架构红利：
-- 无模型抽象层，LLM Gateway 简化 50%
-- Prefix-Cache 从"优化项"升为"架构基石"
-- reasoning_content 一等公民
-- ThinkingLevel 直通 reasoning_effort API
-- ToolCallRepair 专门针对 DeepSeek 已知问题
-
----
-
-## 5. 核心设计原则
-
-### 原则 1：极简内核 + 插件外挂
-
-核心 < 5000 行，System prompt 叙述 < 300 tokens，10 工具（4 核心 read/write/edit/bash + 6 LSP，按 A0 §4 裁决 D-C4）。
-
-### 原则 2：声明式 Agent-Chain
-
-YAML 定义多 Agent 流水线。单 Agent = 1 Stage 的 Chain（统一模型）。
-
-### 原则 3：1M 上下文是战略资源，不是垃圾桶
+### 4.1 任务（Task）——目标到达成的执行单元
 
 ```
-1M Token = 从容，不是浪费
-
-  固定前缀 5-10K  ← 缓存命中基石
-  精选上下文 10-50K ← LSP+CodeRAG 精准注入
-  对话预算 50-200K ← 压缩后历史
-  推理空间 100-500K ← Pro 模型深度思考
-  安全余量 200K+   ← 大文件、工具调用结果
+Task = Goal → Execution → Achievement
 ```
 
-### 原则 4：代码上下文 = LSP 先行，语义兜底
+三个**确认点**（目标驱动的实现机制——用户确认 = 状态转换的唯一通道）：
+
+| 确认点 | 含义 | 确认动作（结构化）| 未确认时模型活动边界 |
+|---|---|---|---|
+| **GoalConfirmed** | 用户确认「做什么」（目标）——**目标驱动的原点** | 确认目标 / 重新描述 | 只澄清目标（不产生执行动作）|
+| **ExecutionConfirmed** | 用户确认「怎么做」（执行方案）| 确认执行 / 修改方案 | 只给方案（不 write/edit/bash）|
+| **AchievementConfirmed** | 用户确认「做完了」（达成汇报）| 已解决 / 还要改 | 持续执行（不收敛——不能自宣布完成停手）|
+
+### 4.2 确认点 = 推进门槛（核心不变式）
+
+**推进（Progression）**：跨确认点的状态转换（Goal → Execution → Achievement）——**唯一通道是用户确认**（结构化确认动作：确认卡按钮）。
+
+**自推进（Self-progression）**：确认点**内部**的自主工作——用户确认执行后，模型自动执行工具链（读→写→验证→汇报）——模型自主，直到下一个确认点。
 
 ```
-Layer 1: LSP + 依赖图 (确定性, 70%)
-  → 定义跳转、引用查找、调用链、类型信息
-  → 零 token 成本，100% 准确
-
-Layer 2: CodeRAG (语义检索, 20%)
-  → 概念性查询、"类似代码在哪"、模式搜索
-  → 仅在 LSP 回答不了时启用
-
-Layer 3: Agent 自主探索 (兜底, 10%)
-  → LLM 自行决定读什么文件
-  → 前两层都解决不了的复杂场景
+目标澄清 ─[用户确认目标]→ 能力检查/执行方案 ─[用户确认执行]→ 动手产出(自推进工具链) → 达成汇报 ─[用户确认解决]→ 收敛
 ```
 
-### 原则 5：Compaction + PrefixCache 协调
+**结构性保证**：确认点未确认 → 领域状态不转换 → 模型活动边界被限制在该确认点——不是事后拦截，是状态机未到下一态。
 
-压缩会破坏缓存前缀 → 但压缩后保留最近 20 条原始消息形成新基线 → 压缩节省的 token >> 缓存重建的成本。
+### 4.3 执行保障（TurnExecutionPolicy）
 
-### 原则 6：Event Bus 唯一通信通道
+确认后的执行保障——防止「只说不做」（坑 80 原意延续）：
 
-Plugin ↔ Core 之间仅通过 EventBus。插件不直调核心模块。
+- **强制产出（forceTool）**：目标+执行已确认、尚无产出 → 强制模型必须调用工具产出——模型不能只输出承诺文本
+- **失败感知**：上一轮工具执行失败（bash exit≠0 / write 失败）→ 释放强制——模型可停下诊断修正（错误回填模型是修正的前提；required 压制诊断 → 重试失败命令死循环——已知反模式）
+- **任务完成度**：计划文件全部写完 或 用户确认达成 → 释放强制——模型可收敛（写 1 个文件 ≠ 任务达成；required 模式模型被逼工具无法输出达成文本——计划写完即释放）
 
----
+### 4.4 宿主强制边界（模型漂移防护）
 
-## 6. 四层领域架构
+模型可能偏离批准范围（写计划外文件）——**约束由宿主强制执行，不依赖模型自律**（行业共识：Claude Code「enforced by the host, not the model」/ Codex rules / Aider fnames）：
 
-```
-Engineering   产品交付层   AgentChain 流水线 → DiffApply → ChangeSet 交付
-   ↑ 编排
-Orchestrate   Agent 协作层   Compaction · PrefixCache · ContextEngine
-   ↑ 设计
-Design        分析设计层   ThinkingLevel · ReasoningViz
-   ↑ 编码
-Code          基础能力层   Editor · ToolRegistry · DeepSeekGateway · PluginSystem
-```
+- **计划清单（PlannedFiles）**：plan_approval 批准的文件集合——模型只能写清单内文件——**清单对模型显式可见**（系统提示注入——模型知道边界）
+- **补充语义**：清单是**追加**的（分批 plan_approval 不覆盖前批——Codex rules AppendRule 同理）
+- **拒绝回填边界**：写清单外文件被拒 → 拒绝信息带清单内容（「X 不在批准清单（批准的是：A/B/C）」）——模型能回到边界内，不重复尝试
 
----
+### 4.5 能力与环境（Capability / Environment）
 
-## 7. 限界上下文（4 层 16 个，对齐 A0 领域权威总纲 §2）
+**环境是事实来源，能力是语义视图**（调研定论——OASF/DeepCode/Augment 三源交叉）：
 
-> ✅ **2026-08-01 内容式对齐（D-C2/D-C3/D-C8）**：本表已按 `00-domain-authority.md` §2 更新为 **16 个 BC**（原 12 个 + Workspace/ShellAgent/TokenTracker/Configuration/MCPBridge 五者）；Preheating 并入 PrefixCache 为领域服务（不再独立 BC）；类型按 A0 判定（核心=壁垒、支撑=载体、通用=设施）。实现以此表 + A0 §2 为准。
+- **环境（Environment）**：检测的事实（runtime/依赖/工具链/宿主 runtime 可用性）——事实来源——一次检测
+- **能力（Capability）**：从环境推导的语义视图（node-runtime/python-runtime/dev-tools 的 ready/missing/failed）——**不独立二次检测**（消除双源）
+- **Ledger 回填**：执行结果回填能力状态（bash 失败归因 → 能力降级 failed；成功恢复）——自学习闭环
+- **能力缺失 → 征求用户**（装依赖/换方案）——决策类确认点（对话式）
 
-### Layer 1: Code（基础编码层）
+### 4.6 结构化确认（行业共识）
 
-| 限界上下文 | 类型 | 职责 | 聚合根 |
-|-----------|------|------|--------|
-| **ToolRegistry** | 通用域 | 工具注册、发现、执行（4 核心 + 6 LSP） | ToolRegistry |
-| **DeepSeekGateway** | 通用域（防腐层） | API 通信、StreamParser、ToolCallRepair、ModelRouter、预热端口 | —（防腐层） |
-| **Editor** | 支撑域 | Monaco 编辑器、DiffApply、ChangeSet | ChangeSet |
-| **Workspace** | 支撑域 | 项目文件 + LSP 客户端集成、文件监听 | Workspace |
-| **ShellAgent** | 支撑域 | 命令执行沙箱（Main Process） | — |
+用户确认 = **结构化显式动作**（确认卡按钮：确认/拒绝）——非确认词匹配（「可以撤销吗」误触发——不可靠）。对齐：OpenHands USER_CONFIRMED/USER_REJECTED、Cline allow_once/allow_always/reject、Codex user_confirmed、Claude Code 权限提示。
 
-### Layer 2: Design（分析设计层）
+**确认语义**：
+- 确认点未处理（未确认未拒绝）= **等待**（blocking——模型停在该确认点——不推进、不默认放行）
+- 确认/拒绝是显式三态（等待/确认/拒绝）
 
-| 限界上下文 | 类型 | 职责 | 聚合根 |
-|-----------|------|------|--------|
-| **ThinkingLevel** | 核心域 | 推理深度四档（none/basic/medium/high）直通 reasoning_effort | ThinkingLevel（值对象） |
-| **ReasoningViz** | 核心域 | reasoning_content 结构化捕获与展示 | ReasoningCapture |
+### 4.7 环境注入（模型开箱即知）
 
-### Layer 3: Orchestrate（Agent 协作层）
+环境/能力快照**主动注入**系统提示（项目根/runtime/依赖/能力状态）——模型不需要探索确认环境（竞品：Aider 文件边界显式可见）。环境注入是事实来源的前置呈现。
 
-| 限界上下文 | 类型 | 职责 | 聚合根 |
-|-----------|------|------|--------|
-| **Conversation** | 核心域 | 多轮对话聚合，承载 ThinkingLevel + PrefixState + CompactionConfig | Conversation |
-| **Compaction** | 核心域 | 触发 100 条/200K，保留最近 20 条，上下文永不溢出 | CompactionService |
-| **PrefixCache** | 核心域 | Append-Only + **Preheating 服务（归属此处）**，≥90% 命中率 | PrefixCacheState |
-| **ContextEngine** | 核心域 | LSP → CodeRAG → Agent 三层代码上下文管线 | ContextEngine |
+## 5. 领域服务（Domain Services）
 
-### Layer 4: Engineering（产品交付层）
+| 服务 | 职责 | 不变式 |
+|---|---|---|
+| **TurnExecutionPolicy** | 输入（确认状态/产出/失败/完成度）→ forceTool 决策 | 确认后无产出强制；失败释放；计划写完/达成确认释放 |
+| **ProgressionGate**（推进门控）| 确认点状态机——当前确认点 → 模型活动边界 | 未确认目标不执行；未确认执行不动手；未确认解决不收敛 |
+| **CapabilityChecker** | 能力视图（从环境推导）+ 缺失清单 + Ledger 回填 | 环境单源；能力是视图；执行结果回填 |
+| **PlannedFiles**（计划清单）| 批准文件集合——写文件边界 | 追加不覆盖；清单显式可见；拒绝带边界 |
+| **TimelineLogger** | 会话所有步骤统一记录 | 时间顺序完整（用户/搭档/工具/授权/确认/状态）|
 
-| 限界上下文 | 类型 | 职责 | 聚合根 |
-|-----------|------|------|--------|
-| **AgentChain** | 核心域 | YAML 声明式流水线（6 角色/4 模板，A0 §3 规格化） | AgentChain |
-| **PluginSystem** | 支撑域 | 插件注册、生命周期、事件钩子、沙箱（内置 5 插件） | PluginRegistry |
+## 6. 领域事件（Domain Events）
 
-### 通用支撑（跨层）
+| 事件 | 触发 | 载荷 |
+|---|---|---|
+| GoalProposed（目标提议）| 模型澄清后给出目标 | 目标文本 |
+| **GoalConfirmed / GoalRejected** | 用户确认目标 / 重新描述 | 目标文本 |
+| ExecutionPlanProposed | 模型给出执行方案 | 方案/文件清单 |
+| **ExecutionConfirmed / ExecutionRejected** | 用户确认执行 / 修改方案 | — |
+| PlanApproved（计划批准）| 用户批准文件清单 | 文件清单（追加）|
+| ToolApproved / ToolRejected | 用户批准/拒绝工具 | 工具名+参数 |
+| ToolExecuted / ToolFailed | 工具执行结果 | 名称/成功/错误 |
+| AchievementProposed（达成提议）| 模型汇报达成 | 产物说明 |
+| **AchievementConfirmed / AchievementRejected** | 用户确认解决 / 还要改 | — |
+| CapabilityChecked | 能力检查 | 能力视图 |
+| EnvironmentInjected | 环境快照注入 | 环境状态 |
 
-| 限界上下文 | 类型 | 职责 | 聚合根 |
-|-----------|------|------|--------|
-| **TokenTracker** | 通用域 | token/缓存/费用统计（含预热命中率） | TokenTracker |
-| **Configuration** | 通用域 | 用户 & 项目配置 | Configuration |
-| **MCPBridge** | 通用域 | MCP 协议外部工具集成（V1 可选） | — |
-
----
-
-## 8. 聚合根模型
-
-> 示例性聚合根（3 个核心示例；16 BC 完整聚合根清单见 A0 领域权威总纲 §2——Workspace/PrefixCacheState/TokenTracker 等聚合根以 A0 为准）。
-
-### Conversation（核心域聚合根，对齐 A0 §2）
-```
-Conversation
-  ├── id, title, status, thinkingLevel
-  ├── messages: Message[]           ← 值对象（只读）
-  ├── runtimeContext: RuntimeContext ← 编辑器状态
-  ├── compactionSnapshots: [...]
-  └── prefixState: PrefixState
-```
-
-> **轮次执行保障（2026-08-07 领域化——坑 89）**：对话轮次的「该不该强制模型产出」是 Conversation BC 的领域规则。
-> 领域服务 `TurnExecutionPolicy`（`src/renderer/domain/turnPolicy.ts`）——输入（阶段、轮次类型 `TurnKind`、纯确认、产出状态、深度）→ 决策 `forceTool`。
-> `TurnKind` 区分触发语义：`user-turn`（用户指令轮——坑 80 原意：必须动手到产出）/ `advance-turn`（阶段推进轮——按阶段工作模式）/ `tool-loop`（工具循环轮——auto，StuckDetector 兜底）。
-> 与 `agentLoop`（TurnProgress/StuckDetector——轮次卡住检测）同 BC 并列（deepcode loop_detector 行业对标）。
-
-### AgentChain（核心域聚合根）
-```
-AgentChain
-  ├── id, name, description
-  ├── stages: ChainStage[]
-  │     ├── id, name, agent, prompt
-  │     ├── dependsOn: []           ← DAG 无环约束
-  │     ├── tools: []
-  │     └── thinkingLevel
-  └── createdAt
-```
-
-> **产品六阶段 = 产品级流水线（2026-08-07 领域化——坑 89）**：产品 0-1 交付流（需求→设计→开发→测试→部署→交付）此前游离于领域模型外（A0 只有 agent 角色 Stage），
-> 依据 A0 §2「流水线编排（角色/模板/Stage）→ AgentChain」补建模为 **`ProductStage`**（`src/renderer/domain/stageFlow.ts`）——每个阶段带**工作模式**（`StageOutputMode`：
-> 需求=clarify 问答澄清 / 设计=text-proposal 方案文本 / 开发=artifacts 动手产出 / 测试=verify / 部署=deploy / 交付=report）。
-> 阶段推进 = `StageTransition`（领域事件）+ `AdvanceInstruction`（推进指令生成——advanceChat 的领域化）。
-> **共享内核（2026-08-07 质量把关 S5）**：`PRODUCT_STAGE_DEFS`（阶段工作模式）被 Conversation BC 的 `turnPolicy`（读取 `forceToolOnAdvance`）与 AgentChain BC 的推进逻辑共用——阶段是跨 BC 通用语言，属**共享内核**（对齐 A0「共享原语」例：Money）——单向依赖（turnPolicy → stageFlow，无环）。
-
-### ChangeSet（支撑域聚合根）
-```
-ChangeSet
-  ├── id, conversationId
-  ├── changes: FileChange[]         ← 值对象 (只读)
-  │     ├── filePath, content, diff
-  │     └── status: proposed|accepted|rejected
-  └── status: open|applied|rejected
-```
-
----
-
-## 9. 层间通信规则
-
-```
-Code ──(防腐层)──→ DeepSeek API
-Code ──(EventBus)──→ Design
-Design ──(EventBus)──→ Orchestrate
-Orchestrate ──(EventBus)──→ Engineering
-
-规则：
-1. 上层可以依赖下层（Engineering → Orchestrate → Design → Code）
-2. 下层通过 DomainEvent 通知上层（Code 发布事件，上层订阅）
-3. 核心域之间通过 EventBus 通信，不直接引用
-4. 通用域通过防腐层隔离外部 API
-```
-
----
-
-## 10. 不变性规则
-
-| 层 | 规则 |
-|----|------|
-| Code | 未授权 Plugin 操作 → SecurityError |
-| Design | ThinkingLevel 映射必须 1:1 对应 reasoning_effort |
-| Orchestrate | Conversation 压缩保留最近 20 条 |
-| Orchestrate | PrefixCache 预热仅 idle 状态执行 |
-| Orchestrate | ContextEngine LSP 已充分 → 不进 CodeRAG |
-| Engineering | AgentChain dependsOn 有向无环 |
-| Engineering | 上游 Stage 失败 → 下游自动 Skip |
-
----
-
-## 11. Ubiquitous Language
-
-| 术语 | 英文 | 定义 | 隐含状态 |
-|------|------|------|----------|
-| 对话压缩 | Compaction | 早期消息→结构化摘要，上下文永不溢出 | 是（空闲 → 触发中 → 已完成） |
-| 推理深度 | ThinkingLevel | none/basic/medium/high，映射到 reasoning_effort | — |
-| 代理链 | Agent Chain | YAML 声明式多 Agent 流水线 | 是（已加载 → 运行中 → 已完成/失败） |
-| 上下文引擎 | ContextEngine | LSP 层 → CodeRAG 层 → Agent 探索层的三级上下文管线 | 是（Layer1→Layer2→Layer3 逐层降级） |
-| 前缀缓存 | Prefix Cache | Append-only + 预热，≥90% 命中率 | 是（idle → warming → ready → broken） |
-| 缓存预热 | Preheating | 打开项目时后台虚拟请求预填缓存 | 是（idle → warming → ready） |
-| 推理可视化 | ReasoningViz | reasoning_content 的结构化展示 | — |
-| 4 工具 | 4 Tools | read / write / edit / bash | — |
-| 10 工具 | 10 Tools | 4 核心 + 6 LSP（find_definition/find_references/get_imports/get_call_chain/get_type_info/get_diagnostics），按 A0 §4 裁决 D-C4 | — |
-| 精筛器 | CodeRAG | 降级为 Layer 2 语义搜索，不再是主力 | — |
-| 改动暂存 | Staging | ✓ 接受的改动暂存于本地，Write 时原子 apply | 是（暂存 → 已写入） |
-| 搭档须知 | Partner Rules | `.neonforge` 文件中的项目约定，搭档每次分析自动读取 | — |
-
----
-
-## 12. 命令清单（Commands）
-
-基于产品设计规范 D0 提取的用户/系统动作：
+## 7. 命令清单（Commands——用户/搭档/系统动作）
 
 | 命令 | 触发者 | 效果 |
 |------|--------|------|
-| `CreateProject` | 用户 | 打开已有项目或从零构建 |
-| `SendInstruction` | 用户 | 向搭档发出指令，触发分析 |
-| `ContinueExecution` | 用户 | 确认分析方案，继续执行 |
-| `AdjustPlan` | 用户 | 调整分析方案，重新分析 |
-| `AcceptChange` | 用户 | ✓ 接受单处改动，暂存 |
-| `RejectChange` | 用户 | ✗ 拒绝单处改动 |
-| `AnnotateChange` | 用户 | 批注改动，搭档按批注重改 |
-| `AcceptAllAndWrite` | 用户 | 全部接受并原子写入文件 |
-| `WriteStagedChanges` | 用户 | 逐处审完，确认写入 |
-| `CancelTask` | 用户 | 取消任务，丢弃未写入改动 |
-| `CreateNewTask` | 用户 | 创建新任务，加入串行队列 |
-| `SwitchTask` | 用户 | 切换到其他任务查看/审核 |
-| `SetThinkingLevel` | 用户 | 调整推理深度 (none/basic/medium/high) |
-| `InvokeTool` | 搭档 | 调用工具 (read/write/edit/bash/LSP) |
-| `StartPreheating` | 系统 | 项目打开时自动预热缓存 |
-| `TriggerCompaction` | 系统 | 消息超过 100 条 / 200K tokens 自动压缩 |
+| `SendInstruction` | 用户 | 发出指令，触发目标澄清 |
+| `ConfirmGoal` | 用户 | 确认目标（推进到执行）|
+| `RejectGoal` | 用户 | 重新描述目标 |
+| `ConfirmExecution` | 用户 | 确认执行方案（推进到动手）|
+| `RejectExecution` | 用户 | 修改方案 |
+| `ApprovePlan` | 用户 | 批准文件清单（追加）|
+| `ApproveTool` / `RejectTool` | 用户 | 批准/拒绝工具执行 |
+| `ConfirmAchievement` | 用户 | 确认解决（收敛）|
+| `RejectAchievement` | 用户 | 还要改（继续执行）|
+| `InvokeTool` | 搭档 | 调用工具（确认点内自推进）|
+| `AskForConfirmation` | 搭档 | 到达确认点——请求用户确认（渲染确认卡）|
 
----
+## 8. Ubiquitous Language
 
-## 13. 外部系统（External Systems）
-
-| 外部系统 | 关系类型 | 说明 |
-|---------|---------|------|
-| **DeepSeek API** | 防腐层（ACL） | 通过 DeepSeekGateway 隔离。PrefixCache + reasoning_content 依赖 |
-| **文件系统** | 直接依赖 | read/write/edit 操作本地文件 |
-| **Shell/Terminal** | 直接依赖 | bash 命令执行 |
-| **LSP Server** | 直接依赖 | 语言服务器，提供定义跳转、引用查找等 |
-| **SQLite** | 直接依赖 | 对话持久化 |
-| **Git** | 间接依赖 | Worktree 隔离（V2） |
-| **MCP Server** | 防腐层（ACL） | 外部 MCP 工具集成（V2） |
-
----
-
-## 14. 上下文映射图（Context Mapping）
-
-```mermaid
-graph TD
-    subgraph Engineering["Engineering 层"]
-        AC[AgentChain<br/>Core]
-        PH[Preheating<br/>Application]
-    end
-
-    subgraph Orchestrate["Orchestrate 层"]
-        CP[Compaction<br/>Core]
-        PC[PrefixCache<br/>Core]
-        CE[ContextEngine<br/>Core]
-        CV[Conversation<br/>Supporting]
-    end
-
-    subgraph Design["Design 层"]
-        TL[ThinkingLevel<br/>Core]
-        RV[ReasoningViz<br/>Core]
-    end
-
-    subgraph Code["Code 层"]
-        TR[ToolRegistry<br/>Generic]
-        DG[DeepSeekGateway<br/>Generic]
-        PS[PluginSystem<br/>Generic]
-        ED[Editor<br/>Supporting]
-    end
-
-    subgraph External["外部系统"]
-        DS[DeepSeek API]
-        FS[文件系统]
-        SH[Shell]
-        LS[LSP Server]
-        DB[(SQLite)]
-    end
-
-    %% 层间依赖
-    AC -->|EventBus| CV
-    PH -->|EventBus| PC
-    CV -->|直接调用| CP
-    CV -->|直接调用| PC
-    CV -->|直接调用| TL
-    CE -->|直接调用| TR
-
-    %% 防腐层
-    DG -->|ACL| DS
-    TR -->|直接调用| FS
-    TR -->|直接调用| SH
-    CE -->|直接调用| LS
-
-    %% 持久化
-    CV -->|Repository| DB
-
-    %% 跨层事件
-    TR -->|EventBus| RV
-    TL -->|EventBus| CP
-    CP -->|EventBus| AC
-```
-
-**关系说明：**
-
-| 关系 | 含义 |
+| 术语 | 定义 |
 |------|------|
-| 直接调用 | 上层直接依赖下层接口 |
-| EventBus | 领域事件异步通信，松耦合 |
-| ACL（防腐层） | 隔离外部 API 变化，保护领域模型 |
-| Repository | 持久化端口，定义在领域层，实现在基础设施层 |
+| 目标驱动（Goal-driven）| 任务围绕「达成什么」组织——目标确认是推进的原点 |
+| 确认点（Confirmation Point）| 推进的门槛——目标/执行/达成三处用户确认 |
+| 推进（Progression）| 跨确认点的状态转换——唯一通道是用户确认 |
+| 自推进（Self-progression）| 确认点内部的模型自主工作（工具链）|
+| 执行保障（Execution Policy）| 确认后防只说不做的 forceTool 决策 |
+| 计划清单（Planned Files）| plan_approval 批准的可写文件集合 |
+| 能力视图（Capability View）| 从环境推导的能力状态（ready/missing/failed）|
+| 环境快照（Environment Snapshot）| 一次检测的事实（runtime/依赖/工具链）——注入模型 |
+| 会话时间线（Session Timeline）| 单会话所有步骤统一日志 |
 
----
+## 9. 与旧六阶段的关系
 
-## 15. DDD 方法论对齐检查
+无阶段不是六阶段的简化——是**范式替换**：
 
-对照 DDD 五步法（统一语言 → 事件风暴 → 战略设计 → 战术设计 → 架构）：
+- 六阶段 = **产品流水线**（需求→设计→开发→测试→部署→交付——固定顺序推进——推进动力 = 阶段完成）
+- 无阶段 = **目标驱动**（目标→执行→达成——按确认点推进——推进动力 = **用户确认目标/执行/达成**）
 
-| 步骤 | 对应文档 | 完整度 |
-|------|---------|--------|
-| 1. 统一语言 | §11（本文件）+ §4 核心原则 | ✓ |
-| 2. 事件风暴（事件） | `06-domain-events.md` — 9 组完整事件目录 | ✓ |
-| 2. 事件风暴（命令） | §12（本文件）— 16 个命令 | ✓ |
-| 2. 事件风暴（外部系统） | §13（本文件）— 7 个外部系统 | ✓ |
-| 3. 战略设计（BC 划分） | `03-strategic-design.md` — 14 个 BC（三层） + §6-7（本文件）— 12 个 BC（四层权威） | ✓ |
-| 3. 战略设计（映射图） | §14（本文件）— Mermaid 上下文映射 | ✓ |
-| 4. 战术设计（聚合） | `04-tactical-design.md` — 6 聚合根 + 值对象 + 领域服务 | ✓ |
-| 4. 战术设计（不变量） | §10（本文件）+ `04-tactical-design.md` §5 | ✓ |
-| 5. 架构 | `05-architecture.md` — 分层架构 + 管线 + 选型 | ✓ |
+核心差异：推进动力从「阶段完成」变为「目标确认」——用户在每个确认点显式决定推进与否（对齐 Plan-Then-Execute 的 user agency + StackAI「request and receive a human decision before executing」）。
