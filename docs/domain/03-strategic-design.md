@@ -62,6 +62,7 @@
 - 项目文件操作（read/write/edit）
 - 写入快照/回滚（安全闭环）
 - 计划清单（plan_approval 批准文件集合——宿主强制边界的数据源）
+- **授权裁决 + 任务级信任**（授权架构 v4——preApproval 规则引擎 deny>allow>ask fail-closed；任务级信任集合「允许并记住」；信任边界=文件路径类+沙箱内；新目标确认 clearTrust 任务边界）
 
 **与 Conversation 的关系**：Conversation 的推进门控读取计划清单（写文件边界）；写操作经 Workspace 执行（快照/回滚）。
 
