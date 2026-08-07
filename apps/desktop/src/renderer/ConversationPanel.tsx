@@ -13,8 +13,8 @@ import { cleanContent, stripMarkdown } from './textClean'
 // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层纯逻辑，双源调研驱动）
 import { evaluateTurnProgress, detectStuck, initialStuckState, isQuestionLike, isCommunicationLike, isDoneLike } from './domain/agentLoop'
 // 2026-08-07 DDD 落地（坑 89 forceTool/advanceChat 领域化——Conversation BC 轮次执行保障 + AgentChain BC 产品阶段流转）
-import { decideTurnPolicy, type TurnKind } from './domain/turnPolicy'
-import { stageByIndex, buildAdvanceInstruction, type ProductStageName } from './domain/stageFlow'
+import { decideTurnPolicy } from './domain/turnPolicy'
+import { buildAdvanceInstruction, type ProductStageName } from './domain/stageFlow'
 // 2026-08-05 方案 3：结构化候选按钮——<candidates> 块解析/剥离（点选文本替代序号，消除模型序号解析漂移）
 import { parseCandidates, stripCandidates, stripTags } from './candidates'
 // 2026-08-03 视觉审计 P1-6：内联 SVG 图标（替换 emoji 图标）
@@ -299,6 +299,8 @@ export default function ConversationPanel({
   const streamingRef = useRef<{ content: string; toolCalls: ToolCallMsg[] }>({ content: '', toolCalls: [] })
   // 2026-08-07 DDD 落地（坑 89）：当前轮次类型——send=user-turn / advanceChat=advance-turn / maybeContinue=tool-loop；
   // forceTool 决策改由领域层 TurnExecutionPolicy 推导（区分「用户指令轮」与「阶段推进轮」——设计阶段推进不强制工具）
+  // 2026-08-07 无阶段重构 S1：TurnKind 已移出领域层（阶段体系类型）——本地过渡定义，S3 删阶段耦合时一并移除
+  type TurnKind = 'user-turn' | 'advance-turn' | 'tool-loop'
   const turnKindRef = useRef<TurnKind>('user-turn')
   const applyChunk = (chunk: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => {
     console.log('[conv] chunk', chunk.type)
@@ -630,13 +632,14 @@ export default function ConversationPanel({
       // 区分「用户指令轮（user-turn——坑 80 原意：必须动手到产出）」vs「阶段推进轮（advance-turn——按阶段工作模式：
       // 设计=text-proposal 输出方案文本，不强制工具）」——原 `flowStage>=1 && depth===0` 数值拼凑误把阶段推进当用户指令
       const produced = producedFilesRef.current.size > 0
+      // 2026-08-07 无阶段重构 S1：三态判定（goalConfirmed/executionConfirmed/produced）
+      // 临时桥接——S3 接入真实 goalConfirmed/executionConfirmed 状态（MainWorkspace state）；
+      // 当前语义：需求确认即目标+执行确认（无阶段下「执行方案确认」概念 S4 ExecutionConfirmCard 落地）
+      const goalConfirmed = requirementConfirmed ?? false // prop 可选（demo）——领域层要求必填 boolean
       const { forceTool } = decideTurnPolicy({
-        stage: stageByIndex(flowStage ?? -1)?.name ?? null,
-        turnKind: turnKindRef.current,
-        isPureAck,
-        requirementConfirmed: requirementConfirmed ?? false, // prop 可选（demo）——领域层要求必填 boolean
+        goalConfirmed,
+        executionConfirmed: goalConfirmed, // S3 接入真实 executionConfirmed（能力检查后用户确认执行方案）
         produced,
-        depth,
       })
       const res = await window.neonforge.gateway.streamChat({
         apiKey: key,
