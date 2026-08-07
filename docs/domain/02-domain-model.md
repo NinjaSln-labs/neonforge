@@ -107,6 +107,16 @@ Task = Goal → Execution → Achievement
 - 确认点未处理（未确认未拒绝）= **等待**（blocking——模型停在该确认点——不推进、不默认放行）
 - 确认/拒绝是显式三态（等待/确认/拒绝）
 
+### 4.10 服务管理（Service Management）
+
+**开发服务器管理**（start-server/check-server/stop-server——非 bash 起服务）：
+
+- **服务注册表（ServiceRegistry）**：按 rootPath 记忆服务（端口/PID/URL/启动时间）——**模型不用猜端口**（服务地址以返回为准——坑 67「帮我打开猜端口」终结）
+- **端口分配**：动态端口（envManager allocatePort）——显式端口替换 `--port 0`（坑 77 vite 忽略 0）；**宿主保留端口保护**（5173/5175 是 NeonForge 自身——不可 kill/占用/冒充）
+- **失败检测**：waitForUrl（最长 15s）——close 无任何输出 = 命令失败（返回 stderr 错误——命令 not found 等）；有输出未解析到地址 = 服务启动中；超时无输出 = 失败
+- **命令识别单源**：isServerCommand（严格白名单——start-server 工具命令选择）/ isServerLikeCommand（宽松——bash 超时/端口保护）/ isInstallCommand（安装识别）——一处判定（T3 regex-todo 单源化）
+- **spawn 环境**：node_modules/.bin 入 PATH（任何 npm 工具可跑——环境单源）
+
 ### 4.9 数字交付（Delivery——交付包/验收/确认关闭）
 
 **数字产物交付**（非技术主路径——文件整理/数据加工 → 变更预览 → 授权 → 交付）：
