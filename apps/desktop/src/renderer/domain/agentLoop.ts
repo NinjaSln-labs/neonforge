@@ -25,6 +25,18 @@ export interface TurnProgress {
   isDone: boolean           // 完成态汇报——模型已完成，不算停滞
 }
 
+// === Domain Service: 文本分类（问句/沟通/完成态——坑 79 结构判定：有限集，不匹配措辞） ===
+// 2026-08-07 质量把关 C 类：唯一实现——ConversationPanel isActionPromise 原复制一份（双源），已合并此处复用
+export function isQuestionLike(t: string): boolean {
+  return /[?？]$/.test(t) || /(吗|呢|吧)[。.!！]?$|可以吗|行不行/.test(t)
+}
+export function isCommunicationLike(t: string): boolean {
+  return /(确认|复述|说明|解释|总结|澄清|商量|理解|明白|知道|收到|确认一下|跟你确认|和你确认|跟您确认|介绍一下|跟你聊|和你聊)/.test(t)
+}
+export function isDoneLike(t: string): boolean {
+  return /(完成|做好|搞定|改好|解决|处理完|已写好|已修改|已删除|已添加|已加|可以了|能玩了|没问题|修好了|加好了|实现了|就绪|收工|结束|达标|通过了|在跑|能跑|弄好|好了，|好的，|就是这些|就这样|先说这么多)/.test(t)
+}
+
 // === Domain Service: ProgressEvaluator——从 AgentTurn（toolCalls + content）评估 TurnProgress ===
 // 排除判定沿用坑 79 结构判定（问句/沟通/完成态——有限集，不匹配措辞）
 export function evaluateTurnProgress(input: {
@@ -52,9 +64,9 @@ export function evaluateTurnProgress(input: {
   const remainingCount = hasRemainingPlanned
     ? [...(plannedFiles ?? [])].filter((f) => !isProduced(f)).length
     : 0
-  const isQuestion = /[?？]$/.test(t) || /(吗|呢|吧)[。.!！]?$|可以吗|行不行/.test(t)
-  const isCommunication = /(确认|复述|说明|解释|总结|澄清|商量|理解|明白|知道|收到|确认一下|跟你确认|和你确认|跟您确认|介绍一下|跟你聊|和你聊)/.test(t)
-  const isDone = /(完成|做好|搞定|改好|解决|处理完|已写好|已修改|已删除|已添加|已加|可以了|能玩了|没问题|修好了|加好了|实现了|就绪|收工|结束|达标|通过了|在跑|能跑|弄好|好了，|好的，|就是这些|就这样|先说这么多)/.test(t)
+  const isQuestion = isQuestionLike(t)
+  const isCommunication = isCommunicationLike(t)
+  const isDone = isDoneLike(t)
   return { artifactProduced, readNewFile, hasPlannedFiles, hasRemainingPlanned, remainingCount, isQuestion, isCommunication, isDone }
 }
 
