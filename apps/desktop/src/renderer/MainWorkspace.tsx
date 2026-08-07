@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import SessionPanel from './SessionPanel'
 import SettingsPanel from './SettingsPanel'
 // 2026-08-07 无阶段重构 S4：DeliveryFlowPanel（阶段卡/推进按钮/STAGE_HINT）删除——阶段体系移除
-import GoalCard from './GoalCard'
 import ExecutionConfirmCard from './ExecutionConfirmCard'
 import OutputPanel from './OutputPanel'
 import ConversationPanel from './ConversationPanel'
@@ -126,17 +125,8 @@ export default function MainWorkspace({
   // 2026-08-07 无阶段重构 S4：不再 handleStageChange（无阶段无推进）——确认目标即结束澄清，进入能力检查/执行方案
   const [goalConfirmed, setGoalConfirmed] = useState(false)
   const [executionConfirmed, setExecutionConfirmed] = useState(false) // 2026-08-07 无阶段重构 S4：执行方案确认（ExecutionConfirmCard）
-  const handleGoalCardConfirm = (summary: string) => {
-    handleGoalConfirmed(summary)
-  }
   // 2026-08-04 体验修复：需求阶段用户需求文本暂存（无阶段重构 S4：目标文本暂存——「确认目标」兜底回写/注入用——不依赖模型【目标确认：】标记）
   const goalTextRef = useRef('')
-  // 2026-08-07 无阶段重构修复（用户实测「快速确认开始还在/目标确认选项卡不见」）：对话开始标志——
-  // GoalCard（快速确认目标）只在对话空态显示；用户一发消息（走对话澄清）即隐藏（对话澄清是主通道，卡片是空态快捷入口）
-  const [chatStarted, setChatStarted] = useState(false)
-  // 2026-08-07 无阶段重构修复：GoalCard 显示条件 = 用户仅发过初始需求（未回复模型）——快捷确认可用；
-  // 用户一旦回复模型（进入对话往返澄清，count≥2）→ 隐藏（对话主通道接管；12:21 实测「卡片一直赖着」根因）
-  const [userMsgCount, setUserMsgCount] = useState(0)
   // 2026-08-07 无阶段重构修复（目标确认选项卡不见根因——goalConfirmed 依赖模型【目标确认：】标记，模型拖沓/不输出时确认链断裂）：
   // 执行确认卡改为「对话中常驻确认入口」——点击 = 确认目标（若未确认）+ 确认执行（坑 51 教训：用户显式操作=最强确认信号）
   const handleExecutionConfirmed = () => {
@@ -145,8 +135,6 @@ export default function MainWorkspace({
   }
   const handleUserMessage = (text: string) => {
     lastPromptRef.current = text
-    setChatStarted(true)
-    setUserMsgCount((c) => c + 1)
     // 2026-08-07 无阶段重构 S4：无阶段推进（「确认推进」是阶段术语——不再特殊处理）
     // 目标未确认时用户说确认/应答词 → 确认目标（GoalCard 外打字兜底——确定性收敛，坑 51 教训：用户显式确认=最强信号）
     // 2026-08-07 修复：词表扩「就这么做/开工/开始吧」等模型「可以吗」常见应答——12:21 实测模型「你点头我就开始写」用户回任意确认词即触发
@@ -277,17 +265,11 @@ function initProblems(): ProblemInstance[] {
             2026-08-07 无阶段重构 S4：阶段卡/推进按钮删除 → 目标确认卡 + 执行确认卡（无阶段交互） */}
         {zeroToOne && (
           <div className="nf-flow__dock">
-            {/* 2026-08-04 P2：目标确认卡——目标未确认时显示（点选 4 项 → 确认目标；确定性收敛不依赖模型标记）
-                2026-08-04 体验修复：initialPrompt 首句关键词预选「做什么」（用户已说过的类型不用重选）
-                2026-08-04 体验修复：无输入（initialPrompt 空——用户空 Enter 进入）不显示卡片——没说过目标，卡片选项对用户没意义，让对话引导
-                2026-08-07 修复（用户实测「快速确认开始还在」）：userMsgCount <= 1——用户仅发初始需求时是快捷入口，用户一回复模型（对话往返澄清）即隐藏 */}
-            {!goalConfirmed && initialPrompt && userMsgCount <= 1 && (
-              <GoalCard onConfirm={handleGoalCardConfirm} initialPrompt={initialPrompt} />
-            )}
             {/* 2026-08-07 无阶段重构 S4：执行确认卡——目标确认后、执行确认前显示（能力检查 → 执行方案 → 确认执行）
-                2026-08-07 修复（用户实测「目标确认选项卡不见」）：改为对话中常驻确认入口——!executionConfirmed && chatStarted
-                （不再依赖 goalConfirmed 前置——模型【目标确认】标记拖沓/不输出时确认入口仍可见；点击 = 确认目标+执行，坑 51 兜底） */}
-            {!executionConfirmed && chatStarted && (
+                2026-08-07 修复（用户实测反馈澄清——「目标确认选项卡」指对话内 <candidates> 候选按钮，非此卡）：
+                回退为 goalConfirmed 前置——过早常驻导致目标未确认就误点执行（冒烟实测轮 1 误点教训）；
+                目标确认由 模型【目标确认】标记 / 用户打字确认词 / GoalCard 三通道置位（不依赖单一概率行为） */}
+            {goalConfirmed && !executionConfirmed && (
               <ExecutionConfirmCard onConfirm={handleExecutionConfirmed} goalText={goalTextRef.current || initialPrompt} />
             )}
           </div>
