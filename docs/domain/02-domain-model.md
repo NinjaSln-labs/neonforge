@@ -80,7 +80,7 @@ Task = Goal → Execution → Achievement
 ```
 
 - **pending 只有一个**——不区分来源各自建 pending（来源只是卡类型）
-- **pending 下模型执行类动作无效**——有副作用工具（write/edit/bash）不执行（做了白做）——信息类（read/search/check-capability——只读无副作用）放行（模型可准备方案/查证）——**用户决策是下一个状态的唯一输入**
+- **pending 下模型所有动作无效**——任何工具（read/search/write/edit/bash/check-capability…）都不执行（做了白做——**无害 ≠ 有用**：只读动作虽无副作用但用户决策未到——结果无意义——同样白做）——**用户决策是下一个状态的唯一输入**
 - **用户「是」→ 模型根据决策重新做**（不是恢复 pending 前的动作——决策改变状态，动作跟随状态重新生成）
 
 **设计对齐与差异说明（2026-08-07 调研交叉验证）**：
