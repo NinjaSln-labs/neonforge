@@ -37,7 +37,7 @@ function waitForUrl(child: import('child_process').ChildProcess, timeoutMs = 150
     let done = false
     const finish = (url: string | null, error?: string) => { if (!done) { done = true; resolve({ url, error }) } }
     const timer = setTimeout(() => {
-      if (!buf && !errBuf) finish(null, '命令启动超时（15s 无输出）——检查命令是否存在或环境未就绪（可用 check-env 检测）')
+      if (!buf && !errBuf) finish(null, '命令启动超时（15s 无输出）——检查命令是否存在或环境未就绪（可用 check-capability 检测）')
       else finish(null)
     }, timeoutMs)
     child.stdout?.on('data', (d: Buffer) => {
@@ -108,7 +108,7 @@ export async function startServer(rootPath: string, command?: string): Promise<{
       try { process.kill(-(child.pid ?? 0), 'SIGKILL') } catch { try { child.kill('SIGKILL') } catch { /* 已退出 */ } }
       serviceProcs.delete(child)
       releasePort(rootPath)
-      return { ok: false, error: `start-server: ${error}（已分配端口 ${port}）——可用 check-env 检测环境后重试` }
+      return { ok: false, error: `start-server: ${error}（已分配端口 ${port}）——可用 check-capability 检测环境后重试` }
     }
     if (!url) {
       // 有输出但没解析到地址（输出慢/格式不同）→ 不杀进程（服务可能正在起），返回启动中——模型用 check-server 确认
@@ -124,7 +124,7 @@ export async function startServer(rootPath: string, command?: string): Promise<{
       return { ok: false, error: `start-server: 服务落到了宿主保留端口 ${actualPort}（NeonForge 自己用）——已停止；已换显式端口请用 vite 类命令` }
     }
     services.set(rootPath, { rootPath, port: actualPort, pid: child.pid ?? 0, url, startedAt: Date.now() })
-    // 环境 Registry 记录实际端口（后续 check-env/端口复用一致）
+    // 环境 Registry 记录实际端口（后续 check-capability/端口复用一致）
     const regEnv = getEnvironment(rootPath)
     if (regEnv) { regEnv.servicePort = actualPort }
     return { ok: true, data: { url, port: actualPort } }
@@ -138,7 +138,7 @@ export async function startServer(rootPath: string, command?: string): Promise<{
 export async function checkServer(rootPath: string): Promise<{ ok: true; data: { running: boolean; url?: string; port?: number; note?: string } } | { ok: false; error: string }> {
   const s = services.get(rootPath)
   if (!s) {
-    return { ok: true, data: { running: false, note: '没有启动过的开发服务器——用 start-server 启动（先 check-env 确认环境）' } }
+    return { ok: true, data: { running: false, note: '没有启动过的开发服务器——用 start-server 启动（先 check-capability 确认环境）' } }
   }
   if (!s.url) {
     return { ok: true, data: { running: false, url: s.url, note: '服务启动中（未确认地址）——稍后再查' } }
@@ -175,7 +175,7 @@ export function listServices(): Array<{ rootPath: string; url: string; port: num
   return [...services.values()].map((s) => ({ rootPath: s.rootPath, url: s.url, port: s.port }))
 }
 
-// 环境预检（开发阶段环境就绪——check-env 工具核心）：返回项目环境报告（模型判断环境是否就绪）
+// 环境预检（开发阶段环境就绪——check-capability 工具核心）：返回项目环境报告（模型判断环境是否就绪）
 export function checkEnvironment(rootPath: string): ReturnType<typeof ensureEnvironment> {
   const env = ensureEnvironment(rootPath)
   return env

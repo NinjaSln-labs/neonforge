@@ -1,6 +1,6 @@
 // 环境管理领域层（2026-08-06 尽调调研驱动——5 源交叉验证：tavily/serper 双源 + oh-my-pi 环境 overlay 集中准备 + deepcode workflow_context 纯数据建模 + reasonix 路径边界）
 // DDD：Value Object（ProjectEnvironment）+ Domain Service（EnvironmentDetector/EnvironmentRegistry）+ 端口分配器
-// 核心原则「环境单源」：检测（check-env 生成签名）→ 记录（Registry）→ 使用（spawn 统一 buildSpawnEnv 注入）——检测时确认的环境 = 使用时用的环境
+// 核心原则「环境单源」：检测（check-capability 生成签名）→ 记录（Registry）→ 使用（spawn 统一 buildSpawnEnv 注入）——检测时确认的环境 = 使用时用的环境
 // 纯逻辑可测（无 Electron 依赖——fs/node 命令注入 detect 内部，buildSpawnEnv/端口分配纯函数）
 
 import { execFileSync } from 'node:child_process'
@@ -225,7 +225,7 @@ export function detectExternalCapabilities(rootPath: string): Capability[] {
   return caps
 }
 
-// 能力检测汇总（平台原生 + 外部扩展——check-env 能力视图）
+// 能力检测汇总（平台原生 + 外部扩展——check-capability 能力视图）
 export function detectCapabilities(rootPath: string, platform: NodeJS.Platform = process.platform): Capability[] {
   const system = SYSTEM_CAPABILITIES[platform] ?? SYSTEM_CAPABILITIES.darwin
   return [...system, ...detectExternalCapabilities(rootPath)]
