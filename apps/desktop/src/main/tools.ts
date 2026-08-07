@@ -7,7 +7,7 @@ import { codeRag } from './codeRag.js'
 // 2026-08-07 T3（regex-todo）：命令类型识别单源化——isServerLikeCommand/isInstallCommand 从 serviceManager 导入（原 DEV_SERVER_RE/INSTALL_RE 散落 tools.ts 已删）
 import { startServer, checkServer, stopServer, checkEnvironment, isServerLikeCommand, isInstallCommand } from './serviceManager.js'
 // 2026-08-06 能力模型（坑 83）：check-env 返回能力视图（平台原生 + 外部扩展 Status——模型按需求选能力）
-import { detectCapabilities } from './envManager.js'
+import { detectCapabilities, attributeCommandFailure } from './envManager.js'
 
 // ToolRegistry（ticket 10 / A0 §2）：工具注册与执行分发
 // 边界判定：ToolRegistry=目录与分发；ShellAgent=bash 执行；Gateway=工具调用修复（02 已实现）
@@ -257,7 +257,11 @@ async function bashExecutor(args: Record<string, unknown>, ctx: { rootPath?: str
       cleanup()
       // 被信号终止（SIGKILL——cancel/超时）→ 「已停止」（对齐原 exec 语义：err.killed → 已停止）
       if (signal || code === null) reject(new Error('已停止（命令被中断）'))
-      else if (code !== 0) reject(new Error(stderr ? `exit-${code}: ${stderr.slice(0, 500)}` : `exit-${code}`))
+      else if (code !== 0) {
+        // 2026-08-07 Ledger（坑 83 ⑥）：bash 失败归因到能力（node/python/dev-tools）——check-capability 后续降级 failed（自学习）
+        try { attributeCommandFailure(ctx.rootPath ?? '', cmd) } catch { /* 归因失败不影响命令错误返回 */ }
+        reject(new Error(stderr ? `exit-${code}: ${stderr.slice(0, 500)}` : `exit-${code}`))
+      }
       else {
         // 2026-08-05 ServiceState（轻量服务记忆）：起服务类命令且 stdout 含实际地址 → 结果注一条（模型跨轮记得，不用重新探查端口）
         // 竞品对照：Claude/Codex 不主动记忆——工具结果回填是最轻方案；不注入全量（~30 token）
