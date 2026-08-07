@@ -235,7 +235,8 @@ test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 1
 
 // 2026-08-04 回归：0-1 从零开始「确认推进」按钮常驻可见（原 flow 面板在滚动容器内——对话一多按钮滚出视口，用户找不到）
 // 2026-08-07 无阶段重构 S4：推进按钮 → 目标确认卡（GoalCard——.nf-reqcard）——dock 常驻可见断言保持
-test('0-1 从零开始：目标确认卡常驻可见（不在滚动容器内，对话滚动不隐藏）', async ({ page }) => {
+// 2026-08-07 无阶段修复（用户实测「快速确认开始还在」）：GoalCard 是空态快捷入口——用户回复模型（对话澄清接管）后隐藏
+test('0-1 从零开始：目标确认卡可见（不在滚动容器）→ 用户回复模型后隐藏', async ({ page }) => {
   await page.addInitScript(() => {
     window.neonforge = {
       version: 'test',
@@ -265,11 +266,13 @@ test('0-1 从零开始：目标确认卡常驻可见（不在滚动容器内，�
   // 修复验证：目标确认卡不在 .nf-panel__body（滚动容器）内——对话滚动不隐藏
   const inScrollBody = await goalCard.evaluate((el) => !!el.closest('.nf-panel__body'))
   expect(inScrollBody).toBe(false)
-  // 发送需求 → 对话开始后卡片仍常驻可见
-  await page.locator('.nf-chat__input textarea').fill('做一个设计类小游戏')
+  // 用户回复模型（对话澄清接管）→ 目标确认卡隐藏（不再赖着——12:21 实测「快速确认开始还在」根因修复）
+  await page.locator('.nf-chat__input textarea').fill('搭积木玩法')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
   await page.waitForTimeout(300)
-  await expect(goalCard).toBeVisible()
+  await expect(goalCard).toHaveCount(0)
+  // 对话主通道接管：执行确认卡出现（对话中常驻确认入口——目标确认选项卡可见）
+  await expect(page.locator('.nf-exec-card')).toBeVisible()
 })
 
 // 2026-08-04 回归：点「确认推进」→ 对话区出现「已进入【X】阶段」反馈消息
