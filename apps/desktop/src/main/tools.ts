@@ -373,8 +373,11 @@ export function initTools(): void {
   toolRegistry.register({ name: 'bash', source: 'core', requiresApproval: true, risk: 'high', execute: bashExecutor, preApproval: (args) => ({ auto: isReadOnlyBash(String(args.command ?? '')) }) })
   // 2026-08-06 打开网页（用户「帮我打开」）：http/https 打开默认浏览器——无害操作自动放行（risk none）
   toolRegistry.register({ name: 'open', source: 'core', requiresApproval: false, risk: 'none', execute: openExecutor })
-  // 2026-08-04 规划级授权：虚拟工具——不执行操作，renderer 收到后弹规划授权卡（用户批准后文件加入任务级信任，write/edit 自动放行）
-  toolRegistry.register({ name: 'approve-files', source: 'core', requiresApproval: false, risk: 'none', execute: async () => ({ ok: true, data: { virtual: true } }) })
+  // 2026-08-04 批量授权：虚拟工具——不执行操作，renderer 收到后弹批量授权卡（用户批准后文件加入任务级信任，write/edit 自动放行）
+  // 2026-08-08 修复（用户「批准这批文件。你没有去点」——e2e 卡死根因）：结果改「待批准」语义——
+  // 原 ok:true 让模型以为已批准 → 继续 write 被拦 → 困惑重试 → 永不停 → waitSettled 卡死
+  // 现明确告知「提交了批准请求、等用户点批准」→ 模型停下等用户（idle）→ 用户点卡后继续
+  toolRegistry.register({ name: 'approve-files', source: 'core', requiresApproval: false, risk: 'none', execute: async () => ({ ok: true, data: { virtual: true, pendingApproval: true }, error: '已提交文件批准请求——等待用户点击「批准这批文件」后继续写文件（批准前不要写）' }) })
   // Layer2 CodeRAG：关键词检索兜底（Claude Code grep 模式——2026-08-02 调研：agentic 工具检索为行业共识，见 .scratch/neonforge-v1/layer2-retrieval-research.md）
   toolRegistry.register({
     name: 'search',
