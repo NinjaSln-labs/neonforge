@@ -1245,10 +1245,14 @@ export default function ConversationPanel({
               // 卡不依赖标记——目标未确认时「最后一条 assistant done」消息下也显示（显示 initialPrompt 暂存目标——
               // 结构化按钮替代原确认词兜底；对齐行业：确认=显式动作，不依赖模型标记）
               const isLastAssistant = m === messages[messages.length - 1]
-              const goalFallback = !goalConfirmed && isLastAssistant
+              // 2026-08-08 候选与确认卡互斥修复（用户「需求澄清选项卡和确认又一起出来了」——时间线 seq 5-6）：
+              // 消息含 <candidates>（候选=澄清决策点，等用户选方向）时不显示兜底确认卡——一个决策点走完再进下一个
+              // （此前 goalFallback「目标未确认+最后一条 done」导致候选与兜底确认卡同时显示）
+              const hasCandidates = m.content.includes('<candidates>')
+              const goalFallback = !goalConfirmed && isLastAssistant && !hasCandidates
               // 2026-08-07 执行确认兜底（模型不输出【执行方案】块时用户仍可确认执行——同目标确认：不依赖标记）：
-              // 目标已确认 && 执行未确认 && 最后一条 assistant done → 显示执行确认卡
-              const execFallback = !!goalConfirmed && !executionConfirmed && isLastAssistant
+              // 目标已确认 && 执行未确认 && 最后一条 assistant done → 显示执行确认卡（含候选时同样不显示——互斥）
+              const execFallback = !!goalConfirmed && !executionConfirmed && isLastAssistant && !hasCandidates
               if (!goalMatch && !hasPlan && !achievedMatch && !goalFallback && !execFallback) return null
               return (
                 <>

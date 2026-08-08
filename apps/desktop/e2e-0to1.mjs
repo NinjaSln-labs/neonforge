@@ -587,16 +587,16 @@ class StageMachine {
       // 2026-08-05 阶段自动推进检测：模型输出【需求确认】标记 → UI 自动推进到设计——跟住阶段
       const stNow = await this.driver.currentStage().catch(() => '')
       if (stNow && stNow.includes('设计')) { console.log('   ↪ 阶段已自动推进到设计——进入设计阶段'); return }
+      // 2026-08-08 第 4 个问题修复（卡片优先——移到循环开头）：确认卡/授权卡出现**立即**点，不等模型 idle——
+      // 否则 approve-files 卡弹出后模型继续调工具（write 被拦）→ waitSettled 永不 settle → 卡死（「批准这批文件没点」根因）
+      const card = await this.driver.handleCards()
+      if (card) { console.log(`   🧑 ${card.label}${card.detail ? `（${card.detail}）` : ''}`); continue }
       const msg = await this.driver.waitSettled()
       if (msg.content === lastProcessed) {
         await this.driver.page.waitForTimeout(3000)
         continue
       }
       lastProcessed = msg.content
-      // 2026-08-08 第 4 个问题修复：卡片优先——确认卡（目标/执行/已解决）+ 授权卡（approve-files 等）——
-      // 无阶段重构后确认只走卡片按钮（坑 135），e2e 必须先点卡（否则 goalConfirmed/executionConfirmed 永不置位 → 死循环）
-      const card = await this.driver.handleCards()
-      if (card) { console.log(`   🧑 ${card.label}${card.detail ? `（${card.detail}）` : ''}`); continue }
       // 2026-08-05 需求阶段模型越界（输出技术方案——STAGE_HINT 需求规则禁止给方案）→ 提醒先确认需求（防阶段错位）
       if (/(技术选型|整体方案|页面结构|模块划分|Three\.js|Vite|代码结构|用.*做.*引擎|渲染库)/.test(msg.content) && !/(【需求确认|需求确认：|确认完毕)/.test(msg.content)) {
         printModel(msg)
