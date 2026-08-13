@@ -13,6 +13,9 @@ on:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    env:
+      # secrets 不能出现在 if: 中（GitHub: Unrecognized named-value: 'secrets'）
+      HAS_NF_TEST_KEY: ${{ secrets.NF_TEST_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -48,7 +51,7 @@ jobs:
 
       # L4 真实 E2E（需 API key——仅手动触发）
       - name: L4 体验（e2e-suite——手动）
-        if: inputs.run_e2e == true && secrets.NF_TEST_KEY != ''
+        if: inputs.run_e2e == true && env.HAS_NF_TEST_KEY == 'true'
         working-directory: apps/desktop
         env:
           NF_TEST_KEY: ${{ secrets.NF_TEST_KEY }}
