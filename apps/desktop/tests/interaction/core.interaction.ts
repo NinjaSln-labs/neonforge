@@ -1067,3 +1067,61 @@ test('approve-files 多卡并存：连续 2 次批量授权 → 各自批准都�
   await expect(page.getByRole('button', { name: '批准这批文件' })).toHaveCount(0, { timeout: 10000 })
   await expect(page.locator('.nf-toolcall--done')).toHaveCount(2)
 })
+
+// 2026-08-14 用户实测卡死修复（timeline 0219a516）：模型连发消息时确认卡漂移消失——
+// write 被拦（exec-confirm 卡弹出）→ 模型继续输出 approve-files/说明消息 → 卡必须保持可见且唯一
+test('执行确认卡不漂移：write 被拦后模型连发消息 → 卡固定可见且唯一', async ({ page }) => {
+  await page.addInitScript(() => {
+    let streamCb: ((c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) | null = null
+    let chatCount = 0
+    window.neonforge = {
+      version: 'test',
+      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
+      workspace: { openFolder: async () => '/test', listDir: async () => [], readFile: async () => ({ ok: true, content: 'x' }), readNotebook: async () => null, initProject: async () => ({ ok: true, path: '/test', title: 't' }), updateProjectTitle: async () => ({ ok: true }) },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        streamChat: async () => {
+          chatCount++
+          setTimeout(() => {
+            // chat#1：模型第一轮回复（目标确认标记 → 目标卡）；chat#2（确认目标后的 send）：连发——write（被拦）→ 说明「点确认卡」
+            if (chatCount === 1) {
+              streamCb?.({ type: 'content', text: '好的。【目标确认：做一个网页游戏】' })
+            } else if (chatCount === 2) {
+              streamCb?.({ type: 'tool-call', toolCall: { name: 'write', args: { path: '/test/game.js', content: 'x' } } })
+              streamCb?.({ type: 'content', text: '写文件需要你点一下确认卡放行。文件清单已经批准了，你点确认后我立刻把代码全部写进去。' })
+            }
+            streamCb?.({ type: 'done' })
+          }, 30)
+          return { ok: true }
+        },
+        onStreamChunk: (cb: (c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) => { streamCb = cb; return () => {} }
+      },
+      tools: {
+        list: async () => [],
+        execute: async () => ({ ok: false, needApproval: true, error: '「write」需要授权（L3）——approved=true 后执行' }),
+        filesApproved: async () => {},
+        revert: async () => ({ ok: true })
+      },
+      context: { resolve: async () => ({ fragments: [] }) },
+      compaction: { compact: async () => ({ ok: false }) },
+      plugins: { list: async () => [], toggle: async () => true },
+      chatLog: { log: async () => {}, export: async () => ({ ok: true, path: '/tmp/x.md' }) }
+    }
+    ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
+  })
+  await page.goto('http://localhost:5175/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.getByRole('button', { name: '从零开始' }).click()
+  await page.locator('.nf-chat__input textarea').fill('帮我做一个网页游戏')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  // 目标确认卡出现 → 点「确认目标」（send「确认，目标清楚了」→ 模型 chat#2 连发 write+说明）
+  await expect(page.getByRole('button', { name: '确认目标' })).toBeVisible({ timeout: 10000 })
+  await page.getByRole('button', { name: '确认目标' }).click()
+  // 修复前：write 消息上的执行确认卡被后续说明消息「漂移」消失 → 用户找不到卡死锁；
+  // 修复后：卡固定挂在 write 信号消息上——可见且唯一（strict 单卡）
+  await expect(page.getByRole('button', { name: '确认执行' })).toBeVisible({ timeout: 10000 })
+  await expect(page.getByRole('button', { name: '确认执行' })).toHaveCount(1)
+  // 卡有效：点「确认执行」→ write 重新执行（approved=true 放行 → done）
+  await page.getByRole('button', { name: '确认执行' }).click()
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(1, { timeout: 10000 })
+})
