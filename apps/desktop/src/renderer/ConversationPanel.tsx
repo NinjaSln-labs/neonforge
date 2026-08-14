@@ -11,6 +11,8 @@ import { buildAuthHint, canMergeApprove, toolRisk } from './authModel'
 import { cleanContent, stripMarkdown } from './textClean'
 // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层纯逻辑，双源调研驱动）
 import { evaluateTurnProgress, detectStuck, initialStuckState, isQuestionLike, isCommunicationLike, isDoneLike, parseExecutionPlan, summarizeCapability } from '../domain/agentLoop'
+// 2026-08-14 会话状态机（Task 聚合——A0 §2/§3/§4/§5）：状态单一来源 + 转换唯一入口（session-state-machine.md S2）
+import { initialState as initialConversationState, userConfirmed, approvalGranted, applyToolResult, classifyAction, plannedComplete as isPlannedComplete, forceToolInput as buildForceToolInput, isProgressing as hasProgress, pendingCardToShow, type ConversationState } from '../domain/conversationState'
 // 2026-08-07 DDD 落地（坑 89 forceTool/advanceChat 领域化——Conversation BC 轮次执行保障 + AgentChain BC 产品阶段流转）
 import { decideTurnPolicy } from '../domain/turnPolicy'
 // 2026-08-07 无阶段重构 S4：buildAdvanceInstruction/stageFlow import 删除（advanceChat 随阶段体系移除）
@@ -246,12 +248,14 @@ export default function ConversationPanel({
   // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层状态）：连续无进展计数 + 升级次数（不可变 StuckState）+ 已读文件集合
   const stuckStateRef = useRef(initialStuckState)
   const prevReadFilesRef = useRef<Set<string>>(new Set())
-  // 2026-08-06 任务完成度（deepcode unimplemented_files 借鉴）：approve-files 规划文件清单 + write/edit 产出文件（approvePlan 时保存/重置）
-  const plannedFilesRef = useRef<Set<string>>(new Set())
-  const producedFilesRef = useRef<Set<string>>(new Set())
-  // 2026-08-07 用户决策（行业共识——显式确认）：达成确认卡【已解决】→ true（替代「模型【已达成】自报即释放」——
-  // 模型【已达成】= 提议，用户点「已解决」才释放 forceTool）
-  const goalAchievedRef = useRef(false)
+  // 2026-08-14 会话状态机（Task 聚合——S2 迁移）：原 7 个散 ref（plannedFiles/producedFiles/goalAchieved/
+  // lastToolFailed/filesApproved/goalConfirmed/executionConfirmed）合并为单一 ConversationState——
+  // 读 = stateRef.current.x；写 = 转换函数（userConfirmed/approvalGranted/applyToolResult）唯一入口
+  const stateRef = useRef<ConversationState>(initialConversationState())
+  // 用户确认（MainWorkspace state）→ 状态机同步（无阶段重构 S4：prop 改名 goalConfirmed）
+  useEffect(() => { if (goalConfirmed && !stateRef.current.goalConfirmed) stateRef.current = userConfirmed(stateRef.current, 'goal') }, [goalConfirmed])
+  // 2026-08-07 执行确认门控（用户「确认卡不选就不执行后续」——与授权卡同语义）：执行未确认 → write/edit/bash 不执行
+  useEffect(() => { if (executionConfirmed && !stateRef.current.executionConfirmed) stateRef.current = userConfirmed(stateRef.current, 'execution') }, [executionConfirmed])
   // 2026-08-07 会话时间线（Session Timeline BC——单会话所有步骤统一日志：用户/搭档/工具/授权/状态——分析一步到位）
   const tlog = (type: string, detail: Record<string, unknown>, role?: 'user' | 'assistant' | 'system' | 'tool') => {
     // 2026-08-08 会话归属：session 用会话 ID（UUID——本组件挂载生成）——写入对应会话 timeline 文件
@@ -271,7 +275,7 @@ export default function ConversationPanel({
     if (isLastAssistant) {
       if ((/【目标确认[:：]/.test(content) || !goalConfirmed) && !goalConfirmed) show('goal-confirm', { goalText: content.slice(0, 80) })
       if ((content.includes('【执行方案') || (goalConfirmed && !executionConfirmed)) && goalConfirmed && !executionConfirmed) show('exec-confirm')
-      if (content.includes('【已达成') && producedFilesRef.current.size > 0 && !goalAchievedRef.current) show('achieve-confirm')
+      if (content.includes('【已达成') && stateRef.current.producedFiles.size > 0 && !stateRef.current.achievementConfirmed) show('achieve-confirm')
     }
     // 授权卡 / approve-files 卡（工具卡 need-approval/plan-approval 状态）——每次弹卡独立记录（同工具不同 args 是新的授权决策）
     for (const m of messages) {
@@ -292,16 +296,9 @@ export default function ConversationPanel({
       tlog('status-change', { status })
     }
   }, [working, messages])
-  // 2026-08-07 无阶段修复（用户「错误要抛出来，模型自己修正」）：工具执行失败标志——bash exit≠0/write 失败
-  // → turnPolicy lastToolFailed 释放强制（模型可停下诊断——防 required 压制修正被迫重试死循环，冒烟实测 37 轮）
-  const lastToolFailedRef = useRef(false)
-  // 2026-08-05：renderer 侧「已规划」标记——approvePlan 置 true（幂等：本任务内再调 approve-files 不弹卡）；阶段推进（clearTrust）重置
-  const filesApprovedRef = useRef(false)
-  const goalConfirmedRef = useRef(false) // 2026-08-06 需求阶段门控：模型输出【目标确认】→ true（无阶段重构 S3：需求确认→目标确认——确认后 write/edit/bash 放行——直接执行）
-  useEffect(() => { if (goalConfirmed) goalConfirmedRef.current = true }, [goalConfirmed]) // 用户确认（MainWorkspace state）→ 同步（无阶段重构 S4：prop 改名 goalConfirmed）
-  // 2026-08-07 执行确认门控（用户「确认卡不选就不执行后续」——与授权卡同语义）：执行未确认 → write/edit/bash 不执行
-  const executionConfirmedRef = useRef(false)
-  useEffect(() => { if (executionConfirmed) executionConfirmedRef.current = true }, [executionConfirmed])
+  // 2026-08-05：renderer 侧「已规划」标记 + 确认门控 ref 已并入状态机（stateRef——见上方 S2 迁移）；保留注释链：
+  // filesApproved → stateRef.filesApproved；goal/execConfirmed → stateRef.goalConfirmed/executionConfirmed；
+  // lastToolFailed → stateRef.lastToolFailed（applyToolResult 唯一写入口）
   useEffect(() => {
     if (initialPrompt && initialPrompt.trim()) {
       inputRef.current = initialPrompt.trim()
@@ -392,7 +389,7 @@ export default function ConversationPanel({
       // 2026-08-08 根因 3 修复③：trustPath 规范化（模型写相对路径如 game.js）——与 approvePlan 的绝对路径清单（1036 行）统一比较基准
       const planFiles = parseExecutionPlan(content)
       if (planFiles.length > 0) {
-        planFiles.forEach((f) => plannedFilesRef.current.add(trustPath(f)))
+        planFiles.forEach((f) => stateRef.current.plannedFiles.add(trustPath(f)))
       }
       // 2026-08-05 体验反馈（用户「最后一条像卡住」）：模型承诺行动（「我先…再…」）但没调工具 → 提示用户可回复「继续」
       // （非卡死——working 已释放；判定收紧：问句/征求同意/「确认/思考」类对话行为不触发；不限于开发阶段——任何阶段说了要看/读/写就该做）
@@ -410,17 +407,18 @@ export default function ConversationPanel({
       //    只处理工具循环轮（首轮已 forceTool API 强制——不重复）；连续 2 轮无产出（无 write/edit/新 read）→ escalate 自动续聊指出没动手；
       //    升级 2 次仍无产出 → needs-human 状态栏提示（对齐行业——不再固定配额「耗尽」问题）
       // 2026-08-07 无阶段重构 S3：目标确认后才启用 StuckDetector（原 flowStage>=1——目标确认前模型澄清问答/探索是正常行为，不检测停滞）
-      if (goalConfirmedRef.current) {
+      if (stateRef.current.goalConfirmed) {
         // 2026-08-06 任务完成度：write/edit 成功标记产出（approve-files 规划文件 vs 已产出——deepcode unimplemented_files 借鉴）
+        // 2026-08-14 S2：产出记录走状态机转换（applyToolResult——不可变更新）
         streamingRef.current.toolCalls.forEach((c) => {
-          if ((c.name === 'write' || c.name === 'edit') && c.status === 'done' && c.file) producedFilesRef.current.add(c.file)
+          if ((c.name === 'write' || c.name === 'edit') && c.status === 'done' && c.file) stateRef.current = applyToolResult(stateRef.current, { name: c.name, ok: true, file: c.file })
         })
         const turn = evaluateTurnProgress({
           toolCalls: streamingRef.current.toolCalls.map((c) => ({ name: c.name, status: c.status, file: c.file })),
           content,
           prevReadFiles: prevReadFilesRef.current,
-          plannedFiles: plannedFilesRef.current,
-          producedFiles: producedFilesRef.current,
+          plannedFiles: stateRef.current.plannedFiles,
+          producedFiles: stateRef.current.producedFiles,
           // 2026-08-06 补充（用户「清单来源不只 approve-files」——③ projectFiles 项目文件树）：产出校验（规划文件出现在文件树=已产出）
           projectFiles: new Set(recentFilesExternal ?? [])
         })
@@ -476,7 +474,7 @@ export default function ConversationPanel({
         // 2026-08-08 改名 + 语义澄清（坑 95）：approve-files = 批量授权（确认执行后的粒度优化），非「规划批准」
         let status: 'pending' | 'done' | 'file-approval' = 'pending'
         if (chunk.toolCall.name === 'approve-files') {
-          status = filesApprovedRef.current ? 'done' : 'file-approval'
+          status = stateRef.current.filesApproved ? 'done' : 'file-approval'
         }
         next.toolCalls = [...(next.toolCalls ?? []), {
           name: chunk.toolCall.name,
@@ -515,13 +513,13 @@ export default function ConversationPanel({
       // 2026-08-08 根因 3 修复③：plannedFiles 清单比较统一**双向 trustPath 规范化**——【执行方案】块解析可能发生在
       // rootPath 未设置时（存相对路径 'game.js'），write 判定时 rootPath 已设（trustPath 转 '/test/game.js'）→ 直接 has 不匹配
       const inPlannedFiles = (p: unknown): boolean =>
-        [...plannedFilesRef.current].some((f) => trustPath(f) === trustPath(p))
+        [...stateRef.current.plannedFiles].some((f) => trustPath(f) === trustPath(p))
       const confirmPending = (content: string, calls: Array<{ name: string; status?: string }>): boolean => {
         const execPending = calls.some((c) => (c.name === 'write' || c.name === 'edit' || c.name === 'bash') && c.status === 'pending')
         return (
-          (content.includes('【目标确认') && !goalConfirmedRef.current)  // 目标确认卡待决策
-          || (goalConfirmedRef.current && !executionConfirmedRef.current && (content.includes('【执行方案') || execPending))  // 执行确认卡（方案提议/要动手）
-          || (content.includes('【已达成') && !goalAchievedRef.current)  // 达成确认卡待决策
+          (content.includes('【目标确认') && !stateRef.current.goalConfirmed)  // 目标确认卡待决策
+          || (stateRef.current.goalConfirmed && !stateRef.current.executionConfirmed && (content.includes('【执行方案') || execPending))  // 执行确认卡（方案提议/要动手）
+          || (content.includes('【已达成') && !stateRef.current.achievementConfirmed)  // 达成确认卡待决策
         )
       }
       // 2026-08-07 用户纠正（「无害≠有用」）：pending 下**所有工具都不执行**——read/search 虽只读无害但没用
@@ -541,13 +539,13 @@ export default function ConversationPanel({
       }
       // 2026-08-06 偏离清单拦截（基于事实：06:03 已规划但写「正确路径」偏离批准清单 → 逐个弹授权/规划外文件——用户「相同文件弹授权」根因）：
       // 已规划（filesApprovedRef）但文件不在批准清单 → 不弹逐个卡——拒绝 + 引导补充 approve-files（清单与实际始终一致）
-      if (tc.name === 'write' && filesApprovedRef.current && !inPlannedFiles(tc.args.path)) { // 2026-08-06 edit 豁免（改现有文件=操作明确——B 类文件操作直接改）；write 新建强制规划
+      if (tc.name === 'write' && stateRef.current.filesApproved && !inPlannedFiles(tc.args.path)) { // 2026-08-06 edit 豁免（改现有文件=操作明确——B 类文件操作直接改）；write 新建强制规划
         setMessages((prev) => {
           const last = prev[prev.length - 1]
           if (!last || last.role !== 'assistant') return prev
           const calls = (last.toolCalls ?? []).map((c) => c.name === tc.name && c.status === 'pending'
             ? (() => {
-                const approved = [...plannedFilesRef.current].map((p) => p.split('/').pop()).join('、')
+                const approved = [...stateRef.current.plannedFiles].map((p) => p.split('/').pop()).join('、')
                 return { ...c, status: 'done' as const, result: `${tc.args.path} 不在批准清单（已批准：${approved || '无'}）——不要重复尝试；改写清单内文件，或再次调 approve-files 补充该文件（列出文件+原因）` }
               })()
             : c)
@@ -558,17 +556,14 @@ export default function ConversationPanel({
       // 2026-08-08 根因 3 修复③：write 门控与【执行方案】块联动——用户确认执行（executionConfirmedRef）后，
       // 【执行方案】块解析的清单内文件（plannedFilesRef）视为已批准（approved=true）→ 绕过 main 规划门控
       // （模型已列清单 + 用户已确认执行 = 认可这批文件——无需再点 approve-files 卡；清单外文件仍被 main 门控拦）
-      const execPlanApproved = tc.name === 'write' && executionConfirmedRef.current && inPlannedFiles(tc.args.path)
+      const execPlanApproved = tc.name === 'write' && stateRef.current.executionConfirmed && inPlannedFiles(tc.args.path)
       const autoApproved = execPlanApproved || (delegateLowRisk && toolRisk(tc.name) === 'low') || isTrusted(tc.args)
       void (window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: autoApproved, rootPath: rootPath ?? undefined, sessionId }) ?? Promise.resolve({ ok: false, error: 'tools 通道未就绪' })).then((r) => {
         const data = r.data as { file?: string; snapshot?: boolean } | undefined
         // 13 交付包联动：真实文件操作成功（write/edit 返回 file）→ 上报变更（产物区展示）
         if (r.ok && data?.file) onToolResult?.({ name: tc.name, file: data.file, ok: true })
-        // 2026-08-07 失败感知：成功执行 → 清除失败标志（模型修正成功恢复强制判定）；失败（非待授权）→ 置失败标志
-        // 2026-08-08 根因 3 修复②：policy（策略引导——如 write 规划门控「先 approve-files 再写」）≠ 执行失败——
-        // 不置 lastToolFailed（否则 forceTool 恒释放 → 模型纯文本承诺后停住——冒烟 O4/O5 根因）
-        if (r.ok) lastToolFailedRef.current = false
-        else if (!r.needApproval && !r.policy) lastToolFailedRef.current = true
+        // 2026-08-14 S2：工具结果 → 状态机转换唯一入口（applyToolResult——进度/失败标志汇入状态）
+        stateRef.current = applyToolResult(stateRef.current, { name: tc.name, ok: r.ok, needApproval: r.needApproval, policy: r.policy, file: data?.file })
         tlog('tool-result', { name: tc.name, ok: r.ok, needApproval: r.needApproval, error: r.error }, 'tool')
         setMessages((prev) => {
           if (prev.length === 0) return prev
@@ -586,7 +581,7 @@ export default function ConversationPanel({
                   }
                   // 2026-08-06 修正重写可见性（用户「第二次 write 很快不知道发生了什么——只需知道第二次是 fix bug」）：
                   // write 且该文件之前已写过（producedFilesRef 已有）→ 卡上标记「修正重写」——用户看到第二次是修正不是重复
-                  const isRewrite = tc.name === 'write' && !!data?.file && producedFilesRef.current.has(data.file)
+                  const isRewrite = tc.name === 'write' && !!data?.file && stateRef.current.producedFiles.has(data.file)
                   return { ...c, status: 'done' as const, result: (isRewrite ? '⚠️ 修正重写——' : '') + fmtToolResult(r), rawResult: typeof r.data === 'string' ? r.data.slice(0, 16000) : JSON.stringify(r.data ?? '').slice(0, 16000), file: data?.file, canRevert: !!(data?.file && data.snapshot) }
                 })()
               : { ...c, status: r.needApproval ? ('need-approval' as const) : ('error' as const), result: r.error }
@@ -629,9 +624,9 @@ export default function ConversationPanel({
       const lastContent = lastMsg.content ?? ''
       const execPendingCalls = lastMsg.toolCalls.filter((c) => (c.name === 'write' || c.name === 'edit' || c.name === 'bash') && c.status === 'pending')
       const confirmPending = (
-        (lastContent.includes('【目标确认') && !goalConfirmedRef.current)  // 目标确认卡
-        || (goalConfirmedRef.current && !executionConfirmedRef.current && (lastContent.includes('【执行方案') || execPendingCalls.length > 0))  // 执行确认卡（方案提议/要动手）
-        || (lastContent.includes('【已达成') && !goalAchievedRef.current)  // 达成确认卡
+        (lastContent.includes('【目标确认') && !stateRef.current.goalConfirmed)  // 目标确认卡
+        || (stateRef.current.goalConfirmed && !stateRef.current.executionConfirmed && (lastContent.includes('【执行方案') || execPendingCalls.length > 0))  // 执行确认卡（方案提议/要动手）
+        || (lastContent.includes('【已达成') && !stateRef.current.achievementConfirmed)  // 达成确认卡
       )
       if (needsApproval || confirmPending) { releaseWorking(); return } // 卡弹出（确认卡/授权卡）——等用户决策（模型停——不续聊）
       if (pending.length === 0) {
@@ -727,7 +722,7 @@ export default function ConversationPanel({
     // 2026-08-07 批准清单可见性（竞品源码调研：Aider abs_fnames / Codex rules / Goose judge——边界对模型显式可见）：
     // approve-files 批准后 → 清单注入系统提示——模型每轮知道「可写哪几个文件」——写文件对照清单，不写清单外
     let planHint = ''
-    const plannedFiles = plannedFilesRef.current
+    const plannedFiles = stateRef.current.plannedFiles
     if (plannedFiles.size > 0) {
       const names = [...plannedFiles].map((p) => p.split('/').pop()).join('、')
       planHint = `【已批准文件清单】${names}——**写文件只能写清单内的**；写清单外文件会被拒绝。被拒=该文件不在已批准范围——**改写清单内文件**；确需写新文件，先调 approve-files 补充（列出文件+原因）再写。`
@@ -742,28 +737,28 @@ export default function ConversationPanel({
       // 2026-08-07 无阶段重构 S1/S3/S4：判定改由领域层 TurnExecutionPolicy 三态推导（goalConfirmed/executionConfirmed/produced）——
       // 目标+执行确认但无产出 → required 强制模型必须调工具（不能只输出文本承诺）；其余 auto（澄清/等确认/已有产出）
       // isPureAck 词表随无阶段终结（S3——T4「保持现状」决策被取代：纯确认进入目标/执行确认状态流转，无需独立豁免名单）
-      const produced = producedFilesRef.current.size > 0
+      const produced = stateRef.current.producedFiles.size > 0
       // 2026-08-07 达成确认（用户决策——显式确认）：goalAchieved 由达成确认卡【已解决】置位（模型【已达成】= 提议，
       // 不再自报即释放——用户确认「已解决」才释放 forceTool）
-      const goalAchieved = goalAchievedRef.current
+      const goalAchieved = stateRef.current.achievementConfirmed
       // 2026-08-07 计划文件写完判定（竞品对齐——任务完成度按计划写完，不依赖模型自报）：
       // producedFiles 数 >= plannedFiles 数（宽松——防路径归一化差异误判）；**无计划文件时视为完成**
       // （冒烟 13 实测：模型未调 approve-files 直接 write → plannedFilesRef 空 → plannedComplete 恒 false
       // → 永远强制 → 死循环——无计划=无「计划未完成」，产出后即释放）
-      const plannedComplete = plannedFilesRef.current.size === 0 || producedFilesRef.current.size >= plannedFilesRef.current.size
+      const plannedComplete = stateRef.current.plannedFiles.size === 0 || stateRef.current.producedFiles.size >= stateRef.current.plannedFiles.size
       // 2026-08-07 无阶段重构 S4：三态接入真实状态（goalConfirmed 目标确认 + executionConfirmed 执行确认——ExecutionConfirmCard）
       // 2026-08-08 根因 3 修复①：判定改读 **ref** 而非 prop 闭包——确认卡按钮同事件触发 send 时
       // （onClick 内 setState 异步 + sendRef 同步调用——1215/1224 行）prop 还是旧渲染值 → forceTool 恒 auto → 模型纯文本承诺后停住
       // （坑 90 ⑧ 教训重演：门控/判定类逻辑用 ref 不用 prop 闭包）；ref 由按钮 onClick 先发同步 + effect 兜底
       const { forceTool } = decideTurnPolicy({
-        goalConfirmed: goalConfirmedRef.current,
-        executionConfirmed: executionConfirmedRef.current,
+        goalConfirmed: stateRef.current.goalConfirmed,
+        executionConfirmed: stateRef.current.executionConfirmed,
         produced,
-        lastToolFailed: lastToolFailedRef.current, // 2026-08-07：上一轮工具失败 → 释放强制（模型可停下诊断修正）
+        lastToolFailed: stateRef.current.lastToolFailed, // 2026-08-07：上一轮工具失败 → 释放强制（模型可停下诊断修正）
         goalAchieved, // 2026-08-07：produced 后仍需模型汇报【已达成】才释放（防写 1 文件就停）
         plannedComplete, // 2026-08-07：计划文件写完 → 释放（required 模式模型无法输出达成文本——防重复写死循环）
       })
-      tlog('assistant-start', { forceTool, goalConfirmed: goalConfirmedRef.current, executionConfirmed: executionConfirmedRef.current }, 'assistant')
+      tlog('assistant-start', { forceTool, goalConfirmed: stateRef.current.goalConfirmed, executionConfirmed: stateRef.current.executionConfirmed }, 'assistant')
       const res = await window.neonforge.gateway.streamChat({
         apiKey: key,
         level: 'basic',
@@ -842,7 +837,8 @@ export default function ConversationPanel({
     taskTrustRef.current = []
     setTaskTrust([])
     // 2026-08-05：阶段推进 = 任务边界；2026-08-07 无阶段重构 S4/S5：目标确认（goalSeq）= 任务边界——approve-files 幂等标记同步重置（新任务需重新规划授权）
-    filesApprovedRef.current = false
+    // 2026-08-14 S2：状态机字段（完整任务边界重置由 userConfirmed('goal') 承担——此处仅即时清幂等标记）
+    stateRef.current = { ...stateRef.current, filesApproved: false }
   }
   // 2026-08-04 修复（用户「游戏成的3是D」错位）：流式链互斥——一次只跑一条链（send/advanceChat/授权续聊），其他链排队；
   // 原并发流（approveToolCall 续聊 + pendingAdvance 补发）chunk 交错写入同一消息 → 文本字符级错位
@@ -1020,10 +1016,8 @@ export default function ConversationPanel({
       const data = r.data as { file?: string; snapshot?: boolean } | undefined
       // 13 交付包联动：授权后真实写入成功 → 上报变更
       if (r.ok && data?.file) onToolResult?.({ name: tc.name, file: data.file, ok: true })
-      // 2026-08-07 失败感知：批准执行成功 → 清失败标志；失败 → 置（turnPolicy 释放强制——模型可停下诊断）
-      // 2026-08-08 根因 3 修复②：policy（策略引导）不置失败标志（同自动执行路径——552 行）
-      if (r.ok) lastToolFailedRef.current = false
-      else if (!r.needApproval && !r.policy) lastToolFailedRef.current = true
+      // 2026-08-14 S2：工具结果 → 状态机转换唯一入口（同自动执行路径）
+      stateRef.current = applyToolResult(stateRef.current, { name: tc.name, ok: r.ok, needApproval: r.needApproval, policy: r.policy, file: data?.file })
       tlog('tool-result', { name: tc.name, ok: r.ok, needApproval: r.needApproval, error: r.error }, 'tool')
       patchToolCall(idx, (c) => (r.ok
         ? { ...c, status: 'done' as const, result: fmtToolResult(r), rawResult: typeof r.data === 'string' ? r.data.slice(0, 16000) : JSON.stringify(r.data ?? '').slice(0, 16000), file: data?.file, canRevert: !!(data?.file && data.snapshot) }
@@ -1073,11 +1067,8 @@ export default function ConversationPanel({
     // 模型分批 approve-files（首批 5 文件 + 后续补充）时后批不再覆盖前批（冒烟 10 实测：style.css 在首批批准，
     // 被模型二次 approve-files 覆盖丢失 → write 误拦「不在清单」→ 模型困惑）；producedFilesRef 不重置（补充规划≠新任务——
     // 已产出文件保留，forceTool produced-auto 状态不丢）
-    const merged = new Set(plannedFilesRef.current)
-    files.forEach((f) => merged.add(trustPath(f.path)))
-    plannedFilesRef.current = merged
-    // 2026-08-05：幂等标记——本任务内再调 approve-files 不再弹卡
-    filesApprovedRef.current = true
+    // 2026-08-14 S2：批准 → 状态机转换唯一入口（approvalGranted——追加语义 + 幂等标记；trustPath 规范化在入口处）
+    stateRef.current = approvalGranted(stateRef.current, files.map((f) => trustPath(f.path)))
     // 2026-08-04 规划强制：通知 main（filesApproved=true——write/edit 放行）
     void window.neonforge.tools?.filesApproved?.()
     patchToolCall(idx, (c) => ({ ...c, status: 'done' as const, result: `已批准 ${files.length} 个文件（本次任务自动放行）` }), tc)
@@ -1273,7 +1264,7 @@ export default function ConversationPanel({
                       <div className="nf-confirmcard__head">目标确认——需要你确认</div>
                       <div className="nf-confirmcard__goal">{goalMatch ? goalMatch[1].trim() : (initialPrompt || '你描述的目标')}</div>
                       <div className="nf-confirmcard__actions">
-                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { goalConfirmedRef.current = true; onGoalConfirmed?.(goalMatch ? goalMatch[1].trim() : (initialPrompt || '目标已确认')); inputRef.current = '确认，目标清楚了'; void sendRef.current() }}>确认目标</button>
+                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { stateRef.current = userConfirmed(stateRef.current, 'goal'); onGoalConfirmed?.(goalMatch ? goalMatch[1].trim() : (initialPrompt || '目标已确认')); inputRef.current = '确认，目标清楚了'; void sendRef.current() }}>确认目标</button>
                         <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { inputRef.current = '目标需要重新描述一下'; void sendRef.current() }}>重新描述</button>
                       </div>
                     </div>
@@ -1282,16 +1273,16 @@ export default function ConversationPanel({
                     <div className="nf-confirmcard" role="group" aria-label="确认执行方案">
                       <div className="nf-confirmcard__head">执行方案——需要你确认后动手</div>
                       <div className="nf-confirmcard__actions">
-                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { executionConfirmedRef.current = true; onExecutionConfirmed?.(); inputRef.current = '确认，按方案执行'; void sendRef.current() }}>确认执行</button>
+                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { stateRef.current = userConfirmed(stateRef.current, 'execution'); onExecutionConfirmed?.(); inputRef.current = '确认，按方案执行'; void sendRef.current() }}>确认执行</button>
                         <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { inputRef.current = '方案需要调整一下'; void sendRef.current() }}>修改方案</button>
                       </div>
                     </div>
                   )}
-                  {achievedMatch && producedFilesRef.current.size > 0 && !goalAchievedRef.current && isLastAssistant && (
+                  {achievedMatch && stateRef.current.producedFiles.size > 0 && !stateRef.current.achievementConfirmed && isLastAssistant && (
                     <div className="nf-confirmcard" role="group" aria-label="确认达成">
                       <div className="nf-confirmcard__head">搭档已完成——你确认解决了没有</div>
                       <div className="nf-confirmcard__actions">
-                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { goalAchievedRef.current = true; inputRef.current = '已解决，谢谢'; void sendRef.current() }}>已解决</button>
+                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { stateRef.current = userConfirmed(stateRef.current, 'achievement'); inputRef.current = '已解决，谢谢'; void sendRef.current() }}>已解决</button>
                         <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { inputRef.current = '还要改一些地方：'; void sendRef.current() }}>还要改</button>
                       </div>
                     </div>

@@ -14,12 +14,12 @@ export type PendingKind = 'none' | 'goal' | 'execution' | 'achievement' | 'appro
 export interface ConversationState {
   goalConfirmed: boolean
   executionConfirmed: boolean
-  achievementConfirmed: boolean
+  achievementConfirmed: boolean // 用户点「已解决」（2026-08-07 决策：模型【已达成】= 提议，用户确认才释放 forceTool）
   pending: PendingKind
   plannedFiles: Set<string>   // A0 §5 宿主边界（追加语义——批准∪执行方案解析；路径已 trustPath 规范化）
   producedFiles: Set<string>  // write/edit 成功累积（进度数据）
+  filesApproved: boolean      // 本任务已批准过 approve-files（幂等——坑 95：再调不弹卡；任务边界重置）
   lastToolFailed: boolean     // 上一轮工具执行失败（坑 93 ②：策略引导 policy 不置）
-  goalAchieved: boolean       // 模型汇报【已达成】
 }
 
 export const initialState = (): ConversationState => ({
@@ -29,8 +29,8 @@ export const initialState = (): ConversationState => ({
   pending: 'none',
   plannedFiles: new Set(),
   producedFiles: new Set(),
+  filesApproved: false,
   lastToolFailed: false,
-  goalAchieved: false,
 })
 
 // ============================================================================
@@ -47,8 +47,8 @@ export function userConfirmed(s: ConversationState, point: 'goal' | 'execution' 
     next.achievementConfirmed = false
     next.plannedFiles = new Set()
     next.producedFiles = new Set()
+    next.filesApproved = false
     next.lastToolFailed = false
-    next.goalAchieved = false
   }
   if (point === 'execution') {
     next.executionConfirmed = true
@@ -74,11 +74,11 @@ export function setPending(s: ConversationState, kind: Exclude<PendingKind, 'non
   return { ...s, pending: kind }
 }
 
-// approve-files 批准 → 计划清单追加（A0 §5 追加语义——不覆盖前批）
+// approve-files 批准 → 计划清单追加（A0 §5 追加语义——不覆盖前批）+ 幂等标记（坑 95）
 export function approvalGranted(s: ConversationState, files: string[]): ConversationState {
   const planned = new Set(s.plannedFiles)
   files.forEach((f) => planned.add(f))
-  return { ...s, plannedFiles: planned, pending: 'none' }
+  return { ...s, plannedFiles: planned, filesApproved: true, pending: 'none' }
 }
 
 // 工具结果 → 进度数据 + 失败标记（缝隙 6：诊断上下文汇入状态）
@@ -143,14 +143,15 @@ export function plannedComplete(s: ConversationState, projectFiles: ReadonlySet<
   return [...s.plannedFiles].every((f) => s.producedFiles.has(f) || projectFiles.has(f))
 }
 
-// forceTool 输入（turnPolicy 消费——plannedComplete 收敛后 forceTool 不再死锁）
+// forceTool 输入（turnPolicy 消费——plannedComplete 收敛后 forceTool 不再死锁；
+// goalAchieved 传 achievementConfirmed——2026-08-07 决策：用户点「已解决」才释放，模型【已达成】只是提议）
 export function forceToolInput(s: ConversationState, projectFiles: ReadonlySet<string>): TurnPolicyInput {
   return {
     goalConfirmed: s.goalConfirmed,
     executionConfirmed: s.executionConfirmed,
     produced: s.producedFiles.size > 0,
     lastToolFailed: s.lastToolFailed,
-    goalAchieved: s.goalAchieved,
+    goalAchieved: s.achievementConfirmed,
     plannedComplete: plannedComplete(s, projectFiles),
   }
 }

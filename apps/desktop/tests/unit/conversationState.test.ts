@@ -22,7 +22,8 @@ describe('conversationState——转换（唯一入口，不可变）', () => {
     expect(next.pending).toBe('none')
     expect(next.plannedFiles.size).toBe(0)
     expect(next.producedFiles.size).toBe(0)
-    expect(next.goalAchieved).toBe(false)
+    expect(next.achievementConfirmed).toBe(false)
+    expect(next.filesApproved).toBe(false)
     expect(next.lastToolFailed).toBe(false)
   })
 
