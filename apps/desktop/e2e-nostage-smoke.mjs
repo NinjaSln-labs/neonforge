@@ -66,11 +66,17 @@ class Driver {
   }
 
   // 等模型完全空闲（working=0 + 无工具执行 + 就绪稳定 2 轮）返回最后一条模型回复
+  // 2026-08-13 同 e2e-0to1 卡死修复三件套：① 进展指纹含工具卡——tool-only 长链持续推进窗口顺延（防固定
+  // 120s 窗口误杀合法长链：write 10+ 文件 / npm install 120s+）② 状态栏读取容错（失败/为空不据此判忙）
+  // ③ 长空闲兜底：窗口耗尽无进展 → 返回最后一条已知回复（上层去重/推动），不无条件 throw
   async waitSettled(timeoutMs = 120000) {
-    const deadline = Date.now() + timeoutMs
+    let windowEnd = Date.now() + timeoutMs
+    const hardDeadline = Date.now() + timeoutMs * 4
     let last = null
     let sb = ''
     let stableCount = 0
+    let lastFp = ''
+    let idleSince = Date.now()
     const settled = async () => {
       await this.page.waitForTimeout(1500)
       const t = await this.transcript()
@@ -81,10 +87,13 @@ class Driver {
       sb = await this.page.locator('.nf-statusbar').innerText().catch(() => '')
       const working = await this.page.locator('.nf-statusbar__dot--working').count().catch(() => 0)
       const runningTools = await this.page.locator('.nf-toolcall--running, .nf-toolcall--pending').count().catch(() => 0)
+      const fp = t.map((m) => `${m.role}|${m.content.slice(0, 30)}|${m.tools.length}|${m.tools.join('|').slice(0, 40)}`).join('~')
+      if (fp !== lastFp) { lastFp = fp; idleSince = Date.now() }
       const msgChanged = last && lastMsg && lastMsg.content !== last.content
       if (sb.includes('有操作待你批准') && lastMsg) return lastMsg
       if (sb.includes('说要做但还没动手') && lastMsg && !msgChanged) return lastMsg
-      if (lastMsg && lastMsg.content.trim() && working === 0 && runningTools === 0 && sb.includes('就绪') && !msgChanged) {
+      const ready = sb === '' ? (working === 0 && runningTools === 0) : sb.includes('就绪')
+      if (lastMsg && lastMsg.content.trim() && ready && working === 0 && runningTools === 0 && !msgChanged) {
         if (/说要做但还没动手|回复.*继续/.test(lastMsg.content)) { last = lastMsg; return null }
         stableCount++
         if (stableCount >= 2) return lastMsg
@@ -92,20 +101,20 @@ class Driver {
       if (lastMsg) last = lastMsg
       return null
     }
-    while (Date.now() < deadline) {
+    while (Date.now() < hardDeadline) {
       const r = await settled()
       if (r) return r
-    }
-    if (sb.includes('就绪')) {
-      log('⚠️', `waitSettled 超时但状态就绪——催一次「继续」再等 60s`)
-      await this.send('继续')
-      const d2 = Date.now() + 60000
-      while (Date.now() < d2) {
-        const r = await settled()
-        if (r) return r
+      const busy = sb.includes('搭档处理中') || sb.includes('工具执行中')
+      const progressing = Date.now() - idleSince < 25000
+      if (Date.now() < windowEnd) continue
+      if (busy && progressing) { windowEnd = Date.now() + 30000; continue }
+      if (last) {
+        log('⚠️', `waitSettled 窗口耗尽（${timeoutMs / 1000}s）——返回最后一条已知回复（${last.content.slice(0, 30)}…）`)
+        return last
       }
+      windowEnd = Date.now() + 30000
     }
-    throw new Error(`waitSettled 超时（状态栏="${sb}"）`)
+    throw new Error(`waitSettled 硬超时 ${(timeoutMs * 4) / 1000}s（状态栏="${sb}"，最后消息="${last?.content.slice(0, 40) ?? ''}"）`)
   }
 
   async clickCandidate(text) {
@@ -152,7 +161,8 @@ class Driver {
 
 // ---- 观察点检测 ----
 function checkObservations(content, toolsText, obs) {
-  if (!obs.O1_goalConfirm.hit && /【目标确认/.test(content)) { obs.O1_goalConfirm.hit = true; obs.O1_goalConfirm.at = content.slice(0, 60) }
+  // 2026-08-14 O1 放宽（模型输出「目标确认：」无【】括号——语义命中，非严格块约定）
+  if (!obs.O1_goalConfirm.hit && /【目标确认|目标确认：/.test(content)) { obs.O1_goalConfirm.hit = true; obs.O1_goalConfirm.at = content.slice(0, 60) }
   if (!obs.O3_execPlan.hit && /【执行方案/.test(content)) { obs.O3_execPlan.hit = true; obs.O3_execPlan.at = content.slice(0, 80) }
   if (!obs.O5_doneReport.hit && /【已达成/.test(content)) { obs.O5_doneReport.hit = true; obs.O5_doneReport.at = content.slice(0, 60) }
   if (!obs.O4_produced.hit && /已写入|已修改|写入|修改.*成功/.test(toolsText) && /write|edit/.test(toolsText)) { obs.O4_produced.hit = true; obs.O4_produced.at = toolsText.slice(0, 80) }
@@ -187,7 +197,9 @@ async function main() {
 
     const driver = new Driver(page)
     let rounds = 0
-    const MAX_ROUNDS = 40
+    // 2026-08-14 40 → 150（tool-only 授权链实测：bash 高危逐个批准是产品设计——npm install/起服务/验证链 30-60 轮正常；
+    // 40 轮在「写文件 + 装依赖 + 起服务」长链中耗尽——误判流程未收敛）
+    const MAX_ROUNDS = 150
     let goalConfirmedClicked = false
     let execConfirmed = false
     const startTime = Date.now()
@@ -201,10 +213,42 @@ async function main() {
     console.log('── 开始无阶段流程（目标确认 → 能力检查 → 执行方案 → 执行确认 → 达成）──\n')
     while (Date.now() < deadline && rounds < MAX_ROUNDS) {
       rounds++
+      // 2026-08-13 观察点检测移到循环开头（全 transcript 幂等——obs.hit 防重复）：waitSettled 只返回最后一条
+      // 消息，【目标确认】/【执行方案】标记若在中间消息里会被跳过（本轮冒烟实测：O1 标记被后续消息覆盖 → 漏检）
+      const fullT = await driver.transcript()
+      for (const m of fullT) {
+        if (m.role !== 'assistant') continue
+        checkObservations(m.content, m.tools.join(' | '), obs)
+      }
+      // 2026-08-13 卡片优先（同 e2e-0to1 handleCards）：tool-only 链期间确认卡/授权卡出现在**空内容消息**里
+      // （assistant-done content:'' + tool-call）——waitSettled 过滤空消息只返回旧消息 → 主循环判「同消息停住」
+      // → 授权卡永不被点 → 模型等批准 → 流程提前结束（本轮冒烟实测：write×3 + bash 授权卡全被跳过）。每轮先查卡
+      const confirmBtns = ['确认目标', '确认执行', '已解决']
+      let cardClicked = false
+      for (const name of confirmBtns) {
+        const btn = page.getByRole('button', { name })
+        if (await btn.count() > 0) { await btn.first().click(); cardClicked = true; log('✅', `点确认卡「${name}」`); break }
+      }
+      if (!cardClicked) {
+        const ap = await driver.approvePending()
+        if (ap) { cardClicked = true; log('🔓', `批准授权：${ap}`) }
+      }
+      if (cardClicked) continue
       const msg = await driver.waitSettled(120000)
       if (!msg) { await driver.page.waitForTimeout(2000); continue }
       // 同消息去重（坑 53 教训——同消息重复处理）：模型停住无新回复 → 连续 MAX_IDLE 次 → 判定流程结束
       if (msg.content === lastProcessed) {
+        // 2026-08-13 模型等授权/工具执行中**不算停住**（tool-only 链连续 bash 授权——本轮实测 idleStreak 误判 break）：
+        // waitSettled 在「有操作待你批准」时返回旧消息 → 同消息 → 停住判定；但模型在等授权/干活 → 下一轮卡片优先会批准
+        const aprox = await page.locator('.nf-toolcall__approve, .nf-toolcall__batch-approve, .nf-toolcall__remember, .nf-toolcall__approveall').count().catch(() => 0)
+        const busyDots = await page.locator('.nf-statusbar__dot--working').count().catch(() => 0)
+        const runCards = await page.locator('.nf-toolcall--running, .nf-toolcall--pending').count().catch(() => 0)
+        if (aprox > 0 || busyDots > 0 || runCards > 0) {
+          idleStreak = 0
+          log('⏳', '模型在等授权/工具执行中——不算停住，继续等')
+          await driver.page.waitForTimeout(2000)
+          continue
+        }
         idleStreak++
         log('⏳', `模型停住（同一条消息连续 ${idleStreak} 次无新回复）——等待后仍无动作则结束本轮`)
         if (idleStreak >= MAX_IDLE) {
@@ -259,6 +303,14 @@ async function main() {
         await driver.clickCandidate(pick)
         continue
       }
+      // 2.5 2026-08-13 冒烟复验暴露：模型「陈述句等待」（无问号无候选——「我先确认一下你的想法…再动手」）→
+      //    真实用户会主动接话（不接 = 模型真停 → idleStreak 误判流程结束）——按画像回复需求范围
+      //    2026-08-14 修复：文案中性化（原写死「射击游戏」——与模型已确认的「装修游戏」冲突 → 模型困惑反问 → 需求漂移）
+      if (/(确认一下|你的想法|再动手|定下来|先确认|想确认|了解一下|范围定)/.test(msg.content) && !/(【目标确认|【执行方案|【已达成)/.test(msg.content)) {
+        log('🧑', '模型陈述等待——回复「对，就按这个来，直接做吧」')
+        await driver.send('对，就按这个来，直接做吧')
+        continue
+      }
       // 3. 模型问开放问题（目标澄清）——按问题内容对答（12:21 教训：答非所问会带偏模型「我看你一直重复这句」）
       if (/[?？]/.test(msg.content) && /(做什么|哪种|给谁|在哪儿|算完|什么样|理解|确认|对吗|好吗|行吗|要不要|还是|具体|玩法)/.test(msg.content)) {
         const c = msg.content
@@ -283,9 +335,9 @@ async function main() {
         await driver.page.waitForTimeout(3000)
         break
       }
-      // 5. 模型提示卡住 → 催「继续」
-      if (/说要做但还没动手|回复.*继续/.test(msg.content)) {
-        log('🧑', '模型提示卡住——回复「继续」')
+      // 5. 模型提示卡住/承诺要做（2026-08-14 放宽：模型「已批准，现在写入文件」= 说要做没动手——isActionPromise 语义）→ 催「继续」
+      if (/说要做但还没动手|回复.*继续|现在写入|马上|这就|直接开写|开始写|准备写/.test(msg.content)) {
+        log('🧑', '模型提示卡住/承诺要做——回复「继续」')
         await driver.send('继续')
         continue
       }
