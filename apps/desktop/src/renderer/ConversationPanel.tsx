@@ -778,6 +778,13 @@ export default function ConversationPanel({
       // 2026-08-08 根因 3 修复①：判定改读 **ref** 而非 prop 闭包——确认卡按钮同事件触发 send 时
       // （onClick 内 setState 异步 + sendRef 同步调用）prop 还是旧渲染值 → forceTool 恒 auto → 模型纯文本承诺后停住
       const { forceTool } = decideTurnPolicy(buildForceToolInput(stateRef.current, new Set(recentFilesExternal ?? [])))
+      // 2026-08-14 取证打点（用户实测「一直读取操作」——plannedComplete 未收敛）：dump 三集合供 timeline 比对
+      tlog('force-input', {
+        planned: [...stateRef.current.plannedFiles].slice(0, 12),
+        produced: [...stateRef.current.producedFiles].slice(0, 12),
+        projectFiles: (recentFilesExternal ?? []).slice(0, 12),
+        goalAchieved: stateRef.current.achievementConfirmed
+      }, 'system')
       tlog('assistant-start', { forceTool, goalConfirmed: stateRef.current.goalConfirmed, executionConfirmed: stateRef.current.executionConfirmed }, 'assistant')
       const res = await window.neonforge.gateway.streamChat({
         apiKey: key,
