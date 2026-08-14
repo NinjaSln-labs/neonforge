@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { decideTurnPolicy, type TurnPolicyInput } from '../../src/renderer/domain/turnPolicy'
+import { decideTurnPolicy, type TurnPolicyInput } from '../../src/domain/turnPolicy'
 
 // 领域层：轮次执行保障（Conversation BC——2026-08-07 无阶段重构 S1）
 // 三态判定（目标驱动）：goalConfirmed / executionConfirmed / produced——穷举 3 布尔 = 8 组合

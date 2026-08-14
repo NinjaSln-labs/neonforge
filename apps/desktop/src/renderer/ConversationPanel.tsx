@@ -10,9 +10,9 @@ import { buildAuthHint, canMergeApprove, toolRisk } from './authModel'
 // 2026-08-04：cleanContent 回复正文展示清洗（字面转义/连续换行杂音）
 import { cleanContent, stripMarkdown } from './textClean'
 // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层纯逻辑，双源调研驱动）
-import { evaluateTurnProgress, detectStuck, initialStuckState, isQuestionLike, isCommunicationLike, isDoneLike, parseExecutionPlan, summarizeCapability } from './domain/agentLoop'
+import { evaluateTurnProgress, detectStuck, initialStuckState, isQuestionLike, isCommunicationLike, isDoneLike, parseExecutionPlan, summarizeCapability } from '../domain/agentLoop'
 // 2026-08-07 DDD 落地（坑 89 forceTool/advanceChat 领域化——Conversation BC 轮次执行保障 + AgentChain BC 产品阶段流转）
-import { decideTurnPolicy } from './domain/turnPolicy'
+import { decideTurnPolicy } from '../domain/turnPolicy'
 // 2026-08-07 无阶段重构 S4：buildAdvanceInstruction/stageFlow import 删除（advanceChat 随阶段体系移除）
 // 2026-08-05 方案 3：结构化候选按钮——<candidates> 块解析/剥离（点选文本替代序号，消除模型序号解析漂移）
 import { parseCandidates, stripCandidates, stripTags } from './candidates'
@@ -637,19 +637,29 @@ export default function ConversationPanel({
       if (pending.length === 0) {
         // 2026-08-04 重构：同工具重复检测（同一 name+args 连续 3 次 = 死循环——防模型空转不产出；跨调用累积——原局部变量每轮重置失效）
         // 2026-08-05 体验反馈：只统计写工具（write/edit）——read/bash 只读重复是模型合理排查（曾因 read 摘要化反复读同文件被误伤），不触发；真正空转由 depth 40 兜底
-        const writeCalls = lastMsg.toolCalls.filter((c) => c.name === 'write' || c.name === 'edit')
-        if (writeCalls.length > 0) {
-          const sig = writeCalls.map((c) => `${c.name}:${JSON.stringify(c.args ?? {})}`).join('|')
+        // 2026-08-14 修复（冒烟实测：npm init 中文目录名失败 exit-1 → 模型 13+ 次原样重试同一命令——空错误无诊断 + bash 重试无上限 = 死循环；
+        // 同日再实测：check-server 成功仍重复 7+ 次（起服务验证后不收敛）——成功重复同样空转）：
+        // 重复检测覆盖三类：① write/edit（原判定）② **失败工具**（status=error——失败重试 ≠ 合理排查，错误没变结果不会变）
+        // ③ **执行/验证类工具**（bash/check-server/start-server/stop-server/open——成功还重复 = 转圈）；
+        // read/search/LSP 查询类仍豁免（2026-08-05 决策：只读重复是模型合理排查）
+        const retryCalls = lastMsg.toolCalls.filter((c) =>
+          (c.name === 'write' || c.name === 'edit')
+          || c.status === 'error'
+          || ['bash', 'check-server', 'start-server', 'stop-server', 'open'].includes(c.name)
+        )
+        if (retryCalls.length > 0) {
+          // sig 含 status：失败→成功的「修好了」不算重复（npm install 失败 2 次后成功 = 合理收敛）
+          const sig = retryCalls.map((c) => `${c.name}:${c.status}:${JSON.stringify(c.args ?? {})}`).join('|')
           const chain = chainRepeatRef.current
           if (chain.sid !== sid) { chain.sid = sid; chain.sig = ''; chain.count = 0 }
           chain.count = sig === chain.sig ? chain.count + 1 : 1
           chain.sig = sig
           if (chain.count >= 3) {
-            console.log('[conversation] 工具循环疑似死循环（重复写文件 3 次）——停止续聊')
+            console.log('[conversation] 工具循环疑似死循环（同一工具重复 3 次）——停止续聊')
             // 2026-08-04 体验修复：停止时提示用户（原静默停——用户看到「卡住」不知道原因；提示后可继续）
             setMessages((prev) => [...prev, {
               role: 'assistant',
-              content: '搭档检测到在重复写同一个文件（已自动暂停，避免死循环）。你回复「继续」或告诉它下一步，它就会接着做。',
+              content: '搭档检测到在重复做同一件事（反复写同一个文件、反复执行同一个失败命令或反复检查同一个服务，已自动暂停，避免死循环）。你回复「继续」或告诉它下一步，它就会接着做。',
               status: 'done'
             }])
             releaseWorking()
@@ -726,7 +736,7 @@ export default function ConversationPanel({
     const langRule = lastUserMsg && /[\u4e00-\u9fff]/.test(String(lastUserMsg.content ?? ''))
       ? '用中文回复用户（避免英文夹杂；工具名/代码/技术名词可保留原文；**即使工具结果/代码是英文，回复用户也保持中文**——不要中途切换成英文）'
       : '用与用户消息相同的语言回复'
-    const sysHint = { role: 'system', content: `你是 NeonForge 搭档。${envHint}${planHint}规则：① 读文件用 read 工具、代码搜索用 search 工具（路径用项目根下的相对路径，如 package.json）② bash 命令**默认已在项目根目录执行**（cwd=项目根）——直接基于项目根执行命令、用项目根相对路径 ③ 工具一次调用一个，执行完看结果再决定 ④ 找不到文件就直接告诉用户——**只陈述实际确认的事实** ⑤ 查符号定义/引用/类型用 find_definition/find_references/get_type_info，查文件错误/依赖用 get_diagnostics/get_imports（传 path + symbol，如 {path: 'src/a.ts', symbol: 'greet'}）⑥ 排查/修复问题**先用 search 或 LSP 定位到具体文件和行号，再 read 目标文件**；**已定位过的文件直接 read（静默，不重复 search）** ⑦ 用户可能不懂技术——回答简洁口语化：优先短句；术语必须用一句大白话解释；**明示你的假设和限制** ⑧ 回复正文用**纯文本**格式（无 Markdown 标记 #、**、反引号、- 列表、代码块框；无尖括号标签；段落之间最多空一行；括号仅用于必要补充）；**仅 <candidates> 候选块**是允许的标记。${langRule}⑨ **执行工具必须通过真正的函数调用（tool-call）发出——说了就做**：用户明确要求执行（「帮我打开」「起服务」「继续」「做 X」）时立即调用对应工具；工具结果不理想就重试或换方案 ⑩ 5173/5175 是 NeonForge（本应用）自己的保留端口（宿主 dev server / 测试 server）——你的项目服务用**动态端口**，以起服务实际输出为准；用户说「帮我打开/打开网页」= 确认真实端口（读起服务输出或 lsof/curl——**必须真实端口**）→ 调 open 工具打开；服务没起先起服务再 open ⑪ bash 命令**必须完整有效**（发送前自检语法——残缺命令会浪费授权交互）；服务操作：起用 **start-server**、验证用 **check-server**、停用 **stop-server**；bash 只用于安装/构建/脚本；服务地址以 start-server 返回为准 ⑫ **向用户只呈现与决策相关的信息**（当前进展、需决策事项、结果）——内部机制与内部状态（环境/能力检测结果）不呈现；环境/能力状态已在系统提示【当前环境】注入（**直接参考使用**）；检测**无异常时安静干活**；缺失/异常时说明缺什么 + 征求决策（装依赖/换方案），确认后引导安装再继续 ⑬ **接到问题先澄清目标**：把「做什么/给谁/在哪儿玩/做成什么样算达成」问清楚（编码类任务先了解项目结构/现有惯例再动手）。**候选用 <candidates> 块包裹**（块内每行「- 选项（一句说明）」；点选即发送选项文本）；候选后引导「或直接告诉我你的想法」——**输入框是主通道，点选与打字等价**。用户确认后**必须输出【目标确认：一句话准确目标】**（没有它 UI 无法识别目标已确认）。**时序**：候选/澄清**收敛后**（用户已选定方向或明确回复）**才输出【目标确认】标记**——**一个决策点走完再进下一个** ⑭ 动手前输出**【执行方案】**：要写/改的文件清单（每行「- 文件路径（原因）」）+ 一句话方案 → **等用户确认执行**；**优先改现有文件**；**确认执行后**如需批量放行，调 **approve-files** 一次性列出全部文件请求批量授权（批准后清单内文件写入不再逐个问）——**批准文件清单 ≠ 确认执行** ⑮ 动手完成后**自检**（重新 read 确认改动/跑验证命令——**验证你编辑/创建的文件**）→ 输出**【已达成】**+ 产物说明 + 如何验证——让用户确认「已解决」⑯ **用户只是问问题/要解释（不涉及动手改东西）时直接回答**，不走确认流程 ⑰ **写代码遵循项目现有风格和惯例**；只用项目已确认在用的依赖；提供完整可用的代码；删除无用代码。` }
+    const sysHint = { role: 'system', content: `你是 NeonForge 搭档。${envHint}${planHint}规则：① 读文件用 read 工具、代码搜索用 search 工具（路径用项目根下的相对路径，如 package.json）② bash 命令**默认已在项目根目录执行**（cwd=项目根）——直接基于项目根执行命令、用项目根相对路径 ③ 工具一次调用一个，执行完看结果再决定 ④ 找不到文件就直接告诉用户——**只陈述实际确认的事实** ⑤ 查符号定义/引用/类型用 find_definition/find_references/get_type_info，查文件错误/依赖用 get_diagnostics/get_imports（传 path + symbol，如 {path: 'src/a.ts', symbol: 'greet'}）⑥ 排查/修复问题**先用 search 或 LSP 定位到具体文件和行号，再 read 目标文件**；**已定位过的文件直接 read（静默，不重复 search）** ⑦ 用户可能不懂技术——回答简洁口语化：优先短句；术语必须用一句大白话解释；**明示你的假设和限制** ⑧ 回复正文用**纯文本**格式（无 Markdown 标记 #、**、反引号、- 列表、代码块框；无尖括号标签；段落之间最多空一行；括号仅用于必要补充）；**仅 <candidates> 候选块**是允许的标记。${langRule}⑨ **执行工具必须通过真正的函数调用（tool-call）发出——说了就做**：用户明确要求执行（「帮我打开」「起服务」「继续」「做 X」）时立即调用对应工具；工具结果不理想就重试或换方案 ⑩ 5173/5175 是 NeonForge（本应用）自己的保留端口（宿主 dev server / 测试 server）——你的项目服务用**动态端口**，以起服务实际输出为准；用户说「帮我打开/打开网页」= 确认真实端口（读起服务输出或 lsof/curl——**必须真实端口**）→ 调 open 工具打开；服务没起先起服务再 open ⑪ bash 命令**必须完整有效**（发送前自检语法——残缺命令会浪费授权交互）；服务操作：起用 **start-server**、验证用 **check-server**、停用 **stop-server**；bash 只用于安装/构建/脚本；服务地址以 start-server 返回为准 ⑫ **向用户只呈现与决策相关的信息**（当前进展、需决策事项、结果）——内部机制与内部状态（环境/能力检测结果）不呈现；环境/能力状态已在系统提示【当前环境】注入（**直接参考使用**）；检测**无异常时安静干活**；缺失/异常时说明缺什么 + 征求决策（装依赖/换方案），确认后引导安装再继续 ⑬ **接到问题先澄清目标**：把「做什么/给谁/在哪儿玩/做成什么样算达成」问清楚（编码类任务先了解项目结构/现有惯例再动手）。**候选用 <candidates> 块包裹**（块内每行「- 选项（一句说明）」；点选即发送选项文本）；候选后引导「或直接告诉我你的想法」——**输入框是主通道，点选与打字等价**。用户确认后**必须输出【目标确认：一句话准确目标】**（没有它 UI 无法识别目标已确认）。**时序**：候选/澄清**收敛后**（用户已选定方向或明确回复）**才输出【目标确认】标记**——**一个决策点走完再进下一个** ⑭ 动手前输出**【执行方案】**：要写/改的文件清单（每行「- 文件路径（原因）」）+ 一句话方案 → **等用户确认执行**；**优先改现有文件**；**确认执行后**如需批量放行，调 **approve-files** 一次性列出全部文件请求批量授权（批准后清单内文件写入不再逐个问）——**批准文件清单 ≠ 确认执行** ⑮ 动手完成后**自检**（重新 read 确认改动/跑验证命令——**验证你编辑/创建的文件**）→ 输出**【已达成】**+ 产物说明 + 如何验证——让用户确认「已解决」⑯ **用户只是问问题/要解释（不涉及动手改东西）时直接回答**，不走确认流程 ⑰ **写代码遵循项目现有风格和惯例**；只用项目已确认在用的依赖；提供完整可用的代码；删除无用代码。⑱ **工具失败时先看错误信息定位原因再动手**；错误输出为空（被命令重定向吞掉）时重跑一次**保留输出**的命令（不要用 >/dev/null 重定向）拿到真实错误——错误不明确就多查一步（读文件/列目录/看日志）；确认原因后**换可行方式**重试，不要原样重试同一失败命令（连续原样重试会被自动暂停）。` }
     try {
       // 2026-08-06 调研驱动根治「只说不做」（官方 issue #1376 + 文档 + 实测三源交叉验证——工具模式 thinking disabled 下 required 可用）：
       // 2026-08-07 无阶段重构 S1/S3/S4：判定改由领域层 TurnExecutionPolicy 三态推导（goalConfirmed/executionConfirmed/produced）——
@@ -987,13 +997,15 @@ export default function ConversationPanel({
   // L3 授权：允许执行（approved=true）/ 拒绝（标记拒绝）
   // 2026-08-04 重构（用户：「搭档处理中」卡住根因）：按消息定位工具卡更新——原固定更新最后一条消息，
   // 续聊已追加新 streaming 消息时错位（工具结果回填错位 → maybeContinue 看不到 done → 链中断 + working 卡）
+  // 2026-08-14 修复（冒烟实测：模型连续 2 次 approve-files → 同工具多卡并存 → 点第一张卡 patch 错位到第二张
+  // → 第一张卡永不消失 → 授权循环死锁）：定位加 **args 相同**——同工具不同实例可区分
   const patchToolCall = (idx: number, patch: (c: ToolCallMsg) => ToolCallMsg, msg: ToolCallMsg) => {
     setMessages((prev) => {
       for (let mi = prev.length - 1; mi >= 0; mi--) {
         const m = prev[mi]
         if (m.role !== 'assistant' || !m.toolCalls) continue
         const c = m.toolCalls[idx]
-        if (c && c.name === msg.name) {
+        if (c && c.name === msg.name && JSON.stringify(c.args ?? {}) === JSON.stringify(msg.args ?? {})) {
           const updated = m.toolCalls.map((x, i) => (i === idx ? patch(x) : x))
           return [...prev.slice(0, mi), { ...m, toolCalls: updated }, ...prev.slice(mi + 1)]
         }
