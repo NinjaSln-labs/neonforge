@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import DigitalDeliveryPanel from './DigitalDeliveryPanel'
 import TrustLadderPanel from './TrustLadderPanel'
 import DoDAlignPanel from './DoDAlignPanel'
@@ -256,6 +256,23 @@ export default function ConversationPanel({
   // lastToolFailed/filesApproved/goalConfirmed/executionConfirmed）合并为单一 ConversationState——
   // 读 = stateRef.current.x；写 = 转换函数（userConfirmed/approvalGranted/applyToolResult）唯一入口
   const stateRef = useRef<ConversationState>(initialConversationState())
+  // 2026-08-14 用户实测卡死修复（timeline 0219a516）：确认卡唯一性——模型连发消息时卡固定在
+  // 「最后一条信号消息」上不漂移。**O(n) 倒序单次扫描**预计算三个信号索引（useMemo 缓存——
+  // 消息列表不可控（compaction 阈值 100+ 条），每渲染 O(n²) 不可接受；此方案 O(n) 一次 + 渲染 O(1) 查表）
+  const lastSignalIdx = useMemo(() => {
+    let exec = -1
+    let goal = -1
+    let achieve = -1
+    for (let k = messages.length - 1; k >= 0; k--) {
+      const x = messages[k]
+      if (x.role !== 'assistant') continue
+      if (exec === -1 && (x.content.includes('【执行方案') || (x.toolCalls ?? []).some((c) => classifyAction(c.name, String(c.args?.command ?? '')) === 'side-effect'))) exec = k
+      if (goal === -1 && /【目标确认[:：]/.test(x.content)) goal = k
+      if (achieve === -1 && x.content.includes('【已达成')) achieve = k
+      if (exec !== -1 && goal !== -1 && achieve !== -1) break
+    }
+    return { exec, goal, achieve }
+  }, [messages])
   // 用户确认（MainWorkspace state）→ 状态机同步（无阶段重构 S4：prop 改名 goalConfirmed）
   useEffect(() => { if (goalConfirmed && !stateRef.current.goalConfirmed) stateRef.current = userConfirmed(stateRef.current, 'goal') }, [goalConfirmed])
   // 2026-08-07 执行确认门控（用户「确认卡不选就不执行后续」——与授权卡同语义）：执行未确认 → write/edit/bash 不执行
@@ -1247,16 +1264,20 @@ export default function ConversationPanel({
               // （此前 goalFallback「目标未确认+最后一条 done」导致候选与兜底确认卡同时显示）
               const hasCandidates = m.content.includes('<candidates>')
               const goalFallback = !goalConfirmed && isLastAssistant && !hasCandidates
-              // 2026-08-07 执行确认兜底（模型不输出【执行方案】块时用户仍可确认执行——同目标确认：不依赖标记）：
-              // 2026-08-07 执行确认兜底（模型不输出【执行方案】块时用户仍可确认执行——同目标确认：不依赖标记）：
               // 2026-08-14 S2b（缝隙 4/5）：触发统一走状态机派生 pendingCardToShow（渲染与 maybeContinue 停模型同源）——
               // 「等确认」语义命中即弹 + 停；探索期（只读 bash/无等确认语义）不弹（冒烟实证：探索期弹卡 → 模型困惑）
               const sideEffectAttempted = (m.toolCalls ?? []).some((c) => classifyAction(c.name, String(c.args?.command ?? '')) === 'side-effect')
               const execFallback = pendingCardToShow(!!goalConfirmed, !!executionConfirmed, false, m.content, sideEffectAttempted) === 'execution'
-              if (!goalMatch && !hasPlan && !achievedMatch && !goalFallback && !execFallback) return null
+              // 2026-08-14 用户实测卡死修复（timeline 0219a516）：模型连发消息时确认卡漂移消失——
+              // write 被拦（exec-confirm 卡弹出）→ 模型继续输出 approve-files/说明消息 → isLastAssistant 漂移 → 卡消失
+              // → 模型等确认、用户找不到卡 → 死锁。**信号消息（方案标记/副作用工具卡）的卡不依赖 isLastAssistant**——
+              // 卡固定挂在信号消息上直到确认；多信号消息只显示「最后一条信号消息」（卡唯一——索引由
+              // useMemo lastSignalIdx O(n) 预计算，此处 O(1) 比较）；兜底卡（无信号）仍限最后一条
+              const execSignal = hasPlan || sideEffectAttempted
+              if (!goalMatch && !hasPlan && !achievedMatch && !goalFallback && !execFallback && !sideEffectAttempted) return null
               return (
                 <>
-                  {(goalMatch || goalFallback) && !goalConfirmed && isLastAssistant && (
+                  {((goalMatch && !goalConfirmed && i === lastSignalIdx.goal) || (lastSignalIdx.goal === -1 && goalFallback)) ? (
                     <div className="nf-confirmcard" role="group" aria-label="确认目标">
                       <div className="nf-confirmcard__head">目标确认——需要你确认</div>
                       <div className="nf-confirmcard__goal">{goalMatch ? goalMatch[1].trim() : (initialPrompt || '你描述的目标')}</div>
@@ -1265,8 +1286,8 @@ export default function ConversationPanel({
                         <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { inputRef.current = '目标需要重新描述一下'; void sendRef.current() }}>重新描述</button>
                       </div>
                     </div>
-                  )}
-                  {(hasPlan || execFallback) && goalConfirmed && !executionConfirmed && isLastAssistant && (
+                  ) : null}
+                  {!!goalConfirmed && !executionConfirmed && ((execSignal && i === lastSignalIdx.exec) || (lastSignalIdx.exec === -1 && isLastAssistant && !hasCandidates && execFallback)) ? (
                     <div className="nf-confirmcard" role="group" aria-label="确认执行方案">
                       <div className="nf-confirmcard__head">执行方案——需要你确认后动手</div>
                       <div className="nf-confirmcard__actions">
@@ -1274,8 +1295,8 @@ export default function ConversationPanel({
                         <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { inputRef.current = '方案需要调整一下'; void sendRef.current() }}>修改方案</button>
                       </div>
                     </div>
-                  )}
-                  {achievedMatch && stateRef.current.producedFiles.size > 0 && !stateRef.current.achievementConfirmed && isLastAssistant && (
+                  ) : null}
+                  {achievedMatch && stateRef.current.producedFiles.size > 0 && !stateRef.current.achievementConfirmed && i === lastSignalIdx.achieve ? (
                     <div className="nf-confirmcard" role="group" aria-label="确认达成">
                       <div className="nf-confirmcard__head">搭档已完成——你确认解决了没有</div>
                       <div className="nf-confirmcard__actions">
@@ -1283,7 +1304,7 @@ export default function ConversationPanel({
                         <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { inputRef.current = '还要改一些地方：'; void sendRef.current() }}>还要改</button>
                       </div>
                     </div>
-                  )}
+                  ) : null}
                 </>
               )
             })()}
