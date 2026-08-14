@@ -43,6 +43,19 @@ export function initProjectFiles(dir: string, title: string): void {
   }
 }
 
+// 2026-08-14 缝隙 6 根因修复：npm package name 必须合法（URL-safe 小写）——slugify 保留中文（目录名用户可读），
+// 中文 title 直接当 name 会产出非法 name（「3d设计游戏」→ npm Invalid name）→ npm init/install 链条失败
+// （冒烟实测：模型 npm init 中文目录 exit-1 + 空错误 → 13 次原样重试死循环）。name 与目录名解耦：ASCII 安全名
+export function safePkgName(title: string): string {
+  const ascii = String(title ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/^[._]+/, '') // npm 不允许 . / _ 开头
+    .slice(0, 200)
+  return ascii || 'neonforge-app'
+}
+
 // 2026-08-04：需求确认后回写项目标题（README 首行 + package.json name）——目录名保持稳定（防路径断裂），标题跟随澄清结果
 // 纯逻辑模块——workspace 调用（读现有 README 保留其余内容）
 export function updateProjectTitle(dir: string, title: string): void {
@@ -54,6 +67,7 @@ export function updateProjectTitle(dir: string, title: string): void {
   writeFileSync(readmePath, nextReadme, 'utf-8')
   try {
     const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { name?: string }
-    writeFileSync(pkgPath, JSON.stringify({ ...pkg, name: slugify(title) }, null, 2) + '\n', 'utf-8')
+    // 2026-08-14 缝隙 6：name 用安全名（原 slugify(title) 保留中文 → 非法 npm name）
+    writeFileSync(pkgPath, JSON.stringify({ ...pkg, name: safePkgName(title) }, null, 2) + '\n', 'utf-8')
   } catch { /* package.json 缺失/损坏——README 已更新，忽略 */ }
 }
