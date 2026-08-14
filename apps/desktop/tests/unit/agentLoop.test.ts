@@ -29,6 +29,14 @@ describe('ProgressEvaluator（单轮进展评估）', () => {
     expect(p.artifactProduced).toBe(true)
   })
 
+  // 2026-08-14 缝隙 2：副作用工具成功（bash 安装/验证）也算进展——安装/验证阶段不再被 escalate 打断合法链
+  it('副作用工具成功 = 进展（sideEffectSucceeded——bash 安装/验证）；只读 bash 成功不算', () => {
+    const install = evaluateTurnProgress({ toolCalls: [{ name: 'bash', status: 'done', command: 'npm install three' }], content: '', prevReadFiles: empty })
+    expect(install.sideEffectSucceeded).toBe(true)
+    const readonly = evaluateTurnProgress({ toolCalls: [{ name: 'bash', status: 'done', command: 'ls -la' }], content: '', prevReadFiles: empty })
+    expect(readonly.sideEffectSucceeded).toBe(false) // 防换文件/换只读命令假装进展（坑 81）
+  })
+
   it('read 新文件 = 新信息（readNewFile）；同文件重复 read = 非进展', () => {
     const prev = new Set(['main.js'])
     expect(evaluateTurnProgress({ toolCalls: [{ name: 'read', status: 'done', file: 'main.js' }], content: '', prevReadFiles: prev }).readNewFile).toBe(false)
@@ -57,6 +65,16 @@ describe('StuckDetector（卡住检测——连续无进展升级）', () => {
     const r2 = detectStuck({ turn: noProgressTurn(), prev: r1.state })
     expect(r2.event?.type).toBe('escalate')
     expect(r2.event).toMatchObject({ type: 'escalate' })
+  })
+
+  // 2026-08-14 缝隙 2：安装/验证阶段（bash 成功）→ 停滞计数重置——不 escalate 打断合法工具链
+  it('副作用工具成功（bash 安装）→ 重置停滞计数（不 escalate）', () => {
+    const r1 = detectStuck({ turn: noProgressTurn(), prev: initialStuckState }) // 累积 1
+    const installing = evaluateTurnProgress({ toolCalls: [{ name: 'bash', status: 'done', command: 'npm install three' }], content: '', prevReadFiles: new Set() })
+    const r2 = detectStuck({ turn: installing, prev: r1.state }) // 进展 → 重置
+    expect(r2.state).toEqual(initialStuckState)
+    const r3 = detectStuck({ turn: noProgressTurn(), prev: r2.state }) // 重新累积
+    expect(r3.event?.type).toBe('no-progress')
   })
 
   it('升级 2 次仍无进展 → needs-human（转用户——行业 needs_human）', () => {

@@ -411,14 +411,16 @@ export default function ConversationPanel({
       //    只处理工具循环轮（首轮已 forceTool API 强制——不重复）；连续 2 轮无产出（无 write/edit/新 read）→ escalate 自动续聊指出没动手；
       //    升级 2 次仍无产出 → needs-human 状态栏提示（对齐行业——不再固定配额「耗尽」问题）
       // 2026-08-07 无阶段重构 S3：目标确认后才启用 StuckDetector（原 flowStage>=1——目标确认前模型澄清问答/探索是正常行为，不检测停滞）
-      if (stateRef.current.goalConfirmed) {
+      // 2026-08-14 S4（缝隙 7）：会话级 PENDING（等用户决策——确认卡/授权卡）期间 StuckDetector 完全静默——
+      // 等用户决策时模型静止是**正常态**不是停滞（A0 §3.2）
+      if (stateRef.current.goalConfirmed && stateRef.current.pending === 'none') {
         // 2026-08-06 任务完成度：write/edit 成功标记产出（approve-files 规划文件 vs 已产出——deepcode unimplemented_files 借鉴）
         // 2026-08-14 S2：产出记录走状态机转换（applyToolResult——不可变更新）
         streamingRef.current.toolCalls.forEach((c) => {
           if ((c.name === 'write' || c.name === 'edit') && c.status === 'done' && c.file) stateRef.current = applyToolResult(stateRef.current, { name: c.name, ok: true, file: c.file })
         })
         const turn = evaluateTurnProgress({
-          toolCalls: streamingRef.current.toolCalls.map((c) => ({ name: c.name, status: c.status, file: c.file })),
+          toolCalls: streamingRef.current.toolCalls.map((c) => ({ name: c.name, status: c.status, file: c.file, command: String(c.args?.command ?? '') })),
           content,
           prevReadFiles: prevReadFilesRef.current,
           plannedFiles: stateRef.current.plannedFiles,
@@ -739,27 +741,12 @@ export default function ConversationPanel({
       // 2026-08-07 无阶段重构 S1/S3/S4：判定改由领域层 TurnExecutionPolicy 三态推导（goalConfirmed/executionConfirmed/produced）——
       // 目标+执行确认但无产出 → required 强制模型必须调工具（不能只输出文本承诺）；其余 auto（澄清/等确认/已有产出）
       // isPureAck 词表随无阶段终结（S3——T4「保持现状」决策被取代：纯确认进入目标/执行确认状态流转，无需独立豁免名单）
-      const produced = stateRef.current.producedFiles.size > 0
-      // 2026-08-07 达成确认（用户决策——显式确认）：goalAchieved 由达成确认卡【已解决】置位（模型【已达成】= 提议，
-      // 不再自报即释放——用户确认「已解决」才释放 forceTool）
-      const goalAchieved = stateRef.current.achievementConfirmed
-      // 2026-08-07 计划文件写完判定（竞品对齐——任务完成度按计划写完，不依赖模型自报）：
-      // producedFiles 数 >= plannedFiles 数（宽松——防路径归一化差异误判）；**无计划文件时视为完成**
-      // （冒烟 13 实测：模型未调 approve-files 直接 write → plannedFilesRef 空 → plannedComplete 恒 false
-      // → 永远强制 → 死循环——无计划=无「计划未完成」，产出后即释放）
-      const plannedComplete = stateRef.current.plannedFiles.size === 0 || stateRef.current.producedFiles.size >= stateRef.current.plannedFiles.size
-      // 2026-08-07 无阶段重构 S4：三态接入真实状态（goalConfirmed 目标确认 + executionConfirmed 执行确认——ExecutionConfirmCard）
+      // 2026-08-14 S4（缝隙 3）：forceTool 输入统一走状态机派生 buildForceToolInput——
+      // plannedComplete 从「size 宽松比较」切换为领域层严格判定（plannedFiles ⊆ produced ∪ projectFiles；
+      // 无计划以 produced 为准——A0 §4 补行语义，L1 已锁定）
       // 2026-08-08 根因 3 修复①：判定改读 **ref** 而非 prop 闭包——确认卡按钮同事件触发 send 时
-      // （onClick 内 setState 异步 + sendRef 同步调用——1215/1224 行）prop 还是旧渲染值 → forceTool 恒 auto → 模型纯文本承诺后停住
-      // （坑 90 ⑧ 教训重演：门控/判定类逻辑用 ref 不用 prop 闭包）；ref 由按钮 onClick 先发同步 + effect 兜底
-      const { forceTool } = decideTurnPolicy({
-        goalConfirmed: stateRef.current.goalConfirmed,
-        executionConfirmed: stateRef.current.executionConfirmed,
-        produced,
-        lastToolFailed: stateRef.current.lastToolFailed, // 2026-08-07：上一轮工具失败 → 释放强制（模型可停下诊断修正）
-        goalAchieved, // 2026-08-07：produced 后仍需模型汇报【已达成】才释放（防写 1 文件就停）
-        plannedComplete, // 2026-08-07：计划文件写完 → 释放（required 模式模型无法输出达成文本——防重复写死循环）
-      })
+      // （onClick 内 setState 异步 + sendRef 同步调用）prop 还是旧渲染值 → forceTool 恒 auto → 模型纯文本承诺后停住
+      const { forceTool } = decideTurnPolicy(buildForceToolInput(stateRef.current, new Set(recentFilesExternal ?? [])))
       tlog('assistant-start', { forceTool, goalConfirmed: stateRef.current.goalConfirmed, executionConfirmed: stateRef.current.executionConfirmed }, 'assistant')
       const res = await window.neonforge.gateway.streamChat({
         apiKey: key,
