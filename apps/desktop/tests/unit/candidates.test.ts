@@ -31,8 +31,14 @@ describe('parseCandidates（候选块解析）', () => {
     expect(parseCandidates('<candidates>\n</candidates>')).toBeNull()
   })
 
-  it('流式未闭合（无 </candidates>）→ null（等完整再渲染按钮）', () => {
-    expect(parseCandidates('<candidates>\n- 射击游戏\n- 解谜')).toBeNull()
+  it('流式未闭合（无 </candidates>）→ 容错解析到最后一个列表行（选项出现即渲染）', () => {
+    expect(parseCandidates('<candidates>\n- 射击游戏\n- 解谜')).toEqual(['射击游戏', '解谜'])
+  })
+
+  // 2026-08-14 用户实测修复（timeline 0219a516）：模型漏闭合标签 → 容错解析到最后一个列表行
+  it('未闭合块容错：解析到最后一个列表行（列表行后遇正文 = 块结束）', () => {
+    const c = '<candidates>\n- 一把步枪就够，干脆利落（好上手）\n- 加一把狙击枪（更爽）\n- 随便，你来定\n\n关于目标：无限刷怪行不行？'
+    expect(parseCandidates(c)).toEqual(['一把步枪就够，干脆利落（好上手）', '加一把狙击枪（更爽）', '随便，你来定'])
   })
 
   it('块内纯文本行（非列表）也保留为选项', () => {
@@ -50,8 +56,14 @@ describe('stripCandidates（候选块剥离——展示层）', () => {
     expect(stripCandidates('普通回复')).toBe('普通回复')
   })
 
-  it('流式未闭合块 → 从 <candidates> 剥离到结尾（不露标记杂音）', () => {
+  it('流式未闭合块 → 剥标记+列表行到结尾（不露标记杂音）', () => {
     expect(stripCandidates('你先确认：\n<candidates>\n- 射击游戏\n- 解谜')).toBe('你先确认：')
+  })
+
+  // 2026-08-14 用户实测修复：未闭合块后还有正文 → 正文必须保留（原实现整段吞掉——用户只看到半截话）
+  it('未闭合块后正文保留（用户实测：候选漏闭合 + 块后「关于目标…」正文不被吞）', () => {
+    const c = '最后补一个很小的点就能开工：\n<candidates>\n- 一把步枪就够\n- 加一把狙击枪\n- 随便，你来定\n\n关于目标：我先做成无限刷怪，行不行？'
+    expect(stripCandidates(c)).toBe('最后补一个很小的点就能开工：\n关于目标：我先做成无限刷怪，行不行？')
   })
 
   it('只剥离候选块，正文不动', () => {
