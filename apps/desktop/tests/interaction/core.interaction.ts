@@ -224,6 +224,13 @@ test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 1
   // 先点「确认目标」+「确认执行」→ 再 emit write（模型根据决策重新做）
   await expect(page.getByRole('button', { name: '确认目标' })).toBeVisible()
   await page.getByRole('button', { name: '确认目标' }).click()
+  // 2026-08-14 S2b：确认目标 send 后模型回复（真实场景——流结束释放 working）→ 执行确认卡在模型消息上弹出
+  // 等 send 的流式消息创建（send 是 async——click 完成时消息可能未 push，emit 会被丢弃）
+  await expect(page.locator('.nf-msg--assistant .nf-msg__body').filter({ hasText: '搭档处理中' })).toBeVisible({ timeout: 5000 })
+  await page.evaluate(() => {
+    window.__emit({ type: 'content', text: '好的，方案如下，等你确认。' })
+    window.__emit({ type: 'done' })
+  })
   await expect(page.getByRole('button', { name: '确认执行' })).toBeVisible()
   await page.getByRole('button', { name: '确认执行' }).click()
   await page.waitForTimeout(300)
@@ -728,8 +735,12 @@ test('0-1 授权 v4 完整路径：允许并记住 → 同文件自动 → 新�
           chatCount++
           setTimeout(() => {
             // chatCount：1=需求消息、2=确认推进 send（都回 content）；3-5=执行确认后的 3 次 write；6=收尾 content
-            if (chatCount <= 2) {
+            // 2026-08-14 S2b：chat#2 带「等确认」语义（A0：执行确认=确认「怎么做」——方案已给才有确认对象；
+            // 原「收到，继续。」无方案 → 状态机正确不弹卡 → 测试死等）
+            if (chatCount === 1) {
               streamCb?.({ type: 'content', text: '收到，继续。' })
+            } else if (chatCount === 2) {
+              streamCb?.({ type: 'content', text: '方案如下：写 index.html 游戏页面，等你确认。' })
             } else if (chatCount >= 3 && chatCount <= 5) {
               const w = writes[chatCount - 3]
               streamCb?.({ type: 'tool-call', toolCall: { name: 'write', args: { path: w.path, content: w.content } } })

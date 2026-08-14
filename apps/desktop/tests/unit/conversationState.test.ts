@@ -164,20 +164,25 @@ describe('conversationState——isProgressing（缝隙 2）', () => {
 })
 
 describe('conversationState——pendingCardToShow（缝隙 5）', () => {
+  const show = (goal: boolean, exec: boolean, achieved: boolean, content: string, sideEffect = false) =>
+    pendingCardToShow(goal, exec, achieved, content, sideEffect)
+
   it('模型标记命中 → 对应确认点', () => {
-    expect(pendingCardToShow(initialState(), '好的。【目标确认：做一个游戏】', false)).toBe('goal')
-    const g = userConfirmed(initialState(), 'goal')
-    expect(pendingCardToShow(g, '【执行方案】\n- a.js', false)).toBe('execution')
-    expect(pendingCardToShow(g, '【已达成】完成', false)).toBe('achievement')
+    expect(show(false, false, false, '好的。【目标确认：做一个游戏】')).toBe('goal')
+    expect(show(true, false, false, '【执行方案】\n- a.js')).toBe('execution')
+    expect(show(true, false, false, '【已达成】完成')).toBe('achievement')
   })
 
   it('无标记但有副作用工具待执行 → 执行确认卡（execPendingCalls 现状语义）', () => {
-    const g = userConfirmed(initialState(), 'goal')
-    expect(pendingCardToShow(g, '开始写。', true)).toBe('execution')
+    expect(show(true, false, false, '开始写。', true)).toBe('execution')
+  })
+
+  it('「等确认」语义（模型自然语言等待——无标记无工具也命中，防续聊遮挡卡死锁）', () => {
+    expect(show(true, false, false, '好的，方案如下，等你确认。')).toBe('execution')
+    expect(show(true, false, false, '我先看看项目现状。')).toBe('none') // 探索陈述——不触发
   })
 
   it('已确认的标记不再触发卡（确认点一次性）', () => {
-    const e = userConfirmed(userConfirmed(initialState(), 'goal'), 'execution')
-    expect(pendingCardToShow(e, '【目标确认：…】【执行方案】…', false)).toBe('none')
+    expect(show(true, true, false, '【目标确认：…】【执行方案】…')).toBe('none')
   })
 })
