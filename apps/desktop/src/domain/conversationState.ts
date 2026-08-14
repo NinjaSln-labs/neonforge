@@ -162,10 +162,25 @@ export function isProgressing(toolResults: Array<{ name: string; ok: boolean; co
   return toolResults.some((r) => r.ok && classifyAction(r.name, r.command) === 'side-effect')
 }
 
-// 确认卡触发（缝隙 5-A：模型标记命中优先；无标记时确定性回退——该确认未确认且模型在等 → 卡应出现）
-export function pendingCardToShow(s: ConversationState, lastContent: string, sideEffectPending: boolean): PendingKind {
-  if (!s.goalConfirmed && lastContent.includes('【目标确认')) return 'goal'
-  if (s.goalConfirmed && !s.executionConfirmed && (lastContent.includes('【执行方案') || sideEffectPending)) return 'execution'
-  if (!s.achievementConfirmed && lastContent.includes('【已达成')) return 'achievement'
+// 确认卡触发（缝隙 5：状态机派生——渲染层与 maybeContinue 停模型**同源判定**，消除双标准）。
+// 纯函数化（布尔参数而非 state——渲染层用 props、异步链用 stateRef，同一定义）：
+// - goal：模型输出【目标确认】标记（无标记时渲染层 goalFallback 兜底——2026-08-07 用户决策）
+// - execution：【执行方案】标记 / 有副作用动作待执行 / 「等确认」语义（模型自然语言等待——「方案如下，等你确认」
+//   无标记无工具也必须命中，否则 maybeContinue 继续续聊、卡被 streaming 遮挡——S2b 实测死锁）
+// - achievement：【已达成】标记
+export function pendingCardToShow(
+  goalConfirmed: boolean,
+  executionConfirmed: boolean,
+  achievementConfirmed: boolean,
+  lastContent: string,
+  sideEffectPending: boolean
+): PendingKind {
+  if (!goalConfirmed && lastContent.includes('【目标确认')) return 'goal'
+  if (goalConfirmed && !executionConfirmed && (
+    lastContent.includes('【执行方案')
+    || sideEffectPending
+    || /(等你确认|你确认一下|确认一下|等你点头|你看行吗|你看行不行|可以的话我)/.test(lastContent)
+  )) return 'execution'
+  if (!achievementConfirmed && lastContent.includes('【已达成')) return 'achievement'
   return 'none'
 }

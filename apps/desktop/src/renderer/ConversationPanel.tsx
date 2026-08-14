@@ -173,13 +173,17 @@ export default function ConversationPanel({
   const messagesRef = useRef<Msg[]>([])
   useEffect(() => { messagesRef.current = messages }, [messages])
   // 2026-08-04 审计修复（D2）：有待批准工具操作 → 上报状态栏提示（need-approval 出现/消失）
-  // 2026-08-07 无阶段修复（输入≠打断）：pendingApprovalRef 同步——send 排队判定用（待授权时模型停住等批准，
+  // 2026-08-07 无阶段修复（输入≠打断）：send 排队判定用（待授权时模型停住等批准，
   // 用户输入直接处理不排队——排队会卡在授权等待；模型产出中才排队衔接）
-  const pendingApprovalRef = useRef(false)
+  // 2026-08-14 S2b：授权等待接入状态机单一 PENDING（pending='approval'——A0 §3.2 授权卡同属会话级 pending）
   useEffect(() => {
-    const pending = messages.some((m) => m.toolCalls?.some((c) => c.status === 'need-approval')) ?? false
-    pendingApprovalRef.current = pending
-    onApprovalChange?.(pending)
+    const hasApproval = messages.some((m) => m.toolCalls?.some((c) => c.status === 'need-approval' || c.status === 'file-approval')) ?? false
+    if (hasApproval && stateRef.current.pending !== 'approval') {
+      stateRef.current = { ...stateRef.current, pending: 'approval' }
+    } else if (!hasApproval && stateRef.current.pending === 'approval') {
+      stateRef.current = { ...stateRef.current, pending: 'none' }
+    }
+    onApprovalChange?.(hasApproval)
   }, [messages, onApprovalChange])
   // 断点续做（ticket 06/基线 §21）：挂载恢复上次会话（onNew 已 clearSession → 空）
   useEffect(() => {
@@ -290,7 +294,7 @@ export default function ConversationPanel({
   // 2026-08-08 状态变化打点（working / approval-pending / ready——统一状态机；变化才记录）
   const lastStatusRef = useRef('')
   useEffect(() => {
-    const status = working ? 'working' : pendingApprovalRef.current ? 'approval-pending' : 'ready'
+    const status = working ? 'working' : stateRef.current.pending === 'approval' ? 'approval-pending' : 'ready'
     if (status !== lastStatusRef.current) {
       lastStatusRef.current = status
       tlog('status-change', { status })
@@ -514,19 +518,16 @@ export default function ConversationPanel({
       // rootPath 未设置时（存相对路径 'game.js'），write 判定时 rootPath 已设（trustPath 转 '/test/game.js'）→ 直接 has 不匹配
       const inPlannedFiles = (p: unknown): boolean =>
         [...stateRef.current.plannedFiles].some((f) => trustPath(f) === trustPath(p))
-      const confirmPending = (content: string, calls: Array<{ name: string; status?: string }>): boolean => {
-        const execPending = calls.some((c) => (c.name === 'write' || c.name === 'edit' || c.name === 'bash') && c.status === 'pending')
-        return (
-          (content.includes('【目标确认') && !stateRef.current.goalConfirmed)  // 目标确认卡待决策
-          || (stateRef.current.goalConfirmed && !stateRef.current.executionConfirmed && (content.includes('【执行方案') || execPending))  // 执行确认卡（方案提议/要动手）
-          || (content.includes('【已达成') && !stateRef.current.achievementConfirmed)  // 达成确认卡待决策
-        )
+      const confirmPending = (content: string, calls: Array<{ name: string; status?: string; command?: string }>): boolean => {
+        // 2026-08-14 S2b（缝隙 4/5）：确认卡触发走状态机派生——执行确认只认**有副作用动作**（探索 bash 不再触发）
+        const sideEffectPending = calls.some((c) => c.status === 'pending' && classifyAction(c.name, c.command) === 'side-effect')
+        return pendingCardToShow(stateRef.current.goalConfirmed, stateRef.current.executionConfirmed, stateRef.current.achievementConfirmed, content, sideEffectPending) !== 'none'
       }
       // 2026-08-07 用户纠正（「无害≠有用」）：pending 下**所有工具都不执行**——read/search 虽只读无害但没用
       // （用户决策未到——结果无意义——做了白做）——模型停（maybeContinue releaseWorking）等用户决策
       // 2026-08-08 问题 2 修复（feedback.log 标注——「又检测，而且这个显示出来了，咱们定的不显示」）：
       // 拦截分支对 check-capability 同样 hidden——O2 静默语义「能力检测默认不展示」对执行/拦截一致
-      if (confirmPending(streamingRef.current.content, [tc])) {
+      if (confirmPending(streamingRef.current.content, [{ name: tc.name, status: 'pending', command: String(tc.args?.command ?? '') }])) {
         setMessages((prev) => {
           const last = prev[prev.length - 1]
           if (!last || last.role !== 'assistant') return prev
@@ -535,6 +536,10 @@ export default function ConversationPanel({
             : c)
           return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
         })
+        // 2026-08-14 S2b：拦截即停——释放 working（原拦截后 working 悬挂「处理中」——状态栏卡住；
+        // 渲染层确认卡的 !working 门依赖此释放——否则模型空闲但卡被 working 挡住不弹 → 死锁）
+        setWorking(false)
+        onWorkingChange?.(false)
         return
       }
       // 2026-08-06 偏离清单拦截（基于事实：06:03 已规划但写「正确路径」偏离批准清单 → 逐个弹授权/规划外文件——用户「相同文件弹授权」根因）：
@@ -621,13 +626,10 @@ export default function ConversationPanel({
       const pending = lastMsg.toolCalls.filter((c) => c.status === 'pending')
       const needsApproval = lastMsg.toolCalls.some((c) => c.status === 'need-approval' || c.status === 'file-approval')
       // 2026-08-07 会话级单一 PENDING（重构——确认卡待决策 → 模型停——动作无效——用户决策是唯一输入）
+      // 2026-08-14 S2b（缝隙 4/5）：确认卡触发走状态机派生——执行确认只认**有副作用动作**（探索 bash 不再触发）
       const lastContent = lastMsg.content ?? ''
-      const execPendingCalls = lastMsg.toolCalls.filter((c) => (c.name === 'write' || c.name === 'edit' || c.name === 'bash') && c.status === 'pending')
-      const confirmPending = (
-        (lastContent.includes('【目标确认') && !stateRef.current.goalConfirmed)  // 目标确认卡
-        || (stateRef.current.goalConfirmed && !stateRef.current.executionConfirmed && (lastContent.includes('【执行方案') || execPendingCalls.length > 0))  // 执行确认卡（方案提议/要动手）
-        || (lastContent.includes('【已达成') && !stateRef.current.achievementConfirmed)  // 达成确认卡
-      )
+      const sideEffectPending = lastMsg.toolCalls.some((c) => c.status === 'pending' && classifyAction(c.name, String(c.args?.command ?? '')) === 'side-effect')
+      const confirmPending = pendingCardToShow(stateRef.current.goalConfirmed, stateRef.current.executionConfirmed, stateRef.current.achievementConfirmed, lastContent, sideEffectPending) !== 'none'
       if (needsApproval || confirmPending) { releaseWorking(); return } // 卡弹出（确认卡/授权卡）——等用户决策（模型停——不续聊）
       if (pending.length === 0) {
         // 2026-08-04 重构：同工具重复检测（同一 name+args 连续 3 次 = 死循环——防模型空转不产出；跨调用累积——原局部变量每轮重置失效）
@@ -888,7 +890,7 @@ export default function ConversationPanel({
         // 不受「输入≠打断」约束；排队会让修正消息延迟到当前轮完成——卡住时正是要立即干预）
         console.log('[conversation] 处理中 silent 发送——打断当前（系统自动续聊/修正）')
         await stopGeneration('silent')
-      } else if (!pendingApprovalRef.current) {
+      } else if (stateRef.current.pending !== 'approval') {
         // 用户输入：排队衔接（不打断当前流式/工具链——输入≠打断，竞品共识：打断=显式停止按钮）
         // 只存 pending——消息显示/onUserMessage（确认词处理）由 flush 后 send 统一执行一次
         // （原排队时 push + flush 后 send 再 push = 重复用户消息——398 实测两条「可以」）
@@ -1247,15 +1249,20 @@ export default function ConversationPanel({
               // 2026-08-07 目标确认兜底（死锁修复延续——模型无【目标确认】标记时用户仍可确认）：
               // 卡不依赖标记——目标未确认时「最后一条 assistant done」消息下也显示（显示 initialPrompt 暂存目标——
               // 结构化按钮替代原确认词兜底；对齐行业：确认=显式动作，不依赖模型标记）
-              const isLastAssistant = m === messages[messages.length - 1]
+              // 2026-08-14 S2b（缝隙 1/5）：确认卡挂在「最后一条 assistant 消息」上——用户消息（确认词 send）插入后
+              // 卡仍在模型消息位置显示，不必等模型下一条回复（旧实现 isLastAssistant 依赖 working 悬挂使 send 排队——缺陷耦合）
+              const isLastAssistant = m.role === 'assistant' && m === [...messages].reverse().find((x) => x.role === 'assistant')
               // 2026-08-08 候选与确认卡互斥修复（用户「需求澄清选项卡和确认又一起出来了」——时间线 seq 5-6）：
               // 消息含 <candidates>（候选=澄清决策点，等用户选方向）时不显示兜底确认卡——一个决策点走完再进下一个
               // （此前 goalFallback「目标未确认+最后一条 done」导致候选与兜底确认卡同时显示）
               const hasCandidates = m.content.includes('<candidates>')
               const goalFallback = !goalConfirmed && isLastAssistant && !hasCandidates
               // 2026-08-07 执行确认兜底（模型不输出【执行方案】块时用户仍可确认执行——同目标确认：不依赖标记）：
-              // 目标已确认 && 执行未确认 && 最后一条 assistant done → 显示执行确认卡（含候选时同样不显示——互斥）
-              const execFallback = !!goalConfirmed && !executionConfirmed && isLastAssistant && !hasCandidates
+              // 2026-08-07 执行确认兜底（模型不输出【执行方案】块时用户仍可确认执行——同目标确认：不依赖标记）：
+              // 2026-08-14 S2b（缝隙 4/5）：触发统一走状态机派生 pendingCardToShow（渲染与 maybeContinue 停模型同源）——
+              // 「等确认」语义命中即弹 + 停；探索期（只读 bash/无等确认语义）不弹（冒烟实证：探索期弹卡 → 模型困惑）
+              const sideEffectAttempted = (m.toolCalls ?? []).some((c) => classifyAction(c.name, String(c.args?.command ?? '')) === 'side-effect')
+              const execFallback = pendingCardToShow(!!goalConfirmed, !!executionConfirmed, false, m.content, sideEffectAttempted) === 'execution'
               if (!goalMatch && !hasPlan && !achievedMatch && !goalFallback && !execFallback) return null
               return (
                 <>
