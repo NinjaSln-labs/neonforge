@@ -413,7 +413,10 @@ export default function ConversationPanel({
       // 2026-08-07 无阶段重构 S3：目标确认后才启用 StuckDetector（原 flowStage>=1——目标确认前模型澄清问答/探索是正常行为，不检测停滞）
       // 2026-08-14 S4（缝隙 7）：会话级 PENDING（等用户决策——确认卡/授权卡）期间 StuckDetector 完全静默——
       // 等用户决策时模型静止是**正常态**不是停滞（A0 §3.2）
-      if (stateRef.current.goalConfirmed && stateRef.current.pending === 'none') {
+      // 2026-08-14 冒烟回归修复（escalate 打断合法链）：**工具轮不参与停滞检测**——有工具调用 = 模型在活动；
+      // 流 done 时工具执行可能未回填（卡仍 pending → 误判无进展 → escalate silent 打断 write 链 → 后续空回复）。
+      // 工具链的停滞由 maybeContinue 重复检测 + depth 40 兜底；StuckDetector 只管「纯文本停住」
+      if (stateRef.current.goalConfirmed && stateRef.current.pending === 'none' && streamingRef.current.toolCalls.length === 0) {
         // 2026-08-06 任务完成度：write/edit 成功标记产出（approve-files 规划文件 vs 已产出——deepcode unimplemented_files 借鉴）
         // 2026-08-14 S2：产出记录走状态机转换（applyToolResult——不可变更新）
         streamingRef.current.toolCalls.forEach((c) => {
