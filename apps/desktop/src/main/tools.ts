@@ -9,6 +9,8 @@ import { startServer, checkServer, stopServer, checkEnvironment, isServerLikeCom
 // 2026-08-06 能力模型（坑 83）：check-env 返回能力视图（平台原生 + 外部扩展 Status——模型按需求选能力）
 import { detectCapabilities, attributeCommandFailure } from './envManager.js'
 import { logTimeline } from './timelineLogger.js'
+// 2026-08-14 S3：动作分类单一权威（领域层——renderer/main 同源判定；缝隙 4）
+import { classifyAction } from '../domain/conversationState.js'
 
 // ToolRegistry（ticket 10 / A0 §2）：工具注册与执行分发
 // 边界判定：ToolRegistry=目录与分发；ShellAgent=bash 执行；Gateway=工具调用修复（02 已实现）
@@ -320,18 +322,9 @@ export function cancelActiveCommand(): { ok: true } | { ok: false; error: string
 
 // 2026-08-04 授权架构重构（用户授权疲劳）：bash 只读命令检测——ls/cat/grep 等查看类自动执行（零打断）；
 // 写命令（rm/mv/cp/npm/git/python/node/重定向）保持授权（main 进程裁决，renderer 不判断防绕过）
-const BASH_READONLY_HEAD = new Set(['ls', 'cat', 'head', 'tail', 'grep', 'wc', 'pwd', 'echo', 'which', 'find', 'sed', 'awk', 'cd', 'stat', 'file', 'du', 'df', 'sort', 'uniq', 'rg', 'tree', 'diff', 'history'])
+// 2026-08-14 S3：判定上移领域层 classifyAction（单一权威——renderer 确认卡/门控与 main preApproval 同源，消除双源）
 export function isReadOnlyBash(cmd: string): boolean {
-  const c = (cmd ?? '').trim()
-  if (!c) return false
-  // 含写副作用标记（重定向 / 写命令 / 可执行任意代码的解释器）→ 非只读
-  if (/>\s*[^|]*$/m.test(c)) return false // 重定向到文件（echo x > f / cat a > b）
-  if (/[;&|]\s*(rm|mv|cp|mkdir|touch|npm|pnpm|yarn|git|curl|wget|python|python3|node|write|install|unlink|ln|chmod|chown)/.test(c)) return false
-  // 2026-08-06 设计层升级（fail-closed——用户「白名单匹配不完」）：白名单**冻结**（不再加条目）；
-  // curl 特判**删除**——curl 验证服务交给 check-server 工具（模型被引导不用 bash curl）；新命令一律默认授权（fail-closed）
-  // 首命令在白名单 → 只读（cd "dir" && ls 也覆盖——head 取 cd）
-  const head = c.split(/[;&|]/)[0].trim().split(/\s+/)[0]?.replace(/^sudo\s+/, '') ?? ''
-  return BASH_READONLY_HEAD.has(head)
+  return classifyAction('bash', cmd) === 'readonly'
 }
 
 // 2026-08-06 用户反馈「帮我打开」（催 4 次都没打开网页）：open 工具——默认浏览器打开 http/https 地址

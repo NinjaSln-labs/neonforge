@@ -3,17 +3,22 @@
 // 行业共识「activity ≠ progress」（dev.to StuckDetector / stackademic）+ 连续无进展升级 + needs-human 转用户 + arXiv 实时失败检测）
 // DDD 落地：Value Object（TurnProgress/StuckState）+ Domain Service（ProgressEvaluator/StuckDetector）+ Domain Event
 // 纯逻辑无 React 依赖——L1 可测；ConversationPanel（Application 层）调用
+// 2026-08-14 S4：副作用分类同源（classifyAction——缝隙 2 进展判定）
+import { classifyAction } from './conversationState.js'
 
 // === Value Object: 工具调用视图（AgentTurn 的 toolCalls 投影——领域层可见的最小信息） ===
 export interface ToolCallView {
   name: string
   status: string
   file?: string // write/edit 目标 / read 路径
+  command?: string // bash 命令（2026-08-14 缝隙 4/2：副作用分类 + 进展判定需要）
 }
 
 // === Value Object: 单轮进展（activity 是否转化为 progress——行业「只能真实工作完成时上升的度量」） ===
 export interface TurnProgress {
   artifactProduced: boolean // write/edit 成功 = 真实产出（0-1 流程最可靠 progress 信号——与 artifactsReady 门控同源）
+  sideEffectSucceeded: boolean // 2026-08-14 缝隙 2：副作用工具成功执行（bash 安装/验证）也算进展——
+                               // 原只有 artifactProduced——模型装依赖（npm install 成功）被当「无进展」→ escalate 打断合法链
   readNewFile: boolean      // read 了此前未读过的文件（新信息）——同文件重复 read = activity 非 progress
   // 2026-08-06 补充（deepcode-hkuds 任务完成度借鉴——用户「文件清单很多地方有」）：approve-files 规划文件是否全部产出
   // 有剩余规划文件 = 任务未完成——模型无工具结束 = 停滞（escalate 强理由）；规划全产出 → 无工具结束 = 阶段完成（不 escalate）
@@ -74,6 +79,9 @@ export function evaluateTurnProgress(input: {
   const { toolCalls, content, prevReadFiles } = input
   const t = (content ?? '').trim()
   const artifactProduced = toolCalls.some((c) => (c.name === 'write' || c.name === 'edit') && c.status === 'done')
+  // 2026-08-14 缝隙 2：副作用工具成功（bash 安装/验证/check-server running 等——classifyAction 同源判定）也算进展——
+  // 安装/验证阶段不再被 escalate 打断（同工具空转由 maybeContinue 重复检测兜底）
+  const sideEffectSucceeded = toolCalls.some((c) => c.status === 'done' && classifyAction(c.name, c.command) === 'side-effect')
   const readNewFile = toolCalls.some((c) => c.name === 'read' && c.file && !prevReadFiles.has(c.file))
   const plannedFiles = input.plannedFiles
   const producedFiles = input.producedFiles
@@ -93,7 +101,7 @@ export function evaluateTurnProgress(input: {
   const isDone = isDoneLike(t)
   // 2026-08-07 待授权轮（根因 2）：need-approval/plan-approval 卡 = 模型停住等用户批准（正常状态）——不算停滞
   const needsApproval = toolCalls.some((c) => c.status === 'need-approval' || c.status === 'file-approval')
-  return { artifactProduced, readNewFile, hasPlannedFiles, hasRemainingPlanned, remainingCount, isQuestion, isCommunication, isDone, needsApproval }
+  return { artifactProduced, sideEffectSucceeded, readNewFile, hasPlannedFiles, hasRemainingPlanned, remainingCount, isQuestion, isCommunication, isDone, needsApproval }
 }
 
 // === Value Object: 卡住状态（连续无进展轮数 + 已升级次数）——不可变，每次变化生成新实例 ===
@@ -126,10 +134,10 @@ export function detectStuck(input: {
   if (turn.isQuestion || turn.isCommunication || turn.isDone || turn.needsApproval) {
     return { state: initialStuckState, event: undefined }
   }
-  // 有进展（write/edit 产出）→ 重置（行业：恢复即重置）
+  // 有进展（write/edit 产出 / 副作用工具成功——缝隙 2：bash 安装验证）→ 重置（行业：恢复即重置）
   // 2026-08-06 修正：read 新文件**不算** progress（activity≠progress——行业 oh-my-pi workspace dirty / deepcode files_completed 只有文件改动才是进展；
   // 防「模型连续 read 不同文件假装进展」——L3 545 测试场景连续 3 轮 read 必须触发 escalate）
-  if (turn.artifactProduced) {
+  if (turn.artifactProduced || turn.sideEffectSucceeded) {
     return { state: initialStuckState, event: undefined }
   }
   // 2026-08-06 任务完成度（deepcode-hkuds unimplemented_files 借鉴）：有规划且规划文件全部产出 → 无工具结束 = 阶段完成（非停滞——等用户推进）

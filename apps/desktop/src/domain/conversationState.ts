@@ -105,6 +105,8 @@ export function applyToolResult(
 // ============================================================================
 
 // 动作分类（缝隙 4 单一权威——bash 只读判定与 main preApproval 同源，列表唯一）
+// 2026-08-14 S3：采用 main isReadOnlyBash 的完整 fail-closed 判定（原 main 比 domain 更严：
+// 重定向到文件/链中危险命令（rm/mv/cp/npm/git/curl/解释器）→ 副作用——上移到领域层，main 改引用）
 export const BASH_READONLY_HEADS: ReadonlySet<string> = new Set([
   'ls', 'cat', 'head', 'tail', 'grep', 'wc', 'pwd', 'echo', 'which', 'find',
   'sed', 'awk', 'cd', 'stat', 'file', 'du', 'df', 'sort', 'uniq', 'rg', 'tree', 'diff', 'history',
@@ -113,7 +115,13 @@ export const BASH_READONLY_HEADS: ReadonlySet<string> = new Set([
 export function classifyAction(name: string, command?: string): 'side-effect' | 'readonly' {
   if (name === 'write' || name === 'edit') return 'side-effect'
   if (name !== 'bash') return 'readonly'
-  const head = String(command ?? '').split(/[;&|]/)[0].trim().split(/\s+/)[0]?.replace(/^sudo\s+/, '') ?? ''
+  const c = String(command ?? '').trim()
+  if (!c) return 'side-effect' // 空命令 fail-closed（非只读）
+  // 含写副作用标记（重定向到文件）→ 副作用
+  if (/>\s*[^|]*$/m.test(c)) return 'side-effect'
+  // 链中含危险/写命令 → 副作用（fail-closed——白名单冻结不加条目）
+  if (/[;&|]\s*(rm|mv|cp|mkdir|touch|npm|pnpm|yarn|git|curl|wget|python|python3|node|write|install|unlink|ln|chmod|chown)/.test(c)) return 'side-effect'
+  const head = c.split(/[;&|]/)[0].trim().split(/\s+/)[0]?.replace(/^sudo\s+/, '') ?? ''
   return BASH_READONLY_HEADS.has(head) ? 'readonly' : 'side-effect'
 }
 
