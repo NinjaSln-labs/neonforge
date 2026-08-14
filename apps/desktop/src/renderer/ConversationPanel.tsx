@@ -12,7 +12,7 @@ import { cleanContent, stripMarkdown } from './textClean'
 // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层纯逻辑，双源调研驱动）
 import { evaluateTurnProgress, detectStuck, initialStuckState, isQuestionLike, isCommunicationLike, isDoneLike, parseExecutionPlan, summarizeCapability } from '../domain/agentLoop'
 // 2026-08-14 会话状态机（Task 聚合——A0 §2/§3/§4/§5）：状态单一来源 + 转换唯一入口（session-state-machine.md S2）
-import { initialState as initialConversationState, userConfirmed, approvalGranted, applyToolResult, classifyAction, canExecute, plannedComplete as isPlannedComplete, forceToolInput as buildForceToolInput, isProgressing as hasProgress, pendingCardToShow, type ConversationState } from '../domain/conversationState'
+import { initialState as initialConversationState, userConfirmed, userRejected, approvalGranted, applyToolResult, classifyAction, canExecute, plannedComplete as isPlannedComplete, forceToolInput as buildForceToolInput, isProgressing as hasProgress, pendingCardToShow, type ConversationState } from '../domain/conversationState'
 // 2026-08-07 DDD 落地（坑 89 forceTool/advanceChat 领域化——Conversation BC 轮次执行保障 + AgentChain BC 产品阶段流转）
 import { decideTurnPolicy } from '../domain/turnPolicy'
 // 2026-08-07 无阶段重构 S4：buildAdvanceInstruction/stageFlow import 删除（advanceChat 随阶段体系移除）
@@ -226,6 +226,10 @@ export default function ConversationPanel({
   // 2026-08-08 B 修复（feedback.log「候选+确认卡不能同时出来」）：候选点击后标记已选（消息索引 → 选项索引）——
   // 跨消息视觉：旧候选消息不再显示可点按钮（已选态），确认卡接管决策（决策点互斥）
   const [chosenCandidates, setChosenCandidates] = useState<Record<number, number>>({})
+  // 2026-08-14 用户实测修复（「重新描述后卡片没有消失」）：确认卡拒绝类按钮（重新描述/修改方案/还要改）——
+  // 标记该消息的卡已处理（隐藏）+ 状态机回退（A0 §3.2 否 → 状态回退 + 模型调整）。卡点确认/拒绝后必须消失，
+  // 等模型重新提议再弹新卡（新消息新索引）
+  const [rejectedCardIdx, setRejectedCardIdx] = useState<{ goal?: number; execution?: number; achievement?: number }>({})
   // ticket 14 L4 委托：低危文件操作（write/edit）自动授权免确认（可随时撤销——localStorage 持久化；bash 高危永不委托）
   const [delegateLowRisk, setDelegateLowRisk] = useState(() => {
     try { return localStorage.getItem('nf-delegate-lowrisk') === '1' } catch { return false }
@@ -1284,31 +1288,31 @@ export default function ConversationPanel({
               if (!goalMatch && !hasPlan && !achievedMatch && !goalFallback && !execFallback && !sideEffectAttempted) return null
               return (
                 <>
-                  {((goalMatch && !goalConfirmed && i === lastSignalIdx.goal) || (lastSignalIdx.goal === -1 && goalFallback)) ? (
+                  {((goalMatch && !goalConfirmed && i === lastSignalIdx.goal) || (lastSignalIdx.goal === -1 && goalFallback)) && i !== rejectedCardIdx.goal ? (
                     <div className="nf-confirmcard" role="group" aria-label="确认目标">
                       <div className="nf-confirmcard__head">目标确认——需要你确认</div>
                       <div className="nf-confirmcard__goal">{goalMatch ? goalMatch[1].trim() : (initialPrompt || '你描述的目标')}</div>
                       <div className="nf-confirmcard__actions">
                         <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { stateRef.current = userConfirmed(stateRef.current, 'goal'); onGoalConfirmed?.(goalMatch ? goalMatch[1].trim() : (initialPrompt || '目标已确认')); inputRef.current = '确认，目标清楚了'; void sendRef.current() }}>确认目标</button>
-                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { inputRef.current = '目标需要重新描述一下'; void sendRef.current() }}>重新描述</button>
+                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { stateRef.current = userRejected(stateRef.current, 'goal'); setRejectedCardIdx((p) => ({ ...p, goal: i })); inputRef.current = '目标需要重新描述一下'; void sendRef.current() }}>重新描述</button>
                       </div>
                     </div>
                   ) : null}
-                  {!!goalConfirmed && !executionConfirmed && ((execSignal && i === lastSignalIdx.exec) || (lastSignalIdx.exec === -1 && isLastAssistant && !hasCandidates && execFallback)) ? (
+                  {!!goalConfirmed && !executionConfirmed && ((execSignal && i === lastSignalIdx.exec) || (lastSignalIdx.exec === -1 && isLastAssistant && !hasCandidates && execFallback)) && i !== rejectedCardIdx.execution ? (
                     <div className="nf-confirmcard" role="group" aria-label="确认执行方案">
                       <div className="nf-confirmcard__head">执行方案——需要你确认后动手</div>
                       <div className="nf-confirmcard__actions">
                         <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { stateRef.current = userConfirmed(stateRef.current, 'execution'); onExecutionConfirmed?.(); inputRef.current = '确认，按方案执行'; void sendRef.current() }}>确认执行</button>
-                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { inputRef.current = '方案需要调整一下'; void sendRef.current() }}>修改方案</button>
+                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { stateRef.current = userRejected(stateRef.current, 'execution'); setRejectedCardIdx((p) => ({ ...p, execution: i })); inputRef.current = '方案需要调整一下'; void sendRef.current() }}>修改方案</button>
                       </div>
                     </div>
                   ) : null}
-                  {achievedMatch && stateRef.current.producedFiles.size > 0 && !stateRef.current.achievementConfirmed && i === lastSignalIdx.achieve ? (
+                  {achievedMatch && stateRef.current.producedFiles.size > 0 && !stateRef.current.achievementConfirmed && i === lastSignalIdx.achieve && i !== rejectedCardIdx.achievement ? (
                     <div className="nf-confirmcard" role="group" aria-label="确认达成">
                       <div className="nf-confirmcard__head">搭档已完成——你确认解决了没有</div>
                       <div className="nf-confirmcard__actions">
                         <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { stateRef.current = userConfirmed(stateRef.current, 'achievement'); inputRef.current = '已解决，谢谢'; void sendRef.current() }}>已解决</button>
-                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { inputRef.current = '还要改一些地方：'; void sendRef.current() }}>还要改</button>
+                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { stateRef.current = userRejected(stateRef.current, 'achievement'); setRejectedCardIdx((p) => ({ ...p, achievement: i })); inputRef.current = '还要改一些地方：'; void sendRef.current() }}>还要改</button>
                       </div>
                     </div>
                   ) : null}
