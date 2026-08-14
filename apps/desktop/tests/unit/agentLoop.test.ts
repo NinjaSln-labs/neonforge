@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { evaluateTurnProgress, detectStuck, initialStuckState, parseExecutionPlan, summarizeCapability } from '../../src/renderer/domain/agentLoop'
+import { evaluateTurnProgress, detectStuck, initialStuckState, parseExecutionPlan, summarizeCapability } from '../../src/domain/agentLoop'
 
 // 领域层：progress-aware 卡住检测（2026-08-06 DDD 落地——行业调研 tavily+serper 双源：activity≠progress + 连续无进展升级 + needs-human）
 

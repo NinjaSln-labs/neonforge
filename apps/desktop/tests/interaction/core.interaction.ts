@@ -944,3 +944,115 @@ test('需求分流 B 类：改文件内容 → edit 直接执行（不弹 plan �
   await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(0)
   await expect(page.locator('.nf-toolcall--plan-approval')).toHaveCount(0)
 })
+
+// 2026-08-14 修复（冒烟实测：npm init 中文目录名失败 exit-1 空错误 → 模型 13+ 次原样重试同一命令 = 死循环）：
+// 重复检测从 write/edit 扩展到**失败工具**（status=error）——bash 失败重试同一命令 3 次 → 停止续聊 + 提示用户
+test('失败重试检测：bash 连续 3 次失败重试同一命令 → 自动暂停（提示用户）不再续聊', async ({ page }) => {
+  await page.addInitScript(() => {
+    let streamCb: ((c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) | null = null
+    let chatCount = 0
+    window.neonforge = {
+      version: 'test',
+      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
+      workspace: { openFolder: async () => '/test', listDir: async () => [], readFile: async () => ({ ok: true, content: 'x' }), readNotebook: async () => null, initProject: async () => ({ ok: true, path: '/test', title: 't' }), updateProjectTitle: async () => ({ ok: true }) },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        streamChat: async () => {
+          chatCount++
+          setTimeout(() => {
+            if (chatCount <= 3) {
+              // 同一失败命令连续 3 轮（真实失败场景：错误为空——命令吞了 stderr——模型看不到原因 → 原样重试）
+              streamCb?.({ type: 'tool-call', toolCall: { name: 'bash', args: { command: 'npm init -y >/dev/null 2>&1 && npm install three vite' } } })
+            }
+            streamCb?.({ type: 'done' })
+          }, 30)
+          return { ok: true }
+        },
+        onStreamChunk: (cb: (c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) => { streamCb = cb; return () => {} }
+      },
+      tools: {
+        list: async () => [],
+        execute: async () => ({ ok: false, error: 'exit-1: ' }), // bash 失败（stderr 被命令重定向吞掉——错误为空）
+        revert: async () => ({ ok: true })
+      },
+      context: { resolve: async () => ({ fragments: [] }) },
+      compaction: { compact: async () => ({ ok: false }) },
+      plugins: { list: async () => [], toggle: async () => true },
+      chatLog: { log: async () => {}, export: async () => ({ ok: true, path: '/tmp/x.md' }) }
+    }
+    ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
+    Object.defineProperty(window, '__chatCount', { get: () => chatCount })
+  })
+  await page.goto('http://localhost:5175/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.getByRole('button', { name: '从零开始' }).click()
+  await page.locator('.nf-chat__input textarea').fill('帮我初始化项目装依赖')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  // 3 次失败重试后自动暂停：提示消息出现（第 4 次 API 调用不发生）
+  await expect(page.locator('.nf-chat__list .nf-msg--assistant').filter({ hasText: '已自动暂停' })).toHaveCount(1, { timeout: 20000 })
+  await page.waitForTimeout(1500)
+  expect(await page.evaluate(() => (window as unknown as { __chatCount: number }).__chatCount)).toBe(3)
+})
+
+// 2026-08-14 修复（冒烟实测：模型连续 2 次 approve-files → 同工具多卡并存 → 点第一张卡 patchToolCall 按 name 从后往前
+// 错位到第二张卡 → 第一张卡永不消失 → 授权循环死锁）：patch 定位加 args 精确匹配——每张卡可被各自正确批准
+test('approve-files 多卡并存：连续 2 次批量授权 → 各自批准都生效（卡逐一 done 消失）', async ({ page }) => {
+  await page.addInitScript(() => {
+    let streamCb: ((c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) | null = null
+    let chatCount = 0
+    window.neonforge = {
+      version: 'test',
+      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
+      workspace: { openFolder: async () => '/test', listDir: async () => [], readFile: async () => ({ ok: true, content: 'x' }), readNotebook: async () => null, initProject: async () => ({ ok: true, path: '/test', title: 't' }), updateProjectTitle: async () => ({ ok: true }) },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        streamChat: async () => {
+          chatCount++
+          setTimeout(() => {
+            if (chatCount === 1) {
+              // 第一批 approve-files（清单 A）
+              streamCb?.({ type: 'tool-call', toolCall: { name: 'approve-files', args: { summary: '第一批', files: [{ path: '/test/a.js', reason: 'x' }] } } })
+            } else if (chatCount === 2) {
+              // 模型补充第二批（清单 B——args 不同）
+              streamCb?.({ type: 'tool-call', toolCall: { name: 'approve-files', args: { summary: '第二批（补充）', files: [{ path: '/test/b.js', reason: 'y' }] } } })
+            } else {
+              streamCb?.({ type: 'content', text: '开始写。' })
+            }
+            streamCb?.({ type: 'done' })
+          }, 30)
+          return { ok: true }
+        },
+        onStreamChunk: (cb: (c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) => { streamCb = cb; return () => {} }
+      },
+      tools: {
+        list: async () => [],
+        execute: async () => ({ ok: true, data: {} }),
+        filesApproved: async () => {},
+        revert: async () => ({ ok: true })
+      },
+      context: { resolve: async () => ({ fragments: [] }) },
+      compaction: { compact: async () => ({ ok: false }) },
+      plugins: { list: async () => [], toggle: async () => true },
+      chatLog: { log: async () => {}, export: async () => ({ ok: true, path: '/tmp/x.md' }) }
+    }
+    ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
+  })
+  await page.goto('http://localhost:5175/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.getByRole('button', { name: '从零开始' }).click()
+  await page.locator('.nf-chat__input textarea').fill('帮我做一个网页游戏')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  // 卡1（第一批）出现——此时不批准（真实场景：模型第一次请求后没等批准，用户动作触发新轮次）
+  await expect(page.getByRole('button', { name: '批准这批文件' })).toBeVisible({ timeout: 10000 })
+  // 用户发送触发模型新轮 → 模型补充第二批 approve-files（filesApprovedRef 仍 false——卡1 未批准 → 卡2 弹卡）→ 两张卡并存
+  await page.locator('.nf-chat__input textarea').fill('继续')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  await expect(page.getByRole('button', { name: '批准这批文件' })).toHaveCount(2, { timeout: 10000 })
+  // 点第一张（DOM 靠前的卡1）→ 卡1 done 消失（修复前：patch 按 name 从后往前错位到卡2 → 卡1 永不消失 → 死锁）
+  await page.getByRole('button', { name: '批准这批文件' }).first().click()
+  await expect(page.getByRole('button', { name: '批准这批文件' })).toHaveCount(1, { timeout: 10000 })
+  // 点第二张（卡2）→ 全部 done、无剩余批准按钮
+  await page.getByRole('button', { name: '批准这批文件' }).first().click()
+  await expect(page.getByRole('button', { name: '批准这批文件' })).toHaveCount(0, { timeout: 10000 })
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(2)
+})
