@@ -37,7 +37,7 @@
 | 限界上下文 | 职责 |
 |-----------|------|
 | **Gateway** | DeepSeek API 通信、流式解析、forceTool 传递、工具调用修复（防腐层）|
-| **ToolRegistry** | 工具注册/发现/执行分发（read/write/edit/bash/check-capability/plan_approval…）|
+| **ToolRegistry** | 工具注册/发现/执行分发（read/write/edit/bash/check-capability/approve-files…）|
 | **Configuration** | 用户与项目配置 |
 
 ### 类型判定规则
@@ -63,7 +63,7 @@
 | 确认点 | 含义 | 确认动作（结构化）| 未确认时模型活动边界 |
 |---|---|---|---|
 | **GoalConfirmed** | 用户确认「做什么」——目标驱动的原点 | 确认目标 / 重新描述 | 只澄清（不产生执行动作）|
-| **ExecutionConfirmed** | 用户确认「怎么做」 | 确认执行 / 修改方案 | 只给方案（不 write/edit/bash）|
+| **ExecutionConfirmed** | 用户确认「怎么做」 | 确认执行 / 修改方案 | 只给方案（不 write/edit/**有副作用 bash**——2026-08-14 澄清：探索性只读命令如 ls/cat 放行，其判定与授权 preApproval 同源 classifyAction）|
 | **AchievementConfirmed** | 用户确认「做完了」 | 已解决 / 还要改 | 持续执行（不收敛）|
 
 ### 3.2 确认语义（行业共识）
@@ -134,13 +134,14 @@ PENDING（执行未确认）──→ 所有动作无效（不管文件在不在
 | 目标+执行确认、无产出 | **强制**（防只说不做）|
 | 上一轮工具失败 | 释放（模型诊断修正——required 压制诊断是反模式）|
 | 计划文件写完 或 达成确认 | 释放（模型可收敛——写 1 文件 ≠ 任务达成）|
+| **无计划文件**（未走 approve-files）| **以产出为准释放**（produced 后 auto——2026-08-14 补行：无计划=无「计划未完成」，产出后即释放，防 required 死循环）|
 
 ---
 
 ## 5. 宿主强制边界（模型漂移防护——行业共识）
 
-- **计划清单（PlannedFiles）**：plan_approval 批准文件集合——模型只能写清单内——**清单对模型显式可见**（系统提示注入）
-- **追加语义**：分批 plan_approval 合并（Codex rules AppendRule 同理——不覆盖前批）
+- **计划清单（PlannedFiles）**：approve-files（2026-08-08 坑 95 改名，原 plan_approval）批准文件集合——模型只能写清单内——**清单对模型显式可见**（系统提示注入）
+- **追加语义**：分批 approve-files 合并（Codex rules AppendRule 同理——不覆盖前批）
 - **拒绝回填边界**：写清单外被拒 → 拒绝信息带清单内容（「X 不在批准清单（批准的是：A/B/C）」）——模型回到边界内
 
 ---
@@ -159,7 +160,7 @@ PENDING（执行未确认）──→ 所有动作无效（不管文件在不在
 |------|------|------|
 | read / write / edit / bash | 核心 | bash 需授权；write/edit 受执行确认 + 计划清单双重边界 |
 | check-capability | 能力 | 环境+能力视图（确认目标后调用）|
-| plan_approval | 规划 | 文件清单批准（追加——宿主边界）|
+| approve-files | 规划 | 文件清单批准（追加——宿主边界；2026-08-08 改名，原 plan_approval）|
 | search / LSP 工具 | 信息 | 定位/查询（放行——不触发执行边界）|
 | start-server / check-server / stop-server | 服务 | 启动/验证/停止开发服务器（自动分配动态端口并记忆——模型不用猜端口）；服务地址以返回为准；宿主保留端口（5173/5175）不可占用 |
 
@@ -192,7 +193,7 @@ PENDING（执行未确认）──→ 所有动作无效（不管文件在不在
 | 推进（Progression）| 跨确认点的状态转换——唯一通道是用户确认 |
 | 自推进（Self-progression）| 确认点内部的模型自主工作（工具链）|
 | 执行保障（Execution Policy）| 确认后防只说不做的 forceTool 决策 |
-| 计划清单（Planned Files）| plan_approval 批准的可写文件集合（宿主边界）|
+| 计划清单（Planned Files）| approve-files 批准的可写文件集合（宿主边界）|
 | 能力视图（Capability View）| 从环境推导的能力状态（ready/missing/failed）|
 | 环境快照（Environment Snapshot）| 一次检测的事实（runtime/依赖/工具链）——注入模型 |
 | 会话时间线（Session Timeline）| 单会话所有步骤统一日志（可观测性）|
