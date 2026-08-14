@@ -314,10 +314,19 @@ class SessionDriver {
   }
 
   async waitSettled(timeoutMs = 120000) {
-    const deadline = Date.now() + timeoutMs
+    // 2026-08-13 waitSettled 卡死修复（HANDOFF §3 首选——阻塞 approve-files 验证 4f1a7f4 的根因）：
+    // 点「确认执行」后 tool-only 长链（write 10+ 文件 / npm install 120s+——坑 61）会超固定 120s 窗口
+    // → settled() 永不返回 → 超时 throw 误杀合法长链（模型还在干活，e2e 却判失败）。三件套：
+    // ① 放宽 tool-only：进展指纹含工具卡——纯工具链（无正文消息）持续变化 = 模型在推进，窗口随进展顺延
+    // ② 状态栏读取容错：innerText 失败/为空时不据此判忙——就绪判定退化为 working/工具卡计数
+    // ③ 长空闲兜底：窗口耗尽且无进展 → 返回最后一条已知回复（上层去重/推动），不再无条件 throw
+    let windowEnd = Date.now() + timeoutMs
+    const hardDeadline = Date.now() + timeoutMs * 4 // 硬上限——推进中顺延到上限，防真卡死无限等
     let last = null
     let sb = '' // 循环外定义——超时 throw 引用
     let stableCount = 0
+    let lastFp = '' // 上一轮 transcript 指纹（消息+内容+工具卡）
+    let idleSince = Date.now()
     // 一轮检查：模型完全空闲（working=0 + 无工具执行 + 就绪 + 消息稳定连续 2 轮）才返回
     const settled = async () => {
       await this.page.waitForTimeout(1500)
@@ -331,13 +340,18 @@ class SessionDriver {
       // 2026-08-05 打断根因修复：模型工具链执行中（工具卡 running/pending）绝不能返回让用户发送——
       // 发送会触发「处理中发送=打断+新指令优先」→ 模型工具链上下文重置 → 反复重启（写文件永远到不了）
       const runningTools = await this.page.locator('.nf-toolcall--running, .nf-toolcall--pending').count().catch(() => 0)
+      // ① 放宽 tool-only：指纹 = 消息数 + 内容摘要 + 工具卡数/文本——纯工具链持续变化也算进展
+      const fp = t.map((m) => `${m.role}|${m.content.slice(0, 30)}|${m.tools.length}|${m.tools.join('|').slice(0, 40)}`).join('~')
+      if (fp !== lastFp) { lastFp = fp; idleSince = Date.now() }
       const msgChanged = last && lastMsg && lastMsg.content !== last.content
       // 授权卡待批（「有操作待你批准」）——模型在等用户批准（maybeContinue 已停），不是没回复——返回让上层处理授权
       if (sb.includes('有操作待你批准') && lastMsg) return lastMsg
       // 2026-08-05：状态栏 isActionPromise 提示（「说要做但还没动手」）= 模型已回复完在等用户（0e12ea6 状态栏化后非「就绪」）——视为就绪返回，上层再推动
       if (sb.includes('说要做但还没动手') && lastMsg && !msgChanged) return lastMsg
+      // ② 状态栏容错：读失败/为空（sb===''）→ 不据此判忙——就绪判定退化为 working/工具卡计数
+      const ready = sb === '' ? (working === 0 && runningTools === 0) : sb.includes('就绪')
       // 模型完全空闲才返回：working=0 + 无工具执行 + 状态「就绪」+ 消息稳定——连续 2 轮（防工具链间隙的「就绪」误判）
-      if (lastMsg && lastMsg.content.trim() && working === 0 && runningTools === 0 && sb.includes('就绪') && !msgChanged) {
+      if (lastMsg && lastMsg.content.trim() && ready && working === 0 && runningTools === 0 && !msgChanged) {
         if (/说要做但还没动手|回复.*继续/.test(lastMsg.content)) { last = lastMsg; return null } // 跳过 isActionPromise 系统提示（UI 插入，非模型回复）
         stableCount++
         if (stableCount >= 2) return lastMsg
@@ -347,32 +361,40 @@ class SessionDriver {
       if (lastMsg) last = lastMsg
       return null
     }
-    while (Date.now() < deadline) {
+    while (Date.now() < hardDeadline) {
       const r = await settled()
       if (r) return r
-    }
-    // 2026-08-05 超时容错：模型停住（状态「就绪」无新回复——偶发，如授权批准后模型没续聊）→
-    // 真实用户会催一次「继续」再等 60s（防偶发停住误报为超时；真卡死仍由总超时兜底）
-    if (sb.includes('就绪')) {
-      console.log(`   ⚠️ waitSettled 超时但状态="${sb}"——真实用户催一次「继续」再等 60s`)
-      await this.send('继续')
-      const d2 = Date.now() + 60000
-      while (Date.now() < d2) {
-        const r = await settled()
-        if (r) return r
+      // ③ 长空闲兜底：窗口耗尽且无进展（或忙但停滞）→ 返回最后一条已知回复，上层去重/推动——不再无条件 throw
+      const busy = sb.includes('搭档处理中') || sb.includes('工具执行中')
+      const progressing = Date.now() - idleSince < 25000 // 25s 内有进展（消息/工具卡变化）→ 工具链还活着
+      if (Date.now() < windowEnd) continue
+      if (busy && progressing) {
+        windowEnd = Date.now() + 30000 // ① 链在推进——顺延窗口（防固定窗口误杀长链；硬上限兜底）
+        continue
       }
+      if (last) {
+        console.log(`   ⚠️ waitSettled 窗口耗尽（${timeoutMs / 1000}s）——状态栏="${sb}"，返回最后一条已知回复（${last.content.slice(0, 30)}…）让上层去重/推动`)
+        return last
+      }
+      windowEnd = Date.now() + 30000 // 首条消息迟迟不来（模型预热/流式慢）——继续等到硬上限
     }
-    throw new Error(`waitSettled 超时 ${timeoutMs / 1000}s（模型长时间无回复，状态栏="${sb}"）`)
+    throw new Error(`waitSettled 硬超时 ${(timeoutMs * 4) / 1000}s（工具链停滞/模型无回复——状态栏="${sb}"，最后消息="${last?.content.slice(0, 40) ?? ''}"）`)
   }
 
   // 等模型「新」回复（内容必须变化——用于决策后等待模型对操作的回复，防点击没生效）
   async waitNew(fromContent, timeoutMs = 120000) {
-    const deadline = Date.now() + timeoutMs
+    // 2026-08-13 同 waitSettled 修复：工具链推进中窗口顺延（防 approve 后长链误判「模型对操作无新回复」）
+    let windowEnd = Date.now() + timeoutMs
+    const hardDeadline = Date.now() + timeoutMs * 4
     let lastReal = null // 最后一条非提示的模型回复（提示插入后模型已回复完——用于超时容错）
-    while (Date.now() < deadline) {
+    let lastFp = ''
+    let idleSince = Date.now()
+    while (Date.now() < hardDeadline) {
       await this.page.waitForTimeout(1500)
       const t = await this.readTranscript()
       const lastMsg = [...t].reverse().find((m) => m.role === 'assistant' && m.content.trim())
+      const fp = t.map((m) => `${m.role}|${m.content.slice(0, 30)}|${m.tools.length}|${m.tools.join('|').slice(0, 40)}`).join('~')
+      if (fp !== lastFp) { lastFp = fp; idleSince = Date.now() }
       if (lastMsg && lastMsg.content !== fromContent) {
         if (/说要做但还没动手|回复.*继续/.test(lastMsg.content)) continue // 跳过 isActionPromise 系统提示（非模型回复）
         lastReal = lastMsg
@@ -381,17 +403,24 @@ class SessionDriver {
       // 记录已出现的非提示消息（可能被提示挤到后面——用于超时容错）
       const real = [...t].reverse().find((m) => m.role === 'assistant' && m.content.trim() && !/说要做但还没动手|回复.*继续/.test(m.content))
       if (real && real.content !== fromContent) lastReal = real
-    }
-    // 超时容错：模型回复完成后被 isActionPromise 提示插入（提示是最后一条）——此时返回提示前的模型回复（流程可继续）
-    if (lastReal && lastReal.content !== fromContent) {
-      console.log(`   ⚠️ 模型回复后插入系统提示（isActionPromise），返回提示前的模型回复继续流程`)
-      return lastReal
+      if (Date.now() >= windowEnd) {
+        const busy = (await this.page.locator('.nf-statusbar__dot--working').count().catch(() => 0)) > 0
+          || (await this.page.locator('.nf-toolcall--running, .nf-toolcall--pending').count().catch(() => 0)) > 0
+        const progressing = Date.now() - idleSince < 25000
+        if (busy && progressing) { windowEnd = Date.now() + 30000; continue } // 链在推进——顺延
+        // 超时容错：模型回复完成后被 isActionPromise 提示插入（提示是最后一条）——此时返回提示前的模型回复（流程可继续）
+        if (lastReal && lastReal.content !== fromContent) {
+          console.log(`   ⚠️ 模型回复后插入系统提示（isActionPromise），返回提示前的模型回复继续流程`)
+          return lastReal
+        }
+        windowEnd = Date.now() + 30000 // 首条新回复迟迟不来（模型预热/流式慢）——继续等到硬上限
+      }
     }
     // 超时诊断：区分「模型流式中断/无响应」vs「操作未生效」（模拟真实用户遇到卡住时看状态）
     const sb = await this.page.locator('.nf-statusbar').innerText().catch(() => '?')
     const last = await this.latestAssistant()
     const working = await this.page.locator('.nf-statusbar__dot--working').count().catch(() => -1)
-    throw new Error(`模型对操作无新回复（${timeoutMs / 1000}s）——状态栏="${sb}" working=${working} 最后消息="${last?.content.slice(0, 40) ?? ''}"（可能流式中断/模型无响应）`)
+    throw new Error(`模型对操作无新回复（${(timeoutMs * 4) / 1000}s）——状态栏="${sb}" working=${working} 最后消息="${last?.content.slice(0, 40) ?? ''}"（可能流式中断/模型无响应）`)
   }
 
   async send(text) {
@@ -592,7 +621,7 @@ class StageMachine {
       const card = await this.driver.handleCards()
       if (card) { console.log(`   🧑 ${card.label}${card.detail ? `（${card.detail}）` : ''}`); continue }
       const msg = await this.driver.waitSettled()
-      if (msg.content === lastProcessed) {
+      if (!msg || msg.content === lastProcessed) {
         await this.driver.page.waitForTimeout(3000)
         continue
       }
@@ -655,12 +684,13 @@ class StageMachine {
       // 2026-08-05 阶段自动推进检测：模型/UI 可能主动推进阶段（用户「推进」消息触发）——e2e 必须跟住，不能在本阶段循环里处理下一阶段消息
       const stNow = await this.driver.currentStage().catch(() => '')
       if (stNow && stNow.includes('开发')) { console.log('   ↪ 阶段已自动推进到开发——进入开发阶段'); return }
-      const msg = await this.driver.waitSettled(120000)
-      if (msg.content === lastProcessed) { await this.driver.page.waitForTimeout(3000); continue }
-      lastProcessed = msg.content
-      // 授权卡（设计阶段模型可能违规调 read/bash——正常批准）
+      // 2026-08-13 卡片优先（同 requirement——tool-only 链期间授权卡出现在空内容消息，waitSettled 只返回旧消息；
+      // 卡放在 dedup 之后 = 永不被点 → 模型等批准 → 死锁。本轮冒烟实测 write×3 + bash 授权卡全被跳过）
       const ap = await this.driver.handleCards()
       if (ap) { console.log(`   🔓 授权：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`); continue }
+      const msg = await this.driver.waitSettled(120000)
+      if (!msg || msg.content === lastProcessed) { await this.driver.page.waitForTimeout(3000); continue }
+      lastProcessed = msg.content
       if (/说要做但还没动手|回复.*继续/.test(msg.content)) {
         console.log(`   🧑 模型说要做但没动手——回复「继续」让它干完`)
         await this.driver.send('继续')
@@ -737,10 +767,7 @@ class StageMachine {
       // 2026-08-05 阶段自动推进检测：模型/UI 可能主动推进到测试（用户「推进测试」消息触发）——跟住阶段，防本阶段循环超时
       const stNow = await this.driver.currentStage().catch(() => '')
       if (stNow && stNow.includes('测试')) { console.log('   ↪ 阶段已自动推进到测试——进入测试阶段'); return }
-      const msg = await this.driver.waitSettled(120000)
-      if (msg.content === lastProcessed) { await this.driver.page.waitForTimeout(3000); continue }
-      lastProcessed = msg.content
-      // 授权卡（approve-files/bash/单卡）——批准并记录清单
+      // 2026-08-13 卡片优先（同 requirement——tool-only 链期间授权卡出现在空内容消息）
       const ap = await this.driver.handleCards()
       if (ap) {
         console.log(`   🔓 授权：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`)
@@ -750,6 +777,9 @@ class StageMachine {
         }
         continue
       }
+      const msg = await this.driver.waitSettled(120000)
+      if (!msg || msg.content === lastProcessed) { await this.driver.page.waitForTimeout(3000); continue }
+      lastProcessed = msg.content
       // 模型请求批准文件清单（二次 approve-files 被 UI 幂等处理不弹卡——模型以为在等批准）→ 显式放行
       if (/(请求你批准|请批准|等你批准|需要你批准|请求批准)/.test(msg.content)) {
         printModel(msg)
@@ -858,11 +888,12 @@ class StageMachine {
       // 2026-08-05 阶段自动推进检测：模型/UI 可能主动推进到部署——跟住阶段
       const stNow = await this.driver.currentStage().catch(() => '')
       if (stNow && stNow.includes('部署')) { console.log('   ↪ 阶段已自动推进到部署——进入部署阶段'); return }
-      const msg = await this.driver.waitSettled(120000)
-      if (msg.content === lastProcessed) { await this.driver.page.waitForTimeout(3000); continue }
-      lastProcessed = msg.content
+      // 2026-08-13 卡片优先（同 requirement——tool-only 链期间授权卡出现在空内容消息）
       const ap = await this.driver.handleCards()
       if (ap) { console.log(`   🔓 授权：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`); continue }
+      const msg = await this.driver.waitSettled(120000)
+      if (!msg || msg.content === lastProcessed) { await this.driver.page.waitForTimeout(3000); continue }
+      lastProcessed = msg.content
       printModel(msg)
       // 2026-08-05 LLM 语义理解（用户指示：真实用户模拟必须语义理解，非正则穷举）
       const decision = await this.sim.understand(msg, '测试')
@@ -937,7 +968,10 @@ class StageMachine {
       console.log(`   ⚠️ 部署前检查：核心产物缺失 ${missingCore.join(', ')}——先让模型补齐`)
       await this.driver.send(`${missingCore.join('、')} 还没写，补齐了再谈部署`)
       msg = await this.driver.waitSettled(180000)
-      printModel(msg, '✅')
+      if (!msg) { // isActionPromise 提示（UI 插入非模型回复）——再等一轮真实回复
+        msg = await this.driver.waitSettled(120000)
+      }
+      printModel(msg ?? { content: '', candidates: [], tools: [] }, '✅')
       // 补齐后再查一次
       const tree2 = await this.driver.realFiles()
       const missing2 = core.filter((c) => !tree2.some((t) => t.endsWith(c)))
@@ -949,9 +983,11 @@ class StageMachine {
     // ② 等模型给出可执行部署方案（或实际部署）
     const deadline = Date.now() + 300000
     while (Date.now() < deadline) {
-      msg = await this.driver.waitSettled(120000)
+      // 2026-08-13 卡片优先（同 requirement——tool-only 链期间授权卡出现在空内容消息）
       const ap = await this.driver.handleCards()
       if (ap) { console.log(`   🔓 授权：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`); continue }
+      msg = await this.driver.waitSettled(120000)
+      if (!msg) { await this.driver.page.waitForTimeout(2000); continue }
       if (/说要做但还没动手|回复.*继续/.test(msg.content) || SEM_PROMISE.test(msg.content)) {
         console.log(`   🧑 模型说要做但没动手——回复「继续」让它干完`)
         await this.driver.send('继续')
