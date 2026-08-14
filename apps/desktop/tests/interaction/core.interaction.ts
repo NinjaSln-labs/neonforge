@@ -1020,10 +1020,14 @@ test('approve-files 多卡并存：连续 2 次批量授权 → 各自批准都�
         streamChat: async () => {
           chatCount++
           setTimeout(() => {
+            // 2026-08-14 更新：目标确认后才走批量授权（授权卡与目标确认卡互斥——目标未确认时
+            // approve-files 卡不渲染——渲染保险 goalConfirmed 门）
             if (chatCount === 1) {
-              // 第一批 approve-files（清单 A）
-              streamCb?.({ type: 'tool-call', toolCall: { name: 'approve-files', args: { summary: '第一批', files: [{ path: '/test/a.js', reason: 'x' }] } } })
+              streamCb?.({ type: 'content', text: '好的。【目标确认：做一个网页游戏】' })
             } else if (chatCount === 2) {
+              // 目标确认后：第一批 approve-files（清单 A）
+              streamCb?.({ type: 'tool-call', toolCall: { name: 'approve-files', args: { summary: '第一批', files: [{ path: '/test/a.js', reason: 'x' }] } } })
+            } else if (chatCount === 3) {
               // 模型补充第二批（清单 B——args 不同）
               streamCb?.({ type: 'tool-call', toolCall: { name: 'approve-files', args: { summary: '第二批（补充）', files: [{ path: '/test/b.js', reason: 'y' }] } } })
             } else {
@@ -1053,6 +1057,9 @@ test('approve-files 多卡并存：连续 2 次批量授权 → 各自批准都�
   await page.getByRole('button', { name: '从零开始' }).click()
   await page.locator('.nf-chat__input textarea').fill('帮我做一个网页游戏')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  // 目标确认卡 → 点确认目标（send「确认，目标清楚了」→ chat#2 模型请求第一批授权）
+  await expect(page.getByRole('button', { name: '确认目标' })).toBeVisible({ timeout: 10000 })
+  await page.getByRole('button', { name: '确认目标' }).click()
   // 卡1（第一批）出现——此时不批准（真实场景：模型第一次请求后没等批准，用户动作触发新轮次）
   await expect(page.getByRole('button', { name: '批准这批文件' })).toBeVisible({ timeout: 10000 })
   // 用户发送触发模型新轮 → 模型补充第二批 approve-files（filesApprovedRef 仍 false——卡1 未批准 → 卡2 弹卡）→ 两张卡并存

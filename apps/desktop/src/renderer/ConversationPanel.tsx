@@ -12,7 +12,7 @@ import { cleanContent, stripMarkdown } from './textClean'
 // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层纯逻辑，双源调研驱动）
 import { evaluateTurnProgress, detectStuck, initialStuckState, isQuestionLike, isCommunicationLike, isDoneLike, parseExecutionPlan, summarizeCapability } from '../domain/agentLoop'
 // 2026-08-14 会话状态机（Task 聚合——A0 §2/§3/§4/§5）：状态单一来源 + 转换唯一入口（session-state-machine.md S2）
-import { initialState as initialConversationState, userConfirmed, approvalGranted, applyToolResult, classifyAction, plannedComplete as isPlannedComplete, forceToolInput as buildForceToolInput, isProgressing as hasProgress, pendingCardToShow, type ConversationState } from '../domain/conversationState'
+import { initialState as initialConversationState, userConfirmed, approvalGranted, applyToolResult, classifyAction, canExecute, plannedComplete as isPlannedComplete, forceToolInput as buildForceToolInput, isProgressing as hasProgress, pendingCardToShow, type ConversationState } from '../domain/conversationState'
 // 2026-08-07 DDD 落地（坑 89 forceTool/advanceChat 领域化——Conversation BC 轮次执行保障 + AgentChain BC 产品阶段流转）
 import { decideTurnPolicy } from '../domain/turnPolicy'
 // 2026-08-07 无阶段重构 S4：buildAdvanceInstruction/stageFlow import 删除（advanceChat 随阶段体系移除）
@@ -549,12 +549,19 @@ export default function ConversationPanel({
       // （用户决策未到——结果无意义——做了白做）——模型停（maybeContinue releaseWorking）等用户决策
       // 2026-08-08 问题 2 修复（feedback.log 标注——「又检测，而且这个显示出来了，咱们定的不显示」）：
       // 拦截分支对 check-capability 同样 hidden——O2 静默语义「能力检测默认不展示」对执行/拦截一致
-      if (confirmPending(streamingRef.current.content, [{ name: tc.name, status: 'pending', command: String(tc.args?.command ?? '') }])) {
+      // 2026-08-14 用户实测修复（「目标确认卡与授权卡不能并存」）：目标/执行确认未处理时副作用工具
+      // **不执行也不弹授权卡**——canExecute 统一门控（A0 §3.5 活动边界：未确认目标 → 只澄清不产生执行动作；
+      // 单一 PENDING 决策点互斥）。原 confirmPending 只认【目标确认】标记命中——模型第一轮直接调 bash 时
+      // 标记未出现 → 走 main need-approval 授权卡 → 与 goalFallback 目标确认卡并存（两决策点冲突）
+      const toolGate = canExecute(stateRef.current, { name: tc.name, command: String(tc.args?.command ?? ''), path: String(tc.args?.path ?? tc.args?.filePath ?? '') }, inPlannedFiles(tc.args?.path ?? tc.args?.filePath))
+      const confirmGate = confirmPending(streamingRef.current.content, [{ name: tc.name, status: 'pending', command: String(tc.args?.command ?? '') }])
+      if (confirmGate || (!toolGate.ok && classifyAction(tc.name, String(tc.args?.command ?? '')) === 'side-effect')) {
+        const gateReason = confirmGate ? '等待你的决策' : toolGate.reason
         setMessages((prev) => {
           const last = prev[prev.length - 1]
           if (!last || last.role !== 'assistant') return prev
           const calls = (last.toolCalls ?? []).map((c) => c.name === tc.name && c.status === 'pending'
-            ? { ...c, status: 'done' as const, hidden: tc.name === 'check-capability', result: `${tc.name} 等待你的决策——此动作未执行（点确认卡后模型会重新执行）` }
+            ? { ...c, status: 'done' as const, hidden: tc.name === 'check-capability', result: confirmGate ? `${tc.name} 等待你的决策——此动作未执行（点确认卡后模型会重新执行）` : `${tc.name} 未执行：${gateReason}` }
             : c)
           return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
         })
@@ -1358,7 +1365,8 @@ export default function ConversationPanel({
                       </button>
                     )}
                     {/* 2026-08-04 规划级授权（用户「一次性要授权」）：计划文件清单卡——模型动手前列出全部文件 → 一次批准整批（后续 write/edit 自动放行） */}
-                    {tc.status === 'file-approval' && (
+                    {/* 2026-08-14 用户实测：授权卡与确认卡互斥——目标未确认时不渲染（副作用工具已被 canExecute 拦截不执行；渲染保险防残留） */}
+                    {goalConfirmed && tc.status === 'file-approval' && (
                       <>
                         <span className="nf-toolcall__approve-hint">本次任务计划修改 {((tc.args.files ?? []) as unknown[]).length} 个文件——批准后自动放行，不再逐个问</span>
                         {typeof tc.args.summary === 'string' && <span className="nf-toolcall__note">{tc.args.summary}</span>}
@@ -1380,7 +1388,7 @@ export default function ConversationPanel({
                         </div>
                       </>
                     )}
-                    {tc.status === 'need-approval' && (
+                    {goalConfirmed && tc.status === 'need-approval' && (
                       <>
                         {/* 2026-08-04 体验修复：醒目标题——用户不知道「先写文件」后要批准（等授权无提示的根因） */}
                         <span className="nf-toolcall__approve-hint">需要你批准——点「允许执行」继续</span>
