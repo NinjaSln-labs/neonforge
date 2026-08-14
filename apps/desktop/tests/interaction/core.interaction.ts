@@ -738,7 +738,9 @@ test('0-1 授权 v4 完整路径：允许并记住 → 同文件自动 → 新�
             // 2026-08-14 S2b：chat#2 带「等确认」语义（A0：执行确认=确认「怎么做」——方案已给才有确认对象；
             // 原「收到，继续。」无方案 → 状态机正确不弹卡 → 测试死等）
             if (chatCount === 1) {
-              streamCb?.({ type: 'content', text: '收到，继续。' })
+              // 2026-08-14 goalFallback 收窄：chat#1 需目标总结语义（「你的需求是…」）→ 目标确认卡弹；
+              // 原「收到，继续。」无总结语义 → 正确不弹 → 测试死等
+              streamCb?.({ type: 'content', text: '你的需求是做网页游戏——就按这个做，行不行？' })
             } else if (chatCount === 2) {
               streamCb?.({ type: 'content', text: '方案如下：写 index.html 游戏页面，等你确认。' })
             } else if (chatCount >= 3 && chatCount <= 5) {

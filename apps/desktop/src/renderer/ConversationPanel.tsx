@@ -1274,7 +1274,15 @@ export default function ConversationPanel({
               // 消息含 <candidates>（候选=澄清决策点，等用户选方向）时不显示兜底确认卡——一个决策点走完再进下一个
               // （此前 goalFallback「目标未确认+最后一条 done」导致候选与兜底确认卡同时显示）
               const hasCandidates = m.content.includes('<candidates>')
-              const goalFallback = !goalConfirmed && isLastAssistant && !hasCandidates
+              // 2026-08-14 用户实测修复（「重新描述后一直弹确认」——timeline a44cce80）：goalFallback 无条件兜底过宽——
+              // 模型在澄清提问（「敌人什么样？一关还是波次？」）时每条消息都弹确认卡 → 用户被卡轰炸 → 点「重新描述」
+              // → 模型重新问 → 又弹 → 循环。收窄：只在模型**征询确认/总结目标**时弹；问句澄清期不弹（决策点互斥——
+              // 候选块/开放问题都是澄清决策点，确认卡不插队）
+              const askingConfirm = /(等你确认|你确认一下|确认一下|确认没问题|行不行|可以吗|对吗|对吧|没问题吧|你看行|这样.*可以|就按这个)/.test(m.content)
+              const goalStated = /(目标是|要做的是|你的需求是|目标就是|就是做一个|做成|需求.*确认)/.test(m.content)
+              // 征询确认（含问句形式「行不行？」）→ 直接弹——确认征询就是要用户决策；目标总结陈述需非问句
+              // （「你的需求是 X，你想做成什么样？」目标+后续提问 = 澄清中，不弹）
+              const goalFallback = !goalConfirmed && isLastAssistant && !hasCandidates && (askingConfirm || (!isQuestionLike(m.content) && goalStated))
               // 2026-08-14 S2b（缝隙 4/5）：触发统一走状态机派生 pendingCardToShow（渲染与 maybeContinue 停模型同源）——
               // 「等确认」语义命中即弹 + 停；探索期（只读 bash/无等确认语义）不弹（冒烟实证：探索期弹卡 → 模型困惑）
               const sideEffectAttempted = (m.toolCalls ?? []).some((c) => classifyAction(c.name, String(c.args?.command ?? '')) === 'side-effect')
