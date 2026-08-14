@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { existsSync, readFileSync, rmSync } from 'node:fs'
-import { slugify, initProjectFiles, updateProjectTitle } from '../../src/main/projectInit'
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { slugify, safePkgName, initProjectFiles, updateProjectTitle } from '../../src/main/projectInit'
 
 const TMP = '/tmp/nf-unit-project'
 
@@ -40,5 +40,21 @@ describe('projectInit（ticket 07——0-1 项目初始化）', () => {
     expect(readme.startsWith('# 3D射击小游戏')).toBe(true)
     expect(readme).toContain('NeonForge 0-1 项目') // 保留正文
     expect(existsSync(`${TMP}/package.json`)).toBe(false)
+  })
+
+  // 2026-08-14 缝隙 6：npm name 合法化（中文 title → ASCII 安全名——原 slugify 保留中文产出非法 name）
+  it('safePkgName：中文 title → ASCII 安全名；非法开头/空 → 兜底', () => {
+    expect(safePkgName('3d设计游戏')).toBe('3d')
+    expect(safePkgName('My Travel Website!')).toBe('my-travel-website')
+    expect(safePkgName('.hidden')).toBe('hidden') // . 开头非法
+    expect(safePkgName('设计游戏')).toBe('neonforge-app') // 全中文 → 兜底
+  })
+
+  it('updateProjectTitle：package.json name 用安全名（合法 npm name——目录名保持中文稳定）', () => {
+    initProjectFiles(TMP, '3d设计小游戏')
+    writeFileSync(`${TMP}/package.json`, JSON.stringify({ name: 'old-name' }), 'utf-8')
+    updateProjectTitle(TMP, '3D射击小游戏')
+    const pkg = JSON.parse(readFileSync(`${TMP}/package.json`, 'utf-8'))
+    expect(pkg.name).toBe('3d')
   })
 })
