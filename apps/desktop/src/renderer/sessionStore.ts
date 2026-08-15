@@ -11,18 +11,19 @@ export interface StoredMsg {
   content: string
   reasoning?: string
   toolCalls?: ToolCallMsg[]
+  id?: string // 2026-08-15 Q5：稳定 id 跨会话保留（断点恢复后 React key 稳定）
 }
 
 // messages → 可存子集（assistant 仅 status done/error；toolCalls 仅完整状态）
-export function serializeMessages(msgs: Array<{ role: 'user' | 'assistant'; content: string; reasoning?: string; status?: string; toolCalls?: ToolCallMsg[] }>): StoredMsg[] {
+export function serializeMessages(msgs: Array<{ role: 'user' | 'assistant'; content: string; reasoning?: string; status?: string; toolCalls?: ToolCallMsg[]; id?: string }>): StoredMsg[] {
   const out: StoredMsg[] = []
   for (const m of msgs) {
     if (m.role === 'user') {
-      out.push({ role: 'user', content: m.content })
+      out.push({ role: 'user', content: m.content, id: m.id })
       continue
     }
     if (m.role === 'assistant' && (m.status === 'done' || m.status === 'error')) {
-      out.push({ role: 'assistant', content: m.content, reasoning: m.reasoning, toolCalls: m.toolCalls?.filter((t) => t.status === 'done' || t.status === 'error' || t.status === 'reverted') })
+      out.push({ role: 'assistant', content: m.content, reasoning: m.reasoning, toolCalls: m.toolCalls?.filter((t) => t.status === 'done' || t.status === 'error' || t.status === 'reverted'), id: m.id })
     }
   }
   return out.slice(-SESSION_MAX)
