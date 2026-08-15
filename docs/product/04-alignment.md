@@ -99,10 +99,10 @@ neonforge/
 
 | 组件 | 设计令牌引用 |
 |------|------------|
-| Button | `--nf-blue`, `--nf-space-2`, `--nf-radius-md`, `--nf-duration-fast` |
-| Input | `--nf-bg-input`, `--nf-border`, `--nf-blue`, `--nf-radius-lg` |
+| Button | `--nf-accent`, `--nf-space-2`, `--nf-radius-md`, `--nf-duration-fast`（2026-08-16 第 17 轮审计 #1：原 --nf-blue——03 终版名 --nf-accent）|
+| Input | `--nf-bg-elevated`, `--nf-border`, `--nf-accent`, `--nf-radius-lg`（#1：原 --nf-bg-input）|
 | MessageBubble | `--nf-bubble-user`, `--nf-bubble-partner`, `--nf-radius-xl`, `--nf-duration-fast` |
-| BreathBar | `--nf-blue`, `--nf-amber`, `--nf-ease-in-out` |
+| BreathBar | `--nf-accent`, `--nf-amber`, `--nf-ease-in-out`（#1：原 --nf-blue）|
 | DiffView | `--nf-diff-add-bg`, `--nf-diff-remove-bg`, `--nf-green`, `--nf-red` |
 | ... | 见 `product/02-components.md` 各组件详细说明 |
 | 所有组件 | 颜色、间距、圆角等参见 `product/03-design-tokens.md` |

@@ -2,6 +2,7 @@
 
 > 只关注产品设计层面：用户看到什么、怎么交互、有哪些模式。
 > 日期：2026-07-30
+> ⚠️ **历史参考（2026-08-16 第 17 轮审计 #5 标注）**：本文为 0-1 初期竞品方案参考（历史输入）——意图确认重设计后的竞品确认机制现行参考为三视角调研（`analysis/competitor-crawler/reports/neonforge-intent-confirmation-research.md`——物理位置 `~/Documents/myself/analysis/competitor-crawler/`）；本文仅作产品形态背景，不构成现行设计依据。
 
 ---
 
