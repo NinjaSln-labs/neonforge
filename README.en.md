@@ -139,6 +139,7 @@ ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ node install.js
 
 ## Known Limitations (V1)
 
+- **Electron version security**: currently on Electron 36.x (known CVEs fixed in 40.10.3+/43.x) — upgrade planned (major-version jump requires full regression: dev/build/smoke)
 - **Resume scope**: after restart, the conversation history and problem ledger (goal / authorized) are restored, but **confirmation state and execution progress do not survive restarts** (resuming re-starts from goal clarification — safe fallback; session-snapshot persistence is planned for V2)
 - **LSP in packaged builds**: full LSP in dev mode; if `typescript-language-server` isn't installed system-wide, LSP tools report "not connected" in packaged builds — chat/tools/delivery main flow unaffected
 - macOS unsigned (see above); Windows/Linux packaging targets configured but not yet validated
