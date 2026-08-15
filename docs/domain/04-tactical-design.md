@@ -49,7 +49,7 @@ clarifying ─[用户确认目标]→ goal-confirmed ─[用户批准方案]→ 
 
 **不变式**：
 - 未确认目标 → 不进入 executing（模型只澄清）
-- 未批准方案 → 不产生执行动作（write/edit/bash）
+- 未批准方案 → 不产生执行动作（write/edit/**有副作用 bash**——探索性只读命令如 ls/cat 放行：与 §3.6 actionGate 只读自动同源——A0 §3.1 澄清，2026-08-16 第 14 轮审计 #1 对齐）
 - 未确认解决 → 不收敛（推进保障保持——模型必须继续推进：产出/提议/证据）
 - 无证据不对账 → 证据不完备的完成声明不进入 resolved-pending（「已解决」卡不弹）
 - **pending（会话级）→ 模型动作全部无效**（做了白做——用户决策是下一个状态的唯一输入）
@@ -353,20 +353,23 @@ interface ProgressGuarantee {
 - 目标未确认 → auto（澄清）
 - 方案未确认 → auto（等方案批准）
 - 目标+方案确认、无任何推进 → require-advance（防只说不做——允许模型输出提议/证据/提问，不逼调工具）
+- **目标+方案确认、无产出且工具可用 → require-action**（2026-08-16 第 14 轮审计 #6 补——设计 §3.3 档位：原 required 语义保留但 pending 时自动降级——工具可用时直接要求行动；require-advance 与 require-action 均映射 tool_choice='required'——区别在系统提示措辞：行动 vs 推进）
 - 工具失败 → 释放（模型诊断修正——required 压制诊断是反模式）
 - 计划写完 或 解决确认 → 释放（模型可收敛）
 - **无计划文件**（未走 approve-files）→ produced 后 auto（A0 §4 补行——2026-08-16 审计补）
 
-### 3.2 ProgressionGate（推进门控）
+### 3.2 ProgressionGate（推进门控——2026-08-16 第 14 轮审计 #2 角色裁决：并入 §3.6 sessionGate）
 
 确认点状态机——当前确认点 → 模型活动边界。
+
+> **角色裁决（2026-08-16 第 14 轮审计 #2——权威：设计文档 §3.3）**：确认点活动边界**并入 sessionGate**（§3.6 意图确认服务组）承载——sessionGate 判定 = 会话冻结（pending）+ 确认点活动边界（goal-confirmed 只澄清+只读探索 / executing 执行 / resolution-pending 证据对账）；**本接口保留为活动边界策略层描述**（allowedActions 语义不变），S1 实现以 §3.6 服务组为准——不单列 ProgressionGate 服务。
 
 ```typescript
 interface ProgressionGate {
   currentPoint(task: Task): 'goal' | 'plan' | 'resolution' | 'done'（2026-08-16 更名）
-  allowedActions(point: string): Action[]  // 该确认点允许的模型动作
+  allowedActions(point: string): Action[]  // 该确认点允许的模型动作（策略层描述——判定由 sessionGate 承载）
   // 未确认目标 → 只澄清（无 write/edit/bash）
-  // 未批准方案 → 只给方案（无执行动作）
+  // 未批准方案 → 只给方案（无执行动作——探索性只读命令放行，A0 §3.1）
   // 未确认解决 → 持续执行（不收敛）
 }
 ```
@@ -411,6 +414,12 @@ interface TimelineLogger {
 不变式：时间顺序完整（ts+seq 升序）；单文件 JSONL（崩溃保留已写行）。
 
 ### 3.6 意图确认服务（2026-08-16 新增——第 11 轮审计 #1；签名权威：设计文档 §3.3/A0 §3.5b/§3.6/§4.2——S1 实现依据）
+
+> **参数形状（2026-08-16 第 14 轮审计 #7 补——S1 类型定义依据）**：
+> `proposals: { goal?: GoalProposal; plan?: PlanProposal; completion?: CompletionClaim }`（待求值的提议快照）
+> `pendingActions: ActionAttribute[]`（本轮待执行动作的属性列表）
+> `systemState: { plannedFiles: Set<string>; producedFiles: Set<string> }`（证据对账的宿主事实）
+> `policy: { outOfPlan: 'ask' | 'deny'; hazardous: 'ask' | 'deny' }`（ActionGate 策略配置——默认 ask）
 
 ```typescript
 interface IntentConfirmationServices {

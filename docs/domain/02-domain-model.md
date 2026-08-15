@@ -56,7 +56,7 @@ Task = Goal → Plan → Resolution（2026-08-16 更名——原 Goal → Execut
 | 确认点 | 含义 | 确认动作（结构化）| 未确认时模型活动边界 |
 |---|---|---|---|
 | **GoalConfirmed** | 用户确认「做什么」（目标）——**目标驱动的原点** | 确认目标 / 重新描述 | 只澄清目标（不产生执行动作）|
-| **PlanConfirmed**（2026-08-16 更名，原 ExecutionConfirmed）| 用户批准「怎么做」（PlanProposal——文件+假设+验证计划）| 批准方案 / 修改 / 重出（带原因）| 只给方案（不 write/edit/bash）|
+| **PlanConfirmed**（2026-08-16 更名，原 ExecutionConfirmed）| 用户批准「怎么做」（PlanProposal——文件+假设+验证计划）| 批准方案 / 修改 / 重出（带原因）| 只给方案（不 write/edit/bash——**探索性只读命令如 ls/cat 放行**——2026-08-16 第 14 轮审计 #1 补 A0 §3.1 澄清：判定与授权 preApproval 同源 classifyReadonly）|
 | **ResolutionConfirmed**（2026-08-16 更名，原 AchievementConfirmed）| 用户确认「问题解决了」（完成声明+证据对账——无证据不对账）| 已解决 / 还要改（带原因）| 持续执行（不收敛——不能自宣布完成停手）|
 
 ### 4.2 确认点 = 推进门槛 + 单一 PENDING 状态机（核心不变式）
@@ -207,7 +207,7 @@ id / title / status / updatedAt
 | 服务 | 职责 | 不变式 |
 |---|---|---|
 | **ProgressGuarantee**（2026-08-16 重设计，原 TurnExecutionPolicy）| 输入（确认状态/推进/失败/完成度/pending）→ tool_choice 决策 | 确认后无推进强制（产出/提议/证据）；失败释放；pending 恒不强制；计划写完/解决确认释放 |
-| **ProgressionGate**（推进门控）| 确认点状态机——当前确认点 → 模型活动边界 | 未确认目标不执行；未批准方案不动手；未确认解决不收敛 |
+| **ProgressionGate**（推进门控——2026-08-16 第 14 轮审计 #2：角色并入 sessionGate——活动边界策略层描述保留，判定由意图确认服务组承载，见 04 §3.2/§3.6）| 确认点状态机——当前确认点 → 模型活动边界 | 未确认目标不执行；未批准方案不动手（只读探索放行——A0 §3.1）；未确认解决不收敛 |
 | **CapabilityChecker** | 能力视图（从环境推导）+ 缺失清单 + Ledger 回填 | 环境单源；能力是视图；执行结果回填 |
 | **PlannedFiles**（计划清单）| 批准文件集合——写文件边界 | 追加不覆盖；清单显式可见；拒绝带边界 |
 | **TimelineLogger** | 会话所有步骤统一记录 | 时间顺序完整（用户/搭档/工具/授权/确认/状态）|
