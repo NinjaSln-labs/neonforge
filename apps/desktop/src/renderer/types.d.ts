@@ -84,7 +84,7 @@ export type ProblemStatus = 'understanding' | 'awaiting-plan' | 'executing' | 'a
 export interface ProblemSnapshot {
   goal: string          // 目标（用户问题第一句）
   decisions: string[]   // 已确认决策
-  authorized: string[]  // 已授权操作
+  authorized: Array<{ tool: string; file: string }> // 已授权操作（2026-08-15 Q9 结构化——原 `[工具] 路径` 字符串拼接协议；旧存档 string[] 由 problemStore 迁移）
   pending: string[]     // 待办/待确认
 }
 export interface ProblemInstance {
