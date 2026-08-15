@@ -37,7 +37,7 @@ import { buildSysHint } from './sysPrompt'
 // 2026-08-15 Q10：demo 注入通道类型化单例
 import { getDemoBridge } from './demoBridge'
 // 2026-08-15 DDD 重建：事件注册表 dev 校验
-import { validateTimelineEvent } from '../domain/timeline'
+import { validateTimelineEvent, TIMELINE_EVENT_SPECS, dedupeKey, detectProposed } from '../domain/timeline'
 
 // ticket 04：对话最小闭环（D0 §2/§3.4）——输入发送 → Gateway 流式 → 消息/呼吸光条/推理展示
 // 消费 02：streamChat（四档 basic）+ ModelRouter（默认 Flash）；错误分支：Key 失效内嵌更新 / 服务故障提示
@@ -234,6 +234,8 @@ export default function ConversationPanel({
   useEffect(() => { applyChunkRef.current = applyChunk }) // 每次渲染同步最新 applyChunk
   // 2026-08-08 会话日志：挂载（进入对话）→ 会话 ID 上报 MainWorkspace（其 timeline 事件归属本会话）
   useEffect(() => { onSessionStart?.(sessionId) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // 2026-08-15 补齐：会话创建事件（06 §1.6 conversation.created——会话文件创建点可观测）
+  useEffect(() => { tlog('conversation.created', { session: sessionId }, 'system') }, [sessionId]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     // 永久 listener：不随 runChat off（off 竞争会导致 done 事件丢失——invoke resolve 与 stream-chunk 投递顺序）
     // 2026-08-04 修复（用户「按停止没反应」）：streamingSidRef 检查——只处理当前活跃流的 chunk（停止 sid++ 后旧流 chunk 忽略）
@@ -309,11 +311,21 @@ export default function ConversationPanel({
   // → effect 立即把回退反转回 true（「重新描述需点两次」根因）。现状态机唯一权威 = stateRef；
   // MainWorkspace 的 goalConfirmed/executionConfirmed 仅作渲染镜像（由确认/拒绝回调显式设置，双向对称）。
   // 2026-08-07 会话时间线（Session Timeline BC——单会话所有步骤统一日志：用户/搭档/工具/授权/状态——分析一步到位）
+  // 2026-08-15 A6：dedupe 事件去重集合（会话级——同 detail 签名只记一次）
+  const timelineDedupeRef = useRef<Set<string>>(new Set())
   const tlog = (type: string, detail: Record<string, unknown>, role?: 'user' | 'assistant' | 'system' | 'tool') => {
     // 2026-08-15 DDD 重建：事件注册表 dev 校验（A2——未登记 type / 缺载荷字段 → warn 防散落）
     try {
       for (const w of validateTimelineEvent(type, detail)) console.warn('[timeline]', w)
     } catch { /* 校验失败不影响发送 */ }
+    // 2026-08-15 A6：dedupe 事件去重（注册表 dedupe:true——同会话同 detail 签名只记一次；替代组件 cardShownRef 手动的通用机制）
+    try {
+      if (TIMELINE_EVENT_SPECS[type as keyof typeof TIMELINE_EVENT_SPECS]?.dedupe) {
+        const k = dedupeKey(type, detail)
+        if (timelineDedupeRef.current.has(k)) return
+        timelineDedupeRef.current.add(k)
+      }
+    } catch { /* 去重失败不影响发送 */ }
     // 2026-08-08 会话归属：session 用会话 ID（UUID——本组件挂载生成）——写入对应会话 timeline 文件
     try { void window.neonforge.timeline?.log?.({ session: sessionId, type, role, detail }) } catch { /* 日志失败不影响 */ }
   }
@@ -439,6 +451,8 @@ export default function ConversationPanel({
       // 2026-08-07 用户决策（显式确认）：模型【目标确认】标记不再调 onGoalConfirmed（自报确认删除）——标记只渲染确认卡，
       // 用户点「确认目标」才 onGoalConfirmed（结构化确认——行业共识）
       tlog('conversation.assistant_done', { content }, 'assistant')
+      // 2026-08-15 补齐：模型提议事件（06 §1.1 task.*_proposed——提议→确认/拒绝闭环起点）
+      for (const p of detectProposed(content)) tlog(p.type, p.detail, 'assistant')
       window.neonforge.chatLog?.log?.({
         ts: new Date().toISOString(),
         role: 'assistant',
@@ -681,6 +695,7 @@ export default function ConversationPanel({
                   // 缺失/异常（needsUser）→ 展示（用户需实质决策：安装/换方案）
                   if (tc.name === 'check-capability') {
                     const cap = summarizeCapability(r.data as { capabilities?: Array<{ id: string; status: string; detail?: string }> })
+                    tlog('capability.checked', { capabilities: (r.data as { capabilities?: Array<{ id: string; status: string }> })?.capabilities ?? [], missing: cap.needsUser }, 'tool')
                     return { ...c, status: 'done' as const, result: cap.summary, hidden: !cap.needsUser, rawResult: typeof r.data === 'string' ? r.data.slice(0, 16000) : JSON.stringify(r.data ?? '').slice(0, 16000) }
                   }
                   // 2026-08-06 修正重写可见性（用户「第二次 write 很快不知道发生了什么——只需知道第二次是 fix bug」）：
@@ -848,6 +863,8 @@ export default function ConversationPanel({
       // 2026-08-08 根因 3 修复①：判定改读 **ref** 而非 prop 闭包——确认卡按钮同事件触发 send 时
       // （onClick 内 setState 异步 + sendRef 同步调用）prop 还是旧渲染值 → forceTool 恒 auto → 模型纯文本承诺后停住
       const { forceTool } = decideTurnPolicy(buildForceToolInput(stateRef.current, new Set(recentFilesExternal ?? [])))
+      // 2026-08-15 补齐：执行保障事件（06 §1.5 execution.forced/released——forceTool 轨迹可回放）
+      tlog(forceTool ? 'execution.forced' : 'execution.released', { reason: 'turn-policy' }, 'system')
       // 2026-08-14 取证打点（用户实测「一直读取操作」——plannedComplete 未收敛）：dump 三集合供 timeline 比对
       tlog('execution.force_input', {
         planned: [...stateRef.current.plannedFiles].slice(0, 12),
@@ -1260,8 +1277,8 @@ export default function ConversationPanel({
                       <div className="nf-confirmcard__head">目标确认——需要你确认</div>
                       <div className="nf-confirmcard__goal">{goalMatch ? goalMatch[1].trim() : (initialPrompt || '你描述的目标')}</div>
                       <div className="nf-confirmcard__actions">
-                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { confirm('goal'); onGoalConfirmed?.(goalMatch ? goalMatch[1].trim() : (initialPrompt || '目标已确认')); inputRef.current = '确认，目标清楚了'; void sendRef.current() }}>确认目标</button>
-                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { reject('goal'); setRejectedCardIdx((p) => ({ ...p, goal: i })); onGoalRejected?.(); inputRef.current = '目标需要重新描述一下'; void sendRef.current() }}>重新描述</button>
+                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { confirm('goal'); tlog('card.resolved', { card: 'goal', action: 'confirm' }, 'system'); onGoalConfirmed?.(goalMatch ? goalMatch[1].trim() : (initialPrompt || '目标已确认')); inputRef.current = '确认，目标清楚了'; void sendRef.current() }}>确认目标</button>
+                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { reject('goal'); tlog('card.rejected', { card: 'goal', action: 'reject' }, 'system'); setRejectedCardIdx((p) => ({ ...p, goal: i })); onGoalRejected?.(); inputRef.current = '目标需要重新描述一下'; void sendRef.current() }}>重新描述</button>
                       </div>
                     </div>
                   ) : null}
@@ -1269,8 +1286,8 @@ export default function ConversationPanel({
                     <div className="nf-confirmcard" role="group" aria-label="确认执行方案">
                       <div className="nf-confirmcard__head">执行方案——需要你确认后动手</div>
                       <div className="nf-confirmcard__actions">
-                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { confirm('execution'); onExecutionConfirmed?.(); inputRef.current = '确认，按方案执行'; void sendRef.current() }}>确认执行</button>
-                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { reject('execution'); setRejectedCardIdx((p) => ({ ...p, execution: i })); onExecutionRejected?.(); inputRef.current = '方案需要调整一下'; void sendRef.current() }}>修改方案</button>
+                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { confirm('execution'); tlog('card.resolved', { card: 'execution', action: 'confirm' }, 'system'); onExecutionConfirmed?.(); inputRef.current = '确认，按方案执行'; void sendRef.current() }}>确认执行</button>
+                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { reject('execution'); tlog('card.rejected', { card: 'execution', action: 'reject' }, 'system'); setRejectedCardIdx((p) => ({ ...p, execution: i })); onExecutionRejected?.(); inputRef.current = '方案需要调整一下'; void sendRef.current() }}>修改方案</button>
                       </div>
                     </div>
                   ) : null}
@@ -1278,8 +1295,8 @@ export default function ConversationPanel({
                     <div className="nf-confirmcard" role="group" aria-label="确认达成">
                       <div className="nf-confirmcard__head">搭档已完成——你确认解决了没有</div>
                       <div className="nf-confirmcard__actions">
-                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { confirm('achievement'); inputRef.current = '已解决，谢谢'; void sendRef.current() }}>已解决</button>
-                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { reject('achievement'); setRejectedCardIdx((p) => ({ ...p, achievement: i })); inputRef.current = '还要改一些地方：'; void sendRef.current() }}>还要改</button>
+                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { confirm('achievement'); tlog('card.resolved', { card: 'achievement', action: 'confirm' }, 'system'); inputRef.current = '已解决，谢谢'; void sendRef.current() }}>已解决</button>
+                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { reject('achievement'); tlog('card.rejected', { card: 'achievement', action: 'reject' }, 'system'); setRejectedCardIdx((p) => ({ ...p, achievement: i })); inputRef.current = '还要改一些地方：'; void sendRef.current() }}>还要改</button>
                       </div>
                     </div>
                   ) : null}

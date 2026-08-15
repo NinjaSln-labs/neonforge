@@ -50,6 +50,7 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
 
   const approveToolCall = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg): void => {
     tlog('tool.approved', { name: tc.name }, 'system')
+    tlog('card.resolved', { card: 'approval', action: 'approve', name: tc.name }, 'system')
     patchToolCall(idx, (c) => ({ ...c, status: 'pending' as const }), tc)
     void window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: true, rootPath: rootPath ?? undefined, sessionId }).then((r) => {
       const data = r.data as { file?: string; snapshot?: boolean } | undefined
@@ -74,6 +75,7 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
   const rejectToolCall = (calls: ToolCallMsg[], idx: number): void => {
     // 2026-08-15 DDD 重建：授权拒绝事件（G2 缺口——原无打点，卡生命周期不可回放）
     tlog('tool.rejected', { name: calls[idx]?.name, args: calls[idx]?.args }, 'system')
+    tlog('card.rejected', { card: 'approval', action: 'reject', name: calls[idx]?.name }, 'system')
     setMessages((prev) => {
       const last = prev[prev.length - 1]
       if (!last || last.role !== 'assistant') return prev
@@ -102,6 +104,7 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
   // 批准计划文件清单（追加语义 + 幂等标记 + 通知 main）
   const approvePlan = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg): void => {
     tlog('tool.approved', { name: 'approve-files', files: ((tc.args.files ?? []) as Array<{ path: string }>).map((f) => f.path) }, 'system')
+    tlog('card.resolved', { card: 'file-approval', action: 'approve' }, 'system')
     const files = (tc.args.files ?? []) as Array<{ path: string }>
     files.forEach((f) => addTrust({ path: f.path }))
     grantPlan(files.map((f) => trustPath(f.path)))

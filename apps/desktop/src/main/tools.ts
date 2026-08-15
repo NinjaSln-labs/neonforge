@@ -272,7 +272,10 @@ async function bashExecutor(args: Record<string, unknown>, ctx: { rootPath?: str
       if (signal || code === null) reject(new Error('已停止（命令被中断）'))
       else if (code !== 0) {
         // 2026-08-07 Ledger（坑 83 ⑥）：bash 失败归因到能力（node/python/dev-tools）——check-capability 后续降级 failed（自学习）
-        try { attributeCommandFailure(ctx.rootPath ?? '', cmd) } catch { /* 归因失败不影响命令错误返回 */ }
+        try {
+          const attr = attributeCommandFailure(ctx.rootPath ?? '', cmd)
+          logTimeline({ session: ctx.sessionId ?? ctx.rootPath ?? undefined, type: 'capability.ledger_updated', role: 'tool', detail: { capabilityId: String(attr ?? ''), ok: false } })
+        } catch { /* 归因失败不影响命令错误返回 */ }
         logTimeline({ session: ctx.sessionId ?? ctx.rootPath ?? undefined, type: 'tool.failed', role: 'tool', detail: { name: 'bash', error: `exit-${code}: ${stderr.slice(0, 300)}`, command: cmd.slice(0, 200) } })
         reject(new Error(stderr ? `exit-${code}: ${stderr.slice(0, 500)}` : `exit-${code}`))
       }

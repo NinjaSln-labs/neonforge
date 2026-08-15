@@ -14,7 +14,7 @@
 | `task.goal_proposed` | 模型澄清后给出目标提议 | taskId, goalText | 确认卡渲染（UI）|
 | `task.goal_confirmed` | 用户点「确认目标」 | taskId, goalText, source | 状态机（→goal-confirmed）、Timeline |
 | `task.goal_rejected` | 用户点「重新描述」 | taskId | 状态机（→clarifying）、模型（重新澄清）|
-| `task.execution_plan_proposed` | 模型给出执行方案 | taskId, plan, files | 执行确认卡渲染（UI）|
+| `task.execution_proposed` | 模型给出执行方案 | taskId, plan, files | 执行确认卡渲染（UI）|
 | `task.execution_confirmed` | 用户点「确认执行」 | taskId, source | 状态机（→executing）、forceTool 生效 |
 | `task.execution_rejected` | 用户点「修改方案」 | taskId | 状态机（→goal-confirmed）、模型（改方案）|
 | `task.achievement_proposed` | 模型汇报达成 | taskId, summary | 达成确认卡渲染（UI）|
@@ -75,7 +75,7 @@
 | `conversation.created` / `archived` | 生命周期 |
 | `message.appended` | 消息变更（用户/搭档/工具）|
 | `streaming.started` / `completed` | 流式输出 |
-| `user.message_sent` | 用户消息（含确认卡触发）|
+| `conversation.message_sent` | 用户消息（含确认卡触发）|
 
 ### 1.7 问题台账事件（Conversation BC——2026-08-15 补建模 M3）
 

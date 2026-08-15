@@ -50,7 +50,10 @@ export type TimelineEventType =
   | 'tool.remembered'                // 允许并记住（任务信任）
   // —— Capability/Environment（06 §1.4）——
   | 'capability.checked'             // 能力检查（载荷：capabilities/missing）
+  | 'capability.ledger_updated'      // Ledger 回填（载荷：capabilityId/ok——bash 失败归因降级）
   | 'environment.injected'           // 环境快照注入模型
+  // —— Conversation 聚合：会话生命周期（06 §1.6）——
+  | 'conversation.created'           // 会话创建（sessionId 生成）
   // —— 执行保障（06 §1.5）——
   | 'execution.forced'               // forceTool=true（确认后无产出强制）
   | 'execution.released'             // forceTool 释放
@@ -58,6 +61,7 @@ export type TimelineEventType =
   | 'stuck.needs_human'              // 升级仍无效转用户
   // —— Problem：问题台账（06 §1.7——2026-08-15 M3 建模）——
   | 'problem.created'                // 问题实例创建/复跑
+  | 'problem.rerun'                  // closed 复开 → 复跑（新 Task 关联同一 Problem）
   | 'problem.snapshot_updated'       // 快照回写（goal/authorized/pending）
   | 'problem.closed'                 // 确认关闭（终态）
   // —— Card：确认/授权卡 UI 生命周期（用户交互路径可观测——2026-08-15 补全）——
@@ -105,12 +109,15 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
   'tool.rejected': { domain: 'tool', role: 'system', detailKeys: ['name'] },
   'tool.remembered': { domain: 'tool', role: 'system', detailKeys: ['name', 'file'] },
   'capability.checked': { domain: 'capability', role: 'tool', detailKeys: ['capabilities', 'missing'] },
+  'capability.ledger_updated': { domain: 'capability', role: 'tool', detailKeys: ['capabilityId', 'ok'] },
   'environment.injected': { domain: 'capability', role: 'system', detailKeys: ['rootPath'] },
+  'conversation.created': { domain: 'conversation', role: 'system', detailKeys: ['session'] },
   'execution.forced': { domain: 'execution', role: 'system', detailKeys: ['reason'] },
   'execution.released': { domain: 'execution', role: 'system', detailKeys: ['reason'] },
   'stuck.escalated': { domain: 'stuck', role: 'system', detailKeys: ['message'] },
   'stuck.needs_human': { domain: 'stuck', role: 'system', detailKeys: ['message'] },
   'problem.created': { domain: 'problem', role: 'system', detailKeys: ['problemId', 'title'] },
+  'problem.rerun': { domain: 'problem', role: 'system', detailKeys: ['problemId', 'title'] },
   'problem.snapshot_updated': { domain: 'problem', role: 'system', detailKeys: ['problemId'] },
   'problem.closed': { domain: 'problem', role: 'system', detailKeys: ['problemId'] },
   'card.shown': { domain: 'card', role: 'system', detailKeys: ['card'], dedupe: true },
@@ -170,4 +177,21 @@ export function deriveStateEvents(prev: ConversationState, next: ConversationSta
 export interface TimelineLogger {
   append(event: Omit<TimelineEvent, 'ts' | 'seq'>): void
   query(filter: { session?: string; type?: TimelineEventType | TimelineEventType[]; from?: string; to?: string; limit?: number }): TimelineEvent[]
+}
+
+// === A6 去重键（dedupe 事件——同会话同 detail 签名只记一次；纯函数 L1 可测） ===
+export function dedupeKey(type: string, detail: Record<string, unknown>): string {
+  return `${type}:${JSON.stringify(detail)}`
+}
+
+// === 模型提议检测（task.*_proposed——assistant_done content 标记 → 提议事件；纯函数 L1 可测） ===
+// 06 §1.1：task.goal_proposed（【目标确认】标记）/ task.execution_proposed（【执行方案】）/ task.achievement_proposed（【已达成】）
+// 与渲染层 pendingCardToShow 同源判定（标记检测——但独立函数，避免 UI 依赖）
+export function detectProposed(content: string): Array<{ type: 'task.goal_proposed' | 'task.execution_proposed' | 'task.achievement_proposed'; detail: Record<string, unknown> }> {
+  const out: Array<{ type: 'task.goal_proposed' | 'task.execution_proposed' | 'task.achievement_proposed'; detail: Record<string, unknown> }> = []
+  const t = String(content ?? '')
+  if (/【目标确认[:：]/.test(t)) out.push({ type: 'task.goal_proposed', detail: { goalText: t.match(/【目标确认[:：]\s*([^】]+)/)?.[1]?.trim() ?? '' } })
+  if (t.includes('【执行方案')) out.push({ type: 'task.execution_proposed', detail: { plan: t } })
+  if (t.includes('【已达成')) out.push({ type: 'task.achievement_proposed', detail: { summary: t } })
+  return out
 }
