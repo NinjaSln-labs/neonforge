@@ -34,6 +34,8 @@ import { SCENES } from './scenes'
 import { classifyChatError, type ChatErrorType } from './errorClassify'
 // 2026-08-15 Q6：系统提示词外置（原内嵌 sysHint 模板）
 import { buildSysHint } from './sysPrompt'
+// 2026-08-15 Q10：demo 注入通道类型化单例
+import { getDemoBridge } from './demoBridge'
 
 // ticket 04：对话最小闭环（D0 §2/§3.4）——输入发送 → Gateway 流式 → 消息/呼吸光条/推理展示
 // 消费 02：streamChat（四档 basic）+ ModelRouter（默认 Flash）；错误分支：Key 失效内嵌更新 / 服务故障提示
@@ -377,7 +379,7 @@ export default function ConversationPanel({
   const [mentionActive, setMentionActive] = useState(-1)
   const demoFiles = (recentFilesExternal && recentFilesExternal.length > 0)
     ? recentFilesExternal
-    : (window.neonforge as unknown as { demo?: { recentFiles?: string[] } }).demo?.recentFiles ?? []
+    : getDemoBridge()?.recentFiles ?? []
   // 2026-08-04 审计修复（A2）：选择浮层项（输入框 @后插入文件名）——点击/Enter 共用
   const pickMention = (idx: number) => {
     const f = recentFiles[idx]
@@ -1099,16 +1101,15 @@ export default function ConversationPanel({
     })
   }
 
-  const d = (window.neonforge as unknown as { demo?: Record<string, unknown> }).demo ?? {}
+  const demo = getDemoBridge()
   // 2026-08-07 无阶段重构 S4：demoFlow（DeliveryFlowPanel demo 通道）删除——阶段卡随阶段体系移除
-  const demoDigital = !!d.digitalDelivery
-  const demoTrust = !!d.trustLadder
-  const demoDod = !!d.dodAlign
-  const compactCount = (d.compactHistory as number) ?? 0
+  const demoDigital = !!demo?.digitalDelivery
+  const demoTrust = !!demo?.trustLadder
+  const demoDod = !!demo?.dodAlign
+  const compactCount = demo?.compactHistory ?? 0
   const compactNote = compactCount > 24 ? `对话已超过 24 条——将压缩前 ${compactCount - 12} 条为摘要（上下文不丢）` : null
   const onDeliver = (pkg: DeliveryPackage) => {
-    const w = window as unknown as { neonforge: { demo?: { onDeliver?: (p: DeliveryPackage) => void } } }
-    w.neonforge.demo?.onDeliver?.(pkg)
+    getDemoBridge()?.onDeliver?.(pkg)
   }
 
   return (
