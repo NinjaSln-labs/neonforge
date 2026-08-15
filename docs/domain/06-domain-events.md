@@ -63,6 +63,15 @@
 | `streaming.started` / `completed` | 流式输出 |
 | `user.message_sent` | 用户消息（含确认卡触发）|
 
+### 1.7 问题台账事件（Conversation BC——2026-08-15 补建模 M3）
+
+| 事件 | 触发时机 | 携带数据 | 消费方 |
+|------|---------|---------|--------|
+| `problem.created` | 用户消息发送（问题实例创建/复跑）| problemId, title, snapshot | 台账 UI、持久化 |
+| `problem.snapshot_updated` | 目标确认 / 授权 / 待办回写 | problemId, patch | 台账 UI、断点续做 |
+| `problem.closed` | 交付确认关闭（TaskResolved 联动）| problemId | 台账 UI（closed 终态）|
+| `problem.rerun` | closed 复开 → 复跑 | problemId, title | 会话创建（新 Task）|
+
 ---
 
 ## 2. 关键时序图

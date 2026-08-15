@@ -139,6 +139,7 @@ ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ node install.js
 
 ## 已知限制（V1）
 
+- **断点续做范围**：重启后恢复对话消息 + 问题台账（目标/已授权），**确认状态与执行进度不跨重启**（复开从目标澄清重新走——安全回退；会话快照持久化在 V2）
 - **打包版 LSP 降级**：dev 模式 LSP 完整可用；打包版若系统未装 `typescript-language-server` 则 LSP 工具提示未连接——对话 / 工具 / 交付主链路不受影响
 - macOS 未签名（见上）；Windows / Linux 打包目标已配置未实测
 - 单实例锁按应用作用域；测试环境注意残留实例（见 CI 脚本）

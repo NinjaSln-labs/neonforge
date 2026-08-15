@@ -139,6 +139,7 @@ ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ node install.js
 
 ## Known Limitations (V1)
 
+- **Resume scope**: after restart, the conversation history and problem ledger (goal / authorized) are restored, but **confirmation state and execution progress do not survive restarts** (resuming re-starts from goal clarification — safe fallback; session-snapshot persistence is planned for V2)
 - **LSP in packaged builds**: full LSP in dev mode; if `typescript-language-server` isn't installed system-wide, LSP tools report "not connected" in packaged builds — chat/tools/delivery main flow unaffected
 - macOS unsigned (see above); Windows/Linux packaging targets configured but not yet validated
 - Single-instance lock is per-app-scope; watch for leftover test instances (see CI scripts)
