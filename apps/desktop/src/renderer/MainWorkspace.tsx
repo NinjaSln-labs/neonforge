@@ -127,7 +127,6 @@ export default function MainWorkspace({
     setGoalConfirmed(true) // 目标已确认 → 解锁执行确认卡
     setGoalSeq((s) => s + 1) // 任务边界递增——ConversationPanel clearTrust（授权收回）
     // 2026-08-07 会话时间线（Session Timeline BC）：目标确认事件（来源：模型标记 onGoalConfirmed / 用户打字确认词）
-    try { void window.neonforge.timeline?.log?.({ session: sessionIdRef.current || (rootPath ?? undefined), type: 'goal-confirmed', role: 'system', detail: { goalText: title } }) } catch { /* 日志失败不影响 */ }
     if (activeProblem) {
       setProblems((prev) => prev.map((p) => p.id === activeProblem
         ? { ...updateProblemSnapshot(p, { goal: title }), title: title.length > 20 ? title.slice(0, 20) + '…' : title }
@@ -146,16 +145,13 @@ export default function MainWorkspace({
   const handleExecutionConfirmed = () => {
     if (!goalConfirmed) handleGoalConfirmed(goalTextRef.current || initialPrompt || '目标已确认')
     setExecutionConfirmed(true)
-    try { void window.neonforge.timeline?.log?.({ session: sessionIdRef.current || (rootPath ?? undefined), type: 'exec-confirmed', role: 'system', detail: { source: 'confirm-card' } }) } catch { /* 日志失败不影响 */ }
   }
   // 2026-08-15 D1：拒绝路径对称回退（渲染镜像与状态机一致——修复「拒绝被 effect 反转」；状态机权威在 ConversationPanel stateRef）
   const handleGoalRejected = () => {
     setGoalConfirmed(false)
-    try { void window.neonforge.timeline?.log?.({ session: sessionIdRef.current || (rootPath ?? undefined), type: 'goal-rejected', role: 'system', detail: { source: 'confirm-card' } }) } catch { /* 日志失败不影响 */ }
   }
   const handleExecutionRejected = () => {
     setExecutionConfirmed(false)
-    try { void window.neonforge.timeline?.log?.({ session: sessionIdRef.current || (rootPath ?? undefined), type: 'exec-rejected', role: 'system', detail: { source: 'confirm-card' } }) } catch { /* 日志失败不影响 */ }
   }
   const handleUserMessage = (text: string) => {
     lastPromptRef.current = text

@@ -40,7 +40,7 @@ contextBridge.exposeInMainWorld('neonforge', {
   },
   // 2026-08-04：对话日志（自动记录 + 导出）
   chatLog: {
-    log: (entry: { ts: string; role: 'user' | 'assistant'; content?: string; toolCalls?: Array<{ name: string; status: string }>; session?: string }) =>
+    log: (entry: { ts: string; role: 'user' | 'assistant'; content?: string; toolCalls?: Array<{ name: string; status?: string }>; session?: string }) =>
       ipcRenderer.invoke('chat:log', entry) as Promise<void>,
     export: () => ipcRenderer.invoke('chat:export') as Promise<{ ok: boolean; path?: string; error?: string }>
   },

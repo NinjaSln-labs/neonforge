@@ -9,7 +9,7 @@ export interface ChatLogEntry {
   ts: string // ISO 时间戳（排序键）
   role: 'user' | 'assistant'
   content?: string
-  toolCalls?: Array<{ name: string; status: string }>
+  toolCalls?: Array<{ name: string; status?: string }>
   error?: string // 2026-08-04：错误状态标记（key-invalid/service/unknown——原仅 done 记录，错误消息无法追溯）
   session?: string // 2026-08-08：会话 ID（UUID——进入对话生成）——决定写入哪个会话文件
 }
@@ -51,7 +51,7 @@ export function exportChatLog(base: string): { ok: boolean; path?: string; error
     entries.sort((a, b) => a.ts.localeCompare(b.ts))
     if (entries.length === 0) return { ok: false, error: '还没有对话记录' }
     const md = entries
-      .map((e) => `${e.role === 'user' ? '我' : '搭档'}（${e.ts.slice(11, 19)}）：\`${e.content ?? ''}\`${e.error ? ` [${e.error}]` : ''}${e.toolCalls && e.toolCalls.length > 0 ? `\n\n工具调用：${e.toolCalls.map((t) => `${t.name}（${t.status}）`).join('、')}` : ''}`)
+      .map((e) => `${e.role === 'user' ? '我' : '搭档'}（${e.ts.slice(11, 19)}）：\`${e.content ?? ''}\`${e.error ? ` [${e.error}]` : ''}${e.toolCalls && e.toolCalls.length > 0 ? `\n\n工具调用：${e.toolCalls.map((t) => `${t.name}${t.status ? `（${t.status}）` : ''}`).join('、')}` : ''}`)
       .join('\n\n')
     // 2026-08-04 体验修复：固定文件名每次覆盖（用户「不用保留之前的内容」——原来带日期跨天堆积多个文件）
     const out = path.join(os.homedir(), 'Downloads', 'neonforge-chat.md')

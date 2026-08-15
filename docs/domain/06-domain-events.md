@@ -36,6 +36,20 @@
 | `tool.approved` / `tool.rejected` | 用户批准/拒绝工具 | toolName, args, action |
 | `tool.executed` / `tool.failed` | 工具执行结果 | toolName, ok, error |
 | `tool.pending_confirmation` | 执行未确认时工具调用到达（挂起）| toolName, args |
+| `tool.blocked` | 工具被拦截（2026-08-15 补录——会话冻结/确认点/清单外/策略引导）| toolName, gate（pending/confirm/out-of-plan/policy）, reason |
+
+### 1.3b 会话级 PENDING 事件（Conversation 聚合——2026-08-15 补录）
+
+| 事件 | 触发时机 | 携带数据 |
+|------|---------|---------|
+| `session.pending_set` | 卡弹出 → 会话进入 PENDING | kind（goal/execution/achievement/approval）|
+| `session.pending_cleared` | 用户决策 → PENDING 解除 | kind |
+
+### 1.3c 卡 UI 生命周期事件（可观测——2026-08-15 补录；领域事件之外的用户交互视图）
+
+| 事件 | 触发时机 | 携带数据 |
+|------|---------|---------|
+| `card.shown` / `card.resolved` / `card.rejected` / `card.dismissed` | 卡弹出/确认/拒绝/消失 | card, action?, cause? |
 
 ### 1.4 能力/环境事件（Capability BC）
 

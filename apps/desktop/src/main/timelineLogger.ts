@@ -25,10 +25,9 @@ export function timelineFile(session?: string): string {
   return path.join(dir, name)
 }
 
-// 事件类型（穷举会话步骤——见 .scratch/neonforge-v1/session-timeline-domain.md §2.2）
-// user-message / assistant-start / assistant-chunk（可选） / assistant-done / tool-call / tool-exec /
-// tool-result / tool-approval / goal-confirmed / exec-confirmed / status-change / stuck-escalate / error / interrupt
-// 2026-08-08 新增 card-shown：确认卡/授权卡弹出（用户「加一个确认/授权等卡弹出的点」）——detail: { card: 'goal-confirm'|'exec-confirm'|'achieve-confirm'|'approval'|'file-approval', name?, args? }
+// 事件类型（穷举会话步骤——2026-08-15 DDD 重建后权威在 src/domain/timeline.ts 事件目录：
+// conversation.*/task.*/session.*/plan.*/tool.*/capability.*/execution.*/stuck.*/problem.*/card.*
+// 旧事件名（user-message/assistant-*/tool-*/card-shown 等）已映射新命名——历史日志文件仍可读（type 字符串兼容）
 // 2026-08-15 领域事件体系（DDD 重建——domain/timeline.ts）：新事件命名对齐 06 目录（task.*/plan.*/tool.*/session.*）；
 // 旧事件名保留兼容（向后可读），新接入统一走领域事件目录
 export function logTimeline(evt: {

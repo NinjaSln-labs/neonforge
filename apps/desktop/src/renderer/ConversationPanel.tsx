@@ -36,6 +36,8 @@ import { classifyChatError, type ChatErrorType } from './errorClassify'
 import { buildSysHint } from './sysPrompt'
 // 2026-08-15 Q10：demo 注入通道类型化单例
 import { getDemoBridge } from './demoBridge'
+// 2026-08-15 DDD 重建：事件注册表 dev 校验
+import { validateTimelineEvent } from '../domain/timeline'
 
 // ticket 04：对话最小闭环（D0 §2/§3.4）——输入发送 → Gateway 流式 → 消息/呼吸光条/推理展示
 // 消费 02：streamChat（四档 basic）+ ModelRouter（默认 Flash）；错误分支：Key 失效内嵌更新 / 服务故障提示
@@ -308,6 +310,10 @@ export default function ConversationPanel({
   // MainWorkspace 的 goalConfirmed/executionConfirmed 仅作渲染镜像（由确认/拒绝回调显式设置，双向对称）。
   // 2026-08-07 会话时间线（Session Timeline BC——单会话所有步骤统一日志：用户/搭档/工具/授权/状态——分析一步到位）
   const tlog = (type: string, detail: Record<string, unknown>, role?: 'user' | 'assistant' | 'system' | 'tool') => {
+    // 2026-08-15 DDD 重建：事件注册表 dev 校验（A2——未登记 type / 缺载荷字段 → warn 防散落）
+    try {
+      for (const w of validateTimelineEvent(type, detail)) console.warn('[timeline]', w)
+    } catch { /* 校验失败不影响发送 */ }
     // 2026-08-08 会话归属：session 用会话 ID（UUID——本组件挂载生成）——写入对应会话 timeline 文件
     try { void window.neonforge.timeline?.log?.({ session: sessionId, type, role, detail }) } catch { /* 日志失败不影响 */ }
   }
@@ -320,7 +326,7 @@ export default function ConversationPanel({
     const show = (card: string, extra?: Record<string, unknown>) => {
       if (cardShownRef.current.has(card)) return
       cardShownRef.current.add(card)
-      tlog('card-shown', { card, ...extra }, 'system')
+      tlog('card.shown', { card, ...extra }, 'system')
     }
     if (isLastAssistant) {
       if ((/【目标确认[:：]/.test(content) || !goalConfirmed) && !goalConfirmed) show('goal-confirm', { goalText: content.slice(0, 80) })
@@ -343,7 +349,7 @@ export default function ConversationPanel({
     const status = working ? 'working' : stateRef.current.pending === 'approval' ? 'approval-pending' : 'ready'
     if (status !== lastStatusRef.current) {
       lastStatusRef.current = status
-      tlog('status-change', { status })
+      tlog('conversation.status_change', { status })
     }
   }, [working, messages])
   // 2026-08-05：renderer 侧「已规划」标记 + 确认门控 ref 已并入状态机（stateRef——见上方 S2 迁移）；保留注释链：
@@ -424,7 +430,7 @@ export default function ConversationPanel({
       // 用户点「确认目标」才 goalConfirmed；原提前检测自报确认删除）
     }
     if (chunk.type === 'tool-call' && chunk.toolCall) {
-      tlog('tool-call', { name: chunk.toolCall.name, args: chunk.toolCall.args }, 'tool')
+      tlog('tool.requested', { name: chunk.toolCall.name, args: chunk.toolCall.args }, 'tool')
       streamingRef.current.toolCalls.push({ name: chunk.toolCall.name, args: chunk.toolCall.args, status: 'pending' })
     }
     if (chunk.type === 'done') {
@@ -432,12 +438,14 @@ export default function ConversationPanel({
       const content = streamingRef.current.content
       // 2026-08-07 用户决策（显式确认）：模型【目标确认】标记不再调 onGoalConfirmed（自报确认删除）——标记只渲染确认卡，
       // 用户点「确认目标」才 onGoalConfirmed（结构化确认——行业共识）
-      tlog('assistant-done', { content }, 'assistant')
+      tlog('conversation.assistant_done', { content }, 'assistant')
       window.neonforge.chatLog?.log?.({
         ts: new Date().toISOString(),
         role: 'assistant',
         content,
-        toolCalls: streamingRef.current.toolCalls.map((t) => ({ name: t.name, status: t.status })),
+        // 2026-08-15 G4：toolCalls 只记工具名清单（原记 streamingRef 恒 pending——误导；
+        // 工具状态完整轨迹在 timeline tool.requested/executed/failed/blocked）
+        toolCalls: streamingRef.current.toolCalls.map((t) => ({ name: t.name })),
         session: sessionId
       })
       // 2026-08-07 用户决策（显式确认）：【目标确认】标记不再同步 goalConfirmedRef（自报确认删除——
@@ -453,7 +461,6 @@ export default function ConversationPanel({
       const cardToShow = pendingCardToShow(stateRef.current.goalConfirmed, stateRef.current.executionConfirmed, stateRef.current.achievementConfirmed, content, sideEffectPendingUi)
       if (cardToShow !== 'none' && stateRef.current.pending === 'none') {
         setPendingState(cardToShow)
-        tlog('pending-set', { kind: cardToShow }, 'system')
       }
       // 2026-08-07 无阶段重构 S5：执行方案清单解析——模型输出【执行方案】块 → 并入 plannedFiles（任务完成度——deepcode unimplemented_files 借鉴）
       // 2026-08-08 根因 3 修复③：trustPath 规范化（模型写相对路径如 game.js）——与 approvePlan 的绝对路径清单（1036 行）统一比较基准
@@ -501,12 +508,12 @@ export default function ConversationPanel({
         const { state, event } = detectStuck({ turn, prev: stuckStateRef.current })
         stuckStateRef.current = state
         if (event?.type === 'escalate') {
-          tlog('stuck-escalate', { message: event.message }, 'system') // 2026-08-08 卡住升级打点
+          tlog('stuck.escalated', { message: event.message }, 'system') // 2026-08-08 卡住升级打点
           onActionPromiseHint?.(null)
           inputRef.current = event.message
           void sendRef.current?.({ silent: true })
         } else if (event?.type === 'needs-human') {
-          tlog('stuck-escalate', { level: 'needs-human', message: event.message }, 'system') // 2026-08-08 升级达上限转用户
+          tlog('stuck.needs_human', { message: event.message }, 'system') // 2026-08-08 升级达上限转用户
           onActionPromiseHint?.(event.message)
         }
       }
@@ -657,7 +664,7 @@ export default function ConversationPanel({
         if (r.ok && data?.file) onToolResult?.({ name: tc.name, file: data.file, ok: true })
         // 2026-08-14 S2：工具结果 → 状态机转换唯一入口（applyToolResult——进度/失败标志汇入状态）
         applyTool({ name: tc.name, ok: r.ok, needApproval: r.needApproval, policy: r.policy, file: data?.file })
-        tlog('tool-result', { name: tc.name, ok: r.ok, needApproval: r.needApproval, error: r.error }, 'tool')
+        tlog(r.ok ? 'tool.executed' : 'tool.failed', { name: tc.name, needApproval: r.needApproval, error: r.error }, 'tool')
         // 2026-08-15 DDD 重建：main 侧策略引导（write 未规划 policy）→ tool.blocked（非执行失败——gate='policy'）
         if (!r.ok && r.policy) {
           tlog('tool.blocked', { name: tc.name, gate: 'policy', reason: r.error, args: tc.args }, 'tool')
@@ -812,7 +819,7 @@ export default function ConversationPanel({
           const missing = caps.filter((c) => c.status === 'missing' || c.status === 'failed').map((c) => c.id)
           envHint = `【当前环境】项目根目录：${rootPath}；runtime：${data?.runtime ?? '?'} ${data?.runtimeVersion ?? ''}；依赖：${data?.hasNodeModules ? '已装' : '未装'}；可用能力：${ready.join('/') || '无'}；${missing.length > 0 ? `缺失/异常：${missing.join('/')}` : '能力齐备'}。`
           // 2026-08-15 M8：环境注入事件（06 §1.4 environment.injected 对应打点——模型 02 §4.7 事实来源前置呈现可观测）
-          tlog('environment-injected', { rootPath, runtime: data?.runtime, runtimeVersion: data?.runtimeVersion, hasNodeModules: data?.hasNodeModules, caps: caps.map((c) => `${c.id}:${c.status}`) }, 'system')
+          tlog('environment.injected', { rootPath, runtime: data?.runtime, runtimeVersion: data?.runtimeVersion, hasNodeModules: data?.hasNodeModules, caps: caps.map((c) => `${c.id}:${c.status}`) }, 'system')
         }
       } catch { /* 环境注入失败不影响发送 */ }
     }
@@ -842,13 +849,13 @@ export default function ConversationPanel({
       // （onClick 内 setState 异步 + sendRef 同步调用）prop 还是旧渲染值 → forceTool 恒 auto → 模型纯文本承诺后停住
       const { forceTool } = decideTurnPolicy(buildForceToolInput(stateRef.current, new Set(recentFilesExternal ?? [])))
       // 2026-08-14 取证打点（用户实测「一直读取操作」——plannedComplete 未收敛）：dump 三集合供 timeline 比对
-      tlog('force-input', {
+      tlog('execution.force_input', {
         planned: [...stateRef.current.plannedFiles].slice(0, 12),
         produced: [...stateRef.current.producedFiles].slice(0, 12),
         projectFiles: (recentFilesExternal ?? []).slice(0, 12),
         goalAchieved: stateRef.current.achievementConfirmed
       }, 'system')
-      tlog('assistant-start', { forceTool, goalConfirmed: stateRef.current.goalConfirmed, executionConfirmed: stateRef.current.executionConfirmed }, 'assistant')
+      tlog('conversation.assistant_start', { forceTool, goalConfirmed: stateRef.current.goalConfirmed, executionConfirmed: stateRef.current.executionConfirmed }, 'assistant')
       const res = await window.neonforge.gateway.streamChat({
         apiKey: key,
         level: 'basic',
@@ -948,7 +955,7 @@ export default function ConversationPanel({
   // 2026-08-05 用户反馈 4：打断能力（对齐 Claude Code Esc / Cursor Stop）——停止当前流 + 杀当前 bash + 释放状态
   // 停止后旧流 chunk / maybeContinue 续聊全部失效（sessionRef++ 隔离）；用户可继续输入新指令
   const stopGeneration = async (source: 'button' | 'silent' = 'button') => {
-    tlog('interrupt', { source }, 'system') // 2026-08-08 打断打点（停止按钮 / silent 自动干预）
+    tlog('conversation.interrupted', { source }, 'system') // 2026-08-08 打断打点（停止按钮 / silent 自动干预）
     sessionRef.current++ // 旧会话失效——旧流 chunk（streamingSidRef 检查）、maybeContinue 续聊（sessionRef 检查）全失效
     streamingSidRef.current = sessionRef.current
     onActionPromiseHint?.(null)
@@ -1001,7 +1008,7 @@ export default function ConversationPanel({
       // 13 复跑入口：上报用户输入（真实交付包 rerunPrompt 用）
       onUserMessage?.(text)
       // 2026-08-04：对话日志（自动记录用户消息——与 assistant done 互补成完整对话）；2026-08-08 会话归属
-      tlog('user-message', { content: text }, 'user')
+      tlog('conversation.message_sent', { content: text }, 'user')
       window.neonforge.chatLog?.log?.({ ts: new Date().toISOString(), role: 'user', content: text, session: sessionId })
       setMessages((p) => [...p, { role: 'user', content: text, status: 'done', id: nextMsgId() }])
     }
@@ -1099,7 +1106,7 @@ export default function ConversationPanel({
     // working 释放点已移到 maybeContinue（0e12ea6）→ finishError 不释放 → working 卡 true → 状态栏「搭档处理中」→ 卡住；此处统一释放
     // 2026-08-07 T1 根因补强：ipc 返回结构化 errorType 优先（gateway 源头分类）——classifyChatError 仅兜底（字面量/未知格式）
     const errorType = errorTypeHint ?? classifyChatError(err)
-    tlog('error', { errorType, message: err }, 'system') // 2026-08-08 错误打点（错误链路可追溯）
+    tlog('conversation.error', { errorType, message: err }, 'system') // 2026-08-08 错误打点（错误链路可追溯）
     let content = '刚才出错了，请再试一次。'
     if (errorType === 'key-invalid') {
       content = 'API Key 好像失效了，换个 Key 试试。'
@@ -1271,8 +1278,8 @@ export default function ConversationPanel({
                     <div className="nf-confirmcard" role="group" aria-label="确认达成">
                       <div className="nf-confirmcard__head">搭档已完成——你确认解决了没有</div>
                       <div className="nf-confirmcard__actions">
-                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { confirm('achievement'); tlog('achievement-confirmed', { source: 'confirm-card' }, 'system'); inputRef.current = '已解决，谢谢'; void sendRef.current() }}>已解决</button>
-                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { reject('achievement'); tlog('achievement-rejected', { source: 'confirm-card' }, 'system'); setRejectedCardIdx((p) => ({ ...p, achievement: i })); inputRef.current = '还要改一些地方：'; void sendRef.current() }}>还要改</button>
+                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { confirm('achievement'); inputRef.current = '已解决，谢谢'; void sendRef.current() }}>已解决</button>
+                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { reject('achievement'); setRejectedCardIdx((p) => ({ ...p, achievement: i })); inputRef.current = '还要改一些地方：'; void sendRef.current() }}>还要改</button>
                       </div>
                     </div>
                   ) : null}
