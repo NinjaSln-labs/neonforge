@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mkdirSync, rmSync, readFileSync, existsSync } from 'node:fs'
-import { timelineFile, logTimeline } from '../../src/main/timelineLogger'
+import { timelineFile, logTimeline, timelineLogger } from '../../src/main/timelineLogger'
 
 // timelineFile/logTimeline 用 os.homedir() 定位 logs 目录——重定向到 /tmp（不污染真实 userData）
 vi.mock('node:os', () => ({ default: { homedir: () => '/tmp/nf-timeline-test' } }))
@@ -57,5 +57,29 @@ describe('timelineLogger（会话时间线——2026-08-08 会话级文件）', 
     logTimeline({ type: 'tool-exec', role: 'tool', detail: { name: 'read' } })
     const f = timelineFile()
     expect(existsSync(f)).toBe(true)
+  })
+})
+
+describe('timelineLogger.query（2026-08-15 DDD 重建——通用接入 A3）', () => {
+  it('按会话 + 类型过滤 + limit（含坏行容忍）', () => {
+    const sid = 'query-0000-4000-8000-000000000001'
+    logTimeline({ session: sid, type: 'conversation.message_sent', role: 'user', detail: { content: 'hi' } })
+    logTimeline({ session: sid, type: 'tool.requested', role: 'tool', detail: { name: 'read' } })
+    // 坏行（崩溃残留半行）容忍
+    const f = timelineFile(sid)
+    const raw = readFileSync(f, 'utf8')
+    const corrupt = raw.split('\n').filter(Boolean)
+    corrupt.splice(1, 0, '{bad json')
+    const fs2 = require('node:fs') as typeof import('node:fs')
+    fs2.writeFileSync(f, corrupt.join('\n') + '\n')
+    logTimeline({ session: sid, type: 'tool.executed', role: 'tool', detail: { name: 'read' } })
+
+    const all = timelineLogger.query({ session: sid })
+    expect(all.length).toBe(3) // 坏行跳过
+    const tools = timelineLogger.query({ session: sid, type: 'tool.requested' })
+    expect(tools.length).toBe(1)
+    expect(tools[0].type).toBe('tool.requested')
+    const limited = timelineLogger.query({ session: sid, limit: 1 })
+    expect(limited.length).toBe(1)
   })
 })

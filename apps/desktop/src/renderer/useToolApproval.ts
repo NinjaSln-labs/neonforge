@@ -49,13 +49,13 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
   }
 
   const approveToolCall = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg): void => {
-    tlog('tool-approval', { name: tc.name, action: 'approve' }, 'system')
+    tlog('tool.approved', { name: tc.name }, 'system')
     patchToolCall(idx, (c) => ({ ...c, status: 'pending' as const }), tc)
     void window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: true, rootPath: rootPath ?? undefined, sessionId }).then((r) => {
       const data = r.data as { file?: string; snapshot?: boolean } | undefined
       if (r.ok && data?.file) onToolResult?.({ name: tc.name, file: data.file, ok: true })
       applyTool({ name: tc.name, ok: r.ok, needApproval: r.needApproval, policy: r.policy, file: data?.file })
-      tlog('tool-result', { name: tc.name, ok: r.ok, needApproval: r.needApproval, error: r.error }, 'tool')
+      tlog(r.ok ? 'tool.executed' : 'tool.failed', { name: tc.name, needApproval: r.needApproval, error: r.error }, 'tool')
       patchToolCall(idx, (c) => (r.ok
         ? { ...c, status: 'done' as const, result: fmtToolResult(r), rawResult: typeof r.data === 'string' ? r.data.slice(0, 16000) : JSON.stringify(r.data ?? '').slice(0, 16000), file: data?.file, canRevert: !!(data?.file && data.snapshot) }
         : { ...c, status: 'error' as const, result: r.error }), tc)
@@ -84,6 +84,7 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
 
   // 允许并记住（本次任务内此文件 write/edit 自动）——授权疲劳核心解法
   const rememberAndApprove = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg): void => {
+    tlog('tool.remembered', { name: tc.name, file: String(tc.args.path ?? tc.args.filePath ?? '') }, 'system')
     addTrust(tc.args)
     approveToolCall(calls, idx, tc)
   }
@@ -100,7 +101,7 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
 
   // 批准计划文件清单（追加语义 + 幂等标记 + 通知 main）
   const approvePlan = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg): void => {
-    tlog('tool-approval', { name: 'approve-files', action: 'approve', files: ((tc.args.files ?? []) as Array<{ path: string }>).map((f) => f.path) }, 'system')
+    tlog('tool.approved', { name: 'approve-files', files: ((tc.args.files ?? []) as Array<{ path: string }>).map((f) => f.path) }, 'system')
     const files = (tc.args.files ?? []) as Array<{ path: string }>
     files.forEach((f) => addTrust({ path: f.path }))
     grantPlan(files.map((f) => trustPath(f.path)))

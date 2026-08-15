@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { deriveStateEvents } from '../../src/domain/timeline'
+import { deriveStateEvents, validateTimelineEvent } from '../../src/domain/timeline'
 import { initialState, userConfirmed, userRejected, approvalGranted, applyToolResult, setPending } from '../../src/domain/conversationState'
 
 // 2026-08-15 DDD 重建：领域事件派生（Event Sourcing-lite——转换 diff → 事件）
@@ -57,5 +57,20 @@ describe('deriveStateEvents（转换 diff → 领域事件）', () => {
   it('无状态变化 → 无事件（幂等）', () => {
     const s = initialState()
     expect(deriveStateEvents(s, s)).toEqual([])
+  })
+})
+
+describe('validateTimelineEvent（注册表——A2 接入约束）', () => {
+  it('已登记事件 + 齐全载荷 → 无警告', () => {
+    expect(validateTimelineEvent('task.goal_confirmed', { point: 'goal' })).toEqual([])
+    expect(validateTimelineEvent('tool.blocked', { name: 'write', gate: 'pending', reason: 'x' })).toEqual([])
+  })
+  it('未登记事件 → 警告（防散落——A2 三步登记）', () => {
+    const warns = validateTimelineEvent('custom-random-event', {})
+    expect(warns.some((w) => w.includes('未登记'))).toBe(true)
+  })
+  it('缺关键载荷字段 → 警告', () => {
+    const warns = validateTimelineEvent('conversation.message_sent', {})
+    expect(warns.some((w) => w.includes('content'))).toBe(true)
   })
 })

@@ -60,6 +60,81 @@ export type TimelineEventType =
   | 'problem.created'                // 问题实例创建/复跑
   | 'problem.snapshot_updated'       // 快照回写（goal/authorized/pending）
   | 'problem.closed'                 // 确认关闭（终态）
+  // —— Card：确认/授权卡 UI 生命周期（用户交互路径可观测——2026-08-15 补全）——
+  | 'card.shown'                     // 卡弹出（载荷：card/name?/args?）
+  | 'card.resolved'                  // 卡被确认/批准（载荷：card/action）
+  | 'card.rejected'                  // 卡被拒绝（载荷：card/action）
+  | 'card.dismissed'                 // 卡消失/任务重置（载荷：card/cause）
+  // —— 元事件（运行时可观测——诊断/状态）——
+  | 'conversation.status_change'     // working/ready/approval-pending 变化
+  | 'conversation.error'             // 错误链路（errorType/message）
+  | 'execution.force_input'          // forceTool 输入快照（取证——planned/produced/projectFiles 三集合）
+
+// === 事件注册表（schema——新增事件三步：登记 → emit → 测试；dev 校验防散落） ===
+export interface TimelineEventSpec {
+  domain: 'conversation' | 'task' | 'session' | 'plan' | 'tool' | 'capability' | 'execution' | 'stuck' | 'problem' | 'card'
+  role?: 'user' | 'assistant' | 'system' | 'tool'
+  detailKeys?: string[] // 期望载荷字段（宽松约定——不强制全有，用于 dev 校验提示）
+  dedupe?: boolean      // 同会话同 detail 只记一次（卡 shown 等）
+}
+
+export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> = {
+  'conversation.message_sent': { domain: 'conversation', role: 'user', detailKeys: ['content'] },
+  'conversation.assistant_start': { domain: 'conversation', role: 'assistant', detailKeys: ['forceTool'] },
+  'conversation.assistant_done': { domain: 'conversation', role: 'assistant', detailKeys: ['content'] },
+  'conversation.interrupted': { domain: 'conversation', role: 'system', detailKeys: ['source'] },
+  'task.goal_proposed': { domain: 'task', role: 'assistant', detailKeys: ['goalText'] },
+  'task.goal_confirmed': { domain: 'task', role: 'system', detailKeys: ['point'] },
+  'task.goal_rejected': { domain: 'task', role: 'system', detailKeys: ['point'] },
+  'task.execution_proposed': { domain: 'task', role: 'assistant', detailKeys: ['plan', 'files'] },
+  'task.execution_confirmed': { domain: 'task', role: 'system', detailKeys: ['point'] },
+  'task.execution_rejected': { domain: 'task', role: 'system', detailKeys: ['point'] },
+  'task.achievement_proposed': { domain: 'task', role: 'assistant', detailKeys: ['summary'] },
+  'task.achievement_confirmed': { domain: 'task', role: 'system', detailKeys: ['point'] },
+  'task.achievement_rejected': { domain: 'task', role: 'system', detailKeys: ['point'] },
+  'session.pending_set': { domain: 'session', role: 'system', detailKeys: ['kind'] },
+  'session.pending_cleared': { domain: 'session', role: 'system', detailKeys: ['kind'] },
+  'plan.approved': { domain: 'plan', role: 'system', detailKeys: ['files'] },
+  'plan.rejected': { domain: 'plan', role: 'tool', detailKeys: ['file'] },
+  'tool.requested': { domain: 'tool', role: 'tool', detailKeys: ['name', 'args'] },
+  'tool.blocked': { domain: 'tool', role: 'tool', detailKeys: ['name', 'gate', 'reason'] },
+  'tool.executing': { domain: 'tool', role: 'tool', detailKeys: ['name', 'approved'] },
+  'tool.executed': { domain: 'tool', role: 'tool', detailKeys: ['name', 'file'] },
+  'tool.failed': { domain: 'tool', role: 'tool', detailKeys: ['name', 'error'] },
+  'tool.approved': { domain: 'tool', role: 'system', detailKeys: ['name'] },
+  'tool.rejected': { domain: 'tool', role: 'system', detailKeys: ['name'] },
+  'tool.remembered': { domain: 'tool', role: 'system', detailKeys: ['name', 'file'] },
+  'capability.checked': { domain: 'capability', role: 'tool', detailKeys: ['capabilities', 'missing'] },
+  'environment.injected': { domain: 'capability', role: 'system', detailKeys: ['rootPath'] },
+  'execution.forced': { domain: 'execution', role: 'system', detailKeys: ['reason'] },
+  'execution.released': { domain: 'execution', role: 'system', detailKeys: ['reason'] },
+  'stuck.escalated': { domain: 'stuck', role: 'system', detailKeys: ['message'] },
+  'stuck.needs_human': { domain: 'stuck', role: 'system', detailKeys: ['message'] },
+  'problem.created': { domain: 'problem', role: 'system', detailKeys: ['problemId', 'title'] },
+  'problem.snapshot_updated': { domain: 'problem', role: 'system', detailKeys: ['problemId'] },
+  'problem.closed': { domain: 'problem', role: 'system', detailKeys: ['problemId'] },
+  'card.shown': { domain: 'card', role: 'system', detailKeys: ['card'], dedupe: true },
+  'card.resolved': { domain: 'card', role: 'system', detailKeys: ['card', 'action'] },
+  'card.rejected': { domain: 'card', role: 'system', detailKeys: ['card', 'action'] },
+  'card.dismissed': { domain: 'card', role: 'system', detailKeys: ['card', 'cause'] },
+  'conversation.status_change': { domain: 'conversation', role: 'system', detailKeys: ['status'] },
+  'conversation.error': { domain: 'conversation', role: 'system', detailKeys: ['errorType'] },
+  'execution.force_input': { domain: 'execution', role: 'system', detailKeys: ['planned', 'produced'] },
+}
+
+// dev 校验（纯函数——未登记 type / 缺关键载荷字段 → warn 提示；消费方不阻断）
+export function validateTimelineEvent(type: string, detail: Record<string, unknown>): string[] {
+  const warns: string[] = []
+  const spec = TIMELINE_EVENT_SPECS[type as TimelineEventType]
+  if (!spec) {
+    warns.push(`timeline 事件未登记：${type}——按 A2 三步登记（TIMELINE_EVENT_SPECS → emit → 测试）`)
+    return warns
+  }
+  for (const k of spec.detailKeys ?? []) {
+    if (!(k in detail)) warns.push(`timeline 事件 ${type} 缺载荷字段：${k}`)
+  }
+  return warns
+}
 
 // === 事件派生（Event Sourcing-lite）：转换前后状态 diff → 领域事件 ===
 // 纯函数：任何 ConversationState 转换（userConfirmed/userRejected/approvalGranted/applyToolResult/setPending/clearPending）
