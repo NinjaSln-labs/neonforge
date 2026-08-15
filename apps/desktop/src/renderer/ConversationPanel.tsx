@@ -55,6 +55,7 @@ interface Msg {
   status: 'streaming' | 'done' | 'error'
   error?: string
   toolCalls?: ToolCallMsg[]
+  id?: string // 2026-08-15 Q5：稳定 id（React key——防索引漂移；旧存档无 id → 渲染 fallback 索引）
 }
 export type { Msg }
 
@@ -184,6 +185,9 @@ export default function ConversationPanel({
   const [messages, setMessages] = useState<Msg[]>([])
   const messagesRef = useRef<Msg[]>([])
   useEffect(() => { messagesRef.current = messages }, [messages])
+  // 2026-08-15 Q5：消息稳定 id 生成（会话内递增——key 稳定性）
+  const msgSeqRef = useRef(0)
+  const nextMsgId = () => `m${Date.now().toString(36)}-${(msgSeqRef.current++).toString(36)}`
   // 2026-08-04 审计修复（D2）：有待批准工具操作 → 上报状态栏提示（need-approval 出现/消失）
   // 2026-08-07 无阶段修复（输入≠打断）：send 排队判定用（待授权时模型停住等批准，
   // 用户输入直接处理不排队——排队会卡在授权等待；模型产出中才排队衔接）
@@ -204,6 +208,7 @@ export default function ConversationPanel({
     const stored = loadSession()
     if (stored && stored.length > 0) {
       setMessages(stored.map((s) => ({
+        id: s.id ?? nextMsgId(),
         role: s.role,
         content: s.content,
         reasoning: s.reasoning,
@@ -725,7 +730,8 @@ export default function ConversationPanel({
             setMessages((prev) => [...prev, {
               role: 'assistant',
               content: '搭档检测到在重复做同一件事（反复写同一个文件、反复执行同一个失败命令或反复检查同一个服务，已自动暂停，避免死循环）。你回复「继续」或告诉它下一步，它就会接着做。',
-              status: 'done'
+              status: 'done',
+              id: nextMsgId()
             }])
             releaseWorking()
             return
@@ -751,7 +757,7 @@ export default function ConversationPanel({
       ...calls.map((c, i) => ({ role: 'tool', tool_call_id: `call_${i}`, content: c.rawResult ?? c.result ?? '执行失败' }))
     ]
     chatRef.current = { msgs: toolMsgs, depth: depth + 1 }
-    setMessages((p) => [...p, { role: 'assistant', content: '', reasoning: '', status: 'streaming' }])
+    setMessages((p) => [...p, { role: 'assistant', content: '', reasoning: '', status: 'streaming', id: nextMsgId() }])
     await new Promise((r) => setTimeout(r, 50))
     await runChat(toolMsgs, depth + 1, sid)
   }
@@ -978,7 +984,7 @@ export default function ConversationPanel({
       // 2026-08-04：对话日志（自动记录用户消息——与 assistant done 互补成完整对话）；2026-08-08 会话归属
       tlog('user-message', { content: text }, 'user')
       window.neonforge.chatLog?.log?.({ ts: new Date().toISOString(), role: 'user', content: text, session: sessionId })
-      setMessages((p) => [...p, { role: 'user', content: text, status: 'done' }])
+      setMessages((p) => [...p, { role: 'user', content: text, status: 'done', id: nextMsgId() }])
     }
     // 2026-08-04：新轮次——重置流式累积（防上轮异常残留）
     streamingRef.current = { content: '', reasoning: '', toolCalls: [] }
@@ -986,7 +992,7 @@ export default function ConversationPanel({
     onWorkingChange?.(true)
     const sid = ++sessionRef.current // 新会话——旧会话事件/续聊失效
     const history = buildHistory(messages)
-    setMessages((p) => [...p, { role: 'assistant', content: '', reasoning: '', status: 'streaming' }])
+    setMessages((p) => [...p, { role: 'assistant', content: '', reasoning: '', status: 'streaming', id: nextMsgId() }])
     setWorkingStage('已发送，等待搭档…')
 
     // ticket 12 ContextEngine：@引用文件 → 注入精准上下文（零 token 确定性——不走 LLM read）
@@ -1024,8 +1030,8 @@ export default function ConversationPanel({
             const tail = prev.slice(-2) // 当前轮新 user + streaming（压缩后保留）
             return [
               // 2026-08-06 用户「早期对话已压缩不要显示实际内容」：展示只提示压缩，summary 只进 API（738 行）——用户不读早期总结
-              { role: 'assistant', content: '（早期对话已压缩——长对话自动摘要，最近 20 条保留）', status: 'done' as const },
-              ...compacted.kept.filter((m) => m.content != null).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content ?? '', status: 'done' as const })),
+              { role: 'assistant', content: '（早期对话已压缩——长对话自动摘要，最近 20 条保留）', status: 'done' as const, id: nextMsgId() },
+              ...compacted.kept.filter((m) => m.content != null).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content ?? '', status: 'done' as const, id: nextMsgId() })),
               ...tail
             ]
           })
@@ -1132,7 +1138,7 @@ export default function ConversationPanel({
           </div>
         )}
         {messages.map((m, i) => (
-          <div key={i} className={`nf-msg nf-msg--${m.role}`}>
+          <div key={m.id ?? i} className={`nf-msg nf-msg--${m.role}`}>
             {m.role === 'assistant' && m.status === 'streaming' && (
               <span className="nf-breath" />
             )}
