@@ -95,6 +95,10 @@ Workspace 执行（快照→写入→可回滚）
 
 ```
 apps/desktop/src/
+├── domain/                          # 领域层（纯逻辑——L1 可测）
+│   ├── conversationState.ts         # Task 聚合（会话状态机单一来源——2026-08-14 落地）
+│   ├── turnPolicy.ts                # TurnExecutionPolicy（forceTool 决策）
+│   └── agentLoop.ts                 # ProgressEvaluator / StuckDetector / parseExecutionPlan
 ├── main/                          # Electron Main Process
 │   ├── envManager.ts              # Capability BC——环境检测/能力推导/Ledger
 │   ├── tools.ts                   # ToolRegistry——工具执行分发
@@ -102,17 +106,9 @@ apps/desktop/src/
 │   ├── timelineLogger.ts          # Session Timeline BC——JSONL 落盘
 │   ├── ipc.ts                     # 进程桥（timeline:log / tools:execute…）
 │   └── workspace.ts               # Workspace BC——项目/文件
-└── renderer/
-    └── src/
-        ├── domain/                # 领域层（纯逻辑——L1 可测）
-        │   ├── turnPolicy.ts      # TurnExecutionPolicy（forceTool 决策）
-        │   ├── agentLoop.ts       # ProgressEvaluator / StuckDetector / parseExecutionPlan
-        │   └── ...                # 确认点/推进门控领域规则
-        ├── ConversationPanel.tsx  # 应用层——对话/确认卡/授权卡/工具卡编排
-        ├── MainWorkspace.tsx      # 应用层——状态机接线（goalConfirmed/executionConfirmed）
-        ├── GoalCard/ExecutionConfirmCard → 已删除（dock 全清——确认走对话内嵌卡）
-        ├── ConfirmCard（.nf-confirmcard）  # 确认/拒绝卡片（目标/执行/达成）
-        └── styles.css             # .nf-confirmcard 等样式
+└── renderer/                       # React 应用层——对话/确认卡/授权卡/工具卡编排
+    ├── ConversationPanel.tsx      # 应用层编排（消费领域层纯函数）
+    └── MainWorkspace.tsx          # 应用层——状态接线
 ```
 
 ## 6. 关键选型
