@@ -23,16 +23,28 @@ export function updateProblemSnapshot(problem: ProblemInstance, patch: Partial<P
   return { ...problem, snapshot: { ...base, ...patch } }
 }
 
-// localStorage 加载（损坏数据忽略 → fallback）
+// localStorage 加载（损坏数据忽略 → fallback；2026-08-15 Q9：旧版 authorized string[] 迁移为结构化 {tool, file}）
 export function loadProblems(fallback: ProblemInstance[] = []): ProblemInstance[] {
   try {
     const raw = localStorage.getItem(PROBLEMS_KEY)
     if (raw) {
       const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed)) return parsed
+      if (Array.isArray(parsed)) return parsed.map(migrateAuthorized)
     }
   } catch { /* 损坏/不可用——忽略 */ }
   return fallback
+}
+
+// 旧存档迁移：`[工具] 路径` 字符串 → { tool, file }（解析失败保留原文为 file）
+function migrateAuthorized(p: ProblemInstance): ProblemInstance {
+  const auth = p.snapshot?.authorized
+  if (!Array.isArray(auth) || auth.length === 0) return p
+  const migrated = auth.map((a) => {
+    if (typeof a !== 'string') return a // 已是结构化
+    const m = a.match(/^\[(.+?)\] (.+)$/)
+    return m ? { tool: m[1], file: m[2] } : { tool: 'unknown', file: a }
+  })
+  return p.snapshot ? { ...p, snapshot: { ...p.snapshot, authorized: migrated } } : p
 }
 
 // 持久化（上限截取——新问题在头部）
