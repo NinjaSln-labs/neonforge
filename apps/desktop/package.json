@@ -66,5 +66,8 @@
     }
   },
   "description": "为 DeepSeek 打造的 AI 问题工作台——说出问题，拿到结果",
-  "author": "NinjaSln"
+  "author": "NinjaSln",
+  "overrides": {
+    "extract-zip": "2.0.1"
+  }
 }
