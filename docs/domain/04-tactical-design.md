@@ -448,6 +448,8 @@ interface IntentConfirmationServices {
 
 ## 4. 领域事件（Domain Events）
 
+> 事件名实现权威 = `timeline.ts` 注册表（TIMELINE_EVENT_SPECS——44 事件）；本表为语义清单（2026-08-16 第 16 轮审计 #1——事件名以注册表为准）。
+
 | 事件 | 触发 | 发布者 |
 |------|------|--------|
 | GoalProposed / GoalConfirmed / GoalRejected | 目标提议 / 用户确认 / 重新描述 | Task |
