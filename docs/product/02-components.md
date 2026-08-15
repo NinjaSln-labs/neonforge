@@ -21,11 +21,11 @@
 
 | 变体 | 背景 | 文字 | 边框 |
 |------|------|------|------|
-| Primary | `--nf-blue` (#6366F1) | #FFFFFF | none |
-| Secondary | `--nf-bg-input` (#262044) | `--nf-text-primary` | `--nf-border` |
+| Primary | `--nf-accent` (#6366F1) | #FFFFFF | none |
+| Secondary | `--nf-bg-elevated` (#262044) | `--nf-text-primary` | `--nf-border` |
 | Ghost | transparent | `--nf-text-secondary` | none |
 | Icon | transparent | `--nf-text-secondary` | none |
-| Link | transparent | `--nf-blue` | none |
+| Link | transparent | `--nf-accent` | none |
 
 (hover: 各背景亮度 +5%.)
 
@@ -44,7 +44,7 @@
 | default | 初始 | 见色彩表 |
 | hover | 鼠标悬停 | 背景加深 5% |
 | active | 鼠标按下 | 背景加深 10%，scale 0.98 |
-| focus | Tab 聚焦 | 2px 蓝色外框（`box-shadow: 0 0 0 2px --nf-blue`） |
+| focus | Tab 聚焦 | 2px 蓝色外框（`box-shadow: 0 0 0 2px --nf-accent`） |
 | disabled | 不可操作 | opacity 0.4, cursor not-allowed |
 | loading | 操作进行中 | 文字替换为 16px spinner, 按钮保持原宽度 |
 
@@ -79,9 +79,9 @@
 
 | 状态 | 视觉 |
 |------|------|
-| default | border: 1px solid `--nf-border`, 背景: `--nf-bg-input` |
+| default | border: 1px solid `--nf-border`, 背景: `--nf-bg-elevated` |
 | hover | border-color 加深 |
-| focus | border: 1px solid `--nf-blue`, box-shadow: 0 0 0 3px rgba(59,130,246,0.15) |
+| focus | border: 1px solid `--nf-accent`, box-shadow: 0 0 0 3px rgba(99,102,241,0.15) |
 | disabled | opacity 0.4 |
 | error | border: 1px solid `--nf-red` |
 
@@ -154,7 +154,7 @@
 | 状态 | 颜色 | 动画 |
 |------|------|------|
 | idle（搭档未激活） | — | 隐藏（height: 0, opacity: 0） |
-| working（分析/修改中） | `--nf-blue` | opacity 在 0.4↔1.0 循环，周期 2s, ease-in-out |
+| working（分析/修改中） | `--nf-accent` | opacity 在 0.4↔1.0 循环，周期 2s, ease-in-out |
 | waiting（等待用户确认） | `--nf-amber` | opacity 在 0.4↔1.0 循环，周期 1s（更快，暗示"需要你"） |
 
 ---
@@ -180,21 +180,21 @@
 
 | 状态 | 圆点 | 颜色 | 含义 |
 |------|------|------|------|
-| executing | ● 实心 | `--nf-blue` | 当前正在执行（分析或修改） |
-| review | ◉ 半实心 | `--nf-blue` | 待审核 |
+| executing | ● 实心 | `--nf-accent` | 当前正在执行（分析或修改） |
+| review | ◉ 半实心 | `--nf-accent` | 待审核 |
 | queued | ○ 空心 | `--nf-text-secondary` | 排队等待执行 |
 | done | ✓ | `--nf-green` | 已完成并写入 |
 | cancelled | ✗ | `--nf-text-secondary` | 已取消 |
 
-**选中态独立于任务状态：** 用户点击任务列表项 → 背景变为 `--nf-bg-selected`，左侧 3px `--nf-blue` 竖条。选中态不代表任何任务状态——用户可以选中任何状态的任务查看详情。
+**选中态独立于任务状态：** 用户点击任务列表项 → 背景变为 `--nf-accent-soft`，左侧 3px `--nf-accent` 竖条。选中态不代表任何任务状态——用户可以选中任何状态的任务查看详情。
 
 ### 交互
 
 | 行为 | 反馈 |
 |------|------|
-| hover | 背景色变为 `--nf-bg-hover` |
+| hover | 背景色变为 `--nf-bg-elevated` |
 | 点击 | 切换到该问题。交付包和产物区更新。 |
-| 选中态 | 背景色 `--nf-bg-selected`（比 hover 更深） |
+| 选中态 | 背景色 `--nf-accent-soft`（比 hover 更深） |
 
 ---
 
@@ -375,7 +375,7 @@ Diff 审核的默认入口。搭档修改完成后先展示改动摘要，而非
 | 状态 | 视觉 |
 |------|------|
 | 正常 | 无标记 |
-| 搭档正在修改 | 文件名旁蓝色圆点 ●（12px, `--nf-blue`） |
+| 搭档正在修改 | 文件名旁蓝色圆点 ●（12px, `--nf-accent`） |
 | 修改完待审核 | 文件名旁绿色圆点 ●（12px, `--nf-green`） |
 | 文件新建中 | 文件名旁闪烁的蓝色圆点 + 文件项从上方"落入"（见下方动画） |
 
@@ -567,7 +567,7 @@ Diff 审核的默认入口。搭档修改完成后先展示改动摘要，而非
 ```
 
 - 两个选项并排
-- 当前选中项：`--nf-blue` 底色，白色文字
+- 当前选中项：`--nf-accent` 底色，白色文字
 - 切换动画：选中指示器滑动（translateX），0.2s ease-out
 - 位置：主工作区右上角（在标签栏上方或工具栏中）
 
@@ -631,7 +631,7 @@ Diff 审核中「全部接受并写入」的确认操作。非模态，不打断
 - 最大高：240px（超过可滚动）
 - 位置：输入框正上方
 - 每个选项高：32px，padding 4px 12px
-- 当前选中项：`--nf-bg-selected` 背景
+- 当前选中项：`--nf-accent-soft` 背景
 - 出现：opacity 0→1，translateY(4px→0)，0.1s
 - 消失：输入非 `@` 字符 / Esc / 点击选项后
 
@@ -653,7 +653,7 @@ Diff 审核中「全部接受并写入」的确认操作。非模态，不打断
 
 ### 选中后
 
-选项以蓝色标签（12px，`--nf-blue` 文字 + 10% alpha 背景，圆角 4px）出现在输入框内，可点 × 移除。
+选项以蓝色标签（12px，`--nf-accent` 文字 + 10% alpha 背景，圆角 4px）出现在输入框内，可点 × 移除。
 
 ---
 
@@ -705,7 +705,7 @@ Diff 审核中「全部接受并写入」的确认操作。非模态，不打断
 - 分区：NeonForge 专属操作 + 分割线 + 系统操作
 - 图标：16px，`--nf-text-secondary`
 - 文字：14px，`--nf-text-primary`
-- hover：`--nf-bg-hover`
+- hover：`--nf-bg-elevated`
 - 出现：跟随鼠标位置（右下方偏移 4px），opacity 0→1，0.1s
 - 消失：点击选项 / 点击外部 / Esc
 

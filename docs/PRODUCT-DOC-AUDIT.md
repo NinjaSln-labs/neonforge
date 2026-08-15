@@ -1,95 +1,94 @@
-# 产品文档审计报告：NeonForge（第 16 轮——2026-08-16 · 事件体系全链对照 + 权威双源逐节 + 指标数字对齐）
+# 产品文档审计报告：NeonForge（第 17 轮——2026-08-16 · 产品层全量精读 + 组件↔令牌交叉 + 第 16 轮修复抽验）
 
-- 审计对象：**事件四层全链**（02 §6 ↔ 04 §4 ↔ 06 目录 ↔ timeline.ts 注册表 44 事件）+ A0↔设计逐节对照 + 03 §2 衡量 ↔ 07 指标数字对齐 + spot-check 第 15 轮修复
-- 审计日期：2026-08-16（**第 16 轮**——事件全链 + 指标数字——本轮为「审计时点评分」循环第 1 轮）
-- 审计方式：三层审计 + 事件注册表逐名对照（44 事件 × 4 层）+ 逐节对照 + 数字对齐 + spot-check（第 15 轮 3 项）+ 就绪度评分（**审计时点诚实评分——发现即扣分**）
-- 结论：**就绪度 87/100，可交付 Yes（S1 前置有 1 项）**（0 Critical / **1 Major**——事件体系文档↔实现双向不同步 / 3 Minor）
+- 审计对象：产品层剩余文档全量（03-design-tokens / 05-visual-spec / 06-product-design-audit / 00-product-reference / 01-user-flows 后半 / 02-components 前半）+ **组件↔令牌符号交叉**（02 引用令牌全集 vs 03 定义全集）+ spot-check 第 16 轮修复
+- 审计日期：2026-08-16（**第 17 轮**——产品层全量 + 令牌交叉——前 16 轮以领域层为主，产品层仅审过领域相关部分）
+- 审计方式：三层审计 + 令牌符号级交叉（02 引用 80 令牌 vs 03 定义 75 令牌——comm 差集）+ 界面/决策点清单对照 + spot-check（第 16 轮 4 项）+ 就绪度评分（**审计时点诚实评分**）
+- 结论：**就绪度 85/100，可交付 Yes（前端实现前置 1 项）**（0 Critical / **1 Major**——组件引用 5 个未定义令牌 / 4 Minor——产品层同步缺口）
 
 ---
 
 ## 一、文档全景核查（层①）
 
-与第 13-15 轮同——新增核查项：
+与第 13-16 轮同——**新增核查项（产品层首次全量）**：
 
 | 项 | 现状 | 判定 |
 |----|------|------|
-| 事件四层（02 §6 / 04 §4 / 06 / timeline.ts 注册表）| 注册表 44 事件——与 06 目录**双向 15 项差异** | ⚠️（Major #1）|
-| 03 §2 衡量 ↔ 07 指标 | 03 声称「对齐 07 v1.1」——引用「目标确认→方案批准转化率/方案批准→产出率」——**07 无此两项** | ⚠️（Minor #3）|
-| 02 §6 事件表完整性 | 缺 TaskResolved/CapabilityLedgerUpdated（04 §4/06 有）| ⚠️（Minor #4）|
+| 03-design-tokens（令牌权威——75 令牌）| 完整（色彩/排版/间距/圆角/阴影/动画/尺寸/Z-Index）| ✅（缺 1 令牌见 #1）|
+| 02-components（18 组件 + 意图确认 3 组件）| 完整——**引用 80 个令牌——其中 5 个 03 未定义** | ⚠️（Major #1）|
+| 05-visual-spec | v2 头部（原则/令牌/关键屏/动效）+ 旧稿废弃标注（L97-102 明确——旧稿保留参考是有意设计）| ✅（信息）|
+| 06-product-design-audit | 07-31 完结 100/100——**重构前结论——头部无重构后标注** | ⚠️（Minor #4）|
+| 00-product-reference | 07-30 竞品方案参考——**无历史标注**（重构后竞品参考以调研报告为准）| ⚠️（Minor #5）|
+| 01-user-flows 后半（界面清单/关键决策点）| 界面清单 S0-S15——**关键决策点表仍为旧交互决策（继续/调整/接受暂存——确认卡决策缺失）** | ⚠️（Minor #2/#3）|
 
 ## 二、逐类独立审计（层②）
 
-### A0 ↔ 设计逐节对照（权威双源——逐节）
+### 组件↔令牌符号交叉（02 引用 vs 03 定义——comm 差集）
 
-| A0 节 | 设计对照 | 判定 |
-|-------|---------|------|
-| §1 模型策略（V1 DeepSeek-only/tool_choice）| 设计范围外（网关不动——§8.4）——07 §1.1 承接 | ✅ |
-| §2 BC 清单（Conversation 职责）| 设计只动 Conversation BC（Task 聚合）——Problem 独立聚合不冲突 | ✅ |
-| §3.1 三确认点 / §3.1b 语义 / §3.2 单一 PENDING | 设计 §3.1 三布尔 + pending ✓ | ✅ |
-| §3.4 用户决策后放行 | 设计 §3.4 userDecided ✓ | ✅ |
-| §3.5/§3.5b 门控优先级 + ActionGate | 设计 §3.3 sessionGate×actionGate ✓ | ✅ |
-| §3.6 触发权 | 设计 §3.3 deriveDecisionPoint（userRequested 已回写）✓ | ✅ |
-| **§4 推进保障决策表** | 设计 §3.3 decideProgressGuarantee——**A0 决策表单档（「强制推进」）vs 设计/04/07 三处两档（require-advance/require-action）** | ⚠️（Minor #2）|
-| §4.1 推进判定 / §4.2 完成证据 | 设计 TurnProgress/verifyCompletion ✓ | ✅ |
-| §5 宿主边界 / §6 能力 / §7 工具面 / §8 矩阵 / §9 术语 / §10 处置 | 设计全部对应 ✓ | ✅ |
+| 02 引用令牌 | 03 定义 | 判定 |
+|------------|---------|------|
+| `--nf-blue` ×11（值 #6366F1）| **无**（03 主 accent 为 `--nf-accent` #6366F1——值相同）| ❌ 旧名残留（#1）|
+| `--nf-bg-input` ×2（#262044）| **无**（03 `--nf-bg-elevated` #262044——「浮面（输入框…）」）| ❌ 旧名残留（#1）|
+| `--nf-bg-selected` ×2 | **无**（03 `--nf-accent-soft` #2B2A52——「选中态背景」）| ❌ 旧名残留（#1）|
+| `--nf-bg-hover` ×2 | **无**（03 `--nf-bg-elevated` #262044——「悬停态」；hover < selected 深度语义符合）| ❌ 旧名残留（#1）|
+| `--nf-bg-skeleton` ×1（#3E3E3E）| **无** | ❌ 03 缺令牌（#1）|
+| `rgba(59,130,246,0.15)`（Input focus 环——旧蓝 #3B82F6）| 05 旧稿已标废弃（旧色由 03 终版取代）| ⚠️ 值级残留（并入 #1）|
 
-### 事件四层全链（02 §6 ↔ 04 §4 ↔ 06 ↔ 注册表）
+其余 75 令牌引用全部命中（--nf-space-*/-radius-*/-duration-*/-ease-* 等命名一致）——**交叉仅 5 个悬空令牌 + 1 个旧色值**。
 
-| 层 | 事件数 | 差异 |
-|----|--------|------|
-| 06 目录（语义权威）| ~30（§1.1-§1.7 + 追加段 7）| 见 Major #1 |
-| timeline.ts 注册表（实现）| 44 | 见 Major #1 |
-| 02 §6 事件表 | 21 | 缺 TaskResolved/CapabilityLedgerUpdated（Minor #4）|
-| 04 §4 事件表 | 23 | 完整（含 TaskResolved/CapabilityLedgerUpdated）|
+### 界面/决策点清单对照（01 ↔ 重构）
 
-### 指标数字对齐（03 §2 ↔ 07）
-
-03 §2 核心域衡量引用 5 项：转化率（目标→方案）/产出率（方案→产出）/解决确认率/授权卡滞留率/方案修改率——07 v1.1 有 3 项（解决确认率/滞留率/修改率）+ 证据核验通过率——**「转化率」「产出率」07 未定义**（07 的「任务完成率=发起→写入」≠ 方案批准→产出率语义）——Minor #3。
+- 界面清单 S0-S15：16 界面——确认卡/方案卡/解决卡/授权卡为对话内嵌（非独立界面——D0 §4.1）——不列界面合理 ✓
+- **S10「方案展示页」**（「搭档分析完」）——与 PlanCard（对话内嵌方案卡——02-components 意图确认组件）**关系未标注**——旧「独立方案页」概念残留（#3）
+- **关键决策点表（8 行）**：首次打开/启动页模糊/分析后继续调整/Diff 审核/逐处接受/写入前确认/安装失败/关闭应用——**全部为旧交互决策**——重构后的确认卡决策（确认目标/批准方案+修改重出/证据对账确认解决/授权允许拒绝）未列入（#2）
 
 ## 三、交叉验证矩阵（层③）
 
 | 对齐关系 | 文档 A 说法 | 文档 B 说法 | 判定 |
 |---------|-----------|-----------|------|
-| **06 目录 ↔ timeline.ts 注册表（事件全量）** | §1.1-§1.7 + 追加段 ~30 事件 | 44 事件 | ❌ **双向 15 差异（#1）** |
-| A0 §4 ↔ 设计/04/07（推进保障档位）| 「强制推进」单档 | require-advance/require-action 两档 | ⚠️（#2）|
-| 03 §2 ↔ 07（衡量指标）| 转化率/产出率（对齐 07 v1.1）| 07 无此两项 | ⚠️（#3）|
-| 02 §6 ↔ 04 §4（事件表）| 21 行 | 23 行（+TaskResolved/CapabilityLedgerUpdated）| ⚠️（#4）|
+| **02-components ↔ 03-design-tokens（令牌）** | 引用 --nf-blue/--nf-bg-input/--nf-bg-hover/--nf-bg-selected/--nf-bg-skeleton | 定义 --nf-accent/--nf-bg-elevated/--nf-accent-soft——5 令牌未定义 | ❌ **冲突（#1——前端实现引用悬空）** |
+| 04-alignment ↔ 03（令牌引用表）| Button/Input/MessageBubble/BreathBar 行引用 --nf-blue | 03 无 --nf-blue | ❌ 同 #1 |
+| 01 关键决策点 ↔ D0 §4.1/Flow 5（确认卡）| 8 个旧决策点 | 确认卡 4 决策（目标/方案/解决/授权）| ⚠️ 未同步（#2）|
+| 01 S10 ↔ 02 PlanCard | 「方案展示页」（独立页）| 方案卡（对话内嵌）| ⚠️ 映射未标注（#3）|
+| 06 完结结论 ↔ 重构后文档 | 100/100（07-31）| D0 v2.2/01 v2.2/02 意图确认组件新增 | ⚠️ 旧结论误导（#4）|
 
-**spot-check 第 15 轮修复（抽验 3/3）**：① 设计 §8.1 C 编号标注 ✓（L2）；② A0 §9/02 §8 授权术语 ✓（L2）；③ 09 §2 原则 4/5/6 三行 ✓（L2）——全采信（L2 语义级——L3 闭环待事件链修复后复核）。
+**spot-check 第 16 轮修复（抽验 4/4）**：① 06 补录 9 事件 + 6 承接标注 ✓（tool.requested/force_input/assistant_start/task.resolved 承接命中）；② A0 §4 require-action 行 ✓；③ 07 执行转化率 + 03 引用 ✓；④ 02 §6 TaskResolved/CapabilityLedgerUpdated ✓——全采信（L2 语义级）。
 
 ## 四、问题
 
-1. **[Major] 事件体系文档↔实现双向不同步（06 目录 vs timeline.ts 注册表——15 项）**
-   - 现象 A（06 缺——注册表有 9 个）：`conversation.assistant_start/assistant_done/error/interrupted/status_change`、`execution.force_input`、`tool.executing/tool.remembered/tool.requested`
-   - 现象 B（注册表缺——06 有 6 个）：`task.resolved`、`message.appended`、`streaming.started/completed`、`conversation.archived`、`tool.pending_confirmation`
-   - 影响：S1 按 06 扩展注册表（proposal/decision/completion/gate）时——06 声称的事件名在注册表落空（task.resolved 等）、注册表已有事件 06 未收录（重复登记风险）——事件登记依据分歧
-2. **[Minor] A0 §4 推进保障决策表未含 require-action 档**（设计 §3.3/04 §3.1/07 §1.1 三处两档——A0 权威层单档「强制推进」）
-3. **[Minor] 03 §2 衡量引用两项 07 未定义指标**（「目标确认→方案批准转化率」「方案批准→产出率」——03 声称对齐 07 v1.1 但 07 无对应行——需 07 补指标或 03 修正引用）
-4. **[Minor] 02 §6 事件表缺 TaskResolved/CapabilityLedgerUpdated 两行**（04 §4/06 均有——02 事件表不完整）
-5. **[信息] 逐节对照正面结论**：A0↔设计 12 节对照除 #2 外全部一致——权威双源收敛
+1. **[Major] 02-components 引用 5 个 03 未定义令牌（组件↔令牌不同步）**
+   - 现象：`--nf-blue` ×11（#6366F1——03 主 accent 为 --nf-accent 值相同）/`--nf-bg-input`（#262044——03 --nf-bg-elevated 同值）/`--nf-bg-selected`（03 --nf-accent-soft 同语义）/`--nf-bg-hover`（03 --nf-bg-elevated——hover<selected 深度符合）/`--nf-bg-skeleton`（03 缺令牌）——04-alignment 令牌引用表同错（--nf-blue 3 行）
+   - 影响：前端按 02/04-alignment 实现 `var(--nf-blue)` 等引用悬空（CSS 变量未定义——回退默认值）——组件规格↔令牌权威不同步（旧令牌名残留——03 为「终版」令牌、02 组件章节未同步）
+   - 附带：02 Input focus 环 `rgba(59,130,246,0.15)`（旧蓝 #3B82F6——05 已标废弃）值级残留
+2. **[Minor] 01 关键决策点表未同步意图确认**——8 个决策点全为旧交互（继续/调整/接受暂存/写入确认/安装失败）——重构后的确认卡决策（确认目标/批准方案+修改重出/证据对账确认解决/授权允许拒绝）缺失——产品关键决策清单不完整
+3. **[Minor] 01 界面清单 S10「方案展示页」与 PlanCard 关系未标注**——旧「独立方案页」概念残留（重构后方案卡为对话内嵌——D0 §4.1）
+4. **[Minor] 06-product-design-audit 头部缺重构后状态标注**——「完结 100/100」（07-31）为重构前结论——D0 v2.2/01 v2.2/02 意图确认组件新增未被该审计覆盖（04-alignment 有历史标注但 06 自身无——读者直接读 06 会被误导）
+5. **[Minor] 00-product-reference 头部缺历史标注**——07-30 竞品方案参考（Codex Desktop/Cursor）——重构后竞品确认机制参考以调研报告（analysis/competitor-crawler/...）为准——00-reference 未声明历史地位（对比 domain/01-reference-analysis 有标注）
+6. **[信息] 05-visual-spec v2+旧稿结构**——旧稿废弃标注明确（L97-102——保留参考是有意设计）——不扣分；令牌交叉 75/80 命中（正面结论）
 
 ## 五、建议
 
 - **修复序**：
-  1. **#1 事件体系同步（S1 前置）**：以 **timeline.ts 注册表为事件名实现权威**（06 为语义视图）——① 06 §1 补录 9 个实现事件（assistant_start/done/error/interrupted/status_change/force_input/tool.executing/remembered/requested——各带语义）；② 06 标注 6 个未实现事件的承接/别名（task.resolved → decision.resolved 承接（S1 登记）；message.appended/streaming.started/completed/conversation.archived → conversation.* 系列表达（注册表现状）；tool.pending_confirmation → tool.requested + tool.blocked 表达）；③ 04 §4/02 §6 表头注明「事件名以 timeline.ts 注册表为准」
-  2. **#2 A0 §4 补 require-action 档行**（无产出且工具可用——两档均映射 tool_choice='required'）
-  3. **#3 03 §2 修正衡量引用**（两项 07 未定义——建议 07 补「方案批准到产出率」（执行转化）或 03 标注「以任务完成率为近似」——裁决：07 补 1 行「执行转化率」（方案批准→首次写入，≥80%）+ 03 引用对齐）
-  4. **#4 02 §6 补 TaskResolved/CapabilityLedgerUpdated 两行**
-- **权威裁决**：事件名以 **timeline.ts 注册表**为权威（06 补录/标注）；指标以 07 为权威（03 引用对齐）；推进保障档位以 A0 §4 补齐后为准（两档统一）
-- **修复后验证**：grep 确认 06 含 9 个补录事件、02 §6 含 TaskResolved、A0 §4 含 require-action、07 含执行转化率——全部命中即闭环。
+  1. **#1 令牌同步（前端实现前置）**：02-components 批量替换（--nf-blue → --nf-accent ×11 / --nf-bg-input → --nf-bg-elevated ×2 / --nf-bg-selected → --nf-accent-soft ×2 / --nf-bg-hover → --nf-bg-elevated ×2）；**03 补 `--nf-bg-skeleton`（#3E3E3E——骨架屏占位底）**；02 Input focus 环旧色值改 `rgba(99,102,241,0.15)`；04-alignment 令牌引用表同步（--nf-blue → --nf-accent 3 行）
+  2. #2 01 关键决策点表补 4 行（确认目标/批准方案（含修改重出）/证据对账确认解决/授权允许拒绝）
+  3. #3 01 S10 标注「由 PlanCard 取代（对话内嵌——2026-08-16）」或并入 S3 对话区
+  4. #4 06 头部补「重构前审计——2026-08-16 后产品文档已更新（D0 v2.2/意图确认组件）——本结论仅覆盖重构前状态」
+  5. #5 00-reference 头部补历史标注（重构后竞品参考以调研报告为准）
+- **权威裁决**：令牌以 **03-design-tokens 为权威**（02/04-alignment 引用对齐）；产品决策清单以 01 为准（补确认卡决策）；竞品参考重构后以调研报告为准（00-reference 标注历史）
+- **修复后验证**：grep 确认 02 无 --nf-blue/--nf-bg-input 等悬空名、03 含 --nf-bg-skeleton、01 关键决策点含确认目标、06/00-reference 有标注——全部命中即闭环。
 
 ## 六、验收标准
 
-- [x] #1 06 补录 9 事件 + 6 事件承接标注 + 04/02 表头注明注册表权威（S1 前置）——2026-08-16 修复：06 补 tool.requested/executing/remembered + execution.force_input + conversation.assistant_start/done/status_change/error/interrupted；6 个未实现事件承接/别名标注；02/04 表头注「事件名以 timeline.ts 注册表为准」
-- [x] #2 A0 §4 补 require-action 档——2026-08-16 修复：决策表补行（无产出且工具可用——两档均映射 required）
-- [x] #3 07 补「执行转化率」+ 03 §2 引用对齐——2026-08-16 修复：07 v1.2 补指标行（≥80%）；03 标注转化率近似口径
-- [x] #4 02 §6 补 TaskResolved/CapabilityLedgerUpdated——2026-08-16 修复：事件表补 2 行
-- [ ] 就绪度 ≥95（**下一轮审计时点评分**——本轮 87——修复后待第 17 轮审计核验）
-- [x] 第 15 轮修复闭环维持（3/3 采信）
+- [ ] #1 令牌同步（02 替换 4 名 + 03 补 1 令牌 + 旧色值 + 04-alignment 引用表）——前端实现前置
+- [ ] #2 01 关键决策点表补确认卡 4 决策
+- [ ] #3 01 S10 标注 PlanCard 取代
+- [ ] #4 06 头部重构前标注
+- [ ] #5 00-reference 头部历史标注
+- [ ] 就绪度 ≥95（**下一轮审计时点评分**——本轮 85——修复后待第 18 轮核验）
+- [ ] 第 16 轮修复闭环维持（4/4 采信）
 
 ## 七、备注
 
-- 本次审计**未修改被审文档**；第 16 轮为事件全链对照（首次四层逐名核对——44 注册表事件）+ 权威双源逐节 + 指标数字对齐
-- **审计时点评分 87/100**（发现即扣分——Major #1 一致性 -6、Minor #2-4 各 -2~-3）——未达 95——修复后须再审计一轮
-- 第 15 轮报告已归档 `docs/PRODUCT-DOC-AUDIT-r15.md`
-- 报告路径：`docs/PRODUCT-DOC-AUDIT.md`（r4-r15 归档）
+- 本次审计**未修改被审文档**；第 17 轮为产品层全量精读 + 组件↔令牌符号交叉（首次）
+- **审计时点评分 85/100**（Major #1 一致性/可实现性 -9、Minor #2-5 各 -1~-2）——未达 95——修复后须再审计一轮
+- 第 16 轮报告已归档 `docs/PRODUCT-DOC-AUDIT-r16.md`
+- 报告路径：`docs/PRODUCT-DOC-AUDIT.md`（r4-r16 归档）
