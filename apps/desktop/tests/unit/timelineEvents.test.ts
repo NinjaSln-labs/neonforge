@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { deriveStateEvents, validateTimelineEvent } from '../../src/domain/timeline'
+import { deriveStateEvents, validateTimelineEvent, dedupeKey, detectProposed } from '../../src/domain/timeline'
 import { initialState, userConfirmed, userRejected, approvalGranted, applyToolResult, setPending } from '../../src/domain/conversationState'
 
 // 2026-08-15 DDD 重建：领域事件派生（Event Sourcing-lite——转换 diff → 事件）
@@ -72,5 +72,21 @@ describe('validateTimelineEvent（注册表——A2 接入约束）', () => {
   it('缺关键载荷字段 → 警告', () => {
     const warns = validateTimelineEvent('conversation.message_sent', {})
     expect(warns.some((w) => w.includes('content'))).toBe(true)
+  })
+})
+
+describe('dedupeKey / detectProposed（2026-08-15 补齐）', () => {
+  it('dedupeKey：type + detail 签名（同内容同 key，不同内容异 key）', () => {
+    expect(dedupeKey('card.shown', { card: 'goal' })).toBe(dedupeKey('card.shown', { card: 'goal' }))
+    expect(dedupeKey('card.shown', { card: 'goal' })).not.toBe(dedupeKey('card.shown', { card: 'execution' }))
+  })
+  it('detectProposed：标记 → 提议事件（载荷）', () => {
+    expect(detectProposed('好的。【目标确认：做一个游戏】')).toContainEqual({ type: 'task.goal_proposed', detail: { goalText: '做一个游戏' } })
+    expect(detectProposed('【执行方案】\n- a.js')).toContainEqual({ type: 'task.execution_proposed', detail: expect.objectContaining({}) })
+    expect(detectProposed('完成【已达成】')).toContainEqual({ type: 'task.achievement_proposed', detail: expect.objectContaining({}) })
+  })
+  it('detectProposed：无标记 → 空', () => {
+    expect(detectProposed('我先看看项目结构。')).toEqual([])
+    expect(detectProposed('')).toEqual([])
   })
 })

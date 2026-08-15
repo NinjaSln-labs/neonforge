@@ -112,6 +112,7 @@ export default function MainWorkspace({
           return m ? { tool: m[1], file: m[2] } : { tool: 'unknown', file: a }
         })
         const alreadyFile = normalized.some((a) => a.file === r.file)
+        if (!alreadyFile) tlog('problem.snapshot_updated', { problemId: activeProblem, field: 'authorized' })
         return alreadyFile ? p : updateProblemSnapshot(p, { authorized: [...normalized, entry] })
       }))
     }
@@ -123,6 +124,10 @@ export default function MainWorkspace({
   // （MainWorkspace 侧 timeline 事件 goal-confirmed/exec-confirmed 归属同一会话）
   const sessionIdRef = useRef('')
   const handleSessionStart = (id: string) => { sessionIdRef.current = id }
+  // 2026-08-15 补齐：问题台账事件（06 §1.7 problem.*——M3 建模后接线）
+  const tlog = (type: string, detail: Record<string, unknown>) => {
+    try { void window.neonforge.timeline?.log?.({ session: sessionIdRef.current || (rootPath ?? undefined), type, role: 'system', detail }) } catch { /* 日志失败不影响 */ }
+  }
   const handleGoalConfirmed = (title: string) => {
     setGoalConfirmed(true) // 目标已确认 → 解锁执行确认卡
     setGoalSeq((s) => s + 1) // 任务边界递增——ConversationPanel clearTrust（授权收回）
@@ -131,6 +136,7 @@ export default function MainWorkspace({
       setProblems((prev) => prev.map((p) => p.id === activeProblem
         ? { ...updateProblemSnapshot(p, { goal: title }), title: title.length > 20 ? title.slice(0, 20) + '…' : title }
         : p))
+      tlog('problem.snapshot_updated', { problemId: activeProblem, field: 'goal' })
     }
     if (rootPath) void window.neonforge.workspace.updateProjectTitle(rootPath, title)
   }
@@ -168,6 +174,7 @@ export default function MainWorkspace({
     // 2026-08-04 修复：setActiveProblem 移出 setProblems updater（React 严格模式 updater 双调 + updater 内 setState 反模式——activeProblem 设置不可靠，导致目标确认回写台账失败）
     const inst = createProblem(text)
     const dup = problems.find((x) => x.title === inst.title)
+    tlog(dup ? 'problem.rerun' : 'problem.created', { problemId: dup ? dup.id : inst.id, title: inst.title })
     setActiveProblem(dup ? dup.id : inst.id)
     setProblems((prev) => {
       if (dup) {
@@ -192,6 +199,7 @@ export default function MainWorkspace({
   // 2026-08-03 A5 审计修复：交付包「确认问题关闭」→ 同步问题台账（SessionPanel 状态 closed——跨组件状态一致）
   const handleConfirmClosed = () => {
     if (!activeProblem) return
+    tlog('problem.closed', { problemId: activeProblem })
     setProblems((prev) => prev.map((p) => (p.id === activeProblem ? { ...p, status: 'closed' as const } : p)))
     setDeliveryPkg((p) => (p ? { ...p, status: 'closed' } : p))
   }
