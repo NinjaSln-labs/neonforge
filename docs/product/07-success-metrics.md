@@ -1,6 +1,7 @@
 # 07 — 产品成功指标（Success Metrics）
 
-> version: v1 · 2026-07-31
+> version: v1.1 · 2026-08-16（v1 · 2026-07-31）
+> 修订（v1.1）：意图确认重设计落地同步（第 5 轮产品文档审计 #1-#3）——补「确认交互质量」指标组（授权卡滞留率/方案修改率/证据核验通过率）+ 解决确认率（北极星口径对齐解决语义）+ 反指标澄清
 > 来源：write-spec 技能方法（leading/lagging）+ `.agents/product-marketing.md` 目标
 > 用途：0-1 验证的量化标尺；各阶段（Alpha/Beta/Full Launch）评估用。
 
@@ -24,10 +25,14 @@
 | 首字延迟 | 预热命中后的首 token 延迟 | ≤ 0.5s（目标 0.3s） | Alpha 起（内部采集） |
 | 任务平均耗时 | 从发起任务到写入文件的时长 | ≤ 10 min | Alpha 起 |
 | 写入采用率 | 生成的改动被用户接受的占比 | ≥ 80% | Beta 起 |
+| **解决确认率**（2026-08-16 补——北极星口径对齐领域「交付≠解决」：完成=证据对账确认，非写入）| 完成任务中「证据对账通过并确认解决」的占比（vs 未解决/放弃）| ≥ 70% | Beta 起（decision.resolved + verifyCompletion 埋点）|
 | **非技术用户新建成功率**（细分用户指标，D0 §1.4） | **不会写代码的用户从「从零开始」→ 一键安装预览 的独立完成比例（无需开发者介入）** | **≥ 50%** | Beta 起（问卷+埋点） |
 | **非技术用户任务完成率**（细分） | 非技术用户发起的任务中「接受全部并写入」占比（走改动说明主路径） | **≥ 60%** | Beta 起 |
+| **授权卡滞留率**（确认交互质量——2026-08-16 补，第 5 轮审计 #1）| 授权请求 → 用户决策时长 >30s 的占比（疲劳/悬挂代理——问题 A「卡悬挂模型乱动」复发监测）| **< 20%** | Beta 起（approval.requested→decision.resolved 时长埋点）|
+| **方案修改率**（确认交互质量——#1）| 方案卡被修改/重出（拒绝 kind=modify）的占比（意图对齐质量：过低=橡皮图章化、过高=方案质量差）| **15-40%**（区间）| Beta 起（decision.resolved 带 RejectReason.kind 埋点）|
+| **证据核验通过率**（确认交互质量——#1）| 完成声明中系统核验（verifyCompletion——只读命令代跑/diff 派生）通过占比（证据机制生效度；unverifiable/证据不足计入未通过）| **≥ 70%** | Beta 起（verifyCompletion 埋点——含 completion.evidence_missing）|
 
-**测量方法**：应用内事件埋点（本地统计，不上传；TokenTracker 扩展事件计数）——`task.started` / `task.written` / `diff.accepted` / `preheat.hit` + 非技术细分：`project.created_nondev` / `project.preview_started` / `diff.accepted_summary`（用户自报「不会写代码」时标记 segment）。
+**测量方法**：应用内事件埋点（本地统计，不上传；TokenTracker 扩展事件计数）——`task.started` / `task.written` / `diff.accepted` / `preheat.hit` + 非技术细分：`project.created_nondev` / `project.preview_started` / `diff.accepted_summary`（用户自报「不会写代码」时标记 segment）。确认交互指标（v1.1 新增）：`decision.requested/resolved`（含 RejectReason.kind——方案修改率）、`approval.requested→decision.resolved` 时长（授权卡滞留率）、`verifyCompletion` 通过/未通过（证据核验通过率——未通过打 `completion.evidence_missing`）。
 
 **阈值依据说明（专家评审补强）**：非技术用户两阈值（≥50% 新建成功率 / ≥60% 任务完成率）为**经验初值**（类比低代码工具非技术用户独立完成基线），无竞品实测支撑——**Beta 期前 30 天校准**：若实际完成率 <30% 或 >85%，回查产品阻塞点（安装分支/改动说明可理解性）后重设阈值，并记录校准依据于本节。
 
@@ -61,7 +66,8 @@
 
 - **不回测数据**：不以「token 消耗/费用」为成功指标（省 token 是手段不是目标）；
 - **不刷活跃**：不以「安装量/下载量」为北极星（无真实使用的安装无意义）；
-- **不牺牲可控性**：任何为提升任务完成率而「自动写入不审核」的改动，违反产品核心原则（D0 §1.2），禁止。
+- **不牺牲可控性**：任何为提升任务完成率而「自动写入不审核」的改动，违反产品核心原则（D0 §1.2），禁止。（2026-08-16 口径澄清：审核在**方案层**（方案卡——文件+假设+验证计划）完成后的**清单内自动放行**（actionGate in-plan 自动）不违反本反指标——审核点前置到方案确认，非取消审核。）
+- **不以机械确认速度为成功指标**（2026-08-16 补）：确认决策时长的缩短必须以「决策内容被审阅」为前提——「点得快」若伴随方案修改率趋零/授权卡滞留消失，是橡皮图章化的信号而非改进（对齐方案修改率/滞留率指标区间）。
 
 ---
 

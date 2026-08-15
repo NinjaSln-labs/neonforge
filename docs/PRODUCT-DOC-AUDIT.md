@@ -1,80 +1,54 @@
-# 产品文档审计报告：NeonForge（第 4 轮——2026-08-15）
+# 产品文档审计报告：NeonForge（第 12 轮——2026-08-16 · 值对象三处一致性 + A0 精读）
 
-- 审计对象：`docs/product/`（8 份）+ `docs/domain/`（10 份）+ README
-- 审计日期：2026-08-15（**第 4 轮**——第 3 轮 08-07 后产品变化复审：approve-files 改名 / 会话状态机落地 / D1-D8 偏离修复 / M1-M3 裁决 / README 重制 / 开源）
-- 审计方式：三层审计 + **既有审计 spot-check**（第 3 轮结论 94/100 抽验）+ 就绪度评分
-- 结论：**就绪度 88/100，可交付 Yes**（无 Critical——2 项 Major 为「已裁决未回写」；安全项 1 项）
+- 审计对象：设计文档 §3.2（7 值对象）↔ 04 §2（值对象权威）↔ 02 ↔ A0 §5/§3.5b + spot-check 第 11 轮
+- 审计日期：2026-08-16（**第 12 轮**——值对象符号级交叉——第 11 轮修了服务/事件，本轮查值对象）
+- 审计方式：符号级交叉核对（7 值对象 × 4 文档）+ spot-check（第 11 轮）+ 就绪度评分
+- 结论：**就绪度 76/100，可交付 Yes**（1 Major：04 §2 缺 6 个新值对象定义——ActionAttribute 三层全缺——S1 前置）→ **2026-08-16 修复后 92/100**（#1/#2 已修——见五）
 
 ---
 
-## 一、文档全景核查（层①）
+## 一、审计项（值对象符号级交叉）
 
-| 文档 | 必需性 | 现状 | 判定 |
-|------|--------|------|------|
-| product/00 产品设计总纲 | 必需 | v2.1（08-15 bump）——无阶段化 ✅ | ⚠️ DoD V1 承诺未回写（见问题 #1） |
-| product/01 用户流 | 必需 | 无阶段确认驱动 ✅ | ⚠️ DoD/断点续做未回写（#1/#2） |
-| product/02 组件 / 03 令牌 / 05 视觉 | 必需 | 无阶段无关/保留 ✅ | ✅ |
-| product/04 对齐 | 必需 | 无阶段化 ✅ | ✅ |
-| product/06 产品审计 | 必需 | 07-31 旧版（历史——第 3 轮未重审）| 信息 |
-| product/07 成功指标 | 必需 | 发布阶段指标（无 DoD 依赖）✅ | ✅ |
-| product/00-reference | 可选 | 07-30 竞品参考（历史）| 信息 |
-| domain/00-09 | 必需 | 08-07 无阶段版 + 08-15 M1-M8 同步 ✅ | ⚠️ 09 缺 Problem 建模（#3） |
-| README（中英） | 必需 | 08-15 重制（确认卡/工具面/结构/Roadmap/破坏性声明）✅ | ✅ |
+| 设计 §3.2 值对象 | 04 §2 定义 | 02 提及 | A0 | 判定 |
+|------------------|-----------|---------|-----|------|
+| GoalProposal | ❌（§2.1 是旧 Goal——无 assumptions）| 1 | 3（§3.6 文字）| **缺定义** |
+| PlanProposal | ✅（第 9 轮重写）| 6 | 11（§5）| ✅ |
+| CompletionClaim | ❌ | 3 | 7（§4.2 文字）| **缺定义** |
+| CompletionEvidence | ❌ | 0 | 2 | **缺定义** |
+| ApprovalRequest | ❌ | 0 | 1 | **缺定义** |
+| RejectReason | ❌ | 2 | 3（§5 文字）| **缺定义** |
+| ActionAttribute | ❌ | 0 | **0（A0 §3.5b 有 ActionGate 判定但无值对象定义）** | **三层全缺** |
 
-**完整性**：无缺必需文档 ✅
+**M1（Major）**：
+1. **04 §2 值对象表缺 6 个新值对象**（GoalProposal/CompletionClaim/CompletionEvidence/ApprovalRequest/RejectReason/ActionAttribute）——04 是值对象定义权威（§2）——S1 领域层重写按 04 §2 会漏 6 个值对象
+2. **04 §3.6（第 11 轮补）引用未定义对象**——`actionGate(...): { attribute: ActionAttribute }`、`verifyCompletion(claim: CompletionClaim)`、`RejectReason`——§2 未定义 → 引用悬空
+3. **ActionAttribute 三层全缺**——A0 §3.5b 描述 ActionGate 判定但未定义 ActionAttribute 值对象（kind 枚举）——连 A0 权威层都缺
 
-## 二、逐类独立审计（层②）——重点（08-07 后变化落点）
+## 二、通过项
 
-| 文档 | 检查点 | 速评 |
-|------|--------|------|
-| product/00 | 范围明确（V1 做/不做）| ⚠️ **DoD 对齐仍标 V1**（§3.3/§4.1/327/354/470）——08-15 裁决 V2 未回写 |
-| product/00 | 非功能约束 | ⚠️ 断点续做无「状态机不跨重启」限制声明（472 行）|
-| product/01 | 用户流分支 | ⚠️ Flow5/146 行 DoD 对齐环节仍 V1 表述 |
-| domain/09 | 追溯完整性 | ⚠️ 缺 Problem/问题台账（08-15 M3 建模后）|
+- spot-check 第 11 轮修复：02/04 deriveDecisionPoint（2/1）、gate.denied（1/1）——**采信（L3）**——服务/事件补齐落地 ✅
+- PlanProposal 三处一致（04 §2.3/A0 §5/设计 §3.2）✅
+- 06 追加段事件登记 ✅
 
-## 三、交叉验证矩阵（层③）——含既有审计 spot-check
+## 三、问题
 
-| 对齐关系 | 说法 A | 说法 B | 判定 |
-|---------|--------|--------|------|
-| product/00 DoD ↔ domain/00 §8 | **DoD 对齐 ✅ V1**（§4.1/327…）| **DoD 对齐 ⏸ V2**（08-15 裁决已回写 A0）| 🔴 **冲突——已裁决未回写（Major）** |
-| product/01 Flow5 DoD ↔ domain/00 §8 | DoD 对齐环节（146 行）| V2 | 🔴 冲突（同上——Major）|
-| product/00/01 断点续做 ↔ 04 §5 ITaskRepository | 「断点续做」（472/96 行）| V1 限制：状态机不跨重启（已回写）| 🔴 冲突——限制未回写产品文档（Major）|
-| product/07 指标 ↔ D0 | 发布阶段指标 | 目标一致 | ✅ |
-| README ↔ product-marketing | 定位/中文优先 | 定位一致（大白话 about）| ✅ |
-| **既有审计 spot-check（第 3 轮 94/100）** | 断言「D0 确认驱动闭环（…→DoD 对齐→…）」| D0 确实含 DoD 表述（L1/L2 存在性/语义级 ✅）——但 DoD 已裁决 V2——**断言与现状偏离（采信（L1 存在性）；结论需复核）** | ⚠️ 抽验 2/2（AUDIT 断言 + Minor #3 09 追溯）——Minor #3 已闭合（09 现有信任/交付/服务管理行）✅；「无 Critical/Major」结论 08-15 后不再成立 |
+1. **[Major] 04 §2 值对象表缺 6 个新值对象（#1）**——GoalProposal/CompletionClaim/CompletionEvidence/ApprovalRequest/RejectReason/ActionAttribute——S1 前置（值对象定义权威缺失）
+2. **[Major] ActionAttribute 三层全缺（#2）**——A0 无定义（§3.5b 用而未定义）+ 04 无 + 02 无——只读判定/门控的 kind 枚举无权威定义
 
-**抽验说明**：第 3 轮报告共 2 个聚合断言 + 3 项 Minor——抽验 2 项（「94/100 无 Critical/Major」结论、「Minor #3 09 追溯」）——覆盖 50%+；落点均衡（产品断言 + 领域落点各 1）。
+## 四、建议
 
-## 四、问题
+- #1：04 §2 补 6 值对象定义（GoalProposal{statement,assumptions} / CompletionClaim{summary,evidence} / CompletionEvidence{verification[],diffs[],pendingQuestions[]} / ApprovalRequest{toolName,subject,reason,risk} / RejectReason{kind:direction|scope|complexity|missing-info|modify|other,text?,target?} / ActionAttribute{kind:readonly|network-read|in-plan|out-of-plan|hazardous,basis}——签名以设计文档 §3.2 为准）——**S1 前置**
+- #2：A0 §3.5b 补 ActionAttribute 值对象定义（kind/basis——门控判定输出类型）
+- **权威裁决**：值对象定义以设计文档 §3.2 为准（04 §2 按此补——战术层权威；A0 §3.5b 补 ActionAttribute）
 
-1. **[Major]** DoD 对齐 V1 承诺未回写（已裁决）
-   - 现象：product/00（§3.3 交付可验证/§4.1 DoD 前置/327 行流程/354 状态表/470 问题闭环）+ product/01（Flow5/146 行）仍表述 DoD 对齐为 V1 流程环节；domain/00 §8 已改「DoD 对齐 ⏸ V2」（08-15 M2 裁决）
-   - 影响：产品文档与领域权威冲突——实现期两难（读 D0 会以为 V1 要做）
-   - 证据：product/00:26/35/37/327/354/470；01:5/78/146；A0 §8 已改
-2. **[Major]** 断点续做 V1 限制未声明
-   - 现象：product/00:472、01:96 仅提「断点续做」——08-15 M1 裁决「V1 = 消息+台账恢复、状态机不跨重启（V2 会话快照）」已回写 04 §5/02 §4.13/README，产品文档未同步
-   - 影响：用户/实现者高估续做能力（复开后确认状态重置——体验落差）
-3. **[Minor]** domain/09 追溯矩阵缺 Problem/问题台账（08-15 M3 建模后未补）
-4. **[Minor]** PRODUCT-DOC-AUDIT.md 第 3 轮结论（94/100）已过期——08-08~08-15 八项变化未复审（本报告即第 4 轮）
-5. **[安全]** 依赖漏洞 3 high：`extract-zip`（electron-builder 链）+ `nanoid`×2——`npm audit fix`（非 breaking）可修；修复后需复验 L1/L2
-6. **[信息]** D0 版本头 2.1 已 bump（08-15）但第 3 轮 AUDIT 表格未同步（本报告已更新）
+## 五、验收标准
 
-## 五、建议
+- [x] #1 04 §2 补 6 值对象（S1 前置）——2026-08-16 修复：04 §2.3b 新增意图确认值对象组（GoalProposal/CompletionClaim/CompletionEvidence/ApprovalRequest/RejectReason/ActionAttribute——签名对齐设计文档 §3.2；§3.6 引用随之落地）
+- [x] #2 A0 §3.5b 补 ActionAttribute 定义——2026-08-16 修复：A0 §3.5b 新增 ActionAttribute 值对象（kind 权威枚举 + basis 判定依据）
+- [x] 就绪度 ≥90（#1/#2 修复后）——92/100
 
-- **#1/#2**（已裁决未回写）：D0 §3.3/§4.1/327/354/470 + 01 §5/78/146 回写「DoD 对齐 V2（V1 以达成确认卡+交付包为可验证闭环）」「断点续做 V1 限制（状态机不跨重启——V2 会话快照）」——一行式 delta，不重写
-- **#3**：09 追溯补一行（Problem ↔ 问题台账快照/复跑——M3 建模）
-- **#5**：`npm audit fix` + L1/L2 复验（安全刚需——仓库已公开）
-- **#4/#6**：本报告即更新（闭环）
-- 权威裁决：维持既有——产品以 product/00 为准、领域以 domain/00 为准；DoD/断点续做以 **A0（已裁决）为准**——产品文档回写对齐
+## 六、备注
 
-## 六、验收标准
-
-- [ ] #1/#2 回写后 D0/01 ↔ A0 交叉验证转绿（无 DoD/断点续做冲突）
-- [ ] #3 09 追溯含 Problem 行
-- [ ] #5 npm audit 0 high + L1/L2 绿
-- [ ] 就绪度 ≥90（回写后重评）
-
-## 七、备注
-
-- 本次审计未修改被审文档（第 4 轮报告本身除外）；报告路径：`docs/PRODUCT-DOC-AUDIT.md`
-- 就绪度：94（第 3 轮）→ **88/100**（一致性扣分：2 项已裁决未回写 + 1 项安全）——可交付 Yes（无 Critical）
+- 本次审计**未修改被审文档**；第 12 轮为值对象符号级核对（服务/事件第 11 轮已补——值对象是第 9/11 轮后剩余缺口）
+- **修复记录（2026-08-16，第 12 轮全修）**：#1 04 §2.3b 补 6 值对象 + #2 A0 §3.5b 补 ActionAttribute——值对象三处一致性达成（设计 §3.2 ↔ 04 §2.3b ↔ A0 §3.5b；02 为行为层不承载值对象定义——`goal/plan/resolution` 确认点已同步）——S1 前置就绪
+- 报告路径：`docs/PRODUCT-DOC-AUDIT.md`（r4-r11 归档）

@@ -1,8 +1,9 @@
-# 00 — 领域权威总纲（无阶段·目标驱动版 v3.0）
+# 00 — 领域权威总纲（无阶段·目标驱动版 v4.0）
 
-> 版本：v3.0 · 2026-08-07
+> 版本：v4.0 · 2026-08-16（v3.0 · 2026-08-07）
 > 状态：**实现权威**。本总纲为领域设计的唯一权威；旧六阶段版（v2.0）及 A1–A7 降级为参考（冲突处以本总纲为准）。
 > 重构依据：无阶段重构（S1-S8——目标驱动 + 能力驱动 + 确认驱动）替代六阶段产品流水线；领域模型重新生成（02/03/04/06 无阶段版）。
+> v4.0（2026-08-16）：意图确认领域模型重设计落地——§3.1 确认点更名（方案/解决）、§3.5b 动作属性门控、§3.6 决策点触发权、§4 推进保障+§4.2 完成证据、§5 PlanProposal/RejectReason（详见 `intent-confirmation-domain-design.md`；v3.0 全文经两轮审计同步）。
 > 方法：领域模型驱动设计——从「确认驱动的执行代理」领域概念出发，不反推现有实现。
 
 ---
@@ -11,7 +12,7 @@
 
 **V1 = DeepSeek-only。** 网关接口按单一 provider 设计；请求参数构造收敛在 `toDeepSeekParams()` 一处（V2 多模型只动网关）。
 
-**forceTool 传递**：`tool_choice: required`（确认后强制产出）/ `auto`（澄清/等确认/失败诊断）——执行保障策略（§4）的输出经网关传递。
+**tool_choice 传递**：`required`（确认后无推进时强制模型推进——产出/提议/证据）/ `auto`（澄清/等用户决策/失败诊断）——推进保障策略（§4）的输出经网关传递。
 
 ---
 
@@ -21,7 +22,7 @@
 
 | 限界上下文 | 职责 | 聚合根 |
 |-----------|------|--------|
-| **Conversation BC** | 目标状态机（Goal → Execution → Achievement）、确认点（用户确认=推进门槛）、执行保障策略（forceTool）、推进门控（模型活动边界）、模型活动边界（确认点未确认 → 停在该确认点）、**问题台账（会话外生命周期——断点续做/复跑——2026-08-15 补建模 M3）** | **Task** + **Problem** |
+| **Conversation BC** | 目标状态机（Goal → Plan → Resolution）、确认点（用户确认=推进门槛——决策点触发权在系统，模型只能提议——§3.6）、推进保障策略（ProgressGuarantee——§4）、推进门控（模型活动边界）、模型活动边界（确认点未确认 → 停在该确认点）、**问题台账（会话外生命周期——断点续做/复跑——2026-08-15 补建模 M3）** | **Task** + **Problem** |
 
 ### 支撑域
 
@@ -36,7 +37,7 @@
 
 | 限界上下文 | 职责 |
 |-----------|------|
-| **Gateway** | DeepSeek API 通信、流式解析、forceTool 传递、工具调用修复（防腐层）|
+| **Gateway** | DeepSeek API 通信、流式解析、tool_choice 传递（推进保障输出——§4）、工具调用修复（防腐层）|
 | **ToolRegistry** | 工具注册/发现/执行分发（read/write/edit/bash/check-capability/approve-files…）|
 | **Configuration** | 用户与项目配置 |
 
@@ -62,11 +63,13 @@
 
 | 确认点 | 含义 | 确认动作（结构化）| 未确认时模型活动边界 |
 |---|---|---|---|
-| **GoalConfirmed** | 用户确认「做什么」——目标驱动的原点 | 确认目标 / 重新描述 | 只澄清（不产生执行动作）|
-| **ExecutionConfirmed** | 用户确认「怎么做」 | 确认执行 / 修改方案 | 只给方案（不 write/edit/**有副作用 bash**——2026-08-14 澄清：探索性只读命令如 ls/cat 放行，其判定与授权 preApproval 同源 classifyAction）|
-| **AchievementConfirmed** | 用户确认「做完了」 | 已解决 / 还要改 | 持续执行（不收敛）|
+| **GoalConfirmed** | 用户确认「做什么」——目标驱动的原点 | 确认目标 / 重新描述（带原因）| 只澄清（不产生执行动作）|
+| **PlanConfirmed**（原 ExecutionConfirmed——2026-08-16 语义澄清：用户确认的是**方案**（PlanProposal），「执行」是确认后的自动结果）| 用户确认「怎么做」| 批准方案 / 修改 / 重出（带原因）| 只给方案（不 write/edit/**有副作用 bash**——2026-08-14 澄清：探索性只读命令如 ls/cat 放行，其判定与授权 preApproval 同源 classifyAction）|
+| **ResolutionConfirmed**（原 AchievementConfirmed——2026-08-16 语义澄清：「达成」是模型声明（CompletionClaim），用户确认的是「问题解决」（证据对账））| 用户确认「问题解决了」| 已解决（证据对账通过）/ 还要改（带原因）| 持续执行（不收敛）——模型必须继续产出/验证 |
 
-### 3.2 确认语义（行业共识）
+> 2026-08-16 更名说明：执行确认→方案确认、达成确认→解决确认——用户在整个流程中确认的对象始终是「提议」（目标提议/方案提议/完成声明），不是「状态」；「执行」「达成」是确认后的自动结果。详见 §3.6 触发权与 `intent-confirmation-domain-design.md`。
+
+### 3.1b 确认语义（行业共识）
 
 - 确认 = **结构化显式动作**（确认卡按钮）——非确认词匹配（误触发不可靠）
 - 确认点未处理（未确认未拒绝）= **等待**（blocking——模型停在该确认点——不推进、不默认放行）
@@ -79,8 +82,8 @@
 ```
 任何需要用户决策的点（卡弹出）──→ 【PENDING——等用户决策】
     ├─ 目标确认卡（大阶段）
-    ├─ 执行确认卡（大阶段）
-    ├─ 达成确认卡（大阶段）
+    ├─ 方案确认卡（大阶段——PlanProposal 批准）
+    ├─ 解决确认卡（大阶段——完成声明+证据对账）
     └─ 授权卡（小阶段——工具级——但不批准则后续无法继续，影响大阶段）
                                         │
                pending 下模型动作全部无效（做了等于白做——不执行不生效）
@@ -95,12 +98,13 @@
 1. **pending 只有一个**——所有确认点/授权卡统一「等用户决策」状态（来源只是卡类型，不各自建 pending）
 2. **pending 下模型动作无效**——模型后续工具调用不执行（做了白做）——状态保持 pending——**用户决策是下一个状态的唯一输入**
 3. **授权卡同属 pending**——授权卡是小阶段（工具级），但不批准则后续无法继续——影响大阶段——与确认卡同一状态机
+4. **决策点触发权在系统，不在模型文本**（2026-08-16 增补——三视角调研结论：竞品无一按模型标记触发确认；学术「介入点按动作属性」）：模型只能产出**提议**（结构化值对象：GoalProposal/PlanProposal/CompletionClaim），**卡（决策点）出现 = 状态 × 提议 × 动作属性的确定性派生**（§3.6）——模型措辞不直接弹卡
 
 ### 3.3 确认点 = 推进门槛（不变式）
 
 - 未确认目标 → 不进入执行（模型只澄清）
-- 未确认执行 → 不产生执行动作（write/edit/bash——结构性：状态机未到下一态）
-- 未确认解决 → 不收敛（forceTool 保持——不能自宣布完成停手）
+- 未确认方案 → 不产生执行动作（write/edit/bash——结构性：状态机未到下一态）
+- 未确认解决 → 不收敛（推进保障保持——不能自宣布完成停手）
 
 ### 3.4 PENDING 下模型动作无效（做了等于白做——审计 Major 1 修正）
 
@@ -113,36 +117,108 @@
 ### 3.5 门控优先级（PENDING vs 计划清单——审计 Major 2 修正）
 
 ```
-PENDING（执行未确认）──→ 所有动作无效（不管文件在不在清单——等「确认执行」卡）
-    │（用户点「确认执行」）
+PENDING（方案未确认）──→ 所有动作无效（不管文件在不在清单——等「方案确认」卡）
+    │（用户批准方案）
     ▼
-执行已确认 ─→ 按计划清单判定：
+方案已批准 ─→ 按计划清单判定：
     ├─ file ∈ 清单 → 放行执行
     └─ file ∉ 清单 → 拒绝 + 拒绝带边界（「X 不在批准清单（批准的是：A/B/C）」）
 ```
 
-**优先级规则**：pending（执行未确认）是**状态机冻结**（先——所有动作无效）；计划清单是**文件级**边界（后——用户确认执行后逐文件核对）。pending 时不进入清单判定。
+**优先级规则**：pending（方案未确认）是**状态机冻结**（先——所有动作无效）；计划清单是**文件级**边界（后——用户批准方案后逐文件核对）。pending 时不进入清单判定。
+
+### 3.5b 动作属性门控（ActionGate——2026-08-16 新增，与会话冻结正交）
+
+**门控 = 会话状态冻结（§3.2/3.4） × 动作属性分级（本节）两个正交维度**（对齐 DSH sandbox×approval 正交、Codex is_safe_command、Deep Code scope 表）：
+
+```
+ActionGate(action, policy) → { verdict: allow | ask | deny, attribute, risk }
+  属性判定（classifyReadonly——与模型自评无关）：
+  - readonly（read/search/LSP/check-capability；bash 命令头白名单+链递归+git 子命令级）→ allow（只读自动）
+  - network-read（curl GET localhost 等无写副作用）→ allow；外网 GET → ask（安全）
+  - in-plan（write/edit 且文件 ∈ plannedFiles）→ allow（清单内自动——§5）
+  - out-of-plan / hazardous（写清单外/危险命令）→ ask 或 deny（策略配置——deny 为机制拦截）
+```
+
+**ActionAttribute 值对象**（门控判定输出类型——kind 权威枚举，与模型自评无关；2026-08-16 第 12 轮审计 #2 补——原 §3.5b 用而未定义）：
+
+```
+ActionAttribute {
+  kind: 'readonly' | 'in-plan' | 'out-of-plan' | 'network-read' | 'hazardous'
+  basis: 'tool-type' | 'command-head' | 'command-chain' | 'git-subcommand' | 'plan-list'
+  // basis = 判定依据（审计追溯：为什么判成这个 kind）
+}
+```
+
+**优先级**：会话冻结（pending）优先于 ActionGate（§3.5 不变）——pending 时任何动作无效，不进入属性判定；ActionGate 的 deny 为机制拦截（`gate.denied` 事件），ask 才产生授权请求（ApprovalRequest：subject+reason+risk）。
 
 ---
 
-## 4. 执行保障规格化（TurnExecutionPolicy）
+### 3.6 决策点触发权（2026-08-16 新增——三视角调研结论：竞品 9/9 无一按模型标记触发确认；学术共识「介入点按动作属性分层，不按模型自评标签」）
+
+**模型只能「提议」，不能「制造决策点」**：
+
+```
+模型产出提议（结构化值对象——非文本标记）：
+  GoalProposal{ statement, assumptions }          // 目标提议（含关键假设）
+  PlanProposal{ summary, files[{path,reason}], assumptions[], verificationPlan[] }  // 方案提议
+  CompletionClaim{ summary, evidence }            // 完成声明（含证据——§4.2）
+  ── 提议本身不产生任何状态变化，只进入「待求值」──
+系统派生决策点（确定性纯函数 deriveDecisionPoint(state, proposals, pendingActions)）：
+  - 目标提议存在 && !GoalConfirmed      → 决策点：goal（目标确认卡）
+  - GoalConfirmed && PlanProposal 存在 && !PlanConfirmed → 决策点：plan（方案卡）
+  - Goal+Plan 已确认 && 动作属性需授权  → 决策点：approval（授权卡）
+  - CompletionClaim 存在（证据完备）&& !ResolutionConfirmed → 决策点：resolution（解决确认卡）
+```
+
+**关键性质**：
+1. **决策点 = 状态 × 提议 × 动作属性的确定性函数**——同一输入永远同一决策点；模型措辞不参与判定（原 pendingCardToShow 以模型文本为输入的建模废除）
+2. **提议是值对象**（结构化内容：假设/证据/验证计划）——不是文本标记；解析层（parsePlanProposal/parseCompletionClaim）负责从模型输出结构化，判定层只消费结构
+3. **决策内容快照**（decisionContent——呈现与审计的唯一来源）：卡弹出时携带完整提议内容，确认/拒绝事件记录快照（「用户确认了什么」可追溯——2026-08-15 run4 实证的追溯缺口）
+4. **用户主动确认通道保留**（goalFallback 语义重定义）：用户可在无提议时主动发起确认（对齐竞品 Plan 门——用户发起 vs 模型触发）——但卡出现的**默认路径**是确定性派生
+
+---
+
+## 4. 推进保障规格化（ProgressGuarantee——原 TurnExecutionPolicy，2026-08-16 语义重定义）
+
+**核心语义变化（三视角调研）**：原 forceTool=required 强制「模型必须调工具」——与「模型需要停下来问用户」结构性冲突（授权卡悬挂时每轮一次无效调用）。**推进保障的强制对象是「推进」不是「工具调用」**——推进 = 产出 / 提议 / 证据 / 提问（pending 时恒不强制）。
 
 | 输入 | 决策 |
 |------|------|
+| **PENDING（等用户决策——§3.2/§3.4）** | **不强制（模型停住等用户——pending 下模型不做任何事；推进保障与 canExecute/maybeContinue 同源读 pending——2026-08-15 补行：三判定器统一）** |
 | 目标未确认 | 不强制（澄清）|
-| 执行未确认 | 不强制（等确认）|
-| 目标+执行确认、无产出 | **强制**（防只说不做）|
+| 方案未确认 | 不强制（等方案确认）|
+| 目标+方案确认、无任何推进 | **强制推进**（防只说不做——强制对象是「推进」：产出/提议/证据，允许模型输出结构化提议与提问，不逼调工具）|
 | 上一轮工具失败 | 释放（模型诊断修正——required 压制诊断是反模式）|
-| 计划文件写完 或 达成确认 | 释放（模型可收敛——写 1 文件 ≠ 任务达成）|
+| 计划文件写完 或 解决确认 | 释放（模型可收敛——写 1 文件 ≠ 任务达成）|
 | **无计划文件**（未走 approve-files）| **以产出为准释放**（produced 后 auto——2026-08-14 补行：无计划=无「计划未完成」，产出后即释放，防 required 死循环）|
+
+### 4.1 推进的判定（与 StuckDetector 同源——2026-08-16 同步）
+
+`TurnProgress` 扩展：**有副作用工具成功 / 新 read / 结构化提议输出 / 完成声明带证据** 均算推进。「只说不做」判定从「无工具调用」改为「无推进」（防模型输出提议被判停滞→escalate 打断合法链——坑 99 教训）。
+
+### 4.2 完成证据（2026-08-16 新增——学术共识：self-verification 不可靠，完成判定必须对账外部证据）
+
+**完成 = 声明 + 证据 + 用户对账**：
+
+```
+CompletionClaim{ summary, evidence: CompletionEvidence }
+CompletionEvidence{ verification: [{command, output?, passed?}], diffs: [{path}], pendingQuestions: [] }
+```
+
+- **无证据不对账**（不变量）：evidence.verification 空 或 pendingQuestions 非空 → 声明不完整 → **不进入 resolution 决策点**（「已解决」卡不弹）→ 回填「缺验证」引导模型补证据
+- 用户确认的是「声明 + 证据」的对账结果（用户原始目标 vs 模型声称完成），不是对声明的背书
+- 证据不足诊断事件：`completion.evidence_missing`
 
 ---
 
 ## 5. 宿主强制边界（模型漂移防护——行业共识）
 
-- **计划清单（PlannedFiles）**：approve-files（2026-08-08 坑 95 改名，原 plan_approval）批准文件集合——模型只能写清单内——**清单对模型显式可见**（系统提示注入）
+- **方案提议（PlanProposal——2026-08-16 新增值对象）**：模型方案确认前的结构化提议——`{ summary, files: [{path, reason}], assumptions[], verificationPlan[] }`——**文件清单含理由、方案含假设清单与验证计划**（用户确认的是「看到全部假设并接受」——竞品计划工件/学术「确认内容含未验证假设」）；渲染为可审阅方案卡（批准/修改/重出）
+- **计划清单（PlannedFiles）**：由已确认的 PlanProposal.files 派生（单一来源——不变量 6）——approve-files（2026-08-08 坑 95 改名，原 plan_approval）追加语义保持——模型只能写清单内——**清单对模型显式可见**（系统提示注入）
 - **追加语义**：分批 approve-files 合并（Codex rules AppendRule 同理——不覆盖前批）
 - **拒绝回填边界**：写清单外被拒 → 拒绝信息带清单内容（「X 不在批准清单（批准的是：A/B/C）」）——模型回到边界内
+- **拒绝带原因（RejectReason——2026-08-16 新增值对象）**：用户拒绝决策携带结构化原因 `{ kind: direction|scope|complexity|missing-info|other, text?, target? }`——回填模型调整方向（对齐 Cline denial reason / Deep Code「不要绕过」——防模型无方向重试）
 
 ---
 
@@ -158,7 +234,7 @@ PENDING（执行未确认）──→ 所有动作无效（不管文件在不在
 
 | 工具 | 分类 | 说明 |
 |------|------|------|
-| read / write / edit / bash | 核心 | bash 需授权；write/edit 受执行确认 + 计划清单双重边界 |
+| read / write / edit / bash | 核心 | bash 需授权；write/edit 受方案确认 + 计划清单双重边界 |
 | check-capability | 能力 | 环境+能力视图（确认目标后调用）|
 | approve-files | 规划 | 文件清单批准（追加——宿主边界；2026-08-08 改名，原 plan_approval）|
 | search / LSP 工具 | 信息 | 定位/查询（放行——不触发执行边界）|
@@ -170,15 +246,15 @@ PENDING（执行未确认）──→ 所有动作无效（不管文件在不在
 
 | 领域能力 | 产品形态 | 门禁 |
 |---------|---------|------|
-| 目标状态机 + 确认点 | 对话内嵌确认卡（目标/执行/达成——确认/拒绝按钮）| ✅ V1 |
-| 执行保障（forceTool）| 后台（确认后无产出强制模型动手）| ✅ V1 |
+| 目标状态机 + 确认点 | 对话内嵌确认卡（目标/方案/解决——确认/拒绝按钮；触发权在系统——§3.6）| ✅ V1 |
+| 推进保障（ProgressGuarantee）| 后台（确认后无推进强制模型推进——产出/提议/证据，pending 恒不强制）| ✅ V1 |
 | 推进门控（活动边界）| 后台（确认点未确认 → 模型停在该确认点）| ✅ V1 |
 | 宿主强制边界（计划清单）| 计划批准卡（批准/拒绝）+ 清单注入模型 | ✅ V1 |
 | 能力检查（check-capability）| 确认目标后自动 + 缺失征求用户 | ✅ V1 |
 | 环境快照注入 | 后台（系统提示注入）| ✅ V1 |
 | 会话时间线 | 日志（logs/timeline-*.jsonl）| ✅ V1 |
 | 结构化确认卡 | 对话流内嵌（确认/拒绝——像授权卡）| ✅ V1 |
-| 数字交付（交付包/DoD 对齐/确认关闭）| 交付面板（产物+验收对照+确认关闭）+ 回滚 | ✅ V1（DoD 对齐 ⏸ **V2**——2026-08-15 裁决：V1 以达成确认卡+交付包为可验证闭环；验收项前置为 V2 首项）|
+| 数字交付（交付包/DoD 对齐/确认关闭）| 交付面板（产物+验收对照+确认关闭）+ 回滚 | ✅ V1（DoD 对齐 ⏸ **V2**——2026-08-15 裁决：V1 以解决确认卡（证据对账）+交付包为可验证闭环；验收项前置为 V2 首项）|
 | 信任阶梯（任务级信任）| 授权记录可视化 + 允许并记住（沙箱内自动）| ✅ V1 |
 | 多 Agent / Worktree / MCP | 范围外 | ⏸ V2+ |
 
@@ -189,16 +265,24 @@ PENDING（执行未确认）──→ 所有动作无效（不管文件在不在
 | 术语 | 定义 |
 |------|------|
 | 目标驱动（Goal-driven）| 任务围绕「达成什么」组织——目标确认是推进的原点 |
-| 确认点（Confirmation Point）| 推进的门槛——目标/执行/达成三处用户确认 |
+| 确认点（Confirmation Point）| 推进的门槛——目标/方案/解决三处用户确认（2026-08-16 更名：执行→方案、达成→解决——§3.1）|
 | 推进（Progression）| 跨确认点的状态转换——唯一通道是用户确认 |
 | 自推进（Self-progression）| 确认点内部的模型自主工作（工具链）|
-| 执行保障（Execution Policy）| 确认后防只说不做的 forceTool 决策 |
+| 推进保障（Progress Guarantee）| 确认后防只说不做的推进决策（强制对象=推进≠调工具——§4）|
 | 计划清单（Planned Files）| approve-files 批准的可写文件集合（宿主边界）|
 | 能力视图（Capability View）| 从环境推导的能力状态（ready/missing/failed）|
 | 环境快照（Environment Snapshot）| 一次检测的事实（runtime/依赖/工具链）——注入模型 |
 | 会话时间线（Session Timeline）| 单会话所有步骤统一日志（可观测性）|
 | 问题台账（Problem Ledger）| 跨会话问题记录（goal/decisions/authorized/pending 快照）——断点续做/复跑（Conversation BC 子域——2026-08-15 补建模）|
 | 确认卡（Confirm Card）| 确认点的结构化 UI（确认/拒绝按钮）|
+| 提议（Proposal）| 模型产出的结构化主张（GoalProposal/PlanProposal/CompletionClaim）——不产生状态变化，只进入待求值（§3.6）|
+| 决策点（Decision Point）| 需要用户输入才能继续的确定性状态——状态×提议×动作属性的纯函数派生（§3.6）|
+| 决策（Decision）| 用户对决策点的响应：确认 / 拒绝（带原因）/ 修改（拒绝+修正内容）（§3.6）|
+| 证据（Evidence）| 完成声明的可核验支撑（verification 命令输出/diff 对账/遗留问题）——无证据不对账（§4.2）|
+| 方案提议（PlanProposal）| 文件清单+假设+验证计划——plannedFiles 单一来源（§5）|
+| 完成声明（Completion Claim）| 模型「做完了」的主张——必须附证据（§4.2）|
+| 拒绝原因（RejectReason）| 拒绝决策的结构化原因（kind/text/target）——回填模型调整（§5）|
+| 动作属性（Action Attribute）| 工具调用的客观性质（只读/网络只读/清单内/越界/高危）——ActionGate 判定（§3.5b）|
 
 ---
 
@@ -211,4 +295,4 @@ PENDING（执行未确认）──→ 所有动作无效（不管文件在不在
 | 05 架构 / 07 网关 / 08 审计 / 09 追溯 | 更新中（无阶段对齐）|
 | 产品文档（docs/product/）| 按无阶段对齐（目标驱动——确认卡/确认点）|
 
-**下一步**：实现按本总纲 v3.0 对齐（确认点/执行保障/宿主边界/能力环境——领域层已就绪：turnPolicy/确认卡/计划清单/环境注入/时间线）。
+**下一步**：意图确认领域模型重设计实现中（`intent-confirmation-domain-design.md`——S1 起分阶段落地：领域层重写/提议解析/renderer 接线/证据对账/推进保障/门控双维；测试域 DDD 同步重构）。

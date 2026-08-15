@@ -724,3 +724,89 @@ Diff 审核中「全部接受并写入」的确认操作。非模态，不打断
 ```
 
 「创建搭档须知」在项目根目录右键时出现，点击生成 `.neonforge` 模板文件并打开。
+
+---
+
+## 意图确认组件（2026-08-16 新增——第 6 轮产品文档审计 #1；规格依据：`intent-confirmation-domain-design.md` §3.2 值对象；S3 实现前置）
+
+### 方案卡（PlanCard——PlanProposal 渲染）
+
+```
+┌──────────────────────────────────────────┐
+│ 💡 执行方案                             │
+│ 一句话方案：用 Three.js 搭 3D 射击游戏    │
+│ ─────────────────────────────────────── │
+│ 📄 文件清单（4）                         │
+│   - package.json   项目配置+依赖         │
+│   - index.html     游戏入口              │
+│   - src/main.js    游戏逻辑              │
+│   - src/style.css  样式                  │
+│ ⚠️ 我的假设（3）                         │
+│   - 用 Three.js（浏览器 3D 引擎）        │
+│   - 第一人称+准星（你未指定，我按常见做） │
+│   - 60 秒倒计时计分（可改）              │
+│ ✅ 验证计划（2）                         │
+│   - npm install && npm run dev 能起服务  │
+│   - 打开页面能开枪、打中加分             │
+│ ─────────────────────────────────────── │
+│ [批准并执行] [修改方案] [重出]           │
+└──────────────────────────────────────────┘
+```
+
+- 数据源：PlanProposal（summary/files[{path,reason}]/assumptions/verificationPlan）
+- **假设清单必须显式呈现**（用户确认的是「看到全部假设并接受」——A0 §3.6/§5）
+- 按钮语义（2026-08-16 设计 §3.4）：批准并执行 → confirm；修改方案 → reject(kind='modify')+修正内容输入；重出 → reject+重提议引导
+- 出现：模型输出方案提议（proposal.plan 事件）且决策点=plan 时；会话级 PENDING 冻结生效
+- 交互：批准后 plannedFiles 由 PlanProposal.files 派生（追加语义 A0 §5）
+
+### 解决确认卡（ResolutionCard——完成声明+证据对账渲染）
+
+```
+┌──────────────────────────────────────────┐
+│ 🎯 搭档说解决了——请对账                 │
+│ 声明：游戏做好并在浏览器打开             │
+│ ─────────────────────────────────────── │
+│ ✅ 证据（系统核验）                      │
+│   - npm test → 2 passed（系统代跑 ✓）    │
+│   - curl localhost:5190 → 200（系统代跑 ✓）│
+│ ⚠️ 未核验：服务截图（需你确认）          │
+│ 对照你的目标：                           │
+│   - 能开枪打中目标 ✅ → 你验证打中了？    │
+│   - 有得分显示 ✅ → 你看到分数了？       │
+│ ─────────────────────────────────────── │
+│ [确认解决] [还要改（带原因）]            │
+└──────────────────────────────────────────┘
+```
+
+- 数据源：CompletionClaim+CompletionEvidence（verification/diffs/pendingQuestions）
+- **无证据不对账**：verifyCompletion 未通过（证据空/未核验项/pendingQuestions 非空）→ 卡不弹，回填「缺验证」引导（completion.evidence_missing 事件）
+- 证据呈现分级：系统核验通过（✓）/未核验（⚠️ unverifiable——提示用户自行判断）
+- 按钮语义：确认解决 → confirm（resolution 确认——问题台账关闭联动）；还要改 → reject(kind)+原因
+
+### 拒绝原因选择器（RejectReasonPicker）
+
+```
+┌──────────────────────────────┐
+│ 为什么不行？（可选原因）       │
+│ ( ) 方向不对（不是我要的）     │
+│ ( ) 范围太大/太小              │
+│ ( ) 太复杂（换个简单做法）     │
+│ ( ) 信息不全（还有没说的）     │
+│ ( ) 其他：________________    │
+│ [确认拒绝]  [取消]            │
+└──────────────────────────────┘
+```
+
+- 数据源：RejectReason（kind: direction/scope/complexity/missing-info/modify/other + text + target）
+- 出现：确认卡/授权卡上的拒绝类按钮（重新描述/修改方案/还要改/拒绝授权）点击时展开（非模态层）
+- modify 由「修改方案」类按钮直接触发（不经过选择器——kind 固定）
+- 提交后：decision.resolved 事件携带 RejectReason → 回填模型（Cline denial reason/Deep Code「不要绕过」方向）+ actionGate 同轮同类短封（授权拒绝）
+- 交互：必选一项（kind）或自由文本（other）——「确认拒绝」才生效；取消不提交
+
+### 组件与设计文档映射
+
+| 组件 | 值对象 | 事件 | S 阶段 |
+|------|--------|------|--------|
+| PlanCard | PlanProposal | proposal.plan / decision.requested / decision.resolved | S3 |
+| ResolutionCard | CompletionClaim/CompletionEvidence | proposal.completion / completion.evidence_missing / decision.resolved | S4 |
+| RejectReasonPicker | RejectReason | decision.resolved（reject+kind）| S3 |

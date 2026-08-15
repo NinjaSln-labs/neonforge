@@ -1,11 +1,11 @@
 # 02 — 领域模型（无阶段·目标驱动版）
 
-> 2026-08-07 重新生成——基于无阶段重构（**目标驱动**为核心：目标确认 → 能力检查 → 执行方案 → 执行确认 → 达成确认；确认与能力检查是实现机制）的领域讨论，领域模型驱动设计，不反推现有实现。
+> 2026-08-07 重新生成——基于无阶段重构（**目标驱动**为核心：目标确认 → 能力检查 → 方案提议 → 方案批准 → 完成声明与证据对账；确认与能力检查是实现机制；2026-08-16 意图确认领域模型重设计同步——决策点触发权在系统，模型只能提议）的领域讨论，领域模型驱动设计，不反推现有实现。
 > 替代旧六阶段版（需求→设计→开发→测试→部署→交付——产品流水线范式）。
 
 ## 1. 一句话
 
-搭档是一个**目标驱动的执行代理**：澄清用户目标 → 用户确认目标 → 检查能力 → 给出执行方案 → 用户确认执行 → 动手产出 → 汇报达成 → 用户确认解决——**目标确认是推进的原点，每个确认点都是推进的门槛，确认点内部模型自主推进**。
+搭档是一个**目标驱动的执行代理**：澄清用户目标 → 用户确认目标 → 检查能力 → 给出方案提议（PlanProposal——文件+假设+验证计划）→ 用户批准方案 → 动手产出 → 完成声明（CompletionClaim+证据）→ 用户证据对账确认解决——**目标确认是推进的原点，每个确认点都是推进的门槛，确认点内部模型自主推进**。
 
 ## 2. 我们是什么，不是什么
 
@@ -13,6 +13,7 @@
 |--------|---------|
 | 目标驱动的任务执行代理（目标→执行→达成）| 阶段流水线（固定顺序推进）|
 | 用户在每个确认点显式决定推进 | 模型自报即确认（自说自话推进）|
+| 决策点触发权在系统（确定性派生——模型只能提议）| 模型文本标记直接弹卡（反模式）|
 | 宿主强制执行边界（不依赖模型自律）| 靠提示词让模型自觉 |
 | 结构化确认动作（按钮）| 自由文本确认词匹配 |
 | 能力=环境视图（单源推导）| 能力独立重复检测 |
@@ -29,7 +30,7 @@
 | codeRag | 语义搜索 | 保留（通用技术——工具查询）|
 | preheat | 缓存预热（PrefixCache）| 保留（网关技术——DeepSeek 缓存）|
 | pluginSystem | 插件注册/生命周期 | 保留（通用——插件体系）|
-| lsp | LSP 工具（定义/引用/诊断）| 保留（通用——信息类工具——执行确认放行）|
+| lsp | LSP 工具（定义/引用/诊断）| 保留（通用——信息类工具——方案确认放行——只读自动）|
 
 **标注**：这些模块不进入无阶段 BC 清单（00 §2）——它们是技术载体（非领域核心）；实现对齐时若与无阶段领域冲突（如 compact 的触发语义与确认点无关——纯上下文管理），以无阶段领域为准。
 
@@ -47,7 +48,7 @@
 ### 4.1 任务（Task）——目标到达成的执行单元
 
 ```
-Task = Goal → Execution → Achievement
+Task = Goal → Plan → Resolution（2026-08-16 更名——原 Goal → Execution → Achievement）
 ```
 
 三个**确认点**（目标驱动的实现机制——用户确认 = 状态转换的唯一通道）：
@@ -55,20 +56,20 @@ Task = Goal → Execution → Achievement
 | 确认点 | 含义 | 确认动作（结构化）| 未确认时模型活动边界 |
 |---|---|---|---|
 | **GoalConfirmed** | 用户确认「做什么」（目标）——**目标驱动的原点** | 确认目标 / 重新描述 | 只澄清目标（不产生执行动作）|
-| **ExecutionConfirmed** | 用户确认「怎么做」（执行方案）| 确认执行 / 修改方案 | 只给方案（不 write/edit/bash）|
-| **AchievementConfirmed** | 用户确认「做完了」（达成汇报）| 已解决 / 还要改 | 持续执行（不收敛——不能自宣布完成停手）|
+| **PlanConfirmed**（2026-08-16 更名，原 ExecutionConfirmed）| 用户批准「怎么做」（PlanProposal——文件+假设+验证计划）| 批准方案 / 修改 / 重出（带原因）| 只给方案（不 write/edit/bash）|
+| **ResolutionConfirmed**（2026-08-16 更名，原 AchievementConfirmed）| 用户确认「问题解决了」（完成声明+证据对账——无证据不对账）| 已解决 / 还要改（带原因）| 持续执行（不收敛——不能自宣布完成停手）|
 
 ### 4.2 确认点 = 推进门槛 + 单一 PENDING 状态机（核心不变式）
 
-**推进（Progression）**：跨确认点的状态转换（Goal → Execution → Achievement）——**唯一通道是用户确认**（结构化确认动作：确认卡按钮）。
+**推进（Progression）**：跨确认点的状态转换（Goal → Plan → Resolution——2026-08-16 更名）——**唯一通道是用户确认**（结构化确认动作：确认卡按钮）。
 
-**自推进（Self-progression）**：确认点**内部**的自主工作——用户确认执行后，模型自动执行工具链（读→写→验证→汇报）——模型自主，直到下一个确认点。
+**自推进（Self-progression）**：确认点**内部**的自主工作——用户批准方案后，模型自动执行工具链（读→写→验证→汇报）——模型自主，直到下一个确认点。
 
 **单一 PENDING 状态机**（2026-08-07 领域定论——**会话级（Conversation 聚合承载）**——所有确认点/授权卡统一——Task 只管任务级确认点，不承载 pending）：
 
 ```
 用户发起目标 ─→ 搭档确认目标(提议) ─→ 卡弹出【PENDING——等用户决策】
-    ├─ 目标确认卡 / 执行确认卡 / 达成确认卡（大阶段）
+    ├─ 目标确认卡 / 方案确认卡 / 解决确认卡（大阶段）
     └─ 授权卡（小阶段——但不批准则后续无法继续，影响大阶段）
                                         │
           pending 下模型动作全部无效（做了等于白做——不执行不生效——所有工具都不放行）
@@ -93,16 +94,16 @@ Task = Goal → Execution → Achievement
 | **授权卡也 pending** | Codex `ExecApprovalRequirement`（工具批准阻塞）+ OpenHands confirmation——对齐（工具批准=等待——影响后续推进）|
 
 ```
-目标澄清 ─[用户确认目标]→ 能力检查/执行方案 ─[用户确认执行]→ 动手产出(自推进工具链) → 达成汇报 ─[用户确认解决]→ 收敛
+目标澄清 ─[用户确认目标]→ 能力检查/方案提议（PlanProposal）─[用户批准方案]→ 动手产出(自推进工具链) → 完成声明（+证据）─[用户证据对账确认解决]→ 收敛（2026-08-16 语义）
 ```
 
 **结构性保证**：确认点未确认 → 领域状态不转换 → 模型活动边界被限制在该确认点——不是事后拦截，是状态机未到下一态。
 
-### 4.3 执行保障（TurnExecutionPolicy）
+### 4.3 推进保障（ProgressGuarantee——2026-08-16 重设计，原执行保障/TurnExecutionPolicy）
 
 确认后的执行保障——防止「只说不做」（坑 80 原意延续）：
 
-- **强制产出（forceTool）**：目标+执行已确认、尚无产出 → 强制模型必须调用工具产出——模型不能只输出承诺文本
+- **推进保障（ProgressGuarantee——2026-08-16 重设计，原 forceTool）**：目标+方案已确认、无任何推进 → 强制模型推进（产出/提议/证据/提问——不逼调工具）——模型不能只输出承诺文本
 - **失败感知**：上一轮工具执行失败（bash exit≠0 / write 失败）→ 释放强制——模型可停下诊断修正（错误回填模型是修正的前提；required 压制诊断 → 重试失败命令死循环——已知反模式）
 - **任务完成度**：计划文件全部写完 或 用户确认达成 → 释放强制——模型可收敛（写 1 个文件 ≠ 任务达成；required 模式模型被逼工具无法输出达成文本——计划写完即释放）
 
@@ -164,9 +165,9 @@ Task = Goal → Execution → Achievement
 - **交付 ≠ 解决**：产物交付 ≠ 用户确认解决——验收对照逐项打勾 → 用户「确认关闭」= 问题终态（交付后可继续调整）
 - **快照回滚**：写前快照（`.nf-bak`）——交付不满意可回滚恢复原样
 
-**DoD 对齐（2026-08-15 裁决——V2）**：动手前「用用户的话复述问题 + 验收标准」为 **V2 首项**（模型【验收标准】结构化解析 → 交付包 acceptance 生产写入）；V1 以**达成确认卡 + 交付包**（产物清单/验收对照保留位）为可验证闭环。
+**DoD 对齐（2026-08-15 裁决——V2）**：动手前「用用户的话复述问题 + 验收标准」为 **V2 首项**（模型【验收标准】结构化解析 → 交付包 acceptance 生产写入）；V1 以**解决确认卡（证据对账）+ 交付包**（产物清单/验收对照保留位）为可验证闭环。
 
-**与确认点的关系**：达成确认卡（用户确认解决）是交付确认的入口——模型汇报达成 → 交付包呈现（产物/验收对照）→ 用户「已解决」= 确认关闭（终态）/「还要改」= 继续调整。
+**与确认点的关系**：解决确认卡（用户确认解决——完成声明+证据对账）是交付确认的入口——模型完成声明（带证据）→ 交付包呈现（产物/验收对照）→ 用户「已解决」= 确认关闭（终态）/「还要改」= 继续调整。
 
 ### 4.8 授权与信任（授权架构 v4——工具批准机制）
 
@@ -194,7 +195,7 @@ id / title / status / updatedAt
 ◆ snapshot: ProblemSnapshot（goal / decisions / authorized / pending——断点续做上下文）
 ```
 
-- **与 Task 的关系**：Problem = 会话外问题记录（跨会话/复跑）；Task = 会话内执行单元（目标驱动状态机）——**Problem 1—N Task**（复跑 = 同一 Problem 新 Task）；TaskResolved（达成确认）→ Problem closed（终态——handleConfirmClosed 联动）
+- **与 Task 的关系**：Problem = 会话外问题记录（跨会话/复跑）；Task = 会话内执行单元（目标驱动状态机）——**Problem 1—N Task**（复跑 = 同一 Problem 新 Task）；TaskResolved（解决确认——证据对账通过）→ Problem closed（终态——handleConfirmClosed 联动；2026-08-16：对账通过才允许关闭）
 - **状态机（7 态——与实现 ProblemStatus 一致）**：understanding → awaiting-plan → executing → awaiting-input → delivered → closed（终态）；failed-recoverable（异常可恢复）——状态推进与确认点联动（目标确认 → goal 回写；授权 → authorized 追加；交付关闭 → closed）
 - **触发**：SendInstruction（用户消息 → 创建/复跑同标题）；GoalConfirmed / ToolApproved / DeliveryClosed 回写快照
 - **仓库**：IProblemRepository（localStorage——上限 20，V1 已落地）
@@ -205,11 +206,23 @@ id / title / status / updatedAt
 
 | 服务 | 职责 | 不变式 |
 |---|---|---|
-| **TurnExecutionPolicy** | 输入（确认状态/产出/失败/完成度）→ forceTool 决策 | 确认后无产出强制；失败释放；计划写完/达成确认释放 |
-| **ProgressionGate**（推进门控）| 确认点状态机——当前确认点 → 模型活动边界 | 未确认目标不执行；未确认执行不动手；未确认解决不收敛 |
+| **ProgressGuarantee**（2026-08-16 重设计，原 TurnExecutionPolicy）| 输入（确认状态/推进/失败/完成度/pending）→ tool_choice 决策 | 确认后无推进强制（产出/提议/证据）；失败释放；pending 恒不强制；计划写完/解决确认释放 |
+| **ProgressionGate**（推进门控）| 确认点状态机——当前确认点 → 模型活动边界 | 未确认目标不执行；未批准方案不动手；未确认解决不收敛 |
 | **CapabilityChecker** | 能力视图（从环境推导）+ 缺失清单 + Ledger 回填 | 环境单源；能力是视图；执行结果回填 |
 | **PlannedFiles**（计划清单）| 批准文件集合——写文件边界 | 追加不覆盖；清单显式可见；拒绝带边界 |
 | **TimelineLogger** | 会话所有步骤统一记录 | 时间顺序完整（用户/搭档/工具/授权/确认/状态）|
+| **deriveDecisionPoint**（2026-08-16 新增——决策点触发权在系统）| 状态×提议×动作属性 → 决策点（goal/plan/approval/resolution/none）| 决策点=确定性纯函数（同一输入同一决策点——模型措辞不参与）|
+| **sessionGate**（2026-08-16 新增）| 会话状态冻结判定（pending/确认点——单一 PENDING）| pending 时任何动作无效（A0 §3.2/§3.4）|
+| **actionGate**（2026-08-16 新增——动作属性门控）| 动作属性分级（readonly/network-read/in-plan/out-of-plan/hazardous）→ allow/ask/deny + risk | SessionGate 优先于 ActionGate（A0 §3.5b）|
+| **classifyReadonly**（2026-08-16 新增，原 classifyAction 升级）| 只读判定（命令头白名单/链递归/git 子命令/网络只读）| 判定依据可审计（basis 字段）；main/renderer 同源 |
+| **verifyCompletion**（2026-08-16 新增——无证据不对账）| 完成声明证据校验（系统代跑只读命令核验/diff 系统派生）| 证据不足/未核验 → 不进入解决决策点（A0 §4.2）|
+| **parsePlanProposal**（2026-08-16 新增，原 parseExecutionPlan）| 【执行方案】块结构化解析（文件+假设+验证计划）| 路径合法性过滤（坑 102）；解析失败降级（不弹卡+回填引导）|
+| **parseCompletionClaim**（2026-08-16 新增）| 【已达成】块结构化解析（声明+证据）| 解析失败降级（回填补证据引导）|
+| **derivePlannedFiles**（2026-08-16 新增——不变量 6）| plannedFiles = state.plannedFiles ∪ PlanProposal.files（trustPath 规范化）| 单一来源（只由已确认 PlanProposal 派生；追加语义 A0 §5）|
+| **canExecute**（2026-08-16 明确列示——组合门控）| sessionGate × actionGate 组合判定 | 会话冻结优先（A0 §3.5/§3.5b）|
+| **shouldStopContinuation**（2026-08-16 明确列示——续聊停止）| pending 非 none 即停（与 canExecute 同源）| 卡在任意消息都停续聊（坑 103）|
+
+> 2026-08-16 第 11 轮审计 #1：服务表补齐新设计 §3.3 全部服务（原 5 服务未覆盖 deriveDecisionPoint 等 10 个——S1 实现按本表+设计文档 §3.3）
 
 ## 6. 领域事件（Domain Events）
 
@@ -217,15 +230,20 @@ id / title / status / updatedAt
 |---|---|---|
 | GoalProposed（目标提议）| 模型澄清后给出目标 | 目标文本 |
 | **GoalConfirmed / GoalRejected** | 用户确认目标 / 重新描述 | 目标文本 |
-| ExecutionPlanProposed | 模型给出执行方案 | 方案/文件清单 |
-| **ExecutionConfirmed / ExecutionRejected** | 用户确认执行 / 修改方案 | — |
+| ExecutionPlanProposed（历史——2026-08-16 起由 proposal.plan 替代）| 模型给出执行方案 | 方案/文件清单 |
+| **PlanConfirmed / PlanRejected**（2026-08-16 更名，原 ExecutionConfirmed/Rejected）| 用户批准方案 / 修改+原因 | — |
 | PlanApproved（计划批准）| 用户批准文件清单 | 文件清单（追加）|
 | ToolApproved / ToolRejected | 用户批准/拒绝工具 | 工具名+参数 |
 | ToolExecuted / ToolFailed | 工具执行结果 | 名称/成功/错误 |
 | AchievementProposed（达成提议）| 模型汇报达成 | 产物说明 |
-| **AchievementConfirmed / AchievementRejected** | 用户确认解决 / 还要改 | — |
+| **ResolutionConfirmed / ResolutionRejected**（2026-08-16 更名，原 AchievementConfirmed/Rejected）| 用户证据对账确认解决 / 还要改+原因 | — |
 | CapabilityChecked | 能力检查 | 能力视图 |
 | EnvironmentInjected | 环境快照注入 | 环境状态 |
+| **proposal.goal / proposal.plan / proposal.completion**（2026-08-16 新增）| 模型输出结构化提议（GoalProposal/PlanProposal/CompletionClaim——完整内容快照）| 提议值对象全量 |
+| **decision.requested**（2026-08-16 新增）| 决策点出现（kind + decisionContent 快照——呈现内容完整审计）| 决策点内容 |
+| **decision.resolved**（2026-08-16 新增）| 用户决策（confirm / reject + RejectReason）| 决策 + 原因 |
+| **completion.evidence_missing**（2026-08-16 新增）| 完成声明证据不足（回填引导补证据）| missing 清单 |
+| **gate.denied**（2026-08-16 新增）| ActionGate deny（高风险动作被机制拦——非 ask）| 动作属性 |
 
 ## 7. 命令清单（Commands——用户/搭档/系统动作）
 
@@ -234,12 +252,12 @@ id / title / status / updatedAt
 | `SendInstruction` | 用户 | 发出指令，触发目标澄清 |
 | `ConfirmGoal` | 用户 | 确认目标（推进到执行）|
 | `RejectGoal` | 用户 | 重新描述目标 |
-| `ConfirmExecution` | 用户 | 确认执行方案（推进到动手）|
-| `RejectExecution` | 用户 | 修改方案 |
+| `ConfirmPlan`（2026-08-16 更名，原 ConfirmExecution）| 用户 | 确认方案（推进到动手）|
+| `RejectPlan`（2026-08-16 更名，原 RejectExecution）| 用户 | 修改方案（带原因——RejectReason）|
 | `ApprovePlan` | 用户 | 批准文件清单（追加）|
 | `ApproveTool` / `RejectTool` | 用户 | 批准/拒绝工具执行 |
-| `ConfirmAchievement` | 用户 | 确认解决（收敛）|
-| `RejectAchievement` | 用户 | 还要改（继续执行）|
+| `ConfirmResolution`（2026-08-16 更名，原 ConfirmAchievement）| 用户 | 确认解决（证据对账通过——收敛）|
+| `RejectResolution`（2026-08-16 更名，原 RejectAchievement）| 用户 | 还要改（带原因——继续执行）|
 | `InvokeTool` | 搭档 | 调用工具（确认点内自推进）|
 | `AskForConfirmation` | 搭档 | 到达确认点——请求用户确认（渲染确认卡）|
 
@@ -248,10 +266,10 @@ id / title / status / updatedAt
 | 术语 | 定义 |
 |------|------|
 | 目标驱动（Goal-driven）| 任务围绕「达成什么」组织——目标确认是推进的原点 |
-| 确认点（Confirmation Point）| 推进的门槛——目标/执行/达成三处用户确认 |
+| 确认点（Confirmation Point）| 推进的门槛——目标/方案/解决三处用户确认（2026-08-16 更名：执行→方案、达成→解决）|
 | 推进（Progression）| 跨确认点的状态转换——唯一通道是用户确认 |
 | 自推进（Self-progression）| 确认点内部的模型自主工作（工具链）|
-| 执行保障（Execution Policy）| 确认后防只说不做的 forceTool 决策 |
+| 推进保障（Progress Guarantee）| 确认后防只说不做的推进决策（强制对象=推进≠调工具——2026-08-16）|
 | 计划清单（Planned Files）| approve-files 批准的可写文件集合 |
 | 能力视图（Capability View）| 从环境推导的能力状态（ready/missing/failed）|
 | 环境快照（Environment Snapshot）| 一次检测的事实（runtime/依赖/工具链）——注入模型 |
