@@ -14,32 +14,34 @@
 | `reasoning_effort` ★ | `'high'` / `'max'`（仅 thinking=enabled 时有效） |
 | `messages` | OpenAI 兼容格式 |
 | `tools` | OpenAI 兼容格式 |
-| `tool_choice` ★ 2026-08-07 | `'required'`（执行保障 forceTool）/ `'auto'`（澄清/等确认/失败诊断） |
+| `tool_choice` ★ 2026-08-07（语义 2026-08-16 更新——推进保障）| `'required'`（确认后**无推进**时强制模型推进——产出/提议/证据，非强制调工具）/ `'auto'`（澄清/等用户决策/失败诊断） |
 | `stream` | SSE 流式输出 |
 | `max_tokens` | 最大输出 token |
 
-### 1.1 forceTool 传递（执行保障——无阶段目标驱动核心链路）
+### 1.1 推进保障传递（ProgressGuarantee——无阶段目标驱动核心链路；2026-08-16 重设计，原 forceTool/执行保障）
 
 ```
-TurnExecutionPolicy（领域层——确认点状态 + 产出 + 失败 + 完成度）
-    │ 决策 { forceTool: boolean; reason: string }
+ProgressGuarantee（领域层——确认状态 + 推进 + 失败 + 完成度 + pending）
+    │ 决策 { mode: 'require-advance' | 'require-action' | 'auto'; reason: string }
     ▼
-Gateway.buildRequest(forceTool)
-    │ forceTool=true → tool_choice: 'required'（模型必须调工具——防只说不做）
-    │ forceTool=false → tool_choice: 'auto'（澄清/等确认/失败诊断——模型自由）
+Gateway.buildRequest(mode)
+    │ require-advance/require-action → tool_choice: 'required'
+    │   ——强制对象是「推进」（产出/结构化提议/证据/提问），不是「必须调工具」
+    │ auto → tool_choice: 'auto'（澄清/等用户决策/失败诊断——模型自由）
     ▼
 DeepSeek API
 ```
 
-| 场景 | forceTool | tool_choice | 理由 |
-|------|-----------|-------------|------|
-| 目标未确认 | false | auto | 澄清（模型自由问答）|
-| 执行未确认 | false | auto | 等确认卡（模型只给方案）|
-| 确认+无产出 | **true** | **required** | 防只说不做（强制动手）|
-| 工具失败 | false | auto | 释放诊断（模型停下修正——required 压制诊断是反模式）|
-| 计划写完/达成确认 | false | auto | 收敛（模型可停下汇报）|
+| 场景 | mode | tool_choice | 理由 |
+|------|------|-------------|------|
+| pending（等用户决策——授权卡/确认卡悬挂）| auto | auto | 模型停住等用户（pending 恒不强制——三判定器同源）|
+| 目标未确认 | auto | auto | 澄清（模型自由问答）|
+| 方案未确认 | auto | auto | 等方案批准卡（模型只给方案）|
+| 目标+方案确认、无任何推进 | **require-advance** | **required** | 防只说不做——强制推进（产出/提议/证据；模型可输出结构化提议与提问，不逼调工具）|
+| 工具失败 | auto | auto | 释放诊断（模型停下修正——required 压制诊断是反模式）|
+| 计划写完/解决确认 | auto | auto | 收敛（模型可停下汇报/对账）|
 
-**不变式**：forceTool 决策只来自领域层 TurnExecutionPolicy（网关不自行判定——单一事实来源）。
+**不变式**：tool_choice 决策只来自领域层 ProgressGuarantee（网关不自行判定——单一事实来源）；required 语义 = 强制推进 ≠ 强制调工具（2026-08-16 推进保障重设计——A0 §4/`intent-confirmation-domain-design.md` §3.3）。
 
 ### ThinkingLevel → API 映射 ★
 

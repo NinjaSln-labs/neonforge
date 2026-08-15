@@ -103,6 +103,20 @@ neonforge/
 
 ---
 
+## 重构期文档（2026-08-16 补——第 5 轮产品文档审计 #4）
+
+**意图确认领域模型重设计（进行中）**——重构期权威文档（scratch，不入 docs 索引）：
+
+| 文档 | 作用 |
+|------|------|
+| `.scratch/neonforge-v1/intent-confirmation-domain-design.md` | **重构期设计权威**（§1-9：决策点触发权/完成证据/PlanProposal/RejectReason/推进保障/双维门控/测试域 DDD；S0-S7 分阶段）|
+| `.scratch/neonforge-v1/intent-confirmation-doc-audit.md` | 设计文档五轮审计闭环（1C+16M+14m 全修）|
+| `analysis/competitor-crawler/reports/neonforge-intent-confirmation-research.md` | 三视角调研依据（9 竞品+14 源码+20+ 学术）|
+| `docs/PRODUCT-DOC-AUDIT.md`（第 5 轮）| 产品文档审计（07 指标/04 索引修复）|
+
+> 冲突裁决：重构期实现语义以 scratch 设计文档为准（领域/产品文档同步已完成——A0 v4.0 / D0 v2.2 / 07 v1.1 / 07-api-gateway 推进保障同步）；本索引的旧 Phase 1-3 为 0-1 初始搭建序，重构按设计文档 S0-S7 执行。
+> 历史文档标注（2026-08-16 第 6/9 轮审计）：`product/06-product-design-audit.md`（07-31）与 `domain/08-domain-design-audit.md`（M1-M10）为历史审计——裁决已回写 A0，与新设计无冲突，仅作追溯参考；`domain/01-reference-analysis.md`（07-30）为历史竞品技术分析——无确认语义冲突（新调研引用见本表上方）。
+
 ## 工程实现顺序建议
 
 ### Phase 1 — 骨架（Day 1-3）
@@ -128,7 +142,7 @@ neonforge/
 
 11. 实现产物区（工程/产物 Tab）+ 问题台账（`product/02-components.md` §6, §7）
 12. 实现 Diff 审核视图（`product/02-components.md` §8, `product/01-user-flows.md` Flow 6）
-13. 实现无阶段确认驱动状态机（目标确认/执行确认/达成确认卡——`product/01-user-flows.md` Flow 5）
+13. 实现无阶段确认驱动状态机（目标确认/执行确认/达成确认卡——`product/01-user-flows.md` Flow 5）〔2026-08-16 标注：本步为 0-1 初始搭建序的旧语义——重构期以 `intent-confirmation-domain-design.md` S0-S7 为准（方案确认/解决确认+证据对账/触发权在系统），冲突处以重构期表裁决为准〕
 14. 实现任务列表 + 多任务（`product/02-components.md` §5, `product/01-user-flows.md` Flow 7）
 
 ### Phase 5 — 完善（Day 22-28）
