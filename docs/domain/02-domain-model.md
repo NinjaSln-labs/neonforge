@@ -110,8 +110,8 @@ Task = Goal → Execution → Achievement
 
 模型可能偏离批准范围（写计划外文件）——**约束由宿主强制执行，不依赖模型自律**（行业共识：Claude Code「enforced by the host, not the model」/ Codex rules / Aider fnames）：
 
-- **计划清单（PlannedFiles）**：plan_approval 批准的文件集合——模型只能写清单内文件——**清单对模型显式可见**（系统提示注入——模型知道边界）
-- **补充语义**：清单是**追加**的（分批 plan_approval 不覆盖前批——Codex rules AppendRule 同理）
+- **计划清单（PlannedFiles）**：approve-files 批准的文件集合——模型只能写清单内文件——**清单对模型显式可见**（系统提示注入——模型知道边界）
+- **补充语义**：清单是**追加**的（分批 approve-files 不覆盖前批——Codex rules AppendRule 同理）
 - **拒绝回填边界**：写清单外文件被拒 → 拒绝信息带清单内容（「X 不在批准清单（批准的是：A/B/C）」）——模型能回到边界内，不重复尝试
 
 ### 4.5 能力与环境（Capability / Environment）
@@ -233,7 +233,7 @@ Task = Goal → Execution → Achievement
 | 推进（Progression）| 跨确认点的状态转换——唯一通道是用户确认 |
 | 自推进（Self-progression）| 确认点内部的模型自主工作（工具链）|
 | 执行保障（Execution Policy）| 确认后防只说不做的 forceTool 决策 |
-| 计划清单（Planned Files）| plan_approval 批准的可写文件集合 |
+| 计划清单（Planned Files）| approve-files 批准的可写文件集合 |
 | 能力视图（Capability View）| 从环境推导的能力状态（ready/missing/failed）|
 | 环境快照（Environment Snapshot）| 一次检测的事实（runtime/依赖/工具链）——注入模型 |
 | 会话时间线（Session Timeline）| 单会话所有步骤统一日志 |

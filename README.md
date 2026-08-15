@@ -1,12 +1,10 @@
 # NeonForge
 
-> 为 DeepSeek 打造的 **AI 问题工作台**：说出你当前的问题，拿到结果。一切能被数字工具解决的：文件整理、小工具、网站、系统修复、0-1 交付。
+> **为 DeepSeek 打造的 AI 问题工作台**——说出你当前的问题，拿到结果。一切能被数字工具解决的：文件整理、小工具、网站、系统修复、0-1 交付。
 
-NeonForge 不是 IDE，也不是 Chatbot。你用自然语言描述问题，工程/设计/编排由它内在推进——**分步授权**、**结果可验证**、超出数字能力时交付产物 + 分步指导（不装能、不半吊子）。
+NeonForge **不是 IDE，也不是 Chatbot**。你用自然语言描述问题，工程/设计/编排由它内在推进——每一步都有**确认卡**把关、**分步授权**、**结果可验证**；超出数字能力时交付数字产物 + 分步指导（不装能、不半吊子）。
 
-**谁在用**：不会写代码的人（说出问题 → 拿到结果 + 指导）· 开发者（异常修复 / 0-1 交付，授权闭环）。
-
-**核心流**：`说出问题 → 澄清 → 分步授权 → 解决 → 交付（产物 / 修复闭环）→ 反馈 + 指导继续`
+**谁在用**：不会写代码的人（说出问题 → 被解决 → 拿到产物 + 指导）· 开发者（异常修复 / 0-1 交付，授权闭环）。
 
 > English: [README.en.md](README.en.md)
 
@@ -16,15 +14,38 @@ NeonForge 不是 IDE，也不是 Chatbot。你用自然语言描述问题，工�
 
 ---
 
+## 它如何工作
+
+```
+说出问题 → 澄清目标（候选按钮 / 自由输入）→ 【目标确认卡】→ 能力检查 → 执行方案 → 【执行确认卡】
+    → 动手产出（强制保障：说做就做，防「只说不做」）→ 达成汇报 → 【达成确认卡】→ 交付产物 + 反馈
+```
+
+- **确认卡 = 推进门槛**：目标 / 执行 / 达成三处结构化确认（确认 / 拒绝按钮）——未确认时模型停在确认点，不越级、不白做
+- **分步授权**：写文件、执行命令逐项授权（风险明示 + 写前快照可回滚）；「允许并记住」免去重复打断；高危命令永远单独确认
+- **宿主强制边界**：模型只能写批准清单内的文件（approve-files 批量授权），清单外写入被拒并提示边界
+- **问题 = 一等公民**：问题台账 + 会话快照（目标 / 已决策 / 已授权 / 待办）+ 断点续做 + 复跑
+
 ## 功能亮点
 
 1. **KV 缓存预热**：打开项目即预热提示前缀，首字延迟 ~0.1s（真实 API 实测：冷启动 275ms → 预热命中 118ms）
-2. **精准上下文（1M 预算思路）**：真实 LSP（定义/引用/类型/诊断）+ CodeRAG 关键词检索 + `@引用` 文件注入——不倾倒垃圾 token
-3. **快照与回滚**：每次写入前快照（`.nf-bak`）→ 可一键回滚；交付包批量接受
-4. **信任阶梯授权**：L1 观察 → L2 建议 → L3 操作（逐项授权 + 风险明示 + 写前备份）→ L4 委托（低危自动授权，可随时撤销）；疲劳防护（批量合并授权，高危命令永远单独确认）；任何时刻可停止/撤销
-5. **问题 = 一等公民**：问题台账 + 会话快照（目标/已决策/已授权/待办）+ 断点续做 + 复跑
+2. **精准上下文**：真实 LSP（定义 / 引用 / 类型 / 诊断）+ CodeRAG 关键词检索 + `@引用` 文件注入——不倾倒垃圾 token
+3. **快照与回滚**：每次写入前快照（`.nf-bak`），工具卡一键回滚；交付包批量接受
+4. **信任阶梯授权**：L1 观察 → L2 建议 → L3 操作（逐项授权）→ L4 委托（低危自动授权，可撤销）；疲劳防护（批量合并授权）；任何时刻可停止 / 撤销
+5. **会话级单一 PENDING**：确认卡 / 授权卡统一「等用户决策」状态机——用户决策是下一个状态的唯一输入
 6. **长对话不丢**：自动压缩（真实摘要 + 保留最近 20 条）
-7. **单实例**：重复启动聚焦已有窗口
+7. **服务生命周期托管**：起服务 / 查服务 / 停服务专用工具（自动分配端口、宿主端口保护、进程退出清理）
+
+## 代理能做什么（工具面）
+
+| 工具 | 用途 |
+|------|------|
+| read / write / edit / bash | 核心四件套（write/edit 受执行确认 + 批准清单双重边界；bash 只读命令自动放行） |
+| search + LSP（find_definition / find_references / get_type_info / get_diagnostics / get_imports / get_call_chain） | 定位 / 查询 / 诊断——零 token 确定性上下文 |
+| check-capability | 能力检测（runtime / 依赖 / 工具链）——环境快照注入模型，开箱即知 |
+| approve-files | 批量授权（1-N 文件，追加语义）——批准后清单内写入自动放行 |
+| start-server / check-server / stop-server | 开发服务器生命周期（自动分配动态端口，宿主 5173/5175 保留） |
+| open | 打开网页（默认浏览器，仅 http/https） |
 
 ## 快速上手
 
@@ -38,8 +59,8 @@ npm run dev:electron       # 完整应用（dev 模式，连接 :5173）
 ```
 
 - 首次启动在「设置」中粘贴 API Key（Key 存系统级 `safeStorage`，绝不上传）
-- 「打开已有项目」→ 在对话里说出问题 → 分步授权 → 拿到交付结果
-- 「从零开始」→ 自动创建项目骨架 → 0-1 交付
+- **打开已有项目** → 在对话里说出问题 → 确认卡 + 分步授权 → 拿到交付结果
+- **从零开始** → 自动创建项目骨架 → 0-1 交付
 
 ### 打包安装
 
@@ -48,11 +69,50 @@ cd apps/desktop
 npm run dist               # 产出 release/（macOS: .dmg + .zip；win: .nsis；linux: AppImage）
 ```
 
-> **ExFAT/外置卷已知问题**：electron-builder 在 ExFAT 卷打包会生成损坏的 asar（`chromium-pickle` offset 越界）——仓库在 ExFAT 卷时输出到本地卷：`npm run build && npx electron-builder -c.directories.output=/tmp/nf-release`
+> **ExFAT/外置卷已知问题**：electron-builder 在 ExFAT 卷打包会生成损坏的 asar（`chromium-pickle` offset 越界）——输出到本地卷：`npm run build && npx electron-builder -c.directories.output=/tmp/nf-release`
 >
-> macOS 未签名版本首次打开需右键 → 打开（Gatekeeper 提示）。代码签名/公证列入后续路线。
+> macOS 未签名版本首次打开需右键 → 打开（Gatekeeper 提示）。代码签名 / 公证列入后续路线。
 
-### 测试
+## 仓库结构
+
+```
+neonforge/
+├── apps/desktop/               # Electron 桌面应用（V1 全量）
+│   ├── src/domain/             # 领域层（纯逻辑——Task 聚合 / 执行策略 / 停滞检测，L1 可测）
+│   ├── src/main/               # 主进程（Gateway / ToolRegistry / 环境能力 / 时间线）
+│   ├── src/renderer/           # React 应用层（对话 / 确认卡 / 授权卡 / 工具卡）
+│   ├── tests/                  # L1 单元 + L3 交互 + L5 视觉
+│   └── e2e-*.mjs               # L4 真实 API E2E（需 NF_TEST_KEY）
+├── docs/product/               # 产品设计（D0-D9）
+├── docs/domain/                # 领域设计（A0-A9，A0 = 实现权威）
+└── demo/                       # 演示录屏
+```
+
+## 架构
+
+**技术栈**：Electron 36 + React 19 + TypeScript + Vite + esbuild + Monaco（产物查看）+ Vitest + Playwright。V1 网关仅接 DeepSeek（`toDeepSeekParams` 单点收敛，V2 多模型只动网关）。
+
+**领域架构（无阶段 · 目标驱动）**：
+
+```
+Conversation BC（核心域） — 目标状态机 · 确认点（目标/执行/达成确认卡）· 执行保障（forceTool）· 会话级单一 PENDING
+Capability BC            — 环境检测（事实来源）· 能力视图（从环境推导）· Ledger 回填（自学习）
+Workspace BC             — 项目文件 · 计划清单（宿主强制边界）· 授权裁决 + 任务级信任
+Delivery BC              — 交付包（产物+验收对照+确认关闭）· DoD 对齐 · 快照回滚
+Session Timeline BC      — 全步骤统一记录（可观测性——JSONL）
+```
+
+领域层为纯函数（无 React 依赖），L1 单测锁定状态机 8 组合穷举与门控优先级。
+
+## 文档
+
+| 文档 | 说明 |
+|------|------|
+| `docs/product/00-product-design.md`（D0 v2.1） | 产品设计总纲（定位 / 用户流 / 组件 / 指标） |
+| `docs/domain/00-domain-authority.md`（A0 v3.0） | 领域实现权威（确认点 / 执行保障 / 宿主边界） |
+| `docs/product/`、`docs/domain/` | 完整索引（D0-D9 / A0-A9） |
+
+## 测试
 
 ```bash
 npx vitest run                            # L1 领域逻辑（257）
@@ -62,46 +122,29 @@ npx playwright test                       # L5 视觉 + L3
 NF_TEST_KEY=<key> node e2e-suite.mjs      # L4 真实 API E2E（前置：mkdir -p /tmp/nf-e2e-test）
 ```
 
+CI（GitHub Actions）：push 自动 L1+L2+L3；L4 需仓库 Secret `NF_TEST_KEY`（手动触发）。
+
 ### 镜像（Electron 下载失败时）
 
 ```bash
 ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ node install.js
 ```
 
-## 技术栈与架构
+## Roadmap
 
-**技术栈**：Electron 36 + React 19 + TypeScript + Vite + esbuild + Monaco（产物查看）+ Vitest + Playwright。V1 网关仅接 DeepSeek。
-
-**领域架构（无阶段·目标驱动）**：
-
-```
-Conversation BC（核心域） — 目标状态机 · 确认点（目标/执行/达成确认卡）· 执行保障（forceTool）· 会话级单一 PENDING
-Capability BC            — 环境检测（事实来源）· 能力视图（从环境推导）
-Workspace BC             — 项目文件 · 计划清单（宿主强制边界）· 授权裁决 + 任务级信任
-Delivery BC              — 交付包（产物+验收对照+确认关闭）· DoD 对齐 · 快照回滚
-Session Timeline BC      — 全步骤统一记录（可观测性）
-```
-
-## 文档
-
-| 文档 | 说明 |
-|------|------|
-| `docs/product/00-product-design.md`（D0） | 产品设计总纲 |
-| `docs/domain/00-domain-authority.md`（A0） | 领域实现权威 |
-| `.agents/product-marketing.md` | 定位 / ICP / 差异化 |
-
-完整索引：`docs/product/`（D0-D9）与 `docs/domain/`（A0-A9）。
+- **V1（当前）**：DeepSeek-only · 单会话 · 本地优先 · 信任阶梯授权 · 0-1 交付
+- **V2 方向**：多模型网关（网关接口已按单点收敛设计）· 插件体系（内置插件注册表已就绪）· 问题台账云端同步 / 多设备 · 代码签名与公证
 
 ## 已知限制（V1）
 
-- **打包版 LSP 降级**：dev 模式 LSP 完整可用；打包版若系统未装 `typescript-language-server` 则 LSP 工具提示未连接——对话/工具/交付主链路不受影响
-- macOS 未签名（见上）；Windows/Linux 打包目标已配置未实测
+- **打包版 LSP 降级**：dev 模式 LSP 完整可用；打包版若系统未装 `typescript-language-server` 则 LSP 工具提示未连接——对话 / 工具 / 交付主链路不受影响
+- macOS 未签名（见上）；Windows / Linux 打包目标已配置未实测
 - 单实例锁按应用作用域；测试环境注意残留实例（见 CI 脚本）
 
 ## 贡献指南
 
 1. Fork + 新分支（`feat/xxx` 或 `fix/xxx`）
-2. 改动前先读 `docs/domain/00-domain-authority.md`（A0 实现权威）
+2. 改动前先读 `docs/domain/00-domain-authority.md`（A0 实现权威）与 `docs/product/00-product-design.md`（D0）
 3. 改动后质量链全绿再提 PR：`npx vitest run` + `npx tsc -p tsconfig.json --noEmit` + 相关 L3/L5
 4. 安全约定：Key 不落盘不上传；写操作先快照；IPC 参数校验
 
