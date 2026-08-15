@@ -72,6 +72,8 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
   }
 
   const rejectToolCall = (calls: ToolCallMsg[], idx: number): void => {
+    // 2026-08-15 DDD 重建：授权拒绝事件（G2 缺口——原无打点，卡生命周期不可回放）
+    tlog('tool.rejected', { name: calls[idx]?.name, args: calls[idx]?.args }, 'system')
     setMessages((prev) => {
       const last = prev[prev.length - 1]
       if (!last || last.role !== 'assistant') return prev

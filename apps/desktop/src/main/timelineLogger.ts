@@ -5,9 +5,10 @@
 // 2026-08-08 会话级文件：renderer 进入对话（ConversationPanel 挂载）生成 UUID 会话 ID → timeline-<会话ID>.jsonl
 // （每会话独立文件——不再按日期聚合所有会话；无会话 ID（启动页阶段/单元测试）→ 降级按日期文件）
 
-import { appendFileSync, mkdirSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
+import type { TimelineEvent, TimelineLogger, TimelineEventType } from '../domain/timeline.js'
 
 // 会话内 seq（设计文档 §2.1：seq=会话内序号）——按会话隔离自增（原进程级计数器——多次启动 seq 冲突）
 const seqBySession = new Map<string, number>()
@@ -28,6 +29,8 @@ export function timelineFile(session?: string): string {
 // user-message / assistant-start / assistant-chunk（可选） / assistant-done / tool-call / tool-exec /
 // tool-result / tool-approval / goal-confirmed / exec-confirmed / status-change / stuck-escalate / error / interrupt
 // 2026-08-08 新增 card-shown：确认卡/授权卡弹出（用户「加一个确认/授权等卡弹出的点」）——detail: { card: 'goal-confirm'|'exec-confirm'|'achieve-confirm'|'approval'|'file-approval', name?, args? }
+// 2026-08-15 领域事件体系（DDD 重建——domain/timeline.ts）：新事件命名对齐 06 目录（task.*/plan.*/tool.*/session.*）；
+// 旧事件名保留兼容（向后可读），新接入统一走领域事件目录
 export function logTimeline(evt: {
   session?: string
   type: string
@@ -48,4 +51,31 @@ export function logTimeline(evt: {
     })
     appendFileSync(timelineFile(evt.session), line + '\n')
   } catch { /* 日志失败不影响运行 */ }
+}
+
+// === 2026-08-15 DDD 重建：TimelineLogger 领域服务实现（对齐 domain/timeline.ts 接口） ===
+// append = logTimeline（现有）；query = JSONL 顺序读 + 过滤（纯函数式——通用接入 A3 查询层）
+export const timelineLogger: TimelineLogger = {
+  append: (event) => logTimeline({ session: event.session, type: event.type, role: event.role, detail: event.detail }),
+  query: (filter) => {
+    try {
+      const file = timelineFile(filter.session)
+      const lines = readFileSync(file, 'utf8').split('\n').filter(Boolean)
+      const out: TimelineEvent[] = []
+      for (const line of lines) {
+        try {
+          const evt = JSON.parse(line) as TimelineEvent
+          if (filter.type) {
+            const types = Array.isArray(filter.type) ? filter.type : [filter.type]
+            if (!types.includes(evt.type as TimelineEventType)) continue
+          }
+          if (filter.from && evt.ts < filter.from) continue
+          if (filter.to && evt.ts > filter.to) continue
+          out.push(evt)
+          if (filter.limit && out.length >= filter.limit) break
+        } catch { /* 坏行跳过（JSONL 崩溃保留已写行——容忍） */ }
+      }
+      return out
+    } catch { return [] }
+  }
 }

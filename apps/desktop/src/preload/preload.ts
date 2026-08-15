@@ -47,7 +47,10 @@ contextBridge.exposeInMainWorld('neonforge', {
   // 2026-08-07 会话时间线（单会话所有步骤统一日志——用户/搭档/工具/授权/状态——分析一步到位）
   timeline: {
     log: (evt: { session?: string; type: string; role?: 'user' | 'assistant' | 'system' | 'tool'; detail?: Record<string, unknown> }) =>
-      ipcRenderer.invoke('timeline:log', evt) as Promise<void>
+      ipcRenderer.invoke('timeline:log', evt) as Promise<void>,
+    // 2026-08-15 DDD 重建：时间线查询（通用接入——调试/分析）
+    query: (filter: { session?: string; type?: string | string[]; from?: string; to?: string; limit?: number }) =>
+      ipcRenderer.invoke('timeline:query', filter) as Promise<Array<{ ts: string; seq: number; session: string; type: string; role?: string; detail: Record<string, unknown> }>>
   },
   tools: {
     list: () => ipcRenderer.invoke('tools:list') as Promise<Array<{ name: string; source: 'core' | 'lsp'; requiresApproval: boolean; risk: 'none' | 'low' | 'high' }>>,
