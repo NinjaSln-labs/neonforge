@@ -164,6 +164,8 @@ Task = Goal → Execution → Achievement
 - **交付 ≠ 解决**：产物交付 ≠ 用户确认解决——验收对照逐项打勾 → 用户「确认关闭」= 问题终态（交付后可继续调整）
 - **快照回滚**：写前快照（`.nf-bak`）——交付不满意可回滚恢复原样
 
+**DoD 对齐（2026-08-15 裁决——V2）**：动手前「用用户的话复述问题 + 验收标准」为 **V2 首项**（模型【验收标准】结构化解析 → 交付包 acceptance 生产写入）；V1 以**达成确认卡 + 交付包**（产物清单/验收对照保留位）为可验证闭环。
+
 **与确认点的关系**：达成确认卡（用户确认解决）是交付确认的入口——模型汇报达成 → 交付包呈现（产物/验收对照）→ 用户「已解决」= 确认关闭（终态）/「还要改」= 继续调整。
 
 ### 4.8 授权与信任（授权架构 v4——工具批准机制）
@@ -181,6 +183,23 @@ Task = Goal → Execution → Achievement
 ### 4.7 环境注入（模型开箱即知）
 
 环境/能力快照**主动注入**系统提示（项目根/runtime/依赖/能力状态）——模型不需要探索确认环境（竞品：Aider 文件边界显式可见）。环境注入是事实来源的前置呈现。
+
+### 4.13 问题生命周期（Problem——会话外问题记录）
+
+**问题 = 一等公民**（产品承诺——断点续做/复跑）：Problem 是**跨会话**的问题记录（Conversation BC 子域实体——2026-08-15 补建模 M3——实现 problemStore 早已落地，模型此前遗漏）：
+
+```
+Problem (聚合根——问题生命周期——跨会话持久化)
+id / title / status / updatedAt
+◆ snapshot: ProblemSnapshot（goal / decisions / authorized / pending——断点续做上下文）
+```
+
+- **与 Task 的关系**：Problem = 会话外问题记录（跨会话/复跑）；Task = 会话内执行单元（目标驱动状态机）——**Problem 1—N Task**（复跑 = 同一 Problem 新 Task）；TaskResolved（达成确认）→ Problem closed（终态——handleConfirmClosed 联动）
+- **状态机（7 态——与实现 ProblemStatus 一致）**：understanding → awaiting-plan → executing → awaiting-input → delivered → closed（终态）；failed-recoverable（异常可恢复）——状态推进与确认点联动（目标确认 → goal 回写；授权 → authorized 追加；交付关闭 → closed）
+- **触发**：SendInstruction（用户消息 → 创建/复跑同标题）；GoalConfirmed / ToolApproved / DeliveryClosed 回写快照
+- **仓库**：IProblemRepository（localStorage——上限 20，V1 已落地）
+
+**断点续做语义（2026-08-15 裁决）**：V1 = 消息 + 问题台账（快照 goal/authorized）恢复；**Task 状态机不跨重启**（复开从澄清重新走——安全回退）——**V2 必做**：会话快照（含状态机）持久化（见 04 §5 ITaskRepository 标注）。
 
 ## 5. 领域服务（Domain Services）
 

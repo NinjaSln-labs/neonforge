@@ -110,6 +110,25 @@ clarifying ─[用户确认目标]→ goal-confirmed ─[用户确认执行]→ 
 
 不变式：环境是事实来源（能力不独立二次检测）；Ledger 失败降级/成功恢复。
 
+### 1.5 Problem 聚合（Conversation BC——问题生命周期，会话外持久化）
+
+**问题 = 一等公民**（2026-08-15 补建模 M3——实现 problemStore 早已落地，模型此前遗漏——见 02 §4.13）：
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Problem (聚合根——跨会话问题记录——断点续做/复跑)                 │
+│ id / title / status / updatedAt                               │
+│ ◆ snapshot: ProblemSnapshot     // 断点续做上下文（值对象）    │
+│   （goal / decisions / authorized / pending）                 │
+│ ◆ status: understanding | awaiting-plan | executing |         │
+│   awaiting-input | delivered | closed | failed-recoverable    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**关系**：Problem 1—N Task（复跑 = 同一 Problem 新 Task）；TaskResolved → Problem closed（handleConfirmClosed 联动——终态）。
+
+**不变式**：快照合并更新（不覆盖已有字段——updateProblemSnapshot）；closed 复开 → 复跑（新 Task 关联）；台账上限 20（防膨胀）。
+
 ## 2. 值对象（Value Objects）
 
 ### 2.1 Goal
@@ -239,6 +258,19 @@ interface TimelineEvent {
 }
 ```
 
+### 2.10 ProblemSnapshot（问题快照——值对象）
+
+```typescript
+interface ProblemSnapshot {
+  goal: string          // 目标（用户问题第一句——GoalConfirmed 回写）
+  decisions: string[]   // 已确认决策
+  authorized: string[]  // 已授权操作（按文件去重——TrustLadder 展示）
+  pending: string[]     // 待办/待确认
+}
+```
+
+> 实现：`problemStore.ts`（createProblem/updateProblemSnapshot——快照合并不覆盖）；2026-08-15 补建模 M3。
+
 ## 3. 领域服务（Domain Services）
 
 ### 3.1 TurnExecutionPolicy（执行保障策略）
@@ -335,10 +367,11 @@ interface TimelineLogger {
 
 | 端口 | 语义 |
 |------|------|
-| ITaskRepository | 任务加载/保存（断点续做）|
+| ITaskRepository | 任务加载/保存（断点续做）——**V1 未落地（2026-08-15 裁决降级）**：断点续做 = 消息 + 问题台账恢复，状态机（确认/计划清单/产出集）不跨重启（复开从澄清重新走——安全但体验回退）；**V2 必做**：会话快照（含状态机序列化）持久化——与 compaction 摘要上下文的基准一致性为 V2 实现前置约束 |
 | IConversationRepository | 会话持久化 |
 | IPlannedFilesRepository | 计划清单持久化 |
 | ITimelineRepository | 时间线追加/查询 |
+| **IProblemRepository** | **问题台账加载/保存（V1 已落地——problemStore localStorage、上限 20）** |
 
 ## 6. 类型汇总
 
