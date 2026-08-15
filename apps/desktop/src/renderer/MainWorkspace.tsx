@@ -100,11 +100,16 @@ export default function MainWorkspace({
     if (activeProblem) {
       setProblems((prev) => prev.map((p) => {
         if (p.id !== activeProblem) return p
-        // 2026-08-15 Q9：authorized 结构化（{tool, file}——原 `[工具] 路径` 字符串拼接；旧存档 string 兼容去重）
+        // 2026-08-15 Q9：authorized 结构化（{tool, file}——原 `[工具] 路径` 字符串拼接；旧存档 string 归一后比较）
         const entry = { tool: r.name, file: r.file }
-        const auth = (p.snapshot?.authorized ?? []) as Array<{ tool: string; file: string } | string>
-        const alreadyFile = auth.some((a) => typeof a === 'string' ? a.endsWith(`] ${r.file}`) : a.file === r.file)
-        return alreadyFile ? p : updateProblemSnapshot(p, { authorized: [...auth, entry] })
+        const rawAuth = (p.snapshot?.authorized ?? []) as Array<{ tool: string; file: string } | string>
+        const normalized = rawAuth.map((a) => {
+          if (typeof a !== 'string') return a
+          const m = a.match(/^\[(.+?)\] (.+)$/)
+          return m ? { tool: m[1], file: m[2] } : { tool: 'unknown', file: a }
+        })
+        const alreadyFile = normalized.some((a) => a.file === r.file)
+        return alreadyFile ? p : updateProblemSnapshot(p, { authorized: [...normalized, entry] })
       }))
     }
   }
