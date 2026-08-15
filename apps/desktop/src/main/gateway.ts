@@ -3,6 +3,7 @@
 // 网络侧收敛在 Main Process（A0 §6 裁决 D-M8）；renderer 经 IPC 调用
 
 export type ThinkingLevel = 'none' | 'basic' | 'medium' | 'high'
+import { TEST_HOOKS } from './testHooks.js'
 
 // 2026-08-07 T1 根因补强（regex-todo）：网关错误结构化透传——原 streamChat throw 文本
 // `gateway: http-${status}` → ipc 文本 → renderer 正则抠状态码（文本重建=打地鼠）；
@@ -108,14 +109,14 @@ export class DeepSeekGateway {
 
   // 非流式：验证 Key 用（max_tokens 最小）
   async validateKey(apiKey: string): Promise<{ ok: boolean; error?: string }> {
-    // 测试钩子：模拟断网/超时（不改系统网络）
-    if (process.env.NF_FORCE_NETWORK_ERROR === '1') {
+    // 测试钩子：模拟断网/超时（不改系统网络——Q7 集中 TEST_HOOKS）
+    if (TEST_HOOKS.forceNetworkError === '1') {
       return { ok: false, error: 'network' }
     }
-    if (process.env.NF_FORCE_NETWORK_ERROR === 'timeout') {
+    if (TEST_HOOKS.forceNetworkError === 'timeout') {
       return { ok: false, error: 'timeout' }
     }
-    if (process.env.NF_FORCE_NETWORK_ERROR === 'service') {
+    if (TEST_HOOKS.forceNetworkError === 'service') {
       return { ok: false, error: 'service-error' }
     }
     try {

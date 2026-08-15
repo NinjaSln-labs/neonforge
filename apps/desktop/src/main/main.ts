@@ -6,6 +6,7 @@ import { registerIpc } from './ipc.js'
 import { killAllSubprocesses } from './tools.js'
 // 2026-08-06 设计层升级（服务生命周期独立）：服务进程退出清理（与 bash 子进程同路径）
 import { stopAllServices } from './serviceManager.js'
+import { TEST_HOOKS } from './testHooks.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -20,7 +21,7 @@ process.on('uncaughtException', (err) => {
 // 单实例（2026-08-03 优化）：同时只能运行一个 NeonForge——第二个实例启动即退出，并聚焦已有实例主窗口
 // 必须在 app ready 前获取锁；锁按 app 用户数据目录（app name）作用域
 // 2026-08-06 测试隔离（e2e-suite 根因修复——场景 13 加载用户真实会话污染上下文）：NF_TEST_USERDATA → 独立 userData（不加载真实会话 + 单实例锁独立）
-if (process.env.NF_TEST_USERDATA) app.setPath('userData', process.env.NF_TEST_USERDATA)
+if (TEST_HOOKS.testUserData) app.setPath('userData', TEST_HOOKS.testUserData)
 const gotTheLock = app.requestSingleInstanceLock()
 
 if (!gotTheLock) {
@@ -76,7 +77,7 @@ if (!gotTheLock) {
       win.loadFile(path.join(__dirname, '../renderer/index.html'))
     }
 
-    if (process.env.NF_DEBUG === '1') {
+    if (TEST_HOOKS.debug) {
       win.webContents.openDevTools({ mode: 'detach' })
     }
   }

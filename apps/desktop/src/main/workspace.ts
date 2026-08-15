@@ -4,6 +4,7 @@ import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import path from 'node:path'
 import { slugify, projectBaseDir, initProjectFiles, updateProjectTitle } from './projectInit.js'
+import { TEST_HOOKS } from './testHooks.js'
 
 const IGNORE = new Set([
   'node_modules', '.git', 'dist', 'out', 'build', 'coverage',
@@ -23,9 +24,9 @@ export class WorkspaceService {
 
   async openFolder(win: BrowserWindow | null): Promise<string | null> {
     // 测试钩子：跳过系统对话框，直接打开指定目录
-    if (process.env.NF_TEST_PROJECT && existsSync(process.env.NF_TEST_PROJECT)) {
-      this.currentRoot = process.env.NF_TEST_PROJECT
-      return process.env.NF_TEST_PROJECT
+    if (TEST_HOOKS.testProject && existsSync(TEST_HOOKS.testProject)) {
+      this.currentRoot = TEST_HOOKS.testProject
+      return TEST_HOOKS.testProject
     }
     const opts: Electron.OpenDialogOptions = {
       properties: ['openDirectory'],
