@@ -97,7 +97,7 @@ neonforge/
 **领域架构（无阶段 · 目标驱动）**：
 
 ```
-Conversation BC（核心域） — 目标状态机 · 确认点（目标/执行/达成确认卡）· 执行保障（forceTool）· 会话级单一 PENDING
+Conversation BC（核心域） — 目标状态机 · 确认点（目标/方案/解决确认卡——触发权在系统，模型只能提议）· 推进保障（强制推进≠调工具）· 会话级单一 PENDING
 Capability BC            — 环境检测（事实来源）· 能力视图（从环境推导）· Ledger 回填（自学习）
 Workspace BC             — 项目文件 · 计划清单（宿主强制边界）· 授权裁决 + 任务级信任
 Delivery BC              — 交付包（产物+验收对照+确认关闭）· DoD 对齐 · 快照回滚
