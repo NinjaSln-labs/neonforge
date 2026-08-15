@@ -775,6 +775,8 @@ export default function ConversationPanel({
           const ready = caps.filter((c) => c.status === 'ready').map((c) => c.id)
           const missing = caps.filter((c) => c.status === 'missing' || c.status === 'failed').map((c) => c.id)
           envHint = `【当前环境】项目根目录：${rootPath}；runtime：${data?.runtime ?? '?'} ${data?.runtimeVersion ?? ''}；依赖：${data?.hasNodeModules ? '已装' : '未装'}；可用能力：${ready.join('/') || '无'}；${missing.length > 0 ? `缺失/异常：${missing.join('/')}` : '能力齐备'}。`
+          // 2026-08-15 M8：环境注入事件（06 §1.4 environment.injected 对应打点——模型 02 §4.7 事实来源前置呈现可观测）
+          tlog('environment-injected', { rootPath, runtime: data?.runtime, runtimeVersion: data?.runtimeVersion, hasNodeModules: data?.hasNodeModules, caps: caps.map((c) => `${c.id}:${c.status}`) }, 'system')
         }
       } catch { /* 环境注入失败不影响发送 */ }
     }
@@ -1354,8 +1356,8 @@ export default function ConversationPanel({
                     <div className="nf-confirmcard" role="group" aria-label="确认达成">
                       <div className="nf-confirmcard__head">搭档已完成——你确认解决了没有</div>
                       <div className="nf-confirmcard__actions">
-                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { stateRef.current = userConfirmed(stateRef.current, 'achievement'); inputRef.current = '已解决，谢谢'; void sendRef.current() }}>已解决</button>
-                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { stateRef.current = userRejected(stateRef.current, 'achievement'); setRejectedCardIdx((p) => ({ ...p, achievement: i })); inputRef.current = '还要改一些地方：'; void sendRef.current() }}>还要改</button>
+                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { stateRef.current = userConfirmed(stateRef.current, 'achievement'); tlog('achievement-confirmed', { source: 'confirm-card' }, 'system'); inputRef.current = '已解决，谢谢'; void sendRef.current() }}>已解决</button>
+                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { stateRef.current = userRejected(stateRef.current, 'achievement'); tlog('achievement-rejected', { source: 'confirm-card' }, 'system'); setRejectedCardIdx((p) => ({ ...p, achievement: i })); inputRef.current = '还要改一些地方：'; void sendRef.current() }}>还要改</button>
                       </div>
                     </div>
                   ) : null}
