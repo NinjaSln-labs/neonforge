@@ -44,11 +44,11 @@ export function toDeepSeekParams(level: ThinkingLevel): DeepSeekThinkingParams {
 export type ModelID = 'deepseek-v4-flash' | 'deepseek-v4-pro'
 
 // A0 §2 边界判定：ThinkingLevel=定义、ModelRouter=决策（返回完整 API 模型名）
+// 2026-08-15 D7：route 签名去除六阶段残留 stageAgent（无调用方传值——dead parameter）
 export class ModelRouter {
-  route(task: { userRequestedPro?: boolean; thinking: ThinkingLevel; stageAgent?: string }): ModelID {
+  route(task: { userRequestedPro?: boolean; thinking: ThinkingLevel }): ModelID {
     if (task.userRequestedPro) return 'deepseek-v4-pro'
     if (task.thinking === 'high') return 'deepseek-v4-pro'
-    if (task.stageAgent === 'analyst' || task.stageAgent === 'architect') return 'deepseek-v4-pro'
     return 'deepseek-v4-flash'
   }
 }

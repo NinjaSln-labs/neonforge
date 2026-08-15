@@ -58,7 +58,9 @@ contextBridge.exposeInMainWorld('neonforge', {
     // ticket 14 可撤销：停止当前活动命令（bash 高危——任何时刻可停）
     cancel: () => ipcRenderer.invoke('tools:cancel') as Promise<{ ok: boolean; error?: string }>,
     // 2026-08-04 规划级授权强制：approve-files 批准后通知 main（write/edit 放行）
-    filesApproved: () => ipcRenderer.invoke('tools:files-approved') as Promise<{ ok: boolean }>
+    filesApproved: () => ipcRenderer.invoke('tools:files-approved') as Promise<{ ok: boolean }>,
+    // 2026-08-15 D2：任务边界（新目标确认）→ 通知 main 重置规划标记（对称双源）
+    filesApprovedReset: () => ipcRenderer.invoke('tools:files-approved-reset') as Promise<{ ok: boolean }>
   },
   context: {
     resolve: (files: string[]) =>

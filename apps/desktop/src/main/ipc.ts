@@ -4,7 +4,7 @@ import { parseUnifiedDiff, applyDiffToFile, snapshot, revert } from './applyDiff
 import { gateway, classifyGatewayError } from './gateway.js'
 import { configStore } from './configStore.js'
 import { workspace } from './workspace.js'
-import { initTools, toolRegistry, revertToolFile, cancelActiveCommand, markPlanApproved } from './tools.js'
+import { initTools, toolRegistry, revertToolFile, cancelActiveCommand, markPlanApproved, resetPlanApproved } from './tools.js'
 import { registerLspTools, lsp } from './lsp.js'
 import { context } from './context.js'
 import { codeRag } from './codeRag.js'
@@ -122,6 +122,9 @@ export function registerIpc(): void {
   ipcMain.handle('tools:list', () => toolRegistry.list())
   // 2026-08-04 规划级授权强制：renderer 批准 approve-files 后通知 main（write/edit 放行）
   ipcMain.handle('tools:files-approved', () => { markPlanApproved(); return { ok: true } })
+  // 2026-08-15 D2：任务边界重置同步 main——新目标确认（clearTrust）时 main filesApprovedRef 必须复位
+  // （原只重置 renderer 侧 → main write 规划门控跨任务恒放行——第二道防线失效）
+  ipcMain.handle('tools:files-approved-reset', () => { resetPlanApproved(); return { ok: true } })
   ipcMain.handle('tools:execute', async (_e, opts: { name: string; args: Record<string, unknown>; approved?: boolean; rootPath?: string; sessionId?: string }) => {
     const res = await toolRegistry.execute(opts.name, opts.args ?? {}, {
       approved: opts.approved ?? false,
