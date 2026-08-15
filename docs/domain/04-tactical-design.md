@@ -11,7 +11,7 @@
 
 **目标驱动的执行单元**（会话内——只管三个**任务级**确认点）。**注意：单一 PENDING 状态机归属会话级（Conversation 聚合——§1.2）——Task 不承载 pending**（工具级授权等待是会话级 pending 的一部分，不在 Task 状态机内）。
 
-> **实现形态（2026-08-15 定论——M4 文档承认）**：Task 状态与会话级 PENDING 承载于**同一状态结构**（`conversationState.ts` 的 `ConversationState`——goal/execution/achievement 三确认布尔 + 会话 pending + plannedFiles/producedFiles 一体）——语义等价（pending 仍是会话级语义：确认卡/授权卡统一冻结、用户决策是下一状态唯一输入；三布尔 = 5 态语义映射：clarifying=三 false、goal-confirmed=goal true、executing=goal+execution true、achieved-reported=goal+execution true+达成提议、resolved=achievement true），**结构合并**（避免双聚合同步开销与跨层一致性问题——2026-08-14 状态机落地选型）；A0 §3.2 单一 PENDING 语义不变。
+> **实现形态（2026-08-15 定论——M4 文档承认）**：Task 状态与会话级 PENDING 承载于**同一状态结构**（`conversationState.ts` 的 `ConversationState`——goal/execution/achievement 三确认布尔 + 会话 pending + plannedFiles/producedFiles 一体）——语义等价（pending 仍是会话级语义：确认卡/授权卡统一冻结、用户决策是下一状态唯一输入；三布尔 = 5 态语义映射：clarifying=三 false、goal-confirmed=goal true、executing=goal+plan true、resolved-pending=goal+plan true+完成声明（证据对账中）、resolved=resolution true——2026-08-16 更名：execution→plan、achieved-reported→resolved-pending、achievement→resolution，第 13 轮审计 #14 同步），**结构合并**（避免双聚合同步开销与跨层一致性问题——2026-08-14 状态机落地选型）；A0 §3.2 单一 PENDING 语义不变。
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -32,12 +32,16 @@
 
 ```
 clarifying ─[用户确认目标]→ goal-confirmed ─[用户批准方案]→ executing
-    ↑ [重新描述+原因]          ↑ [修改方案+原因]                 │
-    │                                                         ↓
-    └──── 持续澄清 ←────────── unresolved ←──────── resolved-pending
-                                                ↑ [还要改+原因]     │
-                                                └──[证据对账通过→确认解决]→ resolved
+    ↑                           ↑                               │
+    │ [重新描述+原因]            │ [修改方案+原因——重提议]        │ [完成声明+证据]
+    └───────────────────────────┴───────────────────────────────↓
+                                                       resolved-pending ─[证据对账通过→确认解决]→ resolved
+                                                         ↑
+                                                         └ [还要改+原因]——回 executing 继续执行
+                                                           （推进保障保持不收敛）
 ```
+
+> 2026-08-16 第 13 轮审计 #2 修正：删除杂散态 `unresolved`（未在任何类型/设计中定义）——5 态与 §6 类型汇总一致；「还要改」= 解决被拒 → 回 executing 继续执行（无证据不对账：证据不完备的完成声明不进入 resolved-pending）。
 
 每个确认点转换都经过**会话级 PENDING**（§1.2——决策点弹出 → 会话 pending → 用户是/否 → 状态推进/回退）。
 
@@ -470,6 +474,10 @@ type FilePath = string & { readonly __brand: 'FilePath' }
 // ===== 确认点 =====
 type ConfirmationPoint = 'goal' | 'plan' | 'resolution'（2026-08-16 更名）
 type ConfirmationAction = 'confirm' | 'reject'
+
+// ===== 决策点（2026-08-16 第 13 轮审计 #7 补——§3.6 签名用而未定义）=====
+type PendingKind = 'none' | 'goal' | 'plan' | 'approval' | 'resolution'   // 会话级等待（设计 §3.1）
+type DecisionKind = 'goal' | 'plan' | 'approval' | 'resolution'           // decisionContent.kind
 
 // ===== 任务状态 =====
 type TaskStatus = 'clarifying' | 'goal-confirmed' | 'executing'

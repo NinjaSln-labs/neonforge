@@ -119,7 +119,7 @@
 ### 2.2 执行确认（确认卡——推进到动手）（2026-08-16 起语义为方案确认——PlanProposal 批准；时序图事件名保持历史，新事件见追加段）
 
 ```
-用户          模型           确认卡        Task状态机       forceTool
+用户          模型           确认卡        Task状态机     ProgressGuarantee（原 forceTool）
  │            │             │             │                │
  │ 确认目标后   │ 能力检查+方案 │             │                │
  │            ├────────────►│             │                │
@@ -130,16 +130,16 @@
  ├───────────►│             │ execution_confirmed          │
  │            │             ├────────────►│               │
  │            │             │             │→executing      │
- │            │             │             ├───► forceTool=true
- │            │             │             │（无产出强制）     │
- │            │ 模型被强制产出 │             │                │
+ │            │             │             ├───► execution.forced
+ │            │             │             │（无推进强制——产出/提议/证据）│
+ │            │ 模型被强制推进 │             │                │
  │            │◄────────────┤             │                │
 ```
 
 ### 2.3 达成确认（确认卡——收敛）（2026-08-16 起语义为解决确认——CompletionClaim+证据对账）
 
 ```
-用户          模型            确认卡        Task状态机        forceTool
+用户          模型            确认卡        Task状态机    ProgressGuarantee（原 forceTool）
  │            │              │             │                │
  │ 动手产出    │ write/edit   │             │                │
  │            ├─────────────►│             │                │
@@ -151,10 +151,12 @@
  ├───────────►│              │ achievement_confirmed       │
  │            │              ├────────────►│               │
  │            │              │             │→resolved       │
- │            │              │             ├───► forceTool释放
+ │            │              │             ├───► execution.released
  │            │              │             │                │
  │ 对话收敛     │              │             │                │
 ```
+
+> 2026-08-16 第 13 轮审计 #8：时序图列名同步推进保障更名（forceTool → ProgressGuarantee；forceTool=true/释放 → execution.forced/released——事件名与 §1.5 一致；图内事件名保持历史——见 §2.2 注记）。
 
 ---
 
@@ -175,4 +177,4 @@
 | `completion.evidence_missing` | 完成声明被拒（missing 清单——回填引导补证据）| verifyCompletion 失败 |
 | `gate.denied` | ActionGate deny（高风险动作被机制拦——非 ask）| 动作属性判定 |
 
-现有事件保持（task.*_proposed 兼容保留——proposal.* 为结构化替代；card.shown/resolved 语义并入 decision.requested/resolved；session.pending_set/cleared、tool.blocked 不变）。
+现有事件保持（task.*_proposed 兼容保留——proposal.* 为结构化替代；card.shown/resolved 与 decision.requested/resolved **两层并存、语义对齐**（card.* = UI 卡生命周期视图事件——保留——消费方/dedupe 依赖；decision.* = 领域决策点事件——2026-08-16 第 13 轮审计 #8 措辞修正：非「并入」非合并——设计 §3.5 注记）；session.pending_set/cleared、tool.blocked 不变）。

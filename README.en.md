@@ -110,8 +110,8 @@ The domain layer is pure functions (no React dependency); L1 unit tests lock the
 
 | Doc | Description |
 |-----|-------------|
-| `docs/product/00-product-design.md` (D0 v2.1) | Product design authority (positioning / flows / components / metrics) |
-| `docs/domain/00-domain-authority.md` (A0 v3.0) | Domain implementation authority (confirmation points / execution policy / host boundary) |
+| `docs/product/00-product-design.md` (D0 v2.2) | Product design authority (positioning / flows / components / metrics) |
+| `docs/domain/00-domain-authority.md` (A0 v4.0) | Domain implementation authority (confirmation points / progress guarantee / host boundary) |
 | `docs/product/`、`docs/domain/` | Full index (D0-D9 / A0-A9) |
 
 ## Testing

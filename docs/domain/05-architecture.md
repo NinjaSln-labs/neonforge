@@ -58,20 +58,23 @@
 ## 3. 推进保障管线（ProgressGuarantee 决策链——2026-08-16 重设计，原 forceTool/执行保障）
 
 ```
-确认状态(goal/execution) + 产出 + 失败 + 完成度
+确认状态(goal/plan/resolution) + 推进 + 失败 + 完成度 + pending
     │
     ▼
 ProgressGuarantee（领域层——纯函数）
     │
+    ├─ pending（等用户决策）→ auto（模型停住等用户——恒不强制）
     ├─ 目标未确认 → auto（澄清）
-    ├─ 执行未确认 → auto（等确认卡）
-    ├─ 确认+无产出 → required（强制动手）
+    ├─ 方案未确认 → auto（等方案确认卡）
+    ├─ 目标+方案确认、无任何推进 → require-advance（强制推进——产出/提议/证据，不逼调工具）
     ├─ 工具失败 → auto（释放诊断）
     └─ 计划写完/解决确认 → auto（收敛）
     │
     ▼
-Gateway.tool_choice 传递（推进保障输出）→ DeepSeek API
+Gateway.tool_choice 传递（推进保障输出——require-advance/require-action → 'required'；auto → 'auto'）→ DeepSeek API
 ```
+
+> 2026-08-16 第 13 轮审计 #3 修正：管线图同步推进保障新语义（原图残留旧 forceTool 语义「required 强制动手」与旧名 goal/execution——与 A0 §4/07 §1.1/04 §3.1 冲突；强制对象=推进≠调工具，pending 恒不强制）。
 
 ## 4. 宿主强制边界管线（模型漂移防护 + 会话级单一 PENDING 状态机）
 
@@ -108,8 +111,12 @@ apps/desktop/src/
 │   └── workspace.ts               # Workspace BC——项目/文件
 └── renderer/                       # React 应用层——对话/确认卡/授权卡/工具卡编排
     ├── ConversationPanel.tsx      # 应用层编排（消费领域层纯函数）
-    └── MainWorkspace.tsx          # 应用层——状态接线
+    ├── MainWorkspace.tsx          # 应用层——状态接线
+    ├── problemStore.ts            # Problem 聚合（问题台账——localStorage 上限 20，V1 已落地——02 §4.13/04 §1.5）
+    └── sessionStore.ts            # 会话持久化（断点续做——decisionContent 序列化 S3 一并，设计 §8.2 E）
 ```
+
+> 2026-08-16 第 13 轮审计 #11：模块目录补 problemStore.ts/sessionStore.ts（原目录缺 Problem 聚合落地文件）。
 
 ## 6. 关键选型
 

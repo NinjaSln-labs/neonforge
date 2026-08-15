@@ -110,8 +110,8 @@ Session Timeline BC      — 全步骤统一记录（可观测性——JSONL）
 
 | 文档 | 说明 |
 |------|------|
-| `docs/product/00-product-design.md`（D0 v2.1） | 产品设计总纲（定位 / 用户流 / 组件 / 指标） |
-| `docs/domain/00-domain-authority.md`（A0 v3.0） | 领域实现权威（确认点 / 执行保障 / 宿主边界） |
+| `docs/product/00-product-design.md`（D0 v2.2） | 产品设计总纲（定位 / 用户流 / 组件 / 指标） |
+| `docs/domain/00-domain-authority.md`（A0 v4.0） | 领域实现权威（确认点 / 推进保障 / 宿主边界） |
 | `docs/product/`、`docs/domain/` | 完整索引（D0-D9 / A0-A9） |
 
 ## 测试

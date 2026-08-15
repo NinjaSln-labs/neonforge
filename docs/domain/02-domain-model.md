@@ -235,7 +235,7 @@ id / title / status / updatedAt
 | PlanApproved（计划批准）| 用户批准文件清单 | 文件清单（追加）|
 | ToolApproved / ToolRejected | 用户批准/拒绝工具 | 工具名+参数 |
 | ToolExecuted / ToolFailed | 工具执行结果 | 名称/成功/错误 |
-| AchievementProposed（达成提议）| 模型汇报达成 | 产物说明 |
+| AchievementProposed（历史——2026-08-16 起由 proposal.completion 替代）| 模型汇报达成 | 产物说明 |
 | **ResolutionConfirmed / ResolutionRejected**（2026-08-16 更名，原 AchievementConfirmed/Rejected）| 用户证据对账确认解决 / 还要改+原因 | — |
 | CapabilityChecked | 能力检查 | 能力视图 |
 | EnvironmentInjected | 环境快照注入 | 环境状态 |
@@ -274,6 +274,18 @@ id / title / status / updatedAt
 | 能力视图（Capability View）| 从环境推导的能力状态（ready/missing/failed）|
 | 环境快照（Environment Snapshot）| 一次检测的事实（runtime/依赖/工具链）——注入模型 |
 | 会话时间线（Session Timeline）| 单会话所有步骤统一日志 |
+| 问题台账（Problem Ledger）| 跨会话问题记录（goal/decisions/authorized/pending 快照）——断点续做/复跑（§4.13）|
+| 确认卡（Confirm Card）| 确认点的结构化 UI（确认/拒绝按钮）|
+| 提议（Proposal）| 模型产出的结构化主张（GoalProposal/PlanProposal/CompletionClaim）——不产生状态变化，只进入待求值（§5 服务表 deriveDecisionPoint）|
+| 决策点（Decision Point）| 需要用户输入才能继续的确定性状态——状态×提议×动作属性的纯函数派生（§5 deriveDecisionPoint）|
+| 决策（Decision）| 用户对决策点的响应：确认 / 拒绝（带原因）/ 修改（拒绝+修正内容）|
+| 证据（Evidence）| 完成声明的可核验支撑（verification 命令输出/diff 对账/遗留问题）——无证据不对账（§5 verifyCompletion）|
+| 方案提议（PlanProposal）| 文件清单+假设+验证计划——plannedFiles 单一来源（§4.4）|
+| 完成声明（Completion Claim）| 模型「做完了」的主张——必须附证据（§4.1 ResolutionConfirmed）|
+| 拒绝原因（RejectReason）| 拒绝决策的结构化原因（kind/text/target——含 modify）——回填模型调整|
+| 动作属性（Action Attribute）| 工具调用的客观性质（只读/网络只读/清单内/越界/高危）——actionGate 判定（§5）|
+
+> 2026-08-16 第 13 轮审计 #9：术语表补齐意图确认重设计新增术语（对齐 A0 §9——原表缺 10 项）。
 
 ## 9. 与旧六阶段的关系
 
