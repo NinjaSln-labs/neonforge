@@ -11,23 +11,29 @@ neonforge/
 ├── README.md
 └── docs/
     ├── product/                         # 产品设计（设计→工程交付）
-    │   ├── 00-product-design.md         # 产品总纲
+    │   ├── 00-product-design.md         # 产品总纲（D0——v2.2）
     │   ├── 00-product-reference.md      # 竞品与差异化
     │   ├── 01-user-flows.md             # 用户旅程图
     │   ├── 02-components.md             # UI 组件规格
     │   ├── 03-design-tokens.md          # 设计令牌
     │   ├── 04-alignment.md              # 本文档
     │   ├── 05-visual-spec.md            # 视觉设计规范
-    │   └── 06-product-design-audit.md   # 交叉审计报告
+    │   ├── 06-product-design-audit.md   # 交叉审计报告
+    │   └── 07-success-metrics.md        # 成功指标（D8——v1.1）
     └── domain/                          # 领域 / 架构
-        ├── 01-reference-analysis.md     # 竞品技术分析
+        ├── 00-domain-authority.md       # 领域权威总纲（A0——v4.0，实现权威——先读）
+        ├── 01-reference-analysis.md     # 竞品技术分析（历史参考）
         ├── 02-domain-model.md           # 领域模型
         ├── 03-strategic-design.md       # 战略设计
         ├── 04-tactical-design.md        # 战术设计
         ├── 05-architecture.md           # 架构设计
         ├── 06-domain-events.md          # 领域事件
-        └── 07-api-gateway.md            # API 网关
+        ├── 07-api-gateway.md            # API 网关
+        ├── 08-domain-design-audit.md    # 领域审计（历史——裁决已回写 A0）
+        └── 09-traceability.md           # 产品↔领域追溯矩阵
 ```
+
+> 2026-08-16 第 13 轮审计 #5：清单补 A0（领域实现权威）/08/09/07-success-metrics（原清单缺失——索引入口漏权威文档）。
 
 ---
 
@@ -112,7 +118,7 @@ neonforge/
 | `.scratch/neonforge-v1/intent-confirmation-domain-design.md` | **重构期设计权威**（§1-9：决策点触发权/完成证据/PlanProposal/RejectReason/推进保障/双维门控/测试域 DDD；S0-S7 分阶段）|
 | `.scratch/neonforge-v1/intent-confirmation-doc-audit.md` | 设计文档五轮审计闭环（1C+16M+14m 全修）|
 | `analysis/competitor-crawler/reports/neonforge-intent-confirmation-research.md` | 三视角调研依据（9 竞品+14 源码+20+ 学术）|
-| `docs/PRODUCT-DOC-AUDIT.md`（第 5 轮）| 产品文档审计（07 指标/04 索引修复）|
+| `docs/PRODUCT-DOC-AUDIT.md`（最新轮——当前第 13 轮；r4-r12 归档）| 产品文档审计（领域/产品文档就绪度与验收标准——修复随轮次回写）|
 
 > 冲突裁决：重构期实现语义以 scratch 设计文档为准（领域/产品文档同步已完成——A0 v4.0 / D0 v2.2 / 07 v1.1 / 07-api-gateway 推进保障同步）；本索引的旧 Phase 1-3 为 0-1 初始搭建序，重构按设计文档 S0-S7 执行。
 > 历史文档标注（2026-08-16 第 6/9 轮审计）：`product/06-product-design-audit.md`（07-31）与 `domain/08-domain-design-audit.md`（M1-M10）为历史审计——裁决已回写 A0，与新设计无冲突，仅作追溯参考；`domain/01-reference-analysis.md`（07-30）为历史竞品技术分析——无确认语义冲突（新调研引用见本表上方）。

@@ -150,7 +150,7 @@ ActionAttribute {
 }
 ```
 
-**优先级**：会话冻结（pending）优先于 ActionGate（§3.5 不变）——pending 时任何动作无效，不进入属性判定；ActionGate 的 deny 为机制拦截（`gate.denied` 事件），ask 才产生授权请求（ApprovalRequest：subject+reason+risk）。
+**优先级**：会话冻结（pending）优先于 ActionGate（§3.5 不变）——pending 时任何动作无效，不进入属性判定；ActionGate 的 deny 为机制拦截（`gate.denied` 事件），ask 才产生授权请求（ApprovalRequest：toolName+subject+reason+risk——2026-08-16 第 13 轮审计 #8 补 toolName 字段，对齐 04 §2.3b）。
 
 ---
 
@@ -218,7 +218,7 @@ CompletionEvidence{ verification: [{command, output?, passed?}], diffs: [{path}]
 - **计划清单（PlannedFiles）**：由已确认的 PlanProposal.files 派生（单一来源——不变量 6）——approve-files（2026-08-08 坑 95 改名，原 plan_approval）追加语义保持——模型只能写清单内——**清单对模型显式可见**（系统提示注入）
 - **追加语义**：分批 approve-files 合并（Codex rules AppendRule 同理——不覆盖前批）
 - **拒绝回填边界**：写清单外被拒 → 拒绝信息带清单内容（「X 不在批准清单（批准的是：A/B/C）」）——模型回到边界内
-- **拒绝带原因（RejectReason——2026-08-16 新增值对象）**：用户拒绝决策携带结构化原因 `{ kind: direction|scope|complexity|missing-info|other, text?, target? }`——回填模型调整方向（对齐 Cline denial reason / Deep Code「不要绕过」——防模型无方向重试）
+- **拒绝带原因（RejectReason——2026-08-16 新增值对象）**：用户拒绝决策携带结构化原因 `{ kind: direction|scope|complexity|missing-info|modify|other, text?, target? }`——`modify`=「修改」决策（拒绝+修正内容→模型重提议，不单列状态分支）；回填模型调整方向（对齐 Cline denial reason / Deep Code「不要绕过」——防模型无方向重试）
 
 ---
 

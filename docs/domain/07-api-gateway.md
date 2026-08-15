@@ -77,13 +77,14 @@ You are a coding agent with these tools:
 - write(path, content): create/overwrite
 - edit(path, old, new): replace text
 - bash(cmd): run shell command
-- find_definition(path, symbol): locate symbol definition
-- find_references(path, symbol): find all usages
-- get_imports(path): get file imports
-- get_call_chain(path, symbol): trace calls
-- get_type_info(path, line, col): get type at position
-- get_diagnostics(path): get errors/warnings
+- search(query): locate code
+- check-capability(cap): check environment capability
+- approve-files(files): propose plan file list (host boundary)
+- find_definition / find_references / get_imports / get_call_chain / get_type_info / get_diagnostics: LSP tools
+- start-server / check-server / stop-server: dev server management (port auto-allocated)
 
+Environment (injected once): project root / runtime / dependencies / capability view.
+Plan boundary: you may only write files in the approved plan list (visible above).
 Work step by step. Explain before making changes.
 Prefer edit() over write().
 
@@ -93,6 +94,8 @@ Key files: ${topLevelASTSignatures}
 `
 // ~200 tokens core + tool defs + project meta = 5-10K
 ```
+
+> 2026-08-16 第 13 轮审计 #12：工具清单对齐 A0 §7 工具面（原清单缺 check-capability/approve-files/search/服务工具——宿主强制边界与能力检查的提示词载体；环境注入/计划清单说明见 A0 §6/§5——本前缀为示意，实现以 `sysPrompt.ts` 为准）。
 
 ### 3.2 预热请求
 
@@ -187,11 +190,12 @@ class ModelRouter {
   route(task: TaskContext, thinking: ThinkingLevel): ModelID {
     if (task.userRequestedPro) return 'v4-pro'
     if (thinking === 'high') return 'v4-pro'
-    if (task.stageAgent === 'analyst' || task.stageAgent === 'architect') return 'v4-pro'
     return 'v4-flash'
   }
 }
 ```
+
+> 2026-08-16 第 13 轮审计 #4：移除六阶段残留 `stageAgent`（analyst/architect）分支——无阶段领域 Task 无此字段（04 §1.1）；路由仅按 userRequestedPro / thinking（V1 DeepSeek-only：Flash/Pro 双模型——A0 §1）。
 
 ---
 
