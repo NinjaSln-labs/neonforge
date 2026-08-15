@@ -17,7 +17,7 @@ const DEMO_LOGS = [
 ]
 
 export default function TrustLadderPanel({ authorizedLogs, delegateLowRisk, onDelegateChange }: {
-  authorizedLogs?: string[]
+  authorizedLogs?: Array<{ tool: string; file: string } | string> // 2026-08-15 Q9：结构化（旧 string 兼容）
   // ticket 14 执行引擎对接：委托规则受控（ConversationPanel 持有真实状态——localStorage 持久化；此处仅展示/切换）
   delegateLowRisk?: boolean
   onDelegateChange?: (v: boolean) => void
