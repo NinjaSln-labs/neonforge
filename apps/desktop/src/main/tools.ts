@@ -1,6 +1,8 @@
 import { promises as fs, existsSync } from 'fs'
 import path from 'path'
 import { execSync } from 'child_process'
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
+import { app } from 'electron' // main 进程内置——vitest 下为 undefined（subprocFile 防御走 fallback）
 import { snapshot as takeSnapshot, revert as revertFile } from './applyDiff.js'
 import { codeRag } from './codeRag.js'
 // 2026-08-06 设计层升级（服务生命周期独立——用户「白名单匹配不完」）：模型用 start/check/stop-server 管服务，不用 bash 起服务/curl 验证
@@ -194,14 +196,15 @@ let activeProc: { proc: import('child_process').ChildProcess; cmd: string } | nu
 const subprocs = new Set<import('child_process').ChildProcess>()
 // PID 记录文件（userData 下）——NeonForge 自己起的 bash 进程 pid 持久化；异常退出（SIGKILL）后下次启动/退出可清
 // 只杀这里记录的 pid——用户自己的进程从不记录 → 不会误杀（修复「启动清固定端口会杀用户进程」）
+// 2026-08-15 Q4 修复：原 require('electron') 在 ESM 恒 ReferenceError → PID 持久化从未生效（catch 吞掉）——改静态 import
 function subprocFile(): string {
   try {
-    const { app } = require('electron') as typeof import('electron')
-    return `${app.getPath('userData')}/neonforge-subprocs.jsonl`
-  } catch { return `${process.env.HOME ?? ''}/Library/Application Support/neonforge-desktop/neonforge-subprocs.jsonl` }
+    if (app?.getPath) return `${app.getPath('userData')}/neonforge-subprocs.jsonl`
+  } catch { /* 非 Electron 环境 */ }
+  return `${process.env.HOME ?? ''}/Library/Application Support/neonforge-desktop/neonforge-subprocs.jsonl`
 }
 function recordPid(pid: number): void {
-  try { require('node:fs').appendFileSync(subprocFile(), `${pid}\n`) } catch { /* 记录失败不影响执行 */ }
+  try { appendFileSync(subprocFile(), `${pid}\n`) } catch { /* 记录失败不影响执行 */ }
 }
 
 // 递归杀进程树（进程组 + 后代）——nohup 后台进程 setsid 脱离进程组，仅杀组不够
@@ -219,9 +222,9 @@ export function killAllSubprocesses(): void {
   activeProc = null
   try {
     const file = subprocFile()
-    const pids = require('node:fs').readFileSync(file, 'utf8').split('\n').filter(Boolean).map(Number)
+    const pids = readFileSync(file, 'utf8').split('\n').filter(Boolean).map(Number)
     for (const pid of pids) killTree(pid)
-    require('node:fs').writeFileSync(file, '')
+    writeFileSync(file, '')
   } catch { /* 无记录文件 */ }
 }
 

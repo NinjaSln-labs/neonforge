@@ -386,15 +386,22 @@ export default function ConversationPanel({
 
   // 处理单个流式事件（当前轮次——写入最后一条 assistant 消息）
   // 2026-08-04：流式累积（事件层）——React StrictMode 会双调 setMessages updater，副作用（日志/工具执行）放 updater 内会重复执行（实测对话日志每条记录两次）
-  const streamingRef = useRef<{ content: string; toolCalls: ToolCallMsg[] }>({ content: '', toolCalls: [] })
+  // 2026-08-15 Q3：reasoning 累积 + onReasoning/setWorkingStage 全部上移到事件层（原 updater 内调用外部回调——坑 32 违反残留）
+  const streamingRef = useRef<{ content: string; reasoning: string; toolCalls: ToolCallMsg[] }>({ content: '', reasoning: '', toolCalls: [] })
   // 2026-08-07 无阶段重构 S4：TurnKind/turnKindRef 删除（advanceChat 随阶段体系移除——无 advance-turn；send/maybeContinue 不再需要轮次类型标记）
   const applyChunk = (chunk: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => {
     console.log('[conv] chunk', chunk.type)
     // 2026-08-05 用户反馈 2：模型有新动作（chunk）→ 清除 isActionPromise 状态栏提示（模型在动——之前只是陈述/即将调工具）
     if (chunk.type === 'content' || chunk.type === 'tool-call') onActionPromiseHint?.(null)
     // 事件层累积（每事件一次——双调安全）
+    if (chunk.type === 'reasoning') {
+      streamingRef.current.reasoning += chunk.text ?? ''
+      onReasoning?.(streamingRef.current.reasoning)
+      setWorkingStage('思考中…')
+    }
     if (chunk.type === 'content') {
       streamingRef.current.content += chunk.text ?? ''
+      setWorkingStage('生成回复…')
       // 2026-08-07 用户决策（显式确认——行业共识）：【目标确认】标记不再自报确认（模型标记=提议，渲染确认卡——
       // 用户点「确认目标」才 goalConfirmed；原提前检测自报确认删除）
     }
@@ -485,10 +492,10 @@ export default function ConversationPanel({
           onActionPromiseHint?.(event.message)
         }
       }
-      streamingRef.current = { content: '', toolCalls: [] }
+      streamingRef.current = { content: '', reasoning: '', toolCalls: [] }
     }
     setMessages((prev) => {
-      // 纯 UI 更新（无副作用——StrictMode 双调安全）
+      // 纯 UI 更新（无副作用——StrictMode 双调安全；onReasoning/setWorkingStage 已在事件层——Q3）
       // 2026-08-05 第五轮修复：定位「最后一条 streaming 的 assistant 消息」而非「最后一条消息」——
       // done 分支插入提示消息（isActionPromise）后，原 last 变成提示消息（status='done'）→ guard 拦截 → 流式消息 status 卡 streaming → 候选按钮不渲染（选项卡消失根因）
       // 从尾部向前找 streaming 消息；tool-call 保留原语义（无 streaming 时回退到最后一条 assistant）
@@ -502,12 +509,9 @@ export default function ConversationPanel({
       const next = { ...prev[target] }
       if (chunk.type === 'reasoning') {
         next.reasoning = (next.reasoning ?? '') + (chunk.text ?? '')
-        onReasoning?.(next.reasoning)
-        setWorkingStage('思考中…')
       }
       if (chunk.type === 'content') {
         next.content = next.content + (chunk.text ?? '')
-        setWorkingStage('生成回复…')
       }
       if (chunk.type === 'done') {
         next.status = 'done'
@@ -969,7 +973,7 @@ export default function ConversationPanel({
       setMessages((p) => [...p, { role: 'user', content: text, status: 'done' }])
     }
     // 2026-08-04：新轮次——重置流式累积（防上轮异常残留）
-    streamingRef.current = { content: '', toolCalls: [] }
+    streamingRef.current = { content: '', reasoning: '', toolCalls: [] }
     setWorking(true)
     onWorkingChange?.(true)
     const sid = ++sessionRef.current // 新会话——旧会话事件/续聊失效
@@ -1159,7 +1163,7 @@ export default function ConversationPanel({
     // 中止当前流式链：sid++ + streamingSid=0 → 旧流 chunk 忽略（applyChunk sid 检查）+ 旧链 maybeContinue 失效
     sessionRef.current++
     streamingSidRef.current = 0
-    streamingRef.current = { content: '', toolCalls: [] }
+    streamingRef.current = { content: '', reasoning: '', toolCalls: [] }
     setWorking(false)
     onWorkingChange?.(false)
     setWorkingStage('')
