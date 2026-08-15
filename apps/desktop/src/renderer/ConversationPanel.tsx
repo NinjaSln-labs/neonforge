@@ -280,7 +280,11 @@ export default function ConversationPanel({
   // 2026-08-14 会话状态机（Task 聚合——S2 迁移）：原 7 个散 ref（plannedFiles/producedFiles/goalAchieved/
   // lastToolFailed/filesApproved/goalConfirmed/executionConfirmed）合并为单一 ConversationState——
   // 读 = stateRef.current.x；写 = useConversationState 转换方法（Q1a+Q2——唯一入口）
-  const { stateRef, confirm, reject, grantPlan, applyTool, setPending: setPendingState, clearPending, addPlannedFiles, setFilesApproved } = useConversationState()
+  // 2026-08-15 DDD 重建：transition 内 diff 派生领域事件 → tlog 落盘（一处接入覆盖全部状态转换——
+  // task.*/session.*/plan.* 事件自动发出；事件目录 domain/timeline.ts 对齐 06 文档）
+  const { stateRef, confirm, reject, grantPlan, applyTool, setPending: setPendingState, clearPending, addPlannedFiles, setFilesApproved } = useConversationState({
+    emit: (type, detail) => tlog(type, detail, 'system')
+  })
   // 2026-08-14 用户实测卡死修复（timeline 0219a516）：确认卡唯一性——模型连发消息时卡固定在
   // 「最后一条信号消息」上不漂移。**O(n) 倒序单次扫描**预计算三个信号索引（useMemo 缓存——
   // 消息列表不可控（compaction 阈值 100+ 条），每渲染 O(n²) 不可接受；此方案 O(n) 一次 + 渲染 O(1) 查表）
@@ -603,6 +607,13 @@ export default function ConversationPanel({
       const pendingBlocked = stateRef.current.pending !== 'none'
       if (confirmGate || pendingBlocked || (!toolGate.ok && classifyAction(tc.name, String(tc.args?.command ?? '')) === 'side-effect')) {
         const gateReason = pendingBlocked ? `会话等待你的决策（${stateRef.current.pending}）——此动作未执行` : (confirmGate ? '等待你的决策' : toolGate.reason)
+        // 2026-08-15 DDD 重建：工具拦截事件（tool.blocked——G3 缺口：拦截原因落时间线，消费方无需反推代码）
+        tlog('tool.blocked', {
+          name: tc.name,
+          gate: pendingBlocked ? 'pending' : (confirmGate ? 'confirm' : 'gate'),
+          reason: gateReason,
+          args: tc.args
+        }, 'tool')
         setMessages((prev) => {
           const last = prev[prev.length - 1]
           if (!last || last.role !== 'assistant') return prev
@@ -620,6 +631,8 @@ export default function ConversationPanel({
       // 2026-08-06 偏离清单拦截（基于事实：06:03 已规划但写「正确路径」偏离批准清单 → 逐个弹授权/规划外文件——用户「相同文件弹授权」根因）：
       // 已规划（filesApprovedRef）但文件不在批准清单 → 不弹逐个卡——拒绝 + 引导补充 approve-files（清单与实际始终一致）
       if (tc.name === 'write' && stateRef.current.filesApproved && !inPlannedFiles(tc.args.path)) { // 2026-08-06 edit 豁免（改现有文件=操作明确——B 类文件操作直接改）；write 新建强制规划
+        // 2026-08-15 DDD 重建：偏离清单拦截事件（tool.blocked gate='out-of-plan'——拒绝带边界可回放）
+        tlog('tool.blocked', { name: tc.name, gate: 'out-of-plan', reason: `${tc.args.path} 不在批准清单`, args: tc.args }, 'tool')
         setMessages((prev) => {
           const last = prev[prev.length - 1]
           if (!last || last.role !== 'assistant') return prev
@@ -645,6 +658,10 @@ export default function ConversationPanel({
         // 2026-08-14 S2：工具结果 → 状态机转换唯一入口（applyToolResult——进度/失败标志汇入状态）
         applyTool({ name: tc.name, ok: r.ok, needApproval: r.needApproval, policy: r.policy, file: data?.file })
         tlog('tool-result', { name: tc.name, ok: r.ok, needApproval: r.needApproval, error: r.error }, 'tool')
+        // 2026-08-15 DDD 重建：main 侧策略引导（write 未规划 policy）→ tool.blocked（非执行失败——gate='policy'）
+        if (!r.ok && r.policy) {
+          tlog('tool.blocked', { name: tc.name, gate: 'policy', reason: r.error, args: tc.args }, 'tool')
+        }
         setMessages((prev) => {
           if (prev.length === 0) return prev
           const last = prev[prev.length - 1]

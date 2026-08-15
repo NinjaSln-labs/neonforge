@@ -1,20 +1,38 @@
-// 会话状态机 hook（2026-08-15 Q1a+Q2：转换单点封装——消除散落双轨模式）
+// 会话状态机 hook（2026-08-15 Q1a+Q2：转换单点封装——写路径唯一入口）
 // 背景：S2 迁移后状态收敛于 stateRef（ConversationState 单一来源），但转换调用散落组件 20+ 处
 // （userConfirmed/userRejected/approvalGranted/applyToolResult/setPending + 2 处直接展开改 + 1 处 Set 直接 add）。
 // 本 hook = 写路径唯一入口（transition 单点）；读仍经 stateRef.current（ref 语义——渲染镜像由 MainWorkspace props 承担）。
 // 未来换 useState/useSyncExternalStore（Q2 完整方案）只改本文件内部。
+//
+// 2026-08-15 DDD 重建（Session Timeline BC）：transition 内自动 diff 派生领域事件（Event Sourcing-lite——
+// deriveStateEvents：任意状态转换 → task.*/session.*/plan.* 事件）→ emit 回调（应用层接 IPC 落盘）。
+// 一处接入覆盖全部状态转换——替代散落打点；事件目录见 domain/timeline.ts（对齐 06 文档）。
 import { useRef } from 'react'
 import {
   initialState, userConfirmed, userRejected, approvalGranted, applyToolResult, setPending,
   type ConversationState, type PendingKind,
 } from '../domain/conversationState'
+import { deriveStateEvents } from '../domain/timeline'
 
 export type ConfirmPoint = 'goal' | 'execution' | 'achievement'
 
-export function useConversationState() {
+export interface UseConversationStateOpts {
+  // 领域事件发出（应用层接 IPC——落盘时间线）
+  emit?: (type: string, detail: Record<string, unknown>) => void
+}
+
+export function useConversationState(opts?: UseConversationStateOpts) {
+  const { emit } = opts ?? {}
   const stateRef = useRef<ConversationState>(initialState())
   const transition = (fn: (s: ConversationState) => ConversationState): void => {
-    stateRef.current = fn(stateRef.current)
+    const prev = stateRef.current
+    stateRef.current = fn(prev)
+    // DDD：转换后 diff 派生领域事件（状态机可回放——G1 缺口闭环）
+    if (emit) {
+      for (const evt of deriveStateEvents(prev, stateRef.current)) {
+        emit(evt.type, evt.detail)
+      }
+    }
   }
   return {
     stateRef,
