@@ -139,6 +139,15 @@ export default function MainWorkspace({
     setExecutionConfirmed(true)
     try { void window.neonforge.timeline?.log?.({ session: sessionIdRef.current || (rootPath ?? undefined), type: 'exec-confirmed', role: 'system', detail: { source: 'confirm-card' } }) } catch { /* 日志失败不影响 */ }
   }
+  // 2026-08-15 D1：拒绝路径对称回退（渲染镜像与状态机一致——修复「拒绝被 effect 反转」；状态机权威在 ConversationPanel stateRef）
+  const handleGoalRejected = () => {
+    setGoalConfirmed(false)
+    try { void window.neonforge.timeline?.log?.({ session: sessionIdRef.current || (rootPath ?? undefined), type: 'goal-rejected', role: 'system', detail: { source: 'confirm-card' } }) } catch { /* 日志失败不影响 */ }
+  }
+  const handleExecutionRejected = () => {
+    setExecutionConfirmed(false)
+    try { void window.neonforge.timeline?.log?.({ session: sessionIdRef.current || (rootPath ?? undefined), type: 'exec-rejected', role: 'system', detail: { source: 'confirm-card' } }) } catch { /* 日志失败不影响 */ }
+  }
   const handleUserMessage = (text: string) => {
     lastPromptRef.current = text
     // 2026-08-07 用户决策：确认词正则匹配删除（「可以撤销吗」也触发等误触发——行业共识是结构化确认动作）——
@@ -268,7 +277,7 @@ function initProblems(): ProblemInstance[] {
             确认流程全部走对话（模型【目标确认】标记 / 用户打字确认词）——dock 无任何卡片残留 */}
         <div className="nf-panel__body">
           {chatTab === 'chat' ? (
-            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} onApprovalChange={setPendingApproval} onActionPromiseHint={setActionHint} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} onGoalConfirmed={handleGoalConfirmed} onExecutionConfirmed={handleExecutionConfirmed} goalConfirmed={goalConfirmed} executionConfirmed={executionConfirmed} goalSeq={goalSeq} recentFilesExternal={projectFiles} initialPrompt={initialPrompt} onSessionStart={handleSessionStart} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} />
+            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} onApprovalChange={setPendingApproval} onActionPromiseHint={setActionHint} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} onGoalConfirmed={handleGoalConfirmed} onExecutionConfirmed={handleExecutionConfirmed} onGoalRejected={handleGoalRejected} onExecutionRejected={handleExecutionRejected} goalConfirmed={goalConfirmed} executionConfirmed={executionConfirmed} goalSeq={goalSeq} recentFilesExternal={projectFiles} initialPrompt={initialPrompt} onSessionStart={handleSessionStart} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} />
           ) : (
             <TaskPanel />
           )}

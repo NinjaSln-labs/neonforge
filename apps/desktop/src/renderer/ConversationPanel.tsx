@@ -10,9 +10,9 @@ import { buildAuthHint, canMergeApprove, toolRisk } from './authModel'
 // 2026-08-04：cleanContent 回复正文展示清洗（字面转义/连续换行杂音）
 import { cleanContent, stripMarkdown } from './textClean'
 // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层纯逻辑，双源调研驱动）
-import { evaluateTurnProgress, detectStuck, initialStuckState, isQuestionLike, isCommunicationLike, isDoneLike, parseExecutionPlan, summarizeCapability } from '../domain/agentLoop'
+import { evaluateTurnProgress, detectStuck, initialStuckState, isQuestionLike, isCommunicationLike, isDoneLike, parseExecutionPlan, summarizeCapability, goalFallbackTrigger } from '../domain/agentLoop'
 // 2026-08-14 会话状态机（Task 聚合——A0 §2/§3/§4/§5）：状态单一来源 + 转换唯一入口（session-state-machine.md S2）
-import { initialState as initialConversationState, userConfirmed, userRejected, approvalGranted, applyToolResult, classifyAction, canExecute, plannedComplete as isPlannedComplete, forceToolInput as buildForceToolInput, isProgressing as hasProgress, pendingCardToShow, type ConversationState } from '../domain/conversationState'
+import { initialState as initialConversationState, userConfirmed, userRejected, approvalGranted, applyToolResult, classifyAction, canExecute, plannedComplete as isPlannedComplete, forceToolInput as buildForceToolInput, isProgressing as hasProgress, pendingCardToShow, setPending, type ConversationState } from '../domain/conversationState'
 // 2026-08-07 DDD 落地（坑 89 forceTool/advanceChat 领域化——Conversation BC 轮次执行保障 + AgentChain BC 产品阶段流转）
 import { decideTurnPolicy } from '../domain/turnPolicy'
 // 2026-08-07 无阶段重构 S4：buildAdvanceInstruction/stageFlow import 删除（advanceChat 随阶段体系移除）
@@ -128,6 +128,8 @@ export default function ConversationPanel({
   onUserMessage,
   onGoalConfirmed,
   onExecutionConfirmed,
+  onGoalRejected,
+  onExecutionRejected,
   goalConfirmed,
   executionConfirmed,
   goalSeq,
@@ -151,7 +153,10 @@ export default function ConversationPanel({
   // 2026-08-07 无阶段重构 S4：onRequirementConfirmed → onGoalConfirmed / requirementConfirmed → goalConfirmed + executionConfirmed
   onGoalConfirmed?: (title: string) => void
   onExecutionConfirmed?: () => void // 2026-08-07 执行确认卡【确认执行】→ MainWorkspace setExecutionConfirmed（结构化确认——替代确认词）
-  goalConfirmed?: boolean // 2026-08-06 需求阶段门控（无阶段重构 S4：目标确认）：用户确认（MainWorkspace state）→ 同步 ref——确认后 write/edit/bash 放行
+  // 2026-08-15 D1：拒绝路径对称回调（MainWorkspace 渲染镜像回退——修复「拒绝被 effect 反转」双权威缺陷）
+  onGoalRejected?: () => void
+  onExecutionRejected?: () => void
+  goalConfirmed?: boolean // 2026-08-06 需求阶段门控（无阶段重构 S4：目标确认）：用户确认（MainWorkspace state）→ 渲染镜像（状态机权威在 stateRef）
   executionConfirmed?: boolean // 2026-08-07 无阶段重构 S4：执行确认（ExecutionConfirmCard——目标确认后用户确认执行方案）
   goalSeq?: number // 2026-08-07 无阶段重构 S4：目标确认次数——每次确认 = 任务边界（clearTrust 驱动）
   recentFilesExternal?: string[]
@@ -176,10 +181,12 @@ export default function ConversationPanel({
   // 2026-08-07 无阶段修复（输入≠打断）：send 排队判定用（待授权时模型停住等批准，
   // 用户输入直接处理不排队——排队会卡在授权等待；模型产出中才排队衔接）
   // 2026-08-14 S2b：授权等待接入状态机单一 PENDING（pending='approval'——A0 §3.2 授权卡同属会话级 pending）
+  // 2026-08-15 D5：互斥——确认卡 pending（goal/execution/achievement——done 分支 setPending 置位）优先，
+  // 授权卡 pending 只在当前无确认卡 pending 时置位（A0：pending 只有一个——决策点互斥，用户先处理先弹的卡）
   useEffect(() => {
     const hasApproval = messages.some((m) => m.toolCalls?.some((c) => c.status === 'need-approval' || c.status === 'file-approval')) ?? false
-    if (hasApproval && stateRef.current.pending !== 'approval') {
-      stateRef.current = { ...stateRef.current, pending: 'approval' }
+    if (hasApproval && stateRef.current.pending === 'none') {
+      stateRef.current = setPending(stateRef.current, 'approval')
     } else if (!hasApproval && stateRef.current.pending === 'approval') {
       stateRef.current = { ...stateRef.current, pending: 'none' }
     }
@@ -277,10 +284,10 @@ export default function ConversationPanel({
     }
     return { exec, goal, achieve }
   }, [messages])
-  // 用户确认（MainWorkspace state）→ 状态机同步（无阶段重构 S4：prop 改名 goalConfirmed）
-  useEffect(() => { if (goalConfirmed && !stateRef.current.goalConfirmed) stateRef.current = userConfirmed(stateRef.current, 'goal') }, [goalConfirmed])
-  // 2026-08-07 执行确认门控（用户「确认卡不选就不执行后续」——与授权卡同语义）：执行未确认 → write/edit/bash 不执行
-  useEffect(() => { if (executionConfirmed && !stateRef.current.executionConfirmed) stateRef.current = userConfirmed(stateRef.current, 'execution') }, [executionConfirmed])
+  // 用户确认/拒绝（MainWorkspace state = 展示镜像——不再从 prop 同步状态机，防拒绝被反转；D1 2026-08-15）
+  // 2026-08-14 审计发现：原 useEffect 只同步 true 方向——拒绝（userRejected 只改 stateRef）后 prop 仍 true
+  // → effect 立即把回退反转回 true（「重新描述需点两次」根因）。现状态机唯一权威 = stateRef；
+  // MainWorkspace 的 goalConfirmed/executionConfirmed 仅作渲染镜像（由确认/拒绝回调显式设置，双向对称）。
   // 2026-08-07 会话时间线（Session Timeline BC——单会话所有步骤统一日志：用户/搭档/工具/授权/状态——分析一步到位）
   const tlog = (type: string, detail: Record<string, unknown>, role?: 'user' | 'assistant' | 'system' | 'tool') => {
     // 2026-08-08 会话归属：session 用会话 ID（UUID——本组件挂载生成）——写入对应会话 timeline 文件
@@ -410,6 +417,19 @@ export default function ConversationPanel({
       })
       // 2026-08-07 用户决策（显式确认）：【目标确认】标记不再同步 goalConfirmedRef（自报确认删除——
       // goalConfirmedRef 由 prop 同步（用户点确认卡 → MainWorkspace state → 248 行 effect））
+      // 2026-08-15 D5：确认卡触发 → 会话级 PENDING（状态机冻结——A0 §3.2/§3.4 单一 PENDING 落地）
+      // 原实现 pending 仅授权卡置位（useEffect 直接展开改）；目标/执行/达成卡的「冻结」靠轮级派生检测——
+      // escalate 续聊后的新轮次模型仍可执行工具（pending 未置位漏洞）。现 done 时按派生结果置 pending，
+      // canExecute 统一消费（pending 下所有工具无效——含只读——用户决策是下一状态唯一输入）。
+      // sideEffectPending 与 maybeContinue 同源（UI 消息 status——拦截后为 done 不计；自动执行中为 pending 计）
+      const lastUiMsg = messagesRef.current[messagesRef.current.length - 1]
+      const uiCalls = lastUiMsg?.toolCalls ?? []
+      const sideEffectPendingUi = uiCalls.some((c) => c.status === 'pending' && classifyAction(c.name, String(c.args?.command ?? '')) === 'side-effect')
+      const cardToShow = pendingCardToShow(stateRef.current.goalConfirmed, stateRef.current.executionConfirmed, stateRef.current.achievementConfirmed, content, sideEffectPendingUi)
+      if (cardToShow !== 'none' && stateRef.current.pending === 'none') {
+        stateRef.current = setPending(stateRef.current, cardToShow)
+        tlog('pending-set', { kind: cardToShow }, 'system')
+      }
       // 2026-08-07 无阶段重构 S5：执行方案清单解析——模型输出【执行方案】块 → 并入 plannedFiles（任务完成度——deepcode unimplemented_files 借鉴）
       // 2026-08-08 根因 3 修复③：trustPath 规范化（模型写相对路径如 game.js）——与 approvePlan 的绝对路径清单（1036 行）统一比较基准
       const planFiles = parseExecutionPlan(content)
@@ -559,13 +579,17 @@ export default function ConversationPanel({
       // 标记未出现 → 走 main need-approval 授权卡 → 与 goalFallback 目标确认卡并存（两决策点冲突）
       const toolGate = canExecute(stateRef.current, { name: tc.name, command: String(tc.args?.command ?? ''), path: String(tc.args?.path ?? tc.args?.filePath ?? '') }, inPlannedFiles(tc.args?.path ?? tc.args?.filePath))
       const confirmGate = confirmPending(streamingRef.current.content, [{ name: tc.name, status: 'pending', command: String(tc.args?.command ?? '') }])
-      if (confirmGate || (!toolGate.ok && classifyAction(tc.name, String(tc.args?.command ?? '')) === 'side-effect')) {
-        const gateReason = confirmGate ? '等待你的决策' : toolGate.reason
+      // 2026-08-15 D5：会话级 PENDING（状态机冻结）下**所有工具无效**（含只读——A0 §3.4「无害≠有用」：
+      // 用户决策未到——read/search 结果无意义——做了白做）。原条件只拦 side-effect——escalate 新轮
+      // 在 pending 下仍可 read（轮级 confirmGate 无信号时不拦 + readonly 豁免）→ 与状态机语义不一致
+      const pendingBlocked = stateRef.current.pending !== 'none'
+      if (confirmGate || pendingBlocked || (!toolGate.ok && classifyAction(tc.name, String(tc.args?.command ?? '')) === 'side-effect')) {
+        const gateReason = pendingBlocked ? `会话等待你的决策（${stateRef.current.pending}）——此动作未执行` : (confirmGate ? '等待你的决策' : toolGate.reason)
         setMessages((prev) => {
           const last = prev[prev.length - 1]
           if (!last || last.role !== 'assistant') return prev
           const calls = (last.toolCalls ?? []).map((c) => c.name === tc.name && c.status === 'pending'
-            ? { ...c, status: 'done' as const, hidden: tc.name === 'check-capability', result: confirmGate ? `${tc.name} 等待你的决策——此动作未执行（点确认卡后模型会重新执行）` : `${tc.name} 未执行：${gateReason}` }
+            ? { ...c, status: 'done' as const, hidden: tc.name === 'check-capability', result: (confirmGate || pendingBlocked) ? `${tc.name} 等待你的决策——此动作未执行（点确认卡后模型会重新执行）` : `${tc.name} 未执行：${gateReason}` }
             : c)
           return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
         })
@@ -816,7 +840,10 @@ export default function ConversationPanel({
     return msgs
       .filter((m) => m.role === 'user' || (m.role === 'assistant' && m.status === 'done'))
       .flatMap((m): Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string }> => {
-        if (m.role === 'assistant' && !m.content && m.toolCalls && m.toolCalls.length > 0) {
+        // 2026-08-15 D4：工具轮完整回填——① 有正文+工具的消息也带 tool_calls（原 `!m.content` 条件丢弃工具结果）② tool 消息用
+        // rawResult 完整内容（原用 UI 摘要 c.result 且截断 300——模型后续轮看不到 read 内容 → 被迫反复 read——「一直读取操作」嫌疑）
+        // 与 maybeContinue（工具循环内）回填语义一致：c.rawResult ?? c.result
+        if (m.role === 'assistant' && m.toolCalls && m.toolCalls.length > 0) {
           const calls = m.toolCalls.map((c, i) => ({
             id: `h${callSeq + i}`,
             name: c.name,
@@ -825,8 +852,8 @@ export default function ConversationPanel({
           }))
           callSeq += calls.length
           return [
-            { role: 'assistant', content: null, tool_calls: calls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.args) } })) },
-            ...calls.map((c) => ({ role: 'tool', tool_call_id: c.id, content: String(c.result).slice(0, 300) }))
+            { role: 'assistant', content: m.content || null, tool_calls: calls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.args) } })) },
+            ...calls.map((c) => ({ role: 'tool', tool_call_id: c.id, content: String(c.result) }))
           ]
         }
         return [{ role: m.role, content: m.content }]
@@ -866,6 +893,8 @@ export default function ConversationPanel({
     // 2026-08-05：阶段推进 = 任务边界；2026-08-07 无阶段重构 S4/S5：目标确认（goalSeq）= 任务边界——approve-files 幂等标记同步重置（新任务需重新规划授权）
     // 2026-08-14 S2：状态机字段（完整任务边界重置由 userConfirmed('goal') 承担——此处仅即时清幂等标记）
     stateRef.current = { ...stateRef.current, filesApproved: false }
+    // 2026-08-15 D2：任务边界同步 main（filesApprovedRef 复位——否则跨任务 write 规划门控失效）
+    try { void window.neonforge.tools?.filesApprovedReset?.() } catch { /* 重置失败不影响——renderer 门控仍生效 */ }
   }
   // 2026-08-04 修复（用户「游戏成的3是D」错位）：流式链互斥——一次只跑一条链（send/advanceChat/授权续聊），其他链排队；
   // 原并发流（approveToolCall 续聊 + pendingAdvance 补发）chunk 交错写入同一消息 → 文本字符级错位
@@ -1285,11 +1314,10 @@ export default function ConversationPanel({
               // 模型在澄清提问（「敌人什么样？一关还是波次？」）时每条消息都弹确认卡 → 用户被卡轰炸 → 点「重新描述」
               // → 模型重新问 → 又弹 → 循环。收窄：只在模型**征询确认/总结目标**时弹；问句澄清期不弹（决策点互斥——
               // 候选块/开放问题都是澄清决策点，确认卡不插队）
-              const askingConfirm = /(等你确认|你确认一下|确认一下|确认没问题|行不行|可以吗|对吗|对吧|没问题吧|你看行|这样.*可以|就按这个)/.test(m.content)
-              const goalStated = /(目标是|要做的是|你的需求是|目标就是|就是做一个|做成|需求.*确认)/.test(m.content)
+              // 2026-08-15 D6：词表收敛——askingConfirm/goalStated 内联正则上移领域层（agentLoop.goalFallbackTrigger）——词表单源
               // 征询确认（含问句形式「行不行？」）→ 直接弹——确认征询就是要用户决策；目标总结陈述需非问句
               // （「你的需求是 X，你想做成什么样？」目标+后续提问 = 澄清中，不弹）
-              const goalFallback = !goalConfirmed && isLastAssistant && !hasCandidates && (askingConfirm || (!isQuestionLike(m.content) && goalStated))
+              const goalFallback = !goalConfirmed && isLastAssistant && !hasCandidates && goalFallbackTrigger(m.content)
               // 2026-08-14 S2b（缝隙 4/5）：触发统一走状态机派生 pendingCardToShow（渲染与 maybeContinue 停模型同源）——
               // 「等确认」语义命中即弹 + 停；探索期（只读 bash/无等确认语义）不弹（冒烟实证：探索期弹卡 → 模型困惑）
               const sideEffectAttempted = (m.toolCalls ?? []).some((c) => classifyAction(c.name, String(c.args?.command ?? '')) === 'side-effect')
@@ -1309,7 +1337,7 @@ export default function ConversationPanel({
                       <div className="nf-confirmcard__goal">{goalMatch ? goalMatch[1].trim() : (initialPrompt || '你描述的目标')}</div>
                       <div className="nf-confirmcard__actions">
                         <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { stateRef.current = userConfirmed(stateRef.current, 'goal'); onGoalConfirmed?.(goalMatch ? goalMatch[1].trim() : (initialPrompt || '目标已确认')); inputRef.current = '确认，目标清楚了'; void sendRef.current() }}>确认目标</button>
-                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { stateRef.current = userRejected(stateRef.current, 'goal'); setRejectedCardIdx((p) => ({ ...p, goal: i })); inputRef.current = '目标需要重新描述一下'; void sendRef.current() }}>重新描述</button>
+                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { stateRef.current = userRejected(stateRef.current, 'goal'); setRejectedCardIdx((p) => ({ ...p, goal: i })); onGoalRejected?.(); inputRef.current = '目标需要重新描述一下'; void sendRef.current() }}>重新描述</button>
                       </div>
                     </div>
                   ) : null}
@@ -1318,7 +1346,7 @@ export default function ConversationPanel({
                       <div className="nf-confirmcard__head">执行方案——需要你确认后动手</div>
                       <div className="nf-confirmcard__actions">
                         <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { stateRef.current = userConfirmed(stateRef.current, 'execution'); onExecutionConfirmed?.(); inputRef.current = '确认，按方案执行'; void sendRef.current() }}>确认执行</button>
-                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { stateRef.current = userRejected(stateRef.current, 'execution'); setRejectedCardIdx((p) => ({ ...p, execution: i })); inputRef.current = '方案需要调整一下'; void sendRef.current() }}>修改方案</button>
+                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { stateRef.current = userRejected(stateRef.current, 'execution'); setRejectedCardIdx((p) => ({ ...p, execution: i })); onExecutionRejected?.(); inputRef.current = '方案需要调整一下'; void sendRef.current() }}>修改方案</button>
                       </div>
                     </div>
                   ) : null}
