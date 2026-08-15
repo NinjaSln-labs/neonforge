@@ -8,6 +8,8 @@ import type { DeliveryPackage, ProblemInstance } from './types'
 import { createProblem, loadProblems, saveProblems, updateProblemSnapshot } from './problemStore'
 import { clearSession } from './sessionStore'
 import { IconSettings } from './icons'
+// 2026-08-15 Q10：demo 注入通道类型化单例
+import { getDemoBridge } from './demoBridge'
 
 // 任务工作台（对话面板「任务」Tab，06 任务队列前为结构占位）
 function TaskPanel() {
@@ -220,12 +222,12 @@ export default function MainWorkspace({
 
 function initDeliveryPkg(): DeliveryPackage | null {
   // 数据源：测试注入（window.neonforge.demo.delivery——视觉基线/演示）——产品运行时无 demo 字段 → 空态（真实执行后联动生成）
-  return (window.neonforge as unknown as { demo?: { delivery?: DeliveryPackage } }).demo?.delivery ?? null
+  return getDemoBridge()?.delivery ?? null
 }
 
 function initProblems(): ProblemInstance[] {
   // 数据源：测试注入（window.neonforge.demo.problems）优先；否则 localStorage 持久化台账（断点续做基础）
-  const demo = (window.neonforge as unknown as { demo?: { problems?: ProblemInstance[] } }).demo?.problems
+  const demo = getDemoBridge()?.problems
   return demo ?? loadProblems()
 }
 
