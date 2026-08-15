@@ -80,7 +80,7 @@ npm run dist               # outputs to release/ (macOS: .dmg + .zip; win: .nsis
 ```
 neonforge/
 ├── apps/desktop/               # Electron desktop app (V1)
-│   ├── src/domain/             # Domain layer (pure logic — Task aggregate / execution policy / stuck detection, L1-tested)
+│   ├── src/domain/             # Domain layer (pure logic — Task aggregate / progress guarantee / stuck detection, L1-tested)
 │   ├── src/main/               # Main process (Gateway / ToolRegistry / environment capability / timeline)
 │   ├── src/renderer/           # React application layer (conversation / confirm cards / approval cards / tool cards)
 │   ├── tests/                  # L1 unit + L3 interaction + L5 visual
