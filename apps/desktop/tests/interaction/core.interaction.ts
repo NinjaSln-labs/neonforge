@@ -1213,3 +1213,76 @@ test('问题 A：approve-files 卡悬挂 → 模型续轮被拦后停续聊（�
   await page.waitForTimeout(1500)
   expect(await page.evaluate(() => (window as unknown as { __chatCount: number }).__chatCount)).toBe(5)
 })
+
+// 2026-08-15 P2（时间线实证 a08d1775：同 args bash 双卡 → name+args 匹配从后往前错位到新卡 →
+// 旧卡永不消失 → 每次点击都真实执行 → 16 个 npm install 并发）：卡按稳定 id 定位——各自批准都生效。
+// 场景：卡#A（need-approval）+ 卡#B（同 args、被 pending 拦为 done）并存 → 点卡#A「允许执行」→ 卡#A done、
+// 按钮归 0（修复前：patch 错位到卡#B → 卡#A 永不消失 → 按钮仍 1）
+test('P2：同 args bash 双卡并存 → 点第一张卡按 id 精确定位（各自批准都生效）', async ({ page }) => {
+  await page.addInitScript(() => {
+    let streamCb: ((c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) | null = null
+    let chatCount = 0
+    window.neonforge = {
+      version: 'test',
+      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
+      workspace: { openFolder: async () => '/test', listDir: async () => [], readFile: async () => ({ ok: true, content: 'x' }), readNotebook: async () => null, initProject: async () => ({ ok: true, path: '/test', title: 't' }), updateProjectTitle: async () => ({ ok: true }) },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        streamChat: async () => {
+          chatCount++
+          setTimeout(() => {
+            // chat#1：目标确认（目标卡）；chat#2：执行方案（执行确认卡——bash 需执行确认后才走授权，否则被 confirmGate 拦）；
+            // chat#3+：模型调同 args bash（npm install——第一次 needApproval 弹卡#A，之后被 pending 拦为 done 卡#B）
+            if (chatCount === 1) {
+              streamCb?.({ type: 'content', text: '好的。【目标确认：做一个网页游戏】' })
+            } else if (chatCount === 2) {
+              streamCb?.({ type: 'content', text: '【执行方案】\n- index.html' })
+            } else {
+              streamCb?.({ type: 'tool-call', toolCall: { name: 'bash', args: { command: 'npm install' } } })
+            }
+            streamCb?.({ type: 'done' })
+          }, 30)
+          return { ok: true }
+        },
+        onStreamChunk: (cb: (c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) => { streamCb = cb; return () => {} }
+      },
+      tools: {
+        list: async () => [],
+        execute: async (_name: string, _args: Record<string, unknown>, opts?: { approved?: boolean }) =>
+          opts?.approved ? { ok: true, data: {} } : { ok: false, needApproval: true, error: '「bash」需要授权（L3）——approved=true 后执行' },
+        filesApproved: async () => {},
+        revert: async () => ({ ok: true })
+      },
+      context: { resolve: async () => ({ fragments: [] }) },
+      compaction: { compact: async () => ({ ok: false }) },
+      plugins: { list: async () => [], toggle: async () => true },
+      chatLog: { log: async () => {}, export: async () => ({ ok: true, path: '/tmp/x.md' }) }
+    }
+    ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
+  })
+  await page.goto('http://localhost:5175/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.getByRole('button', { name: '从零开始' }).click()
+  await page.locator('.nf-chat__input textarea').fill('帮我做一个网页游戏')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  // chat#1：目标确认 → 点确认目标
+  await expect(page.getByRole('button', { name: '确认目标' })).toBeVisible({ timeout: 10000 })
+  await page.getByRole('button', { name: '确认目标' }).click()
+  // chat#2：执行方案 → 点确认执行（执行确认后 bash 才走授权路径）
+  await expect(page.getByRole('button', { name: '确认执行' })).toBeVisible({ timeout: 10000 })
+  await page.getByRole('button', { name: '确认执行' }).click()
+  // chat#3：bash npm install → need-approval 卡#A（「允许执行」按钮 1 个）
+  await expect(page.locator('.nf-toolcall__approve')).toHaveCount(1, { timeout: 10000 })
+  // 用户「继续」→ chat#3：模型重试同 args bash → 被 pending 拦为 done（卡#B——同 args 双卡并存）
+  await page.locator('.nf-chat__input textarea').fill('继续')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  await expect(page.locator('.nf-toolcall--done').filter({ hasText: '等待你的决策' })).toHaveCount(1, { timeout: 10000 })
+  // 卡#A 仍在（need-approval 按钮 1 个）+ 卡#B 已 done——两卡并存
+  await expect(page.locator('.nf-toolcall__approve')).toHaveCount(1)
+  // 点卡#A「允许执行」→ 按 id 精确定位：卡#A done、按钮归 0
+  // （修复前：patch 从后往前错位到卡#B → 卡#A 永不消失 → 按钮仍 1——断言失败）
+  await page.locator('.nf-toolcall__approve').first().click()
+  await expect(page.locator('.nf-toolcall__approve')).toHaveCount(0, { timeout: 10000 })
+  // 两张卡都 done（卡#A 批准 + 卡#B 被拦）
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(2)
+})

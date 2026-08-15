@@ -43,6 +43,7 @@ import { validateTimelineEvent, TIMELINE_EVENT_SPECS, dedupeKey, detectProposed 
 // 消费 02：streamChat（四档 basic）+ ModelRouter（默认 Flash）；错误分支：Key 失效内嵌更新 / 服务故障提示
 
 export interface ToolCallMsg {
+  id?: string // 2026-08-15 P2：稳定 id（会话内递增——同 args 卡并存的精确定位键；旧存档无 id → 渲染/定位 fallback）
   name: string
   args: Record<string, unknown>
   status: 'pending' | 'done' | 'need-approval' | 'file-approval' | 'error' | 'reverted'
@@ -427,6 +428,8 @@ export default function ConversationPanel({
   // 2026-08-07 无阶段重构 S4：TurnKind/turnKindRef 删除（advanceChat 随阶段体系移除——无 advance-turn；send/maybeContinue 不再需要轮次类型标记）
   const applyChunk = (chunk: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => {
     console.log('[conv] chunk', chunk.type)
+    // 2026-08-15 P2：当前 tool-call chunk 的卡稳定 id（函数级——updater 闭包引用；tool-call chunk 时赋值）
+    let tcId: string | undefined
     // 2026-08-05 用户反馈 2：模型有新动作（chunk）→ 清除 isActionPromise 状态栏提示（模型在动——之前只是陈述/即将调工具）
     if (chunk.type === 'content' || chunk.type === 'tool-call') onActionPromiseHint?.(null)
     // 事件层累积（每事件一次——双调安全）
@@ -443,7 +446,11 @@ export default function ConversationPanel({
     }
     if (chunk.type === 'tool-call' && chunk.toolCall) {
       tlog('tool.requested', { name: chunk.toolCall.name, args: chunk.toolCall.args }, 'tool')
-      streamingRef.current.toolCalls.push({ name: chunk.toolCall.name, args: chunk.toolCall.args, status: 'pending' })
+      // 2026-08-15 P2：卡稳定 id **在流事件层同步生成**（updater 外——React 批处理会延迟执行 updater，
+      // 期间 streamingRef 可能已被后续 done chunk 清空 → updater 内取 streamingRef 会拿到 undefined；
+      // 闭包变量传入 updater——StrictMode 双调 id 仍唯一）
+      tcId = nextMsgId()
+      streamingRef.current.toolCalls.push({ name: chunk.toolCall.name, args: chunk.toolCall.args, status: 'pending', id: tcId })
     }
     if (chunk.type === 'done') {
       // 副作用移出 updater：目标确认回写 + 对话日志（updater 双调会重复记录）
@@ -516,7 +523,9 @@ export default function ConversationPanel({
           plannedFiles: stateRef.current.plannedFiles,
           producedFiles: stateRef.current.producedFiles,
           // 2026-08-06 补充（用户「清单来源不只 approve-files」——③ projectFiles 项目文件树）：产出校验（规划文件出现在文件树=已产出）
-          projectFiles: new Set(recentFilesExternal ?? [])
+          // 2026-08-15 坑 102 修复：projectFiles 统一绝对基准（MainWorkspace listDir 返回 basename——与 planned/produced 绝对基准分裂
+          // → projectFiles.has(f) 恒 false → 文件树权威分支失效 → plannedComplete 只靠 produced 记录）；trustPath 归一
+          projectFiles: new Set((recentFilesExternal ?? []).map((f) => trustPath(f)))
         })
         streamingRef.current.toolCalls.forEach((c) => { if (c.name === 'read' && c.file) prevReadFilesRef.current.add(c.file) })
         const { state, event } = detectStuck({ turn, prev: stuckStateRef.current })
@@ -570,6 +579,8 @@ export default function ConversationPanel({
           status = stateRef.current.filesApproved ? 'done' : 'file-approval'
         }
         next.toolCalls = [...(next.toolCalls ?? []), {
+          // 2026-08-15 P2：复用流事件层同步生成的稳定 id（闭包 tcId——同 args 卡并存的精确定位键）
+          id: tcId,
           name: chunk.toolCall.name,
           args: chunk.toolCall.args,
           status,
@@ -866,7 +877,7 @@ export default function ConversationPanel({
       // 无计划以 produced 为准——A0 §4 补行语义，L1 已锁定）
       // 2026-08-08 根因 3 修复①：判定改读 **ref** 而非 prop 闭包——确认卡按钮同事件触发 send 时
       // （onClick 内 setState 异步 + sendRef 同步调用）prop 还是旧渲染值 → forceTool 恒 auto → 模型纯文本承诺后停住
-      const { forceTool } = decideTurnPolicy(buildForceToolInput(stateRef.current, new Set(recentFilesExternal ?? [])))
+      const { forceTool } = decideTurnPolicy(buildForceToolInput(stateRef.current, new Set((recentFilesExternal ?? []).map((f) => trustPath(f)))))
       // 2026-08-15 补齐：执行保障事件（06 §1.5 execution.forced/released——forceTool 轨迹可回放）
       tlog(forceTool ? 'execution.forced' : 'execution.released', { reason: 'turn-policy' }, 'system')
       // 2026-08-14 取证打点（用户实测「一直读取操作」——plannedComplete 未收敛）：dump 三集合供 timeline 比对
@@ -1333,7 +1344,7 @@ export default function ConversationPanel({
                   // ticket 14：授权卡风险明示——等级 + 影响（写哪个文件/执行什么命令）+ 快照提示
                   const hint = buildAuthHint(tc.name, tc.args)
                   return (
-                  <div key={i} className={`nf-toolcall nf-toolcall--${tc.status}`}>
+                  <div key={tc.id ?? i} className={`nf-toolcall nf-toolcall--${tc.status}`}>
                     <span className="nf-toolcall__icon">
                       {tc.status === 'done' ? <IconCheck size={11} /> : tc.status === 'need-approval' || tc.status === 'file-approval' ? <IconLock size={11} /> : tc.status === 'reverted' ? <IconRotateCcw size={11} /> : tc.status === 'error' ? <IconX size={11} /> : <IconClock size={11} />}
                     </span>

@@ -148,6 +148,15 @@ describe('conversationState——plannedComplete / forceToolInput（缝隙 3）'
     s = applyToolResult(s, { name: 'bash', ok: false, error: 'exit-1' })
     expect(forceToolInput(s, new Set()).lastToolFailed).toBe(true)
   })
+
+  it('pending 非 none → forceToolInput.pending=true（P1——A0 §4 补行：等用户决策不强制，与 canExecute 同源）', () => {
+    for (const kind of ['goal', 'execution', 'achievement', 'approval'] as const) {
+      const s = setPending(initialState(), kind)
+      expect(forceToolInput(s, new Set()).pending).toBe(true)
+    }
+    expect(forceToolInput(initialState(), new Set()).pending).toBe(false)
+    expect(forceToolInput(userConfirmed(initialState(), 'goal'), new Set()).pending).toBe(false)
+  })
 })
 
 describe('conversationState——isProgressing（缝隙 2）', () => {
@@ -233,5 +242,19 @@ describe('conversationState——shouldStopContinuation（问题 A：maybeContin
 
   it('pending=none + 无卡信号 → 继续（模型还在调工具——等待自动执行完成）', () => {
     expect(shouldStopContinuation(initialState(), { needsApproval: false, confirmPending: false })).toBe(false)
+  })
+})
+
+describe('conversationState——plannedComplete 基准统一（坑 102：projectFiles 必须绝对基准——与 planned/produced 同源）', () => {
+  it('produced 无记录但文件树（绝对）出现 → 完成（回滚/删除场景文件树权威——坑 102 护栏）', () => {
+    let s = userConfirmed(userConfirmed(initialState(), 'goal'), 'execution')
+    s = approvalGranted(s, ['/test/a.js'])
+    expect(plannedComplete(s, new Set(['/test/a.js']))).toBe(true)
+  })
+
+  it('basename 注入（旧分裂——MainWorkspace 原 listDir e.name）→ 不命中（锁定调用方必须归一化）', () => {
+    let s = userConfirmed(userConfirmed(initialState(), 'goal'), 'execution')
+    s = approvalGranted(s, ['/test/a.js'])
+    expect(plannedComplete(s, new Set(['a.js']))).toBe(false)
   })
 })

@@ -52,6 +52,9 @@ export function isDoneLike(t: string): boolean {
 //   - 文件路径（原因）
 //   - 文件路径2（原因）
 // 行首 `- `/`• ` 提取路径（去括号原因注释）；无【执行方案】标记或空块 → 返回 []
+// 2026-08-15 坑 102 修复（取证 fa596cdd）：模型把备注/说明当行首（「- 项目说明 README 保持不动」）→
+// 垃圾条目入清单 → plannedComplete 永不收敛 → forceTool 恒 true → read 自检循环。加路径形态过滤：
+// 无空白字符 = 合法路径（相对/绝对/目录）；含空白必须带文件扩展名（中文文件名容错——如「docs/我的 文件.md」）
 export function parseExecutionPlan(text: string): string[] {
   const block = text.match(/【执行方案】([\s\S]*?)(?:【|$)/)
   if (!block) return [] // 无【执行方案】标记 → 不解析（防误抓正文 - 行）
@@ -61,9 +64,15 @@ export function parseExecutionPlan(text: string): string[] {
     const m = line.match(/^\s*[-•]\s*(.+?)(?:\s*[（(].*?[）)])?\s*$/)
     if (!m) continue
     const p = m[1].trim()
-    if (p) files.push(p)
+    if (p && isLikelyPath(p)) files.push(p)
   }
   return files
+}
+
+// 路径形态判定（坑 102：清单必须只含「能产出/能出现在文件树」的条目——自然语言说明行排除）
+function isLikelyPath(p: string): boolean {
+  if (!/\s/.test(p)) return true // 无空白：相对/绝对/目录（src/、assets、game.js、/a/b.html）
+  return /\.[a-zA-Z0-9]{1,5}$/.test(p) // 含空白但带扩展名（中文文件名容错——docs/我的 文件.md）
 }
 
 // === Domain Service: ProgressEvaluator——从 AgentTurn（toolCalls + content）评估 TurnProgress ===

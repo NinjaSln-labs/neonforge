@@ -19,6 +19,16 @@ describe('parseExecutionPlan（执行方案清单解析）', () => {
   it('• 符号行同样解析（容错）', () => {
     expect(parseExecutionPlan('【执行方案】\n• b.js（改配置）')).toEqual(['b.js'])
   })
+  it('自然语言说明行过滤（坑 102 取证 fa596cdd：模型把备注当行首——「项目说明 README 保持不动」入清单 → plannedComplete 永不收敛 → forceTool 恒 true → read 自检循环）', () => {
+    const text = '【执行方案】\n- index.html（页面骨架）\n- 项目说明 README 保持不动\n- src/game.js（游戏逻辑）'
+    expect(parseExecutionPlan(text)).toEqual(['index.html', 'src/game.js'])
+  })
+  it('绝对路径与含空格但带扩展名的合法路径保留（中文文件名容错——不误伤）', () => {
+    expect(parseExecutionPlan('【执行方案】\n- /Users/sin/test/package.html\n- docs/我的 文件.md')).toEqual(['/Users/sin/test/package.html', 'docs/我的 文件.md'])
+  })
+  it('目录行（无扩展名无空格）保留', () => {
+    expect(parseExecutionPlan('【执行方案】\n- src/\n- assets')).toEqual(['src/', 'assets'])
+  })
 })
 
 describe('ProgressEvaluator（单轮进展评估）', () => {

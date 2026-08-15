@@ -24,6 +24,9 @@ export interface TurnPolicyInput {
   lastToolFailed?: boolean
   goalAchieved?: boolean
   plannedComplete?: boolean
+  // 2026-08-15 P1（A0 §4 补行）：等用户决策（pending 非 none）→ 不强制——pending 下模型不做任何事（§3.4），
+  // forceTool 与 canExecute/maybeContinue 同源读 pending（三判定器统一——问题 A 审计第 3 处脱节）
+  pending?: boolean
 }
 
 export interface TurnPolicyDecision {
@@ -42,6 +45,12 @@ export interface TurnPolicyDecision {
 //                              避免已干活后被迫空转）
 export function decideTurnPolicy(input: TurnPolicyInput): TurnPolicyDecision {
   const { goalConfirmed, executionConfirmed, produced } = input
+  // 2026-08-15 P1：PENDING 优先（A0 §3.5 门控优先级——状态机冻结先于一切确认点）——
+  // 授权卡/确认卡悬挂期间用户决策是唯一输入：不强制（required 会逼模型调工具 → 被 canExecute 拦 →
+  // 每轮无效调用——时间线实证 e070d44c seq 83-99「卡悬挂 + FORCED + write blocked」）
+  if (input.pending) {
+    return { forceTool: false, reason: 'pending-user-decision' }
+  }
   // 目标未确认 → auto（澄清问答——无论执行/产出状态，目标未确认一切免谈）
   if (!goalConfirmed) {
     return { forceTool: false, reason: 'goal-clarify' }
