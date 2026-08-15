@@ -101,7 +101,8 @@ export default function MainWorkspace({
       setProblems((prev) => prev.map((p) => {
         if (p.id !== activeProblem) return p
         // 2026-08-15 Q9：authorized 结构化（{tool, file}——原 `[工具] 路径` 字符串拼接；旧存档 string 归一后比较）
-        const entry = { tool: r.name, file: r.file }
+        const file = r.file as string // 闭包内 narrowing 丢失——外层已守卫 !r.file
+        const entry = { tool: r.name, file }
         const rawAuth = (p.snapshot?.authorized ?? []) as Array<{ tool: string; file: string } | string>
         const normalized = rawAuth.map((a) => {
           if (typeof a !== 'string') return a
