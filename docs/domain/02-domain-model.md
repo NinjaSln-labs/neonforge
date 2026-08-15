@@ -284,6 +284,7 @@ id / title / status / updatedAt
 | 完成声明（Completion Claim）| 模型「做完了」的主张——必须附证据（§4.1 ResolutionConfirmed）|
 | 拒绝原因（RejectReason）| 拒绝决策的结构化原因（kind/text/target——含 modify）——回填模型调整|
 | 动作属性（Action Attribute）| 工具调用的客观性质（只读/网络只读/清单内/越界/高危）——actionGate 判定（§5）|
+| 授权（Approval）| 对「动作属性判定为需询问」的调用，向用户呈现请求（ApprovalRequest）——用户允许或拒绝（带原因）（2026-08-16 第 15 轮审计 #2 补——A0 §9 同源）|
 
 > 2026-08-16 第 13 轮审计 #9：术语表补齐意图确认重设计新增术语（对齐 A0 §9——原表缺 10 项）。
 

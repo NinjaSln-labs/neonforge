@@ -283,6 +283,7 @@ CompletionEvidence{ verification: [{command, output?, passed?}], diffs: [{path}]
 | 完成声明（Completion Claim）| 模型「做完了」的主张——必须附证据（§4.2）|
 | 拒绝原因（RejectReason）| 拒绝决策的结构化原因（kind/text/target）——回填模型调整（§5）|
 | 动作属性（Action Attribute）| 工具调用的客观性质（只读/网络只读/清单内/越界/高危）——ActionGate 判定（§3.5b）|
+| 授权（Approval）| 对「动作属性判定为需询问」的调用，向用户呈现请求（ApprovalRequest：toolName+subject+reason+risk），用户允许（一次/会话/永久）或拒绝（带原因）（2026-08-16 第 15 轮审计 #2 补——设计 §2 通用语言同源）|
 
 ---
 
