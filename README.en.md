@@ -97,7 +97,7 @@ neonforge/
 **Domain architecture (stage-free, goal-driven)**:
 
 ```
-Conversation BC (core) — goal state machine · confirmation points (goal/execution/achievement cards) · execution policy (forceTool) · session-level single PENDING
+Conversation BC (core) — goal state machine · confirmation points (goal/plan/resolution cards — system-triggered, model can only propose) · progress guarantee (force advancement ≠ force tool calls) · session-level single PENDING
 Capability BC           — environment detection (source of truth) · capability views (derived) · Ledger feedback (self-learning)
 Workspace BC            — project files · planned-files boundary (host-enforced) · authorization + task-level trust
 Delivery BC             — delivery package (artifacts + acceptance + confirm-close) · DoD alignment · snapshot rollback
