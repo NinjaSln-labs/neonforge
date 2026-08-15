@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   initialState, userConfirmed, userRejected, setPending, approvalGranted, applyToolResult,
-  classifyAction, canExecute, plannedComplete, forceToolInput, isProgressing, pendingCardToShow,
+  classifyAction, canExecute, plannedComplete, forceToolInput, isProgressing, pendingCardToShow, shouldStopContinuation,
   type ConversationState,
 } from '../../src/domain/conversationState'
 
@@ -211,5 +211,27 @@ describe('conversationState——D5 单一 PENDING 冻结语义（2026-08-15）'
     expect(userConfirmed(setPending(initialState(), 'achievement'), 'achievement').pending).toBe('none')
     expect(userRejected(setPending(initialState(), 'goal'), 'goal').pending).toBe('none')
     expect(approvalGranted(setPending(initialState(), 'approval'), ['/test/a.js']).pending).toBe('none')
+  })
+})
+
+describe('conversationState——shouldStopContinuation（问题 A：maybeContinue 与 canExecute 同源）', () => {
+  it('pending 非 none（卡在任意消息——含旧消息授权卡）→ 停续聊', () => {
+    for (const kind of ['goal', 'execution', 'achievement', 'approval'] as const) {
+      const s = setPending(initialState(), kind)
+      // 最后一条消息无任何卡信号（授权卡在旧消息——lastMsg 派生检测不到的正是这个场景）
+      expect(shouldStopContinuation(s, { needsApproval: false, confirmPending: false })).toBe(true)
+    }
+  })
+
+  it('pending=none + 最后消息授权卡 → 停（既有语义——卡在最后一条消息）', () => {
+    expect(shouldStopContinuation(initialState(), { needsApproval: true, confirmPending: false })).toBe(true)
+  })
+
+  it('pending=none + 最后消息确认卡 → 停（既有语义——确认卡触发）', () => {
+    expect(shouldStopContinuation(initialState(), { needsApproval: false, confirmPending: true })).toBe(true)
+  })
+
+  it('pending=none + 无卡信号 → 继续（模型还在调工具——等待自动执行完成）', () => {
+    expect(shouldStopContinuation(initialState(), { needsApproval: false, confirmPending: false })).toBe(false)
   })
 })

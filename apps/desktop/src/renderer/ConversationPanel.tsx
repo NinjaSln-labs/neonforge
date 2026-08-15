@@ -12,7 +12,7 @@ import { cleanContent, stripMarkdown } from './textClean'
 // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层纯逻辑，双源调研驱动）
 import { evaluateTurnProgress, detectStuck, initialStuckState, isQuestionLike, isCommunicationLike, isDoneLike, parseExecutionPlan, summarizeCapability, goalFallbackTrigger } from '../domain/agentLoop'
 // 2026-08-14 会话状态机（Task 聚合——A0 §2/§3/§4/§5）：状态单一来源 + 转换唯一入口（session-state-machine.md S2）
-import { initialState as initialConversationState, classifyAction, canExecute, plannedComplete as isPlannedComplete, forceToolInput as buildForceToolInput, isProgressing as hasProgress, pendingCardToShow, type ConversationState } from '../domain/conversationState'
+import { initialState as initialConversationState, classifyAction, canExecute, plannedComplete as isPlannedComplete, forceToolInput as buildForceToolInput, isProgressing as hasProgress, pendingCardToShow, shouldStopContinuation, type ConversationState } from '../domain/conversationState'
 // 2026-08-15 Q1a+Q2：状态机转换单点封装（写路径唯一入口）
 import { useConversationState } from './useConversationState'
 // 2026-08-15 Q1b：工具授权 handler 封装（组件瘦身）
@@ -744,7 +744,11 @@ export default function ConversationPanel({
       const lastContent = lastMsg.content ?? ''
       const sideEffectPending = lastMsg.toolCalls.some((c) => c.status === 'pending' && classifyAction(c.name, String(c.args?.command ?? '')) === 'side-effect')
       const confirmPending = pendingCardToShow(stateRef.current.goalConfirmed, stateRef.current.executionConfirmed, stateRef.current.achievementConfirmed, lastContent, sideEffectPending) !== 'none'
-      if (needsApproval || confirmPending) { releaseWorking(); return } // 卡弹出（确认卡/授权卡）——等用户决策（模型停——不续聊）
+      // 2026-08-15 问题 A 修复（用户实测 14 轮工具循环根因）：停止条件接入状态机——pending 非 none 即停
+      // （与 canExecute 同源——领域层 shouldStopContinuation）。授权卡（need-approval/file-approval）可能挂在
+      // **旧消息**（用户未批准未拒绝——卡悬挂）→ 全列表 effect 已置 pending='approval'，但 lastMsg 派生检测不到
+      // → 修复前继续喂模型 → forceTool 逼模型每轮调工具 → 被 pendingBlocked 拦 → 循环。现在卡在任意消息都停续聊
+      if (shouldStopContinuation(stateRef.current, { needsApproval, confirmPending })) { releaseWorking(); return } // 卡弹出（确认卡/授权卡）——等用户决策（模型停——不续聊）
       if (pending.length === 0) {
         // 2026-08-04 重构：同工具重复检测（同一 name+args 连续 3 次 = 死循环——防模型空转不产出；跨调用累积——原局部变量每轮重置失效）
         // 2026-08-05 体验反馈：只统计写工具（write/edit）——read/bash 只读重复是模型合理排查（曾因 read 摘要化反复读同文件被误伤），不触发；真正空转由 depth 40 兜底
