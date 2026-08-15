@@ -729,6 +729,8 @@ Diff 审核中「全部接受并写入」的确认操作。非模态，不打断
 
 ## 意图确认组件（2026-08-16 新增——第 6 轮产品文档审计 #1；规格依据：`intent-confirmation-domain-design.md` §3.2 值对象；S3 实现前置）
 
+> **视觉令牌（2026-08-16 第 18 轮审计 #3 注）**：本节为**结构规格**（数据源/按钮语义/出现时机）——视觉实现按 `product/03-design-tokens.md`（--nf-accent/--nf-bg-elevated/--nf-radius-*/--nf-ease-*）+ `product/05-visual-spec.md` §3 关键屏风格落地（S3 实现时锚定）。
+
 ### 方案卡（PlanCard——PlanProposal 渲染）
 
 ```
