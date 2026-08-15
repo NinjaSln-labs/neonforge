@@ -28,11 +28,11 @@
 | **解决确认率**（2026-08-16 补——北极星口径对齐领域「交付≠解决」：完成=证据对账确认，非写入）| 完成任务中「证据对账通过并确认解决」的占比（vs 未解决/放弃）| ≥ 70% | Beta 起（decision.resolved + verifyCompletion 埋点）|
 | **非技术用户新建成功率**（细分用户指标，D0 §1.4） | **不会写代码的用户从「从零开始」→ 一键安装预览 的独立完成比例（无需开发者介入）** | **≥ 50%** | Beta 起（问卷+埋点） |
 | **非技术用户任务完成率**（细分） | 非技术用户发起的任务中「接受全部并写入」占比（走改动说明主路径） | **≥ 60%** | Beta 起 |
-| **授权卡滞留率**（确认交互质量——2026-08-16 补，第 5 轮审计 #1）| 授权请求 → 用户决策时长 >30s 的占比（疲劳/悬挂代理——问题 A「卡悬挂模型乱动」复发监测）| **< 20%** | Beta 起（approval.requested→decision.resolved 时长埋点）|
+| **授权卡滞留率**（确认交互质量——2026-08-16 补，第 5 轮审计 #1）| 授权请求 → 用户决策时长 >30s 的占比（疲劳/悬挂代理——问题 A「卡悬挂模型乱动」复发监测）| **< 20%** | Beta 起（decision.requested(kind=approval)→decision.resolved 时长埋点——2026-08-16 第 14 轮审计 #4 事件名对齐）|
 | **方案修改率**（确认交互质量——#1）| 方案卡被修改/重出（拒绝 kind=modify）的占比（意图对齐质量：过低=橡皮图章化、过高=方案质量差）| **15-40%**（区间）| Beta 起（decision.resolved 带 RejectReason.kind 埋点）|
 | **证据核验通过率**（确认交互质量——#1）| 完成声明中系统核验（verifyCompletion——只读命令代跑/diff 派生）通过占比（证据机制生效度；unverifiable/证据不足计入未通过）| **≥ 70%** | Beta 起（verifyCompletion 埋点——含 completion.evidence_missing）|
 
-**测量方法**：应用内事件埋点（本地统计，不上传；TokenTracker 扩展事件计数）——`task.started` / `task.written` / `diff.accepted` / `preheat.hit` + 非技术细分：`project.created_nondev` / `project.preview_started` / `diff.accepted_summary`（用户自报「不会写代码」时标记 segment）。确认交互指标（v1.1 新增）：`decision.requested/resolved`（含 RejectReason.kind——方案修改率）、`approval.requested→decision.resolved` 时长（授权卡滞留率）、`verifyCompletion` 通过/未通过（证据核验通过率——未通过打 `completion.evidence_missing`）。
+**测量方法**：应用内事件埋点（本地统计，不上传；TokenTracker 扩展事件计数）——`task.started` / `task.written` / `diff.accepted` / `preheat.hit` + 非技术细分：`project.created_nondev` / `project.preview_started` / `diff.accepted_summary`（用户自报「不会写代码」时标记 segment）。确认交互指标（v1.1 新增）：`decision.requested/resolved`（含 RejectReason.kind——方案修改率）、`decision.requested(kind=approval)→decision.resolved` 时长（授权卡滞留率——2026-08-16 第 14 轮审计 #4：`approval.requested` 为埋点别名，事件目录以 `docs/domain/06-domain-events.md` 为准——授权请求出现 = decision.requested kind=approval）、`verifyCompletion` 通过/未通过（证据核验通过率——未通过打 `completion.evidence_missing`）。
 
 **阈值依据说明（专家评审补强）**：非技术用户两阈值（≥50% 新建成功率 / ≥60% 任务完成率）为**经验初值**（类比低代码工具非技术用户独立完成基线），无竞品实测支撑——**Beta 期前 30 天校准**：若实际完成率 <30% 或 >85%，回查产品阻塞点（安装分支/改动说明可理解性）后重设阈值，并记录校准依据于本节。
 
