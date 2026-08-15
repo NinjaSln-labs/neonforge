@@ -12,7 +12,7 @@ async function mockBridge(page: import('@playwright/test').Page) {
         clearKey: async () => {}
       },
       workspace: {
-        openFolder: async () => '/workspace/neonforge',
+        openFolder: async () => '/tmp/nf-visual-test',
         listDir: async () => [],
         readFile: async (p: string) => ({ ok: true, content: '// ' + p })
       },
