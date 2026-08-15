@@ -117,7 +117,7 @@ Session Timeline BC      — 全步骤统一记录（可观测性——JSONL）
 ## 测试
 
 ```bash
-npx vitest run                            # L1 领域逻辑（299）
+npx vitest run                            # L1 领域逻辑（291）
 npx tsc -p tsconfig.json --noEmit         # L2 契约（renderer + main）
 npx playwright test --project=interaction # L3 组件交互（27）
 npx playwright test                       # L5 视觉 + L3
