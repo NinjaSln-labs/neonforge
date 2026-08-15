@@ -37,7 +37,7 @@ export function loadProblems(fallback: ProblemInstance[] = []): ProblemInstance[
 
 // 旧存档迁移：`[工具] 路径` 字符串 → { tool, file }（解析失败保留原文为 file）
 function migrateAuthorized(p: ProblemInstance): ProblemInstance {
-  const auth = p.snapshot?.authorized
+  const auth = (p.snapshot?.authorized ?? []) as Array<{ tool: string; file: string } | string>
   if (!Array.isArray(auth) || auth.length === 0) return p
   const migrated = auth.map((a) => {
     if (typeof a !== 'string') return a // 已是结构化

@@ -61,7 +61,7 @@ export default function SessionPanel({
             {activeId === p.id && p.snapshot && (
               <div className="nf-ledger__snapshot">
                 {p.snapshot.authorized.length > 0 && (
-                  <div className="nf-ledger__snap-row">已授权：{p.snapshot.authorized.slice(-3).map((a) => a.replace(/\[[^\]]+\]\s*/, '')).join(' · ')}</div>
+                  <div className="nf-ledger__snap-row">已授权：{(p.snapshot.authorized as Array<{ tool: string; file: string } | string>).slice(-3).map((a) => typeof a === 'string' ? a.replace(/\[[^\]]+\]\s*/, '') : a.file.split('/').pop() ?? a.file).join(' · ')}</div>
                 )}
                 {p.snapshot.pending.length > 0 && (
                   <div className="nf-ledger__snap-row">待办：{p.snapshot.pending.slice(-2).join(' · ')}</div>
