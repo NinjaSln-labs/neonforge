@@ -186,3 +186,30 @@ describe('conversationState——pendingCardToShow（缝隙 5）', () => {
     expect(show(true, true, false, '【目标确认：…】【执行方案】…')).toBe('none')
   })
 })
+
+describe('conversationState——D5 单一 PENDING 冻结语义（2026-08-15）', () => {
+  it('目标/执行/达成任一 pending → 所有工具无效（含只读——A0 §3.4 无害≠有用）', () => {
+    for (const kind of ['goal', 'execution', 'achievement'] as const) {
+      const s = setPending(initialState(), kind)
+      expect(canExecute(s, { name: 'read' }, false).ok).toBe(false)
+      expect(canExecute(s, { name: 'bash', command: 'ls -la' }, false).ok).toBe(false)
+      expect(canExecute(s, { name: 'search' }, false).ok).toBe(false)
+      expect(canExecute(s, { name: 'write', path: '/test/a.js' }, true).ok).toBe(false)
+      expect(canExecute(s, { name: 'write', path: '/test/a.js' }, false).ok).toBe(false)
+    }
+  })
+
+  it('授权卡 pending（approval）同样冻结全部工具', () => {
+    const s = setPending(initialState(), 'approval')
+    expect(canExecute(s, { name: 'read' }, false).ok).toBe(false)
+    expect(canExecute(s, { name: 'write', path: '/test/a.js' }, false).ok).toBe(false)
+  })
+
+  it('确认/拒绝/批准均清除 pending（用户决策 = 下一状态唯一输入）', () => {
+    expect(userConfirmed(setPending(initialState(), 'goal'), 'goal').pending).toBe('none')
+    expect(userConfirmed(setPending(initialState(), 'execution'), 'execution').pending).toBe('none')
+    expect(userConfirmed(setPending(initialState(), 'achievement'), 'achievement').pending).toBe('none')
+    expect(userRejected(setPending(initialState(), 'goal'), 'goal').pending).toBe('none')
+    expect(approvalGranted(setPending(initialState(), 'approval'), ['/test/a.js']).pending).toBe('none')
+  })
+})

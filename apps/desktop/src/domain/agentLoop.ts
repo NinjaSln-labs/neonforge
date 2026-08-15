@@ -188,3 +188,16 @@ export function summarizeCapability(data?: { capabilities?: CapabilityView[] }):
   const names = notReady.map((c) => `${c.id}${c.detail ? `（${c.detail}）` : ''}`).join('、')
   return { needsUser: true, summary: `检测到能力缺失/异常：${names}——需要你决策（安装补齐或换方案）` }
 }
+
+// === 2026-08-15 D6：目标确认兜底触发（词表单源——原 ConversationPanel 内联词表上移领域层） ===
+// 场景：模型无【目标确认】标记时的兜底卡（goalFallback）——目标未确认 + 模型「征询确认」或「总结目标陈述」→ 弹目标确认卡
+// 语义：征询确认（含问句形式「行不行？」）直接命中；目标总结陈述需非问句（「你的需求是 X，你想做成什么样？」= 澄清中，不弹）
+// 与 pendingCardToShow（执行确认词表——conversationState）同为领域层词表——渲染层不再自建正则（防双源）
+export function goalFallbackTrigger(content: string): boolean {
+  const t = String(content ?? '').trim()
+  if (!t) return false
+  const askingConfirm = /(等你确认|你确认一下|确认一下|确认没问题|行不行|可以吗|对吗|对吧|没问题吧|你看行|这样.*可以|就按这个)/.test(t)
+  if (askingConfirm) return true
+  const goalStated = /(目标是|要做的是|你的需求是|目标就是|就是做一个|做成|需求.*确认)/.test(t)
+  return goalStated && !isQuestionLike(t)
+}
