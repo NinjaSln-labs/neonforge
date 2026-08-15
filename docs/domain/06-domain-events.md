@@ -2,6 +2,7 @@
 
 > 2026-08-07 重新生成——事件目录基于无阶段目标驱动领域模型（02 领域模型 / 04 战术设计）。
 > 替代旧六阶段版（ContextEngine/Compaction/AgentChain 等产品流水线事件）。
+> **事件名权威（2026-08-16 第 16 轮审计 #1）**：事件注册表实现（`timeline.ts` TIMELINE_EVENT_SPECS——44 事件）为**事件名实现权威**；本文档为**语义视图**（触发时机/携带数据/消费方）——本文已按注册表补录全部实现事件（§1.3/§1.5/§1.6）并标注文档声明但注册表未实现事件的承接/别名——S1 扩展注册表（proposal/decision/completion/gate）时以注册表为准逐名登记。
 
 ---
 
@@ -20,7 +21,7 @@
 | `task.achievement_proposed` | 模型汇报达成（**历史——2026-08-16 起由 proposal.completion 替代**）| taskId, summary | 达成确认卡渲染（UI——2026-08-16 起为解决确认卡，证据对账）|
 | `task.achievement_confirmed` | 用户点「已解决」（**历史——2026-08-16 起由 decision.resolved 替代**）| taskId, source | 状态机（→resolved）、推进保障释放 |
 | `task.achievement_rejected` | 用户点「还要改」（**历史——2026-08-16 起由 decision.resolved（reject+RejectReason）替代**）| taskId | 状态机（→executing 继续）|
-| `task.resolved` | 用户确认解决 | taskId | 任务收敛、Timeline |
+| `task.resolved` | 用户确认解决（**#1 承接标注：注册表未实现——S1 起由 `decision.resolved`（kind=resolution）承接任务收敛语义——task.resolved 为语义视图保留**）| taskId | 任务收敛、Timeline |
 
 ### 1.2 计划清单事件（Workspace BC）
 
@@ -34,8 +35,11 @@
 | 事件 | 触发时机 | 携带数据 |
 |------|---------|---------|
 | `tool.approved` / `tool.rejected` | 用户批准/拒绝工具 | toolName, args, action |
+| `tool.requested`（2026-08-16 第 16 轮审计 #1 补录——注册表实现）| 工具调用发起（执行前）| toolName, args |
+| `tool.executing`（#1 补录）| 工具执行中 | toolName |
 | `tool.executed` / `tool.failed` | 工具执行结果 | toolName, ok, error |
-| `tool.pending_confirmation` | 方案未批准时工具调用到达（挂起——2026-08-16 语义更新）| toolName, args |
+| `tool.remembered`（#1 补录）| 用户「允许并记住」——任务信任加入 | toolName, path |
+| `tool.pending_confirmation` | 方案未批准时工具调用到达（挂起——2026-08-16 语义更新）——**#1 承接标注：注册表以 `tool.requested` + `tool.blocked` 表达（挂起=发起后拦截）** | toolName, args |
 | `tool.blocked` | 工具被拦截（2026-08-15 补录——会话冻结/确认点/清单外/策略引导）| toolName, gate（pending/confirm/out-of-plan/policy）, reason |
 
 ### 1.3b 会话级 PENDING 事件（Conversation 聚合——2026-08-15 补录）
@@ -64,6 +68,7 @@
 | 事件 | 触发时机 | 携带数据 |
 |------|---------|---------|
 | `execution.forced` | 推进保障强制（确认后无推进——产出/提议/证据；原 forceTool=true——2026-08-16 语义更新）| taskId, reason |
+| `execution.force_input`（2026-08-16 第 16 轮审计 #1 补录——注册表实现）| forceTool 输入构造（推进保障决策输入侧）| taskId, input |
 | `execution.released` | 推进保障释放（失败/计划写完/解决确认/pending——2026-08-16 语义更新）| taskId, reason |
 | `stuck.escalated` | 连续无产出升级 | taskId, message |
 | `stuck.needs_human` | 升级仍无效转用户 | taskId, message |
@@ -72,10 +77,14 @@
 
 | 事件 | 说明 |
 |------|------|
-| `conversation.created` / `archived` | 生命周期 |
-| `message.appended` | 消息变更（用户/搭档/工具）|
-| `streaming.started` / `completed` | 流式输出 |
+| `conversation.created` / `archived` | 生命周期（**#1 承接标注：注册表以 `conversation.created` + 会话关闭表达——`archived` 未在注册表——别名 conversation.status_change**）|
+| `message.appended` | 消息变更（用户/搭档/工具）——**#1 承接标注：注册表以 `conversation.message_sent` / `conversation.assistant_start` / `conversation.assistant_done` 表达（按角色分事件——`message.appended` 为语义别名）** |
+| `streaming.started` / `completed` | 流式输出——**#1 承接标注：注册表以 `conversation.assistant_start` / `conversation.assistant_done` 表达（`streaming.*` 为语义别名）** |
 | `conversation.message_sent` | 用户消息（含确认卡触发）|
+| `conversation.assistant_start` / `assistant_done`（2026-08-16 第 16 轮审计 #1 补录——注册表实现）| 搭档回合开始/结束（含流式边界）|
+| `conversation.status_change`（#1 补录）| 会话状态变化（活动/等待/错误）|
+| `conversation.error`（#1 补录）| 会话级错误 |
+| `conversation.interrupted`（#1 补录）| 用户停止打断 |
 
 ### 1.7 问题台账事件（Conversation BC——2026-08-15 补建模 M3）
 

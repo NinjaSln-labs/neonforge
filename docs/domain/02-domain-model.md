@@ -226,6 +226,8 @@ id / title / status / updatedAt
 
 ## 6. 领域事件（Domain Events）
 
+> 事件名实现权威 = `timeline.ts` 注册表（TIMELINE_EVENT_SPECS——44 事件）；本表为语义清单（2026-08-16 第 16 轮审计 #1——事件名以注册表为准）。
+
 | 事件 | 触发 | 载荷 |
 |---|---|---|
 | GoalProposed（目标提议）| 模型澄清后给出目标 | 目标文本 |
@@ -237,7 +239,9 @@ id / title / status / updatedAt
 | ToolExecuted / ToolFailed | 工具执行结果 | 名称/成功/错误 |
 | AchievementProposed（历史——2026-08-16 起由 proposal.completion 替代）| 模型汇报达成 | 产物说明 |
 | **ResolutionConfirmed / ResolutionRejected**（2026-08-16 更名，原 AchievementConfirmed/Rejected）| 用户证据对账确认解决 / 还要改+原因 | — |
+| TaskResolved（2026-08-16 第 16 轮审计 #4 补——04 §4/06 §1.1 同源）| 用户确认解决——任务收敛（→ Problem closed 联动——§4.13）| taskId |
 | CapabilityChecked | 能力检查 | 能力视图 |
+| CapabilityLedgerUpdated（#4 补——04 §4/06 §1.4 同源）| Ledger 回填 | rootPath, capabilityId, ok |
 | EnvironmentInjected | 环境快照注入 | 环境状态 |
 | **proposal.goal / proposal.plan / proposal.completion**（2026-08-16 新增）| 模型输出结构化提议（GoalProposal/PlanProposal/CompletionClaim——完整内容快照）| 提议值对象全量 |
 | **decision.requested**（2026-08-16 新增）| 决策点出现（kind + decisionContent 快照——呈现内容完整审计）| 决策点内容 |
