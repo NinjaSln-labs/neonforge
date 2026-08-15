@@ -11,6 +11,8 @@
 
 **目标驱动的执行单元**（会话内——只管三个**任务级**确认点）。**注意：单一 PENDING 状态机归属会话级（Conversation 聚合——§1.2）——Task 不承载 pending**（工具级授权等待是会话级 pending 的一部分，不在 Task 状态机内）。
 
+> **实现形态（2026-08-15 定论——M4 文档承认）**：Task 状态与会话级 PENDING 承载于**同一状态结构**（`conversationState.ts` 的 `ConversationState`——goal/execution/achievement 三确认布尔 + 会话 pending + plannedFiles/producedFiles 一体）——语义等价（pending 仍是会话级语义：确认卡/授权卡统一冻结、用户决策是下一状态唯一输入；三布尔 = 5 态语义映射：clarifying=三 false、goal-confirmed=goal true、executing=goal+execution true、achieved-reported=goal+execution true+达成提议、resolved=achievement true），**结构合并**（避免双聚合同步开销与跨层一致性问题——2026-08-14 状态机落地选型）；A0 §3.2 单一 PENDING 语义不变。
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ Task (聚合根——会话内子状态机)                                   │
@@ -183,6 +185,8 @@ interface DeliveryPackage {
 }
 ```
 
+> **实现形态（2026-08-15 定论——M7 文档承认）**：状态集为 `'draft' | 'delivered' | 'closed'`（`types.d.ts`）——`draft`=交付包构建中（真实变更联动生成前）；`adjusting` 不设独立态（用户「还要改」→ 交付包保持 delivered、对话继续调整，再次交付更新包）；`snapshot` 字段不在交付包内——回滚由工具卡层承担（`revertToolFile`——write/edit 写前 `.nf-bak` 快照、按文件回滚），交付包聚焦产物/验收呈现。
+
 ### 2.9 DeliveryService（数字交付——领域服务）
 
 ```typescript
@@ -218,6 +222,8 @@ interface AuthorizationService {
 ```
 
 不变式：bash 无 path 永不进入信任（高危永远单独确认）；沙箱外永不进入信任（安全底线）；信任不跨任务（clearTrust）。
+
+> **实现形态（2026-08-15 定论——M5 文档承认）**：Electron 架构必然的**双进程拆分**——规则引擎（`preApprove` deny>allow>ask fail-closed）部署于 **main 进程**（`tools.ts`——renderer 不判断，防绕过）；任务级信任集合（`addTrust`/`isTrusted`/`clearTrust`——renderer taskTrustRef）部署于 **renderer**（渲染需即时感知——信任条/授权卡）；`filesApproved` 幂等标记双进程对称（main `filesApprovedRef` ↔ renderer `filesApproved`——任务边界 `clearTrust` 经 IPC 同步重置，D2 2026-08-15 修复）。语义等价——信任裁决唯一权威在 main（execute 门控），renderer 侧为展示/交互镜像。
 ### 2.6 TimelineEvent（时间线事件）
 
 ```typescript
