@@ -29,7 +29,7 @@ export default function TrustLadderPanel({ authorizedLogs, delegateLowRisk, onDe
   // 授权记录：真实数据（06 问题快照 authorized——可回溯）优先；无则 demo 回退
   // 2026-08-15 Q9：结构化 {tool, file}（旧存档 string 兼容展示）
   const [demoLogs, setDemoLogs] = useState(DEMO_LOGS)
-  const realLogs = (authorizedLogs ?? []).map((a) => ({ t: '', action: typeof a === 'string' ? a : `[${a.tool}] ${a.file}`, level: 'L3', ok: true }))
+  const realLogs = ((authorizedLogs ?? []) as Array<{ tool: string; file: string } | string>).map((a) => ({ t: '', action: typeof a === 'string' ? a : `[${a.tool}] ${a.file}`, level: 'L3', ok: true }))
   const logs = realLogs.length > 0 ? realLogs : demoLogs
 
   const upgrade = () => { if (level < 3) setLevel((l) => l + 1) }

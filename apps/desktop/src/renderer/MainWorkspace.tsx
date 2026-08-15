@@ -102,7 +102,7 @@ export default function MainWorkspace({
         if (p.id !== activeProblem) return p
         // 2026-08-15 Q9：authorized 结构化（{tool, file}——原 `[工具] 路径` 字符串拼接；旧存档 string 兼容去重）
         const entry = { tool: r.name, file: r.file }
-        const auth = p.snapshot?.authorized ?? []
+        const auth = (p.snapshot?.authorized ?? []) as Array<{ tool: string; file: string } | string>
         const alreadyFile = auth.some((a) => typeof a === 'string' ? a.endsWith(`] ${r.file}`) : a.file === r.file)
         return alreadyFile ? p : updateProblemSnapshot(p, { authorized: [...auth, entry] })
       }))
