@@ -11,7 +11,8 @@ import path from 'node:path'
 const KEY = process.env.NF_TEST_KEY
 if (!KEY) { console.error('缺少 NF_TEST_KEY'); process.exit(1) }
 
-const OUT = path.resolve('/workspace/neonforge/demo/neonforge-demo.mov')
+// 产物路径：仓库根 demo/（相对本脚本定位，任意 cwd 可跑）；NF_GIF_OUT 可覆盖
+const OUT = process.env.NF_GIF_OUT ?? path.resolve(fileURLToPath(new URL('../../demo/neonforge-demo.mov', import.meta.url)))
 // 窗口固定位置（避菜单栏/Dock）：1200x800 内容区（含标题栏）
 const WIN = { x: 120, y: 80, w: 1200, h: 800 }
 const TMP = '/tmp/nf-gif-frames'
@@ -28,7 +29,7 @@ console.log('已清理 userData 会话存档 + Key 缓存（干净首启）')
 
 const app = await _electron.launch({
   args: ['.'],
-  cwd: '/workspace/neonforge/apps/desktop',
+  cwd: process.cwd(), // 约定在 apps/desktop 目录运行（与 HANDOFF §4 一致）
   env: { ...process.env, VITE_DEV_SERVER_URL: 'http://localhost:5173', NF_TEST_PROJECT: '/tmp/nf-gif-demo' }
 })
 const win = await app.firstWindow()

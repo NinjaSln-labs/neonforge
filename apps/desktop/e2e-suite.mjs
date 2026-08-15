@@ -5,7 +5,8 @@ import fs from 'node:fs'
 // 场景矩阵：主链路 / 工具待授权 / 多轮对话 / 纯文本 / 异常 / 空回复 / 超时
 const KEY = process.env.NF_TEST_KEY
 const EMPTY_DIR = '/tmp/nf-e2e-test'
-const REAL_PROJ = '/workspace/neonforge/apps/desktop' // 有 package.json
+// 真实项目目录：默认当前目录（apps/desktop——有 package.json）；可用 NF_E2E_REAL_PROJ 覆盖
+const REAL_PROJ = process.env.NF_E2E_REAL_PROJ ?? process.cwd()
 
 let pass = 0, fail = 0
 const results = []
@@ -137,7 +138,8 @@ await case_('需求分流 B 类（改文件内容→edit 直接执行）', async
   const TEST_DIR = '/tmp/nf-e2e-edit-test'
   const TEST_FILE = TEST_DIR + '/待办事项.txt'
   const ORIG = 'TODO: 买牛奶、交电费、约牙医'
-  // 测试幂等：先还原原始内容
+  // 测试幂等：先还原原始内容（目录不存在则创建）
+  fs.mkdirSync(TEST_DIR, { recursive: true })
   fs.writeFileSync(TEST_FILE, ORIG, 'utf-8')
   const { app, page } = await launch(TEST_DIR)
   await send(page, '把待办事项.txt 里的买牛奶改成买面包')
