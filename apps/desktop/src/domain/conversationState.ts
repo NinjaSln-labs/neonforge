@@ -192,3 +192,15 @@ export function pendingCardToShow(
   if (!achievementConfirmed && lastContent.includes('【已达成')) return 'achievement'
   return 'none'
 }
+
+// 续聊停止判定（问题 A 2026-08-15：maybeContinue 停止条件与 canExecute **同源**——状态机 pending 非 none 即停）。
+// 背景：授权卡（need-approval/file-approval）可能挂在**旧消息**上（用户未批准也未拒绝——卡悬挂）——
+// 全列表 effect 已置 pending='approval'，但 maybeContinue 的 lastMsg 派生（needsApproval/confirmPending）
+// 只查最后一条消息 → 检测不到 → 继续喂模型 → forceTool 逼模型每轮调工具 → 被 canExecute 拦 → 14 轮循环。
+// lastMsg 信号保留——状态机置位与轮询之间的同步间隙兜底（缝隙 5 既有语义不变）。
+export function shouldStopContinuation(
+  s: ConversationState,
+  lastMsg: { needsApproval: boolean; confirmPending: boolean }
+): boolean {
+  return s.pending !== 'none' || lastMsg.needsApproval || lastMsg.confirmPending
+}

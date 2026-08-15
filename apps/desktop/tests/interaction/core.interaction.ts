@@ -1134,3 +1134,82 @@ test('执行确认卡不漂移：write 被拦后模型连发消息 → 卡固定
   await page.getByRole('button', { name: '确认执行' }).click()
   await expect(page.locator('.nf-toolcall--done')).toHaveCount(1, { timeout: 10000 })
 })
+
+// 2026-08-15 问题 A 复现（用户实测 e6ae459d：approve-files 卡悬挂 → maybeContinue 停止条件只查最后一条消息
+// → 检测不到旧消息上的授权卡 → forceTool 逼模型每轮调工具 → 全部被拦 → 14 轮循环，5 文件零写入）。
+// 修复：maybeContinue 停止条件接入状态机（pending 非 none 即停——与 canExecute 同源，领域层 shouldStopContinuation）；
+// 本测试锁两个行为：① 卡悬挂时拦截后**停续聊**（chatCount 停留 3——修复前 4+ 循环）② 批准后**恢复续聊**（不误伤批准路径）
+test('问题 A：approve-files 卡悬挂 → 模型续轮被拦后停续聊（不再循环）；批准卡后恢复', async ({ page }) => {
+  await page.addInitScript(() => {
+    let streamCb: ((c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) | null = null
+    let chatCount = 0
+    window.neonforge = {
+      version: 'test',
+      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
+      workspace: { openFolder: async () => '/test', listDir: async () => [], readFile: async () => ({ ok: true, content: 'x' }), readNotebook: async () => null, initProject: async () => ({ ok: true, path: '/test', title: 't' }), updateProjectTitle: async () => ({ ok: true }) },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        streamChat: async () => {
+          chatCount++
+          setTimeout(() => {
+            // chat#1：目标确认标记（目标卡）；chat#2：执行方案 + approve-files（执行卡 + 文件卡并存——卡悬挂）；
+            // chat#3：模型被 forceTool 逼着调 write（修复前每轮都被 pending 拦 → 无限循环）；
+            // chat#4（批准后恢复）：write 真正执行（approved）→ chat#5：模型纯文本收尾（自然停止）
+            if (chatCount === 1) {
+              streamCb?.({ type: 'content', text: '好的。【目标确认：做一个网页游戏】' })
+            } else if (chatCount === 2) {
+              streamCb?.({ type: 'content', text: '【执行方案】\n- /test/game.js（游戏入口）' })
+              streamCb?.({ type: 'tool-call', toolCall: { name: 'approve-files', args: { summary: '第一批', files: [{ path: '/test/game.js', reason: '游戏入口' }] } } })
+            } else if (chatCount === 5) {
+              streamCb?.({ type: 'content', text: '游戏已写好，打开就能玩。' })
+            } else {
+              streamCb?.({ type: 'tool-call', toolCall: { name: 'write', args: { path: '/test/game.js', content: 'x' } } })
+            }
+            streamCb?.({ type: 'done' })
+          }, 30)
+          return { ok: true }
+        },
+        onStreamChunk: (cb: (c: { type: string; text?: string; toolCall?: { name: string; args: Record<string, unknown> } }) => void) => { streamCb = cb; return () => {} }
+      },
+      tools: {
+        list: async () => [],
+        execute: async () => ({ ok: true, data: {} }),
+        filesApproved: async () => {},
+        revert: async () => ({ ok: true })
+      },
+      context: { resolve: async () => ({ fragments: [] }) },
+      compaction: { compact: async () => ({ ok: false }) },
+      plugins: { list: async () => [], toggle: async () => true },
+      chatLog: { log: async () => {}, export: async () => ({ ok: true, path: '/tmp/x.md' }) }
+    }
+    ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
+    Object.defineProperty(window, '__chatCount', { get: () => chatCount })
+  })
+  await page.goto('http://localhost:5175/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.getByRole('button', { name: '从零开始' }).click()
+  await page.locator('.nf-chat__input textarea').fill('帮我做一个网页游戏')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  // chat#1：目标确认卡 → 点确认目标
+  await expect(page.getByRole('button', { name: '确认目标' })).toBeVisible({ timeout: 10000 })
+  await page.getByRole('button', { name: '确认目标' }).click()
+  // chat#2：执行确认卡 + approve-files 文件卡并存（真实 bug 场景：用户确认执行但**不批准文件卡**——卡悬挂）
+  await expect(page.getByRole('button', { name: '确认执行' })).toBeVisible({ timeout: 10000 })
+  await expect(page.getByRole('button', { name: '批准这批文件' })).toBeVisible({ timeout: 10000 })
+  await page.getByRole('button', { name: '确认执行' }).click()
+  // chat#3：模型 write 被拦（pending='approval'——状态机冻结正确——D5）→ 卡片回填「等待你的决策」
+  await expect(page.locator('.nf-toolcall__result').filter({ hasText: '等待你的决策' })).toBeVisible({ timeout: 10000 })
+  // **修复断言**：拦截后模型停——不再喂下一轮（修复前：maybeContinue 检测不到旧消息授权卡 → 续聊 →
+  // forceTool 逼模型再调工具 → 再被拦 → chatCount 4、5、6… 循环）。给足 2 个轮询周期（500ms/次）余量
+  await page.waitForTimeout(2500)
+  expect(await page.evaluate(() => (window as unknown as { __chatCount: number }).__chatCount)).toBe(3)
+  // 文件卡仍在（悬挂等待用户决策）→ 用户批准 → 恢复续聊：chat#4 write 真正执行（approved 放行）→
+  // chat#5 模型纯文本收尾 → 自然停止（chatCount 定格 5——批准路径不被误伤，也无新一轮循环）
+  await expect(page.getByRole('button', { name: '批准这批文件' })).toBeVisible()
+  await page.getByRole('button', { name: '批准这批文件' }).click()
+  await expect(page.locator('.nf-toolcall--done').filter({ hasText: '已批准' })).toBeVisible({ timeout: 10000 })
+  await page.waitForTimeout(3000)
+  expect(await page.evaluate(() => (window as unknown as { __chatCount: number }).__chatCount)).toBe(5)
+  await page.waitForTimeout(1500)
+  expect(await page.evaluate(() => (window as unknown as { __chatCount: number }).__chatCount)).toBe(5)
+})
