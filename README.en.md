@@ -8,6 +8,8 @@ NeonForge is **not an IDE and not a chatbot**. You describe a problem in plain l
 
 > 中文: [README.md](README.md)
 
+> **⚠️ Breaking changes**: NeonForge is under active development (V1, pre-1.0) — tool interfaces, system-prompt semantics, confirmation-card flows, and storage formats (session/ledger/config) **may change in breaking ways** with no backward-compatibility guarantee. Rely on Releases and commit messages when upgrading; please open an Issue (with your version) if a breaking change bites you.
+
 <video controls width="720" src="demo/neonforge-demo.mov" title="NeonForge core flow demo (recorded against the real API — first-run config → open project → two-turn conversation)">
   Your browser doesn't support the video tag — <a href="demo/neonforge-demo.mov">download the demo video</a>.
 </video>

@@ -8,6 +8,8 @@ NeonForge **不是 IDE，也不是 Chatbot**。你用自然语言描述问题，
 
 > English: [README.en.md](README.en.md)
 
+> **⚠️ 破坏性变更声明**：NeonForge 处于活跃开发期（V1 尚未到 1.0）——工具接口、系统提示语义、确认卡流程、会话/台账/配置存储格式均**可能发生破坏性变更**，不保证向后兼容。升级以 Releases 与 git 提交说明为准；遇到破坏性变更欢迎提 Issue（注明版本）。
+
 <video controls width="720" src="demo/neonforge-demo.mov" title="NeonForge 核心流演示（真实 API 录制——首次配置 → 打开项目 → 两轮对话）">
   你的浏览器不支持 video 标签——<a href="demo/neonforge-demo.mov">下载演示视频</a>。
 </video>
