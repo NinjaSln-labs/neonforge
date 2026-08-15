@@ -389,8 +389,21 @@ class SessionDriver {
     let lastReal = null // 最后一条非提示的模型回复（提示插入后模型已回复完——用于超时容错）
     let lastFp = ''
     let idleSince = Date.now()
+    let lastApprovalAt = 0 // 2026-08-15 E3：授权点击防抖（点卡后冷却 2s——防同卡重复点击/渲染滞后重复批准）
     while (Date.now() < hardDeadline) {
       await this.page.waitForTimeout(1500)
+      // 2026-08-15 问题 A 修复后适配：模型调工具被拦 → 授权卡弹出 → maybeContinue 停（正确行为——不再 14 轮循环）→
+      // waitNew 若只等「新回复」会死等 480s（tool-only 轮内容为空被 content 过滤跳过）。检测「有操作待你批准」
+      // → 点授权卡（approvePending 完整策略）→ 继续等模型对操作的回复。waitSettled 已有同款检测（348 行）——补 waitNew
+      const sbNow = await this.page.locator('.nf-statusbar').innerText().catch(() => '')
+      if (sbNow.includes('有操作待你批准') && Date.now() - lastApprovalAt > 2000) {
+        const ap = await this.approvePending()
+        if (ap) {
+          lastApprovalAt = Date.now()
+          console.log(`   🔓 授权（等待中）：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`)
+          continue
+        }
+      }
       const t = await this.readTranscript()
       const lastMsg = [...t].reverse().find((m) => m.role === 'assistant' && m.content.trim())
       const fp = t.map((m) => `${m.role}|${m.content.slice(0, 30)}|${m.tools.length}|${m.tools.join('|').slice(0, 40)}`).join('~')
@@ -439,7 +452,10 @@ class SessionDriver {
       btn = this.page.locator('.nf-candidates__btn').filter({ hasText: core })
       if (await btn.count() > 0) { await btn.click(); return }
     }
-    throw new Error(`候选按钮「${text}」未找到——选项文本不匹配`)
+    // 2026-08-15 降级（实测：模型输出非标准候选标签如 <异值候选> → 产品只去标签不渲染按钮——坑 100 ① 同类
+    // 格式漂移）：真实用户面对「有选项文本但无按钮」会直接打字表达选择——降级为发送文本，不抛错中断流程
+    console.log(`   ⚠️ 候选按钮「${text}」未找到（模型未用标准 <candidates> 块）——降级为直接输入文本`)
+    await this.send(clean)
   }
 
   async currentStage() {
@@ -511,10 +527,13 @@ class SessionDriver {
   // 2026-08-08 第 4 个问题修复（feedback.log 标注「之前用户未点确认目标卡」——e2e 与无阶段交互脱节根因）：
   // 无阶段重构后确认**只走卡片按钮**（坑 135：文本确认词已删除）——e2e 用户模拟必须点卡：
   // 结构化确认卡（目标确认/执行确认/已解决——.nf-confirmcard）+ 授权卡（approve-files 等——approvePending）
-  async handleCards() {
+  // 2026-08-15 E1（无阶段语义对齐——no-stage-refactor「确认目标 → goalConfirmed」）：
+  // only 参数限定可点的确认卡——需求阶段只点「确认目标」（点掉=需求收敛，进设计阶段）；
+  // 「确认执行」是设计阶段的决策点——需求未收敛时点掉会提前触发 forceTool 强制（时间线实证 e070d44c seq 71-99）
+  async handleCards(only) {
     const p = this.page
     // 结构化确认卡（对话流内嵌）——点「确认目标」→ goalConfirmed；「确认执行」→ executionConfirmed；「已解决」→ goalAchieved
-    const confirmBtns = ['确认目标', '确认执行', '已解决']
+    const confirmBtns = only && only.length > 0 ? only : ['确认目标', '确认执行', '已解决']
     for (const name of confirmBtns) {
       const btn = p.getByRole('button', { name })
       if (await btn.count() > 0) {
@@ -618,8 +637,17 @@ class StageMachine {
       if (stNow && stNow.includes('设计')) { console.log('   ↪ 阶段已自动推进到设计——进入设计阶段'); return }
       // 2026-08-08 第 4 个问题修复（卡片优先——移到循环开头）：确认卡/授权卡出现**立即**点，不等模型 idle——
       // 否则 approve-files 卡弹出后模型继续调工具（write 被拦）→ waitSettled 永不 settle → 卡死（「批准这批文件没点」根因）
-      const card = await this.driver.handleCards()
-      if (card) { console.log(`   🧑 ${card.label}${card.detail ? `（${card.detail}）` : ''}`); continue }
+      // 2026-08-15 E1/E2（无阶段语义对齐）：需求阶段**只点「确认目标」卡**——点掉即需求收敛进入设计；
+      // 「确认执行」是设计阶段决策点——需求未收敛点掉会提前触发 forceTool 强制（时间线实证 e070d44c seq 71-99）
+      const card = await this.driver.handleCards(['确认目标'])
+      if (card) {
+        console.log(`   🧑 ${card.label}${card.detail ? `（${card.detail}）` : ''}`)
+        if (card.label.includes('确认目标')) {
+          console.log('   📌 目标已确认（点「确认目标」卡 = 需求收敛——无阶段语义）——进入设计阶段')
+          return
+        }
+        continue
+      }
       const msg = await this.driver.waitSettled()
       if (!msg || msg.content === lastProcessed) {
         await this.driver.page.waitForTimeout(3000)
@@ -633,11 +661,11 @@ class StageMachine {
         await this.driver.send('先别急着设计方案——先把需求确认清楚（做什么/给谁玩/在哪玩/做完什么样），方案到设计阶段再出')
         continue
       }
-      // 需求确认 → 推进
+      // 需求确认 → 推进（2026-08-15 无阶段化适配：产品 S4 已移除阶段 UI/advanceChat——无「确认推进」按钮；
+      // 需求确认完成 = 语义进入设计阶段（外层顺序调用 design()））
       if (/(【需求确认|需求确认|确认完毕|点.*「?确认推进|确认无误|就这样定)/.test(msg.content)) {
         printModel(msg)
-        console.log(`   📌 需求确认完成——点「确认推进」进入设计`)
-        await this.driver.clickAdvance('设计')
+        console.log(`   📌 需求确认完成——进入设计阶段`)
         return
       }
       // 真实用户：先看完整回复 → 语义理解（LLM 优先，正则兜底）→ 决策
@@ -730,8 +758,7 @@ class StageMachine {
         if (okLen && okKw) {
           this.verdicts.push({ stage: '设计', okLen, okKw, len: msg.content.length })
           console.log(`   📐 设计验证：${msg.content.length} 字 ✓ 含方案要素 ✓ 我确认方案`)
-          console.log(`   🧑 方案我看过了，没问题——点「确认推进」进入开发`)
-          await this.driver.clickAdvance('开发')
+          console.log(`   🧑 方案我看过了，没问题——进入开发（无阶段——方案确认即开工）`)
           return
         }
         console.log(`   ⏳ 我确认方案了，但还没看到完整方案（${und}）——等模型补充`)
@@ -745,8 +772,7 @@ class StageMachine {
       if (okLen && okKw && confirmed) {
         this.verdicts.push({ stage: '设计', okLen, okKw, len: msg.content.length })
         console.log(`   📐 设计验证：${msg.content.length} 字 ✓ 含方案要素 ✓ 模型确认完整`)
-        console.log(`   🧑 方案我看过了，没问题——点「确认推进」进入开发`)
-        await this.driver.clickAdvance('开发')
+        console.log(`   🧑 方案我看过了，没问题——进入开发（无阶段——方案确认即开工）`)
         return
       }
       // 模型还在输出方案（没说完整/没问问题）→ 等下一轮

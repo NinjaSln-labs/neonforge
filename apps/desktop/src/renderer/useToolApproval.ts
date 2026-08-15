@@ -33,8 +33,24 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
   const { setMessages, tlog, fmtToolResult, trustPath, rootPath, sessionId, onToolResult, applyTool, grantPlan, addTrust, acquireChain, maybeContinue, chatRef, sessionRef, streamingSidRef, streamingRef, setWorking, onWorkingChange, setWorkingStage } = deps
 
   // 按消息定位工具卡更新（同工具不同实例可区分——args 相同匹配；2026-08-14 冒烟修复）
+  // 2026-08-15 P2（时间线实证 a08d1775：同 args bash 双卡并存 → name+args 匹配从后往前错位到新卡 →
+  // 旧卡永不消失 → e2e 反复点 → 16 个 npm install 并发执行）：**按稳定 id 精确定位**（渲染闭包 tc.id =
+  // 流事件层生成——同 args 卡各有 id）；id 定位失败 = 卡已不存在 → 不 patch（防误伤同 args 其他卡）；
+  // 旧存档（断点续做恢复的消息无 id）→ fallback 原 name+args 匹配
   const patchToolCall = (idx: number, patch: (c: ToolCallMsg) => ToolCallMsg, msg: ToolCallMsg): void => {
     setMessages((prev) => {
+      if (msg.id) {
+        for (let mi = prev.length - 1; mi >= 0; mi--) {
+          const m = prev[mi]
+          if (m.role !== 'assistant' || !m.toolCalls) continue
+          const ci = m.toolCalls.findIndex((x) => x.id === msg.id)
+          if (ci >= 0) {
+            const updated = m.toolCalls.map((x, i) => (i === ci ? patch(x) : x))
+            return [...prev.slice(0, mi), { ...m, toolCalls: updated }, ...prev.slice(mi + 1)]
+          }
+        }
+        return prev
+      }
       for (let mi = prev.length - 1; mi >= 0; mi--) {
         const m = prev[mi]
         if (m.role !== 'assistant' || !m.toolCalls) continue

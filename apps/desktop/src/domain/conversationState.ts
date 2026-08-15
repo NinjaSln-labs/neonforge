@@ -153,6 +153,7 @@ export function plannedComplete(s: ConversationState, projectFiles: ReadonlySet<
 
 // forceTool 输入（turnPolicy 消费——plannedComplete 收敛后 forceTool 不再死锁；
 // goalAchieved 传 achievementConfirmed——2026-08-07 决策：用户点「已解决」才释放，模型【已达成】只是提议）
+// 2026-08-15 P1：pending 非 none → pending=true（A0 §4 补行——等用户决策不强制；与 canExecute 同源）
 export function forceToolInput(s: ConversationState, projectFiles: ReadonlySet<string>): TurnPolicyInput {
   return {
     goalConfirmed: s.goalConfirmed,
@@ -161,6 +162,7 @@ export function forceToolInput(s: ConversationState, projectFiles: ReadonlySet<s
     lastToolFailed: s.lastToolFailed,
     goalAchieved: s.achievementConfirmed,
     plannedComplete: plannedComplete(s, projectFiles),
+    pending: s.pending !== 'none',
   }
 }
 
