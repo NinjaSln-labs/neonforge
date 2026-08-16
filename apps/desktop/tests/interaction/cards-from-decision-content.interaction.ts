@@ -499,3 +499,56 @@ test('S7-1：方案卡待确认时用户直接打字 → 卡消失 + 模型收�
   await expectVisible(page.getByRole('button', { name: '确认执行' }), 15000)
   await expectText(page.locator('.nf-chat__list'), '/test/store.ts（状态）', 5000)
 })
+
+// S7（C2 完善——e2e-0to1 场景 B 暴露）：pending 期确认文本 → 自动确认（等价点按钮）
+test('S7-2：方案卡待确认时用户打字「行，按这个方案来」→ 自动确认（不弹拒绝——确认文本分流）', async ({
+  page,
+}) => {
+  await installMockBridge(page, {
+    project: 'none',
+    script: compose(
+      goalConfirm('做一个待办应用'),
+      planPropose(['/test/app.ts（核心）']),
+      // 自动确认后模型继续（写文件——清单内放行）
+      [[toolCall.write('/test/app.ts', 'x'), chunk.done()]],
+    ),
+  })
+  await startFromScratch(page, '做个待办应用')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  // 确认文本（非按钮）——自动确认方案（等价点「确认执行」）
+  await sendChat(page, '行，按这个方案来，你写吧')
+  // 方案自动确认 → 模型继续写（清单内放行——done）
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(1, { timeout: 10000 })
+  await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(0)
+})
+
+test('S7-3：授权卡待批时用户打字「批准」→ 自动批准（approval 文本批准——明确批准词）', async ({
+  page,
+}) => {
+  await installMockBridge(page, {
+    project: 'none',
+    // bash 需授权（approval 卡）
+    executeResults: {
+      bash: {
+        ok: false,
+        needApproval: true,
+        error: '「bash」需要授权（L3）——approved=true 后执行',
+      },
+    },
+    script: compose(goalConfirm('做一个待办应用'), planPropose(['/test/app.ts（核心）']), [
+      [toolCall.bash('npm install three'), chunk.done()],
+    ]),
+  })
+  await startFromScratch(page, '做个待办应用')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  await page.getByRole('button', { name: '确认执行' }).click()
+  // bash 授权卡出现
+  await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(1, { timeout: 10000 })
+  // 用户打字「批准」→ 自动批准（approval 文本确认）
+  await sendChat(page, '批准')
+  await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(0, { timeout: 10000 })
+})

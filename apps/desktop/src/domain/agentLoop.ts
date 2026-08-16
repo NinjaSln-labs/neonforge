@@ -44,6 +44,20 @@ export interface TurnProgress {
 export function isQuestionLike(t: string): boolean {
   return /[?？]$/.test(t) || /(吗|呢|吧)[。.!！]?$|可以吗|行不行/.test(t)
 }
+// S7（C2 完善——e2e-0to1 场景 B 暴露）：确认语义判定（pending 期用户确认文本 → 自动确认当前决策点——
+// 确认卡时代只处理按钮确认遗漏了文本确认——真实用户打字「行/按这个方案」等价点确认按钮；
+// 与新意图文本（隐式 reject）分流——坑 79 结构判定：有限确认词表，不匹配措辞）
+export function isConfirmIntent(t: string): boolean {
+  const s = String(t ?? '').trim()
+  if (!s) return false
+  if (
+    /^(行|好|可以|确认|同意|对|没错|没问题|就这么办|按这个方案|继续|动手吧|开始吧|写吧|就按你说的)[。！!~～]?$/.test(
+      s,
+    )
+  )
+    return true
+  return /按这个方案|就这么办|确认执行|确认目标|同意这个方案|可以开始|开始写吧|就按这个来/.test(s)
+}
 export function isCommunicationLike(t: string): boolean {
   return /(确认|复述|说明|解释|总结|澄清|商量|理解|明白|知道|收到|确认一下|跟你确认|和你确认|跟您确认|介绍一下|跟你聊|和你聊)/.test(
     t,

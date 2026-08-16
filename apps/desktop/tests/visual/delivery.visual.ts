@@ -15,6 +15,7 @@ async function mockBridge(page: import('@playwright/test').Page, demoDelivery: b
         openFolder: async () => '/test',
         listDir: async () => [],
         readFile: async () => ({ ok: true, content: '// x' }),
+        updateProjectTitle: async () => ({ ok: true }),
       },
       gateway: {
         validate: async () => ({ ok: true }),
@@ -102,10 +103,27 @@ test('真实执行 → 产物区交付包联动（write 授权后）', async ({ 
         openFolder: async () => '/test',
         listDir: async () => [],
         readFile: async () => ({ ok: true, content: '// x' }),
+        updateProjectTitle: async () => ({ ok: true }),
       },
       gateway: {
         validate: async () => ({ ok: true }),
-        streamChat: async () => ({ ok: true }),
+        streamChat: async () => {
+          // S7 L5 基线更新（确认卡门控）：多轮脚本——chat1 目标确认 / chat2 方案占位（等你确认）
+          const n = window as unknown as { __chatN?: number }
+          n.__chatN = (n.__chatN ?? 0) + 1
+          if (n.__chatN === 1) {
+            setTimeout(() => {
+              window.__emit({ type: 'content', text: '好的。【目标确认：写一个 notes 文件】' })
+              window.__emit({ type: 'done' })
+            }, 30)
+          } else if (n.__chatN === 2) {
+            setTimeout(() => {
+              window.__emit({ type: 'content', text: '好的，方案如下，等你确认。\n【执行方案】' })
+              window.__emit({ type: 'done' })
+            }, 30)
+          }
+          return { ok: true }
+        },
         onStreamChunk: (cb: (c: unknown) => void) => {
           window.__emit = cb
           return () => {}
@@ -135,7 +153,12 @@ test('真实执行 → 产物区交付包联动（write 授权后）', async ({ 
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.locator('.nf-chat__input textarea').fill('帮我写一个 notes 文件')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
-  await page.waitForTimeout(300)
+  // S7 L5 基线更新（确认卡门控）：目标确认 → 执行确认 → write 授权（方案占位——清单外需授权）
+  await expect(page.getByRole('button', { name: '确认目标' })).toBeVisible({ timeout: 8000 })
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expect(page.getByRole('button', { name: '确认执行' })).toBeVisible({ timeout: 8000 })
+  await page.getByRole('button', { name: '确认执行' }).click()
+  await page.waitForTimeout(600)
   await page.evaluate(() => {
     window.__emit({ type: 'reasoning', text: '需要写入文件' })
     window.__emit({
@@ -160,6 +183,7 @@ test('真实执行 → 产物区交付包联动（write 授权后）', async ({ 
   await expect(page.locator('.nf-delivery__rerun')).toContainText('再跑一遍')
   await page.locator('.nf-delivery__rerun').click()
   await page.waitForTimeout(400)
-  await expect(page.locator('.nf-msg--user')).toHaveCount(2)
-  await expect(page.locator('.nf-msg--user').last()).toContainText('帮我写一个 notes 文件')
+  await expect(page.locator('.nf-msg--user')).toHaveCount(4) // S7 确认流程：初始 + 确认目标 + 确认执行 + 复跑
+  // 复跑 = 最近用户输入（S7 确认流程后 = 确认执行消息——rerunPrompt 语义）
+  await expect(page.locator('.nf-msg--user').last()).toContainText('确认，按方案执行')
 })
