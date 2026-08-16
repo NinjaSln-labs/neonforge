@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdirSync, rmSync, readFileSync, existsSync } from 'node:fs'
+import { mkdirSync, rmSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { timelineFile, logTimeline, timelineLogger } from '../../src/main/timelineLogger'
 
 // timelineFile/logTimeline 用 os.homedir() 定位 logs 目录——重定向到 /tmp（不污染真实 userData）
@@ -70,8 +70,7 @@ describe('timelineLogger.query（2026-08-15 DDD 重建——通用接入 A3）',
     const raw = readFileSync(f, 'utf8')
     const corrupt = raw.split('\n').filter(Boolean)
     corrupt.splice(1, 0, '{bad json')
-    const fs2 = require('node:fs') as typeof import('node:fs')
-    fs2.writeFileSync(f, corrupt.join('\n') + '\n')
+    writeFileSync(f, corrupt.join('\n') + '\n')
     logTimeline({ session: sid, type: 'tool.executed', role: 'tool', detail: { name: 'read' } })
 
     const all = timelineLogger.query({ session: sid })

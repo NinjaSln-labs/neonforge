@@ -12,7 +12,7 @@ import { cleanContent, stripMarkdown } from './textClean'
 // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层纯逻辑，双源调研驱动）
 import { evaluateTurnProgress, detectStuck, initialStuckState, isQuestionLike, isCommunicationLike, isDoneLike, parseExecutionPlan, summarizeCapability, goalFallbackTrigger } from '../domain/agentLoop'
 // 2026-08-14 会话状态机（Task 聚合——A0 §2/§3/§4/§5）：状态单一来源 + 转换唯一入口（session-state-machine.md S2）
-import { initialState as initialConversationState, classifyAction, canExecute, plannedComplete as isPlannedComplete, forceToolInput as buildForceToolInput, isProgressing as hasProgress, pendingCardToShow, shouldStopContinuation, type ConversationState } from '../domain/conversationState'
+import { classifyAction, canExecute, forceToolInput as buildForceToolInput, pendingCardToShow, shouldStopContinuation } from '../domain/conversationState'
 // 2026-08-15 Q1a+Q2：状态机转换单点封装（写路径唯一入口）
 import { useConversationState } from './useConversationState'
 // 2026-08-15 Q1b：工具授权 handler 封装（组件瘦身）
@@ -221,7 +221,6 @@ export default function ConversationPanel({
         toolCalls: s.toolCalls
       })))
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   // 断点续做：完整消息变化 → 持久化（过滤半截 streaming——streaming 时 serialize 为空不覆盖存档）
   useEffect(() => {
@@ -1128,7 +1127,7 @@ export default function ConversationPanel({
   // 2026-08-04 重构（用户：「搭档处理中」卡住根因）：按消息定位工具卡更新——原固定更新最后一条消息，
   // 续聊已追加新 streaming 消息时错位（工具结果回填错位 → maybeContinue 看不到 done → 链中断 + working 卡）
   // 2026-08-15 Q1b：工具授权 handler 封装（useToolApproval——批准/拒绝/记住/合并/回滚/停止）
-  const { patchToolCall, approveToolCall, rejectToolCall, rememberAndApprove, approveAllRemember, approvePlan, revertToolCall, stopToolCall, approveAllToolCalls } = useToolApproval({
+  const { approveToolCall, rejectToolCall, rememberAndApprove, approveAllRemember, approvePlan, revertToolCall, stopToolCall, approveAllToolCalls } = useToolApproval({
     setMessages, tlog, fmtToolResult, trustPath, rootPath, sessionId, onToolResult, applyTool, grantPlan, addTrust,
     acquireChain, maybeContinue, chatRef, sessionRef, streamingSidRef, streamingRef, setWorking, onWorkingChange, setWorkingStage
   })

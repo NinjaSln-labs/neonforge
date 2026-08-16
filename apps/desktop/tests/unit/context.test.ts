@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import path from 'node:path'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { context } from '../../src/main/context'
 
 const TMP = '/tmp/nf-unit-context'

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { matchesRule, isInSandbox, type PermissionRule } from '../../src/main/tools.js'
+import { matchesRule, isInSandbox } from '../../src/main/tools.js'
 
 // 2026-08-04 授权架构 v4：规则引擎（deny > allow > ask，Tool(specifier) 格式对齐 Claude/Codex/Cursor）+ 沙箱判定
 

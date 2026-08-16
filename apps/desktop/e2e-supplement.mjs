@@ -1,5 +1,5 @@
 import { _electron } from 'playwright'
-import { existsSync, writeFileSync, readFileSync, unlinkSync } from 'fs'
+import { existsSync, readFileSync, unlinkSync } from 'fs'
 
 // L4 补充场景：write 授权写入 / 授权后续聊 / Key 失效 / 上下文保留
 const KEY = process.env.NF_TEST_KEY
@@ -68,7 +68,7 @@ console.log('=== L4 补充场景（7-12 补 4 个真实可测）===\n')
   const { app, page } = await launch(EMPTY)
   await send(page, '查看这个项目的结构')
   const r1 = await settle(page, 30000)
-  let ok = false
+  let ok
   if (r1.approve > 0) {
     const before = await page.locator('.nf-msg').count()
     await page.locator('.nf-toolcall__approve').first().click()

@@ -149,7 +149,7 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
   }
 
   // 可撤销：停止当前操作 = 中止整条链（kill bash + sid++ 失效旧流 + 卡标记已停止）
-  const stopToolCall = (calls: ToolCallMsg[], idx: number): void => {
+  const stopToolCall = (_calls: ToolCallMsg[], _idx: number): void => {
     void (window.neonforge.tools?.cancel?.() ?? Promise.resolve({ ok: false }))
     sessionRef.current++
     streamingSidRef.current = 0

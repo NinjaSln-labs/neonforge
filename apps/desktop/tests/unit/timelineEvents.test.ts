@@ -36,7 +36,7 @@ describe('deriveStateEvents（转换 diff → 领域事件）', () => {
   })
 
   it('计划清单追加 → plan.approved（files 载荷——追加语义）', () => {
-    let s = userConfirmed(userConfirmed(initialState(), 'goal'), 'plan')
+    const s = userConfirmed(userConfirmed(initialState(), 'goal'), 'plan')
     const next = approvalGranted(s, ['/test/a.js', '/test/b.js'])
     const evts = deriveStateEvents(s, next)
     expect(evts).toContainEqual(expect.objectContaining({ type: 'plan.approved', detail: { files: ['/test/a.js', '/test/b.js'] } }))

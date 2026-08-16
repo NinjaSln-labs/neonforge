@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { createProblem, loadProblems, saveProblems, updateProblemSnapshot, PROBLEMS_KEY, PROBLEMS_MAX } from '../../src/renderer/problemStore'
 
 // localStorage 在 node 环境不存在——vitest jsdom/happy-dom 才提供；用 stub 模拟

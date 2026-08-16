@@ -1,7 +1,6 @@
 // applyDiff：统一 diff 解析 + 应用 + 快照回滚（05 交付包执行层 A1）
 // V1 支持：行级新增/删除/替换（统一 diff 格式）；复杂变更（重命名/二进制）返回不支持
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
-import path from 'node:path'
+import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 
 export interface DiffChange {
   line: number // 目标行号（1-based——原始文件）

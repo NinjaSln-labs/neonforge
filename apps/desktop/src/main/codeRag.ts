@@ -27,13 +27,13 @@ export class CodeRag {
     let scanned = 0
     const walk = (dir: string): void => {
       if (hits.length >= MAX_MATCH || scanned >= MAX_FILES) return
-      let entries: string[] = []
+      let entries: string[]
       try { entries = readdirSync(dir) } catch { return }
       for (const name of entries) {
         if (hits.length >= MAX_MATCH || scanned >= MAX_FILES) return
         if (name.startsWith('.') || IGNORE.has(name)) continue
         const full = path.join(dir, name)
-        let isDir = false
+        let isDir: boolean
         try { isDir = statSync(full).isDirectory() } catch { continue }
         if (isDir) { walk(full); continue }
         scanned++
