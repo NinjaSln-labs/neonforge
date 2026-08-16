@@ -103,6 +103,50 @@ describe('ProgressEvaluator（单轮进展评估）', () => {
         .isDone,
     ).toBe(true)
   })
+
+  // S5 spec TDD 网格：推进检测统一（设计 §8.1 B 331——结构化提议/完成声明带证据视为推进）
+  it('S5：结构化提议输出 = 推进（proposed——【目标确认】/【执行方案】/【已达成】信号）', () => {
+    expect(
+      evaluateTurnProgress({
+        toolCalls: [],
+        content: '好的。【目标确认：做个游戏】',
+        prevReadFiles: empty,
+      }).proposed,
+    ).toBe(true)
+    expect(
+      evaluateTurnProgress({
+        toolCalls: [],
+        content: '【执行方案】\n- a.js',
+        prevReadFiles: empty,
+      }).proposed,
+    ).toBe(true)
+    expect(
+      evaluateTurnProgress({
+        toolCalls: [],
+        content: '【已达成】\n完成了。',
+        prevReadFiles: empty,
+      }).proposed,
+    ).toBe(true)
+    // 纯文本承诺不算结构化提议（「只说不做」判定保留——坑 79）
+    expect(
+      evaluateTurnProgress({ toolCalls: [], content: '我接下来就改。', prevReadFiles: empty })
+        .proposed,
+    ).toBe(false)
+  })
+
+  it('S5：完成声明带验证证据 = 推进（providedEvidence——parseCompletionClaim 判定）', () => {
+    expect(
+      evaluateTurnProgress({
+        toolCalls: [],
+        content: '【已达成】\n完成。\n验证证据：\n- ls dist（通过）',
+        prevReadFiles: empty,
+      }).providedEvidence,
+    ).toBe(true)
+    expect(
+      evaluateTurnProgress({ toolCalls: [], content: '【已达成】\n完成了。', prevReadFiles: empty })
+        .providedEvidence,
+    ).toBe(false)
+  })
 })
 
 describe('StuckDetector（卡住检测——连续无进展升级）', () => {
@@ -223,6 +267,52 @@ describe('StuckDetector（卡住检测——连续无进展升级）', () => {
     expect(turn.hasRemainingPlanned).toBe(false) // 树中已有 → 无剩余
     const r = detectStuck({ turn, prev: { consecutiveNoProgress: 1, escalations: 0 } })
     expect(r.event).toBeUndefined()
+  })
+
+  // S5 spec TDD 网格：StuckDetector 对齐（§8.1 B 331——proposed/providedEvidence 轮 = 推进——
+  // 模型在走决策点流程不被 escalate 打断——坑 99 教训扩展）
+  it('S5：结构化提议轮（proposed）→ 停滞计数重置（不 escalate——模型在走决策点流程）', () => {
+    const proposedTurn = evaluateTurnProgress({
+      toolCalls: [],
+      content: '好的。【目标确认：做个游戏】',
+      prevReadFiles: new Set(),
+    })
+    expect(proposedTurn.proposed).toBe(true)
+    const r = detectStuck({
+      turn: proposedTurn,
+      prev: { consecutiveNoProgress: 1, escalations: 0 },
+    })
+    expect(r.state.consecutiveNoProgress).toBe(0)
+    expect(r.event).toBeUndefined()
+  })
+
+  it('S5：完成声明带证据轮（providedEvidence）→ 停滞计数重置（证据对账流程不打断）', () => {
+    const evidenceTurn = evaluateTurnProgress({
+      toolCalls: [],
+      content: '【已达成】\n完成。\n验证证据：\n- ls dist（通过）',
+      prevReadFiles: new Set(),
+    })
+    expect(evidenceTurn.providedEvidence).toBe(true)
+    const r = detectStuck({
+      turn: evidenceTurn,
+      prev: { consecutiveNoProgress: 1, escalations: 0 },
+    })
+    expect(r.state.consecutiveNoProgress).toBe(0)
+    expect(r.event).toBeUndefined()
+  })
+
+  it('S5：纯文本承诺（无结构化提议）连续 2 轮 → 仍 escalate（「只说不做」判定保留——坑 79）', () => {
+    const textOnly = evaluateTurnProgress({
+      toolCalls: [],
+      content: '我马上就去改，稍等。',
+      prevReadFiles: new Set(),
+    })
+    expect(textOnly.proposed).toBe(false)
+    expect(textOnly.providedEvidence).toBe(false)
+    const r1 = detectStuck({ turn: textOnly, prev: initialStuckState })
+    expect(r1.event?.type).toBe('no-progress')
+    const r2 = detectStuck({ turn: textOnly, prev: r1.state })
+    expect(r2.event?.type).toBe('escalate')
   })
 })
 

@@ -6,6 +6,7 @@
 // 2026-08-14 S4：副作用分类同源（classifyAction——缝隙 2 进展判定）
 import { classifyAction } from './conversationState.js'
 import { isLikelyPath } from './planProposalParser.js'
+import { parseCompletionClaim } from './completionClaimParser.js'
 
 // === Value Object: 工具调用视图（AgentTurn 的 toolCalls 投影——领域层可见的最小信息） ===
 export interface ToolCallView {
@@ -33,6 +34,9 @@ export interface TurnProgress {
   // （设计语义：maybeContinue releaseWorking + return）——不是卡住，不算停滞——
   // 根因 2（冒烟 13）：write 授权卡（need-approval）被 StuckDetector 当「无产出」→ escalate
   // → silent 打断授权流 → 轮 4 授权处理混乱 + 轮 5 重写（此前缺失此排除）
+  // S5（§8.1 B 331）：推进维度——结构化提议/完成声明带证据视为推进（模型在走决策点流程——不判停滞）
+  proposed: boolean // 结构化提议输出（【目标确认】/【执行方案】/【已达成】信号——与 pendingCardToShow 同源）
+  providedEvidence: boolean // 完成声明带验证证据（parseCompletionClaim 判定——verification 非空）
 }
 
 // === Domain Service: 文本分类（问句/沟通/完成态——坑 79 结构判定：有限集，不匹配措辞） ===
@@ -119,6 +123,11 @@ export function evaluateTurnProgress(input: {
   const needsApproval = toolCalls.some(
     (c) => c.status === 'need-approval' || c.status === 'file-approval',
   )
+  // S5（§8.1 B 331——推进检测统一）：结构化提议输出 = 推进（【目标确认】/【执行方案】/【已达成】信号——
+  // 与 pendingCardToShow 信号同源——决策点流程中模型在推进）；纯文本承诺不算（「只说不做」判定保留——坑 79）
+  const proposed = /【(目标确认|执行方案|已达成)/.test(t)
+  // S5：完成声明带验证证据 = 推进（parseCompletionClaim 判定——verification 非空——S4 证据对账流程中不判停滞）
+  const providedEvidence = (parseCompletionClaim(t)?.evidence.verification.length ?? 0) > 0
   return {
     artifactProduced,
     sideEffectSucceeded,
@@ -130,6 +139,8 @@ export function evaluateTurnProgress(input: {
     isCommunication,
     isDone,
     needsApproval,
+    proposed,
+    providedEvidence,
   }
 }
 
@@ -166,7 +177,8 @@ export function detectStuck(input: {
   // 有进展（write/edit 产出 / 副作用工具成功——缝隙 2：bash 安装验证）→ 重置（行业：恢复即重置）
   // 2026-08-06 修正：read 新文件**不算** progress（activity≠progress——行业 oh-my-pi workspace dirty / deepcode files_completed 只有文件改动才是进展；
   // 防「模型连续 read 不同文件假装进展」——L3 545 测试场景连续 3 轮 read 必须触发 escalate）
-  if (turn.artifactProduced || turn.sideEffectSucceeded) {
+  // S5（§8.1 B 331——坑 99 教训扩展）：结构化提议/完成声明带证据 = 推进——模型在走决策点流程不被 escalate 打断
+  if (turn.artifactProduced || turn.sideEffectSucceeded || turn.proposed || turn.providedEvidence) {
     return { state: initialStuckState, event: undefined }
   }
   // 2026-08-06 任务完成度（deepcode-hkuds unimplemented_files 借鉴）：有规划且规划文件全部产出 → 无工具结束 = 阶段完成（非停滞——等用户推进）
