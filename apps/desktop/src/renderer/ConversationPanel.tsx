@@ -28,7 +28,13 @@ import {
   forceToolInput as buildForceToolInput,
   pendingCardToShow,
   shouldStopContinuation,
+  inPlannedFiles as inPlannedFilesDomain,
+  type GoalProposal,
+  type PlanProposal,
 } from '../domain/conversationState'
+// S2 提议解析（S3 接线：done 分支结构化解析 → decisionContent 快照——卡渲染唯一来源）
+import { parsePlanProposal } from '../domain/planProposalParser'
+import { parseCompletionClaim } from '../domain/completionClaimParser'
 // 2026-08-15 Q1a+Q2：状态机转换单点封装（写路径唯一入口）
 import { useConversationState } from './useConversationState'
 // 2026-08-15 Q1b：工具授权 handler 封装（组件瘦身）
@@ -111,6 +117,18 @@ function fmtToolResult(r: { ok: boolean; data?: unknown }): string {
     if ('file' in d) return `已写入：${String(d.file)}`
   }
   return '完成'
+}
+
+// S3（§8.1 C ⑬ 契约）：目标提议「关键假设：」行提取（- 行列表；无节 → 空数组）
+function extractAssumptions(text: string): string[] {
+  const block = text.match(/关键假设[:：]([\s\S]*?)(?:【|$)/)
+  if (!block) return []
+  return block[1]
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => /^[-•]\s*/.test(l))
+    .map((l) => l.replace(/^[-•]\s*/, '').trim())
+    .filter(Boolean)
 }
 
 // 2026-08-05：工具卡参数人类化（原 JSON.stringify(args) 技术化——普通用户看不懂）——「读取 xxx / 执行 xxx」
@@ -264,6 +282,8 @@ export default function ConversationPanel({
     onApprovalChange?.(hasApproval)
   }, [messages, onApprovalChange])
   // 断点续做（ticket 06/基线 §21）：挂载恢复上次会话（onNew 已 clearSession → 空）
+  // S3（§8.2 E C5）：恢复后 pending 冻结立即生效——决策点内容快照（decisionContent）随消息恢复，
+  // 卡重显旧内容（用户确认/修改后才更新——模型首轮只能响应用户对已有决策点的决策）
   useEffect(() => {
     const stored = loadSession()
     if (stored && stored.length > 0) {
@@ -277,13 +297,22 @@ export default function ConversationPanel({
           toolCalls: s.toolCalls,
         })),
       )
+      // 恢复决策点冻结：最新消息携带 decisionContent → 恢复 pending（goal/plan/resolution——卡重显）
+      for (let i = stored.length - 1; i >= 0; i--) {
+        const dc = stored[i].decisionContent
+        if (dc) {
+          setPendingState(dc.kind, {
+            since: dc.since,
+            ...(dc.proposal ? { proposal: dc.proposal } : {}),
+          })
+          break
+        }
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   // 断点续做：完整消息变化 → 持久化（过滤半截 streaming——streaming 时 serialize 为空不覆盖存档）
-  useEffect(() => {
-    const serialized = serializeMessages(messages)
-    if (serialized.length > 0) saveSession(serialized)
-  }, [messages])
+  // S3（§8.2 E）：决策点内容快照随最近 assistant 消息持久化（恢复后卡内容不丢——pending 冻结语义）
   const chatRef = useRef<{
     msgs: Array<{
       role: string
@@ -394,6 +423,21 @@ export default function ConversationPanel({
   } = useConversationState({
     emit: (type, detail) => tlog(type, detail, 'system'),
   })
+  // 断点续做：完整消息变化 → 持久化（过滤半截 streaming——streaming 时 serialize 为空不覆盖存档）
+  // S3（§8.2 E）：决策点内容快照随最近 assistant 消息持久化（恢复后卡内容不丢——pending 冻结语义）
+  useEffect(() => {
+    const dc = stateRef.current.decisionContent
+    const withSnapshot = dc
+      ? messages.map((m, i) =>
+          i === messages.length - 1 && m.role === 'assistant' && m.status === 'done'
+            ? { ...m, decisionContent: dc }
+            : m,
+        )
+      : messages
+    const serialized = serializeMessages(withSnapshot)
+    if (serialized.length > 0) saveSession(serialized)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, stateRef.current.decisionContent])
   // 2026-08-14 用户实测卡死修复（timeline 0219a516）：确认卡唯一性——模型连发消息时卡固定在
   // 「最后一条信号消息」上不漂移。**O(n) 倒序单次扫描**预计算三个信号索引（useMemo 缓存——
   // 消息列表不可控（compaction 阈值 100+ 条），每渲染 O(n²) 不可接受；此方案 O(n) 一次 + 渲染 O(1) 查表）
@@ -646,8 +690,52 @@ export default function ConversationPanel({
         content,
         sideEffectPendingUi,
       )
+      // S3（§6 S3 + §8.2 E）：决策点置位携带 decisionContent 快照（卡渲染唯一来源——呈现内容完整审计；
+      // 模型文本不再直接参与卡内容判定——文本标记只用于**探测**，内容取结构化解析结果）
       if (cardToShow !== 'none' && stateRef.current.pending === 'none') {
-        setPendingState(cardToShow)
+        if (cardToShow === 'plan') {
+          // 方案提议 → parsePlanProposal 结构化解析 → decisionContent.proposal（文件/假设/验证计划）
+          const r = parsePlanProposal(content)
+          if (r.ok) {
+            setPendingState('plan', { proposal: r.proposal, since: new Date().toISOString() })
+            tlog(
+              'proposal.plan',
+              { ok: true, summary: r.proposal.summary, files: r.proposal.files.map((f) => f.path) },
+              'assistant',
+            )
+          } else {
+            // C3：解析失败 → 不产生决策点（卡不弹）+ 诊断事件（原始文本保留在对话审计）
+            tlog('proposal.plan', { ok: false, reason: r.reason }, 'assistant')
+          }
+        } else if (cardToShow === 'goal') {
+          // 目标提议 → GoalProposal（statement + assumptions——S2 ⑬ 契约：必要时附「关键假设：」行）
+          const goalMatch = content.match(/【目标确认：([^】]+)】/)
+          const assumptions = extractAssumptions(content)
+          setPendingState('goal', {
+            proposal: { statement: goalMatch?.[1]?.trim() ?? content.trim(), assumptions },
+            since: new Date().toISOString(),
+          })
+        } else if (cardToShow === 'resolution') {
+          // 完成声明 → parseCompletionClaim 结构化解析 → decisionContent.proposal
+          const claim = parseCompletionClaim(content)
+          if (claim) {
+            setPendingState('resolution', { proposal: claim, since: new Date().toISOString() })
+            tlog(
+              'proposal.completion',
+              {
+                ok: true,
+                summary: claim.summary,
+                verification: claim.evidence.verification.length,
+                pendingQuestions: claim.evidence.pendingQuestions.length,
+              },
+              'assistant',
+            )
+          } else {
+            tlog('proposal.completion', { ok: false }, 'assistant')
+          }
+        } else {
+          setPendingState(cardToShow, { since: new Date().toISOString() })
+        }
       }
       // 2026-08-07 无阶段重构 S5：执行方案清单解析——模型输出【执行方案】块 → 并入 plannedFiles（任务完成度——deepcode unimplemented_files 借鉴）
       // 2026-08-08 根因 3 修复③：trustPath 规范化（模型写相对路径如 game.js）——与 approvePlan 的绝对路径清单（1036 行）统一比较基准
@@ -812,8 +900,10 @@ export default function ConversationPanel({
       // 信息类（read/search/check-capability——只读无副作用）放行（模型可准备方案/查证——「白做」对有副作用动作才有意义）
       // 2026-08-08 根因 3 修复③：plannedFiles 清单比较统一**双向 trustPath 规范化**——【执行方案】块解析可能发生在
       // rootPath 未设置时（存相对路径 'game.js'），write 判定时 rootPath 已设（trustPath 转 '/test/game.js'）→ 直接 has 不匹配
+      // S3（Q5 单源）：判定引用领域层 inPlannedFiles（plannedFiles 已 trustPath 绝对化——参数同样归一化后传入；
+      // renderer 不再自写匹配逻辑——领域层相对/绝对/目录尾斜杠兼容）
       const inPlannedFiles = (p: unknown): boolean =>
-        [...stateRef.current.plannedFiles].some((f) => trustPath(f) === trustPath(p))
+        inPlannedFilesDomain(stateRef.current, { name: 'write', path: trustPath(p) })
       const confirmPending = (
         content: string,
         calls: Array<{ name: string; status?: string; command?: string }>,
@@ -1791,6 +1881,12 @@ export default function ConversationPanel({
             </div>
           </div>
         )}
+        {/* S3（§4.1）：拒绝超限回退——rejectStreak ≥3 状态栏提示澄清（不弹卡轰炸；同一决策点协商保护） */}
+        {stateRef.current.rejectStreak >= 3 && (
+          <div className="nf-reject-overflow" role="status">
+            连续拒绝了 3 次——建议澄清需求或重新描述，让搭档换个方向
+          </div>
+        )}
         {messages.map((m, i) => (
           <div key={m.id ?? i} className={`nf-msg nf-msg--${m.role}`}>
             {m.role === 'assistant' && m.status === 'streaming' && <span className="nf-breath" />}
@@ -1934,6 +2030,23 @@ export default function ConversationPanel({
                         <div className="nf-confirmcard__goal">
                           {goalMatch ? goalMatch[1].trim() : initialPrompt || '你描述的目标'}
                         </div>
+                        {/* S3：目标提议关键假设（⑬ 契约——decisionContent.proposal.assumptions 渲染） */}
+                        {(() => {
+                          const dc = stateRef.current.decisionContent
+                          if (!dc || dc.kind !== 'goal') return null
+                          const goal = dc.proposal as GoalProposal
+                          if (!goal.assumptions || goal.assumptions.length === 0) return null
+                          return (
+                            <div className="nf-confirmcard__plan-section">
+                              <div className="nf-confirmcard__plan-label">关键假设</div>
+                              <ul>
+                                {goal.assumptions.map((a, idx) => (
+                                  <li key={idx}>{a}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )
+                        })()}
                         <div className="nf-confirmcard__actions">
                           <button
                             type="button"
@@ -1977,6 +2090,46 @@ export default function ConversationPanel({
                     i !== rejectedCardIdx.execution ? (
                       <div className="nf-confirmcard" role="group" aria-label="确认执行方案">
                         <div className="nf-confirmcard__head">执行方案——需要你确认后动手</div>
+                        {/* S3：方案卡三要素（文件清单含原因/关键假设/验证计划——decisionContent.proposal 渲染） */}
+                        {(() => {
+                          const dc = stateRef.current.decisionContent
+                          if (!dc || dc.kind !== 'plan') return null
+                          const proposal = dc.proposal as PlanProposal
+                          return (
+                            <div className="nf-confirmcard__plan">
+                              {proposal.files.length > 0 && (
+                                <ul className="nf-confirmcard__plan-files">
+                                  {proposal.files.map((f) => (
+                                    <li key={f.path}>
+                                      {f.path}
+                                      {f.reason ? `（${f.reason}）` : ''}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                              {proposal.assumptions.length > 0 && (
+                                <div className="nf-confirmcard__plan-section">
+                                  <div className="nf-confirmcard__plan-label">关键假设</div>
+                                  <ul>
+                                    {proposal.assumptions.map((a, idx) => (
+                                      <li key={idx}>{a}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              {proposal.verificationPlan.length > 0 && (
+                                <div className="nf-confirmcard__plan-section">
+                                  <div className="nf-confirmcard__plan-label">验证计划</div>
+                                  <ul>
+                                    {proposal.verificationPlan.map((v, idx) => (
+                                      <li key={idx}>{v}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })()}
                         <div className="nf-confirmcard__actions">
                           <button
                             type="button"
@@ -1999,10 +2152,11 @@ export default function ConversationPanel({
                             type="button"
                             className="nf-confirmcard__btn nf-confirmcard__btn--no"
                             onClick={() => {
-                              reject('plan')
+                              // S3：拒绝带原因（不变量 8——RejectKind；「修改方案」= scope 调整方向）
+                              reject('plan', { kind: 'scope', target: 'plan' })
                               tlog(
                                 'card.rejected',
-                                { card: 'execution', action: 'reject' },
+                                { card: 'execution', action: 'reject', reason: 'scope' },
                                 'system',
                               )
                               setRejectedCardIdx((p) => ({ ...p, execution: i }))

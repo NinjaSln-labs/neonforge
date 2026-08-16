@@ -163,7 +163,8 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
   'proposal.plan': {
     domain: 'proposal',
     role: 'assistant',
-    detailKeys: ['ok', 'reason', 'files', 'summary'],
+    // 两形态载荷：成功 { ok:true, summary, files } / 失败 { ok:false, reason }——detailKeys 只列公共字段（宽松约定）
+    detailKeys: ['ok'],
   },
   'proposal.completion': {
     domain: 'proposal',
