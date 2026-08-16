@@ -265,9 +265,7 @@ export function dedupeKey(type: string, detail: Record<string, unknown>): string
 // === 模型提议检测（task.*_proposed——assistant_done content 标记 → 提议事件；纯函数 L1 可测） ===
 // 06 §1.1：task.goal_proposed（【目标确认】标记）/ task.execution_proposed（【执行方案】）/ task.achievement_proposed（【已达成】）
 // 与渲染层 pendingCardToShow 同源判定（标记检测——但独立函数，避免 UI 依赖）
-export function detectProposed(
-  content: string,
-): Array<{
+export function detectProposed(content: string): Array<{
   type: 'task.goal_proposed' | 'task.execution_proposed' | 'task.achievement_proposed'
   detail: Record<string, unknown>
 }> {
