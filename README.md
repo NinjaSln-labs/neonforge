@@ -21,11 +21,11 @@ NeonForge **不是 IDE，也不是 Chatbot**。你用自然语言描述问题，
 ## 它如何工作
 
 ```
-说出问题 → 澄清目标（候选按钮 / 自由输入）→ 【目标确认卡】→ 能力检查 → 执行方案 → 【执行确认卡】
-    → 动手产出（强制保障：说做就做，防「只说不做」）→ 达成汇报 → 【达成确认卡】→ 交付产物 + 反馈
+说出问题 → 澄清目标（候选按钮 / 自由输入）→ 【目标确认卡】→ 能力检查 → 执行方案 → 【方案确认卡】（可审阅：文件清单 + 假设 + 验证计划）
+    → 动手产出（强制保障：说做就做，防「只说不做」）→ 达成汇报（附验证证据）→ 【解决确认卡】（证据对账）→ 交付产物 + 反馈
 ```
 
-- **确认卡 = 推进门槛**：目标 / 执行 / 达成三处结构化确认（确认 / 拒绝按钮）——未确认时模型停在确认点，不越级、不白做
+- **确认卡 = 推进门槛**：目标 / 方案 / 解决三处结构化确认（确认 / 拒绝带原因）——未确认时模型停在确认点，不越级、不白做
 - **分步授权**：写文件、执行命令逐项授权（风险明示 + 写前快照可回滚）；「允许并记住」免去重复打断；高危命令永远单独确认
 - **宿主强制边界**：模型只能写批准清单内的文件（approve-files 批量授权），清单外写入被拒并提示边界
 - **问题 = 一等公民**：问题台账 + 会话快照（目标 / 已决策 / 已授权 / 待办）+ 断点续做 + 复跑
@@ -44,7 +44,7 @@ NeonForge **不是 IDE，也不是 Chatbot**。你用自然语言描述问题，
 
 | 工具 | 用途 |
 |------|------|
-| read / write / edit / bash | 核心四件套（write/edit 受执行确认 + 批准清单双重边界；bash 只读命令自动放行） |
+| read / write / edit / bash | 核心四件套（write/edit 受分步授权 + 批准清单双重边界；bash 只读命令自动放行） |
 | search + LSP（find_definition / find_references / get_type_info / get_diagnostics / get_imports / get_call_chain） | 定位 / 查询 / 诊断——零 token 确定性上下文 |
 | check-capability | 能力检测（runtime / 依赖 / 工具链）——环境快照注入模型，开箱即知 |
 | approve-files | 批量授权（1-N 文件，追加语义）——批准后清单内写入自动放行 |
@@ -82,7 +82,7 @@ npm run dist               # 产出 release/（macOS: .zip（.dmg 后补）；wi
 ```
 neonforge/
 ├── apps/desktop/               # Electron 桌面应用（V1 全量）
-│   ├── src/domain/             # 领域层（纯逻辑——Task 聚合 / 执行策略 / 停滞检测，L1 可测）
+│   ├── src/domain/             # 领域层（纯逻辑——Task 聚合 / 意图确认（决策点·推进保障）/ 停滞检测 / 时间线，L1 可测）
 │   ├── src/main/               # 主进程（Gateway / ToolRegistry / 环境能力 / 时间线）
 │   ├── src/renderer/           # React 应用层（对话 / 确认卡 / 授权卡 / 工具卡）
 │   ├── tests/                  # L1 单元 + L3 交互 + L5 视觉
@@ -135,6 +135,8 @@ ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ node install.js
 ```
 
 ## Roadmap
+
+> 正式跟踪：GitHub [Issues](https://github.com/NinjaSln-labs/neonforge/issues?q=label%3Aroadmap)（label `roadmap` · Milestones：V1 稳定收尾 / V1.x 体验与稳健 / V2 方向）
 
 **V1（当前——稳定收尾）**
 - 发布资产：macOS `.dmg` 打包（`.zip` 已可用）· Blog 发布 · Landing + waitlist · 渠道与 Product Hunt

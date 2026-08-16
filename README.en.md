@@ -21,11 +21,11 @@ NeonForge is **not an IDE and not a chatbot**. You describe a problem in plain l
 ## How it works
 
 ```
-Say the problem → Clarify the goal (candidate buttons / free input) → [Goal confirm card] → Capability check → Execution plan → [Execution confirm card]
-    → Produce (enforced: act, don't just promise) → Achievement report → [Achievement confirm card] → Deliver artifacts + feedback
+Say the problem → Clarify the goal (candidate buttons / free input) → [Goal confirm card] → Capability check → Execution plan → [Plan confirm card] (reviewable: file list + assumptions + verification plan)
+    → Produce (enforced: act, don't just promise) → Completion report (with verification evidence) → [Resolution confirm card] (evidence reconciliation) → Deliver artifacts + feedback
 ```
 
-- **Confirmation cards are the progression gate**: structured confirm/reject at goal / execution / achievement — until confirmed, the model stays at the confirmation point: no skipping, no wasted work
+- **Confirmation cards are the progression gate**: structured confirm/reject (with reason) at goal / plan / resolution — until confirmed, the model stays at the confirmation point: no skipping, no wasted work
 - **Step-by-step approval**: file writes and commands are approved individually (risk disclosed + pre-write snapshot, one-click rollback); "Allow and remember" reduces interruptions; high-risk commands are always confirmed individually
 - **Host-enforced boundary**: the model can only write files in the approved plan (approve-files batch authorization); out-of-plan writes are rejected with the boundary stated
 - **Problem = first-class citizen**: problem ledger + session snapshots (goal / decided / authorized / todo) + resume + re-run
@@ -44,7 +44,7 @@ Say the problem → Clarify the goal (candidate buttons / free input) → [Goal 
 
 | Tool | Purpose |
 |------|---------|
-| read / write / edit / bash | Core four (write/edit gated by execution-confirm + approved plan; read-only bash auto-approved) |
+| read / write / edit / bash | Core four (write/edit gated by step-by-step approval + approved plan; read-only bash auto-approved) |
 | search + LSP (find_definition / find_references / get_type_info / get_diagnostics / get_imports / get_call_chain) | Locate / query / diagnose — zero-token deterministic context |
 | check-capability | Capability detection (runtime / deps / toolchain) — environment snapshot injected into the model |
 | approve-files | Batch authorization (1-N files, append semantics) — approved files auto-approved on write |
@@ -82,7 +82,7 @@ npm run dist               # outputs to release/ (macOS: .zip (.dmg planned); wi
 ```
 neonforge/
 ├── apps/desktop/               # Electron desktop app (V1)
-│   ├── src/domain/             # Domain layer (pure logic — Task aggregate / progress guarantee / stuck detection, L1-tested)
+│   ├── src/domain/             # Domain layer (pure logic — Task aggregate / intent confirmation (decision points · progress guarantee) / stuck detection / timeline, L1-tested)
 │   ├── src/main/               # Main process (Gateway / ToolRegistry / environment capability / timeline)
 │   ├── src/renderer/           # React application layer (conversation / confirm cards / approval cards / tool cards)
 │   ├── tests/                  # L1 unit + L3 interaction + L5 visual
@@ -135,6 +135,8 @@ ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ node install.js
 ```
 
 ## Roadmap
+
+> Tracked formally on GitHub [Issues](https://github.com/NinjaSln-labs/neonforge/issues?q=label%3Aroadmap) (label `roadmap` · Milestones: V1 stabilizing / V1.x experience & robustness / V2 directions)
 
 **V1 (current — stabilizing)**
 - Release assets: macOS `.dmg` packaging (`.zip` already usable) · Blog launch · Landing + waitlist · distribution channels & Product Hunt
