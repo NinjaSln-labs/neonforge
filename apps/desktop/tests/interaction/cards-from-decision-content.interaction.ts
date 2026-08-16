@@ -176,6 +176,13 @@ test('S4-1a：证据不足 → 不弹已解决卡 + evidence_missing 打点 + �
           chunk.done(),
         ],
       ],
+      [
+        [
+          // 第二次证据不足声明（由第一次引导 send 触发）→ 引导护栏生效：不再自动 send（chatCount 停 5）
+          chunk.content('【已达成】\n还是不够。\n遗留问题：\n- 无'),
+          chunk.done(),
+        ],
+      ],
     ),
   })
   await startFromScratch(page, '做个待办应用')
@@ -184,7 +191,7 @@ test('S4-1a：证据不足 → 不弹已解决卡 + evidence_missing 打点 + �
   await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
   await page.getByRole('button', { name: '确认执行' }).click()
   await expect(page.locator('.nf-toolcall--done')).toHaveCount(1, { timeout: 10000 })
-  // 完成声明（证据不足）→ 已解决卡不出现（verifyCompletion ok=false——不变量 4 接线；脚本无后续轮次→恒不出现）
+  // 完成声明（证据不足）→ 已解决卡不出现（verifyCompletion ok=false——不变量 4 接线；脚本无后续轮次→结构性恒不出现）
   await page.waitForTimeout(2000)
   await expect(page.getByRole('button', { name: '已解决' })).toHaveCount(0)
   // evidence_missing 打点（ok:false + missing 含 verification）
@@ -194,7 +201,8 @@ test('S4-1a：证据不足 → 不弹已解决卡 + evidence_missing 打点 + �
   expect(ev).toBeTruthy()
   expect(ev?.detail?.ok).toBe(false)
   expect(ev?.detail?.missing).toContain('verification')
-  // 回填引导已触发模型下一轮（chatCount 达到 5：goal/plan/write/不足声明/引导 send——空 defaultRound 无内容）
+  // 引导护栏（S4 复审）：第一次不足声明触发 1 次引导 send（chatCount=5：goal/plan/write/不足/引导 send）；
+  // 第二次不足声明（round5）后护栏生效不再 send——chatCount 停在 5（防回填死循环）
   expect(
     await page.evaluate(() => (window as unknown as { __nfChatCount: number }).__nfChatCount),
   ).toBe(5)
