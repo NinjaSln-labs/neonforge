@@ -113,6 +113,7 @@ export interface ConversationState {
   lastToolFailed: boolean       // 上一轮工具执行失败（坑 93 ②：策略引导 policy 不置）
   decisionContent?: DecisionContent  // 当前待决策内容快照（决策点呈现与审计唯一来源）
   deniedApprovals: Array<{ toolName: string; subject: string }>  // 拒绝记忆（§3.4 C6——同轮同类动作短封，S6 actionGate 消费；任务边界重置）
+  rejectStreak: number                // 同一决策点连续拒绝计数（§4.1 C8——上限 3 超限回退澄清/人工接管；随确认/新提议重置；S3 消费）
 }
 
 export const initialState = (): ConversationState => ({
@@ -125,6 +126,7 @@ export const initialState = (): ConversationState => ({
   filesApproved: false,
   lastToolFailed: false,
   deniedApprovals: [],
+  rejectStreak: 0,
 })
 
 // ============================================================================
@@ -143,6 +145,7 @@ export function userDecided(
   }
   const next: ConversationState = { ...s, pending: 'none', decisionContent: undefined }
   if (decision.confirm) {
+    next.rejectStreak = 0 // §4.1 C8：决策点确认 → 连续拒绝计数重置
     if (point === 'goal') {
       // 目标确认 = 任务边界（A0 §9 目标驱动原点；对齐 clearTrust 语义）——新任务清零进度/清单/达成/拒绝记忆
       next.goalConfirmed = true
@@ -158,9 +161,10 @@ export function userDecided(
       // 方案确认蕴含目标确认（继承 handleExecutionConfirmed 现状语义）；plannedFiles 只由已确认方案派生（不变量 6）
       next.goalConfirmed = true
       next.planConfirmed = true
-      const proposal = s.decisionContent?.proposal as PlanProposal | undefined
-      if (proposal && Array.isArray(proposal.files)) {
-        next.plannedFiles = derivePlannedFiles(s, proposal)
+      // 决策内容按 kind 收窄（Q3 审计：不裸收窄三型 union——kind 非 plan 视同无 proposal，防御）
+      const dc = s.decisionContent
+      if (dc?.kind === 'plan' && dc.proposal && Array.isArray((dc.proposal as PlanProposal).files)) {
+        next.plannedFiles = derivePlannedFiles(s, dc.proposal as PlanProposal)
       }
     }
     if (point === 'resolution') {
@@ -174,6 +178,8 @@ export function userDecided(
     if (point === 'goal') next.goalConfirmed = false
     if (point === 'plan') next.planConfirmed = false
     if (point === 'resolution') next.resolutionConfirmed = false
+    // §4.1 C8：同一决策点连续拒绝计数（含 kind='modify'——修改=拒绝）——超限处理（AskToAct 澄清/人工接管）S3 消费
+    next.rejectStreak = s.rejectStreak + 1
     // reason 由事件层回填模型（decision.resolved detail.reason——S3 接线）；状态层只回退 + 清 pending
     void reason
   }
@@ -208,6 +214,10 @@ export function userRejected(s: ConversationState, point: 'goal' | 'plan' | 'res
 
 // 卡弹出 → 会话进入 PENDING（A0 §3.2 单一 PENDING——pending 只有一个；不变量 7）
 export function setPending(s: ConversationState, kind: Exclude<PendingKind, 'none'>, content?: Omit<DecisionContent, 'kind'>): ConversationState {
+  // §4.1 C8 计数语义（S1.1 审计裁定）：模型重提议（新 content）属**同一决策点延续**——不重置计数
+  // （否则「连续拒绝 3 次上限」因每次重提议清零而永远不触发——协商保护失效）；
+  // 「随新提议重置」按 C2 语义 = 用户新意图（pending 期间新自由文本 → reject(direction)+新 GoalProposal）
+  // 是**新决策点**——由应用层经 goal 确认边界/新任务重置（S3 接线）；领域层只承载计数
   return { ...s, pending: kind, decisionContent: content ? { kind, ...content } : undefined }
 }
 
@@ -413,9 +423,23 @@ export function deriveDecisionPoint(
 
 // —— 完成对账（不变量 4：无证据不进入对账——verifyCompletion 纯逻辑部分；V1a 系统代跑核验 S2 扩展） ——
 
-/** 证据完整性判定（verification 非空 && pendingQuestions 空） */
+/** 验证命令是否系统可代跑（只读——V1a 核验范围；network-read 同为可代跑核验） */
+function isSystemVerifiable(command: string): boolean {
+  const kind = classifyReadonly('bash', command)
+  return kind === 'readonly' || kind === 'network-read'
+}
+
+/** 证据可核验性（不变量 4 单源——Q2 审计：completionEvidenceComplete 与 verifyCompletion 共用，消除分歧）：
+ * verification 非空 + 全部系统可代跑（只读）+ 无 pendingQuestions */
+export function evidenceVerifiable(evidence: CompletionEvidence): boolean {
+  if (evidence.verification.length === 0) return false
+  if (evidence.pendingQuestions.length > 0) return false
+  return evidence.verification.every((item) => isSystemVerifiable(item.command))
+}
+
+/** 证据完整性判定（兼容壳——语义 = evidenceVerifiable；S4 接线时可由 verifyCompletion 直连取代） */
 export function completionEvidenceComplete(evidence: CompletionEvidence): boolean {
-  return evidence.verification.length > 0 && evidence.pendingQuestions.length === 0
+  return evidenceVerifiable(evidence)
 }
 
 /**
@@ -428,9 +452,9 @@ export function verifyCompletion(claim: CompletionClaim): { ok: boolean; missing
   if (claim.evidence.verification.length === 0) missing.push('verification')
   for (const item of claim.evidence.verification) {
     if (item.passed === false) missing.push(`verification:${item.command}`)
-    // 非只读验证命令（系统不可代跑）→ unverifiable（拍板 4：标记 + 用户对账时提示「该证据未经系统核验」）
-    const kind = classifyReadonly('bash', item.command)
-    if (kind !== 'readonly' && kind !== 'network-read') unverifiable.push(item.command)
+    // 非只读验证命令（系统不可代跑）→ unverifiable（拍板 4：标记 + 用户对账时提示「该证据未经系统核验」；
+    // 与 evidenceVerifiable 同源——isSystemVerifiable）
+    if (!isSystemVerifiable(item.command)) unverifiable.push(item.command)
   }
   if (claim.evidence.pendingQuestions.length > 0) missing.push(...claim.evidence.pendingQuestions.map((q) => `pending-question:${q}`))
   return { ok: missing.length === 0 && unverifiable.length === 0, missing, unverifiable }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { deriveStateEvents, validateTimelineEvent, dedupeKey, detectProposed } from '../../src/domain/timeline'
-import { initialState, userConfirmed, userRejected, approvalGranted, applyToolResult, setPending } from '../../src/domain/conversationState'
+import { initialState, userConfirmed, userRejected, approvalGranted, applyToolResult, setPending, approvalDecided } from '../../src/domain/conversationState'
 
 // 2026-08-15 DDD 重建：领域事件派生（Event Sourcing-lite——转换 diff → 事件）
 // 锁定：任意状态转换自动产生对应领域事件（06 事件目录对齐——状态机可回放）
@@ -88,5 +88,43 @@ describe('dedupeKey / detectProposed（2026-08-15 补齐）', () => {
   it('detectProposed：无标记 → 空', () => {
     expect(detectProposed('我先看看项目结构。')).toEqual([])
     expect(detectProposed('')).toEqual([])
+  })
+})
+
+// 2026-08-16 意图确认重设计 S1（Q1 审计修复）：decision.requested/resolved 事件派生锁定（三步登记第 3 步）
+describe('deriveStateEvents（decision.* 领域决策点事件——设计 §3.5）', () => {
+  it('pending_set 同发 decision.requested（kind + since 快照）', () => {
+    const s = initialState()
+    const next = setPending(s, 'goal', { proposal: { statement: 'g', assumptions: [] }, since: 't1' })
+    const events = deriveStateEvents(s, next)
+    expect(events.map((e) => e.type)).toContain('decision.requested')
+    const evt = events.find((e) => e.type === 'decision.requested')
+    expect(evt?.detail.kind).toBe('goal')
+    expect(evt?.detail.since).toBe('t1')
+    // 与 session.pending_set 并存（领域视图 + 会话视图——§3.5 两层语义）
+    expect(events.map((e) => e.type)).toContain('session.pending_set')
+  })
+
+  it('plan 确认 → decision.resolved（point: plan, action: confirm）', () => {
+    const s = setPending(userConfirmed(initialState(), 'goal'), 'plan', { proposal: { summary: 'p', files: [], assumptions: [], verificationPlan: [] }, since: 't' })
+    const next = userConfirmed(s, 'plan')
+    const evt = deriveStateEvents(s, next).find((e) => e.type === 'decision.resolved')
+    expect(evt?.detail).toEqual({ point: 'plan', action: 'confirm' })
+  })
+
+  it('plan 拒绝 → decision.resolved（point: plan, action: reject）', () => {
+    const s = setPending(userConfirmed(initialState(), 'goal'), 'plan', { proposal: { summary: 'p', files: [], assumptions: [], verificationPlan: [] }, since: 't' })
+    const next = userRejected(s, 'plan', { kind: 'scope' })
+    const evt = deriveStateEvents(s, next).find((e) => e.type === 'decision.resolved')
+    expect(evt?.detail).toEqual({ point: 'plan', action: 'reject' })
+  })
+
+  it('approval 允许 → decision.resolved（point: approval, action: confirm）；拒绝 → reject（拒绝记忆 diff 推断）', () => {
+    const req = { toolName: 'bash', subject: 'rm -rf /', reason: '高危', risk: 'high' as const }
+    const s = setPending(userConfirmed(userConfirmed(initialState(), 'goal'), 'plan'), 'approval', { approval: req, since: 't' })
+    const allow = deriveStateEvents(s, approvalDecided(s, req, { confirm: true }))
+    expect(allow.find((e) => e.type === 'decision.resolved')?.detail).toEqual({ point: 'approval', action: 'confirm' })
+    const deny = deriveStateEvents(s, approvalDecided(s, req, { confirm: false, reason: { kind: 'direction' } }))
+    expect(deny.find((e) => e.type === 'decision.resolved')?.detail).toEqual({ point: 'approval', action: 'reject' })
   })
 })
