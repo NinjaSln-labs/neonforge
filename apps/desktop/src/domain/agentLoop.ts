@@ -4,7 +4,7 @@
 // DDD 落地：Value Object（TurnProgress/StuckState）+ Domain Service（ProgressEvaluator/StuckDetector）+ Domain Event
 // 纯逻辑无 React 依赖——L1 可测；ConversationPanel（Application 层）调用
 // 2026-08-14 S4：副作用分类同源（classifyAction——缝隙 2 进展判定）
-import { classifyAction } from './conversationState.js'
+import { classifyAction, isStructuredProposal } from './conversationState.js'
 import { isLikelyPath } from './planProposalParser.js'
 import { parseCompletionClaim } from './completionClaimParser.js'
 
@@ -125,7 +125,8 @@ export function evaluateTurnProgress(input: {
   )
   // S5（§8.1 B 331——推进检测统一）：结构化提议输出 = 推进（【目标确认】/【执行方案】/【已达成】信号——
   // 与 pendingCardToShow 信号同源——决策点流程中模型在推进）；纯文本承诺不算（「只说不做」判定保留——坑 79）
-  const proposed = /【(目标确认|执行方案|已达成)/.test(t)
+  // S5 复审（坑 97 单源）：isStructuredProposal 领域层唯一探测（renderer proposalConsumed 共用——不自写正则）
+  const proposed = isStructuredProposal(t)
   // S5：完成声明带验证证据 = 推进（parseCompletionClaim 判定——verification 非空——S4 证据对账流程中不判停滞）
   const providedEvidence = (parseCompletionClaim(t)?.evidence.verification.length ?? 0) > 0
   return {

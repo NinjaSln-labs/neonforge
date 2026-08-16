@@ -2,8 +2,11 @@ import { describe, it, expect } from 'vitest'
 import {
   initialState,
   userConfirmed,
+  userDecided,
   setPending,
   decideProgressGuarantee,
+  isConsumedProposal,
+  isStructuredProposal,
   type ConversationState,
   type TurnProgress,
 } from '../../src/domain/conversationState'
@@ -109,5 +112,36 @@ describe('decideProgressGuarantee（S5 唯一推进判定器——turnPolicy 语
   it('确认后无推进 + 工具不可用 → require-advance（逼「推进」——允许提议/证据/提问，不逼调工具）', () => {
     const r = decideProgressGuarantee(confirmed(), turn({ toolsAvailable: false }))
     expect(r.mode).toBe('require-advance')
+  })
+})
+
+// S5 复审（Standards 坑 97 单源——renderer proposalConsumed 下沉领域层）：已确认决策点的已消费提议判定
+describe('isConsumedProposal / isStructuredProposal（S5 复审——单源探测）', () => {
+  it('isStructuredProposal：三种结构化标记命中；纯文本不命中（evaluateTurnProgress 与 renderer 共用唯一探测）', () => {
+    expect(isStructuredProposal('好的。【目标确认：做个游戏】')).toBe(true)
+    expect(isStructuredProposal('【执行方案】\n- a.js')).toBe(true)
+    expect(isStructuredProposal('【已达成】\n完成。')).toBe(true)
+    expect(isStructuredProposal('我马上就去改。')).toBe(false)
+    expect(isStructuredProposal('')).toBe(false)
+  })
+
+  it('已确认决策点的提议 = 已消费（goal/plan/resolution 各自）', () => {
+    const s = userConfirmed(userConfirmed(initialState(), 'goal'), 'plan')
+    expect(isConsumedProposal('好的。【目标确认：做个游戏】', s)).toBe(true) // goal 已确认
+    expect(isConsumedProposal('【执行方案】\n- a.js', s)).toBe(true) // plan 已确认
+    expect(isConsumedProposal('【已达成】\n完成。', s)).toBe(false) // resolution 未确认——不算消费
+    const done = userDecided(s, 'resolution', { confirm: true })
+    expect(isConsumedProposal('【已达成】\n完成。', done)).toBe(true) // 达成已确认——收敛态消费
+  })
+
+  it('未确认的提议 → 不算已消费（pending 期/拒绝后重提议轮仍算推进——auto）', () => {
+    const onlyGoal = userConfirmed(initialState(), 'goal')
+    expect(isConsumedProposal('【执行方案】\n- a.js', onlyGoal)).toBe(false) // plan 未确认
+    expect(isConsumedProposal('好的。【目标确认：做个游戏】', onlyGoal)).toBe(true) // goal 已确认仍消费
+  })
+
+  it('纯文本 → 恒非已消费（isStructuredProposal 前置——与「只说不做」判定不冲突）', () => {
+    const s = userConfirmed(userConfirmed(initialState(), 'goal'), 'plan')
+    expect(isConsumedProposal('我马上就去改。', s)).toBe(false)
   })
 })

@@ -690,6 +690,27 @@ export function plannedComplete(s: ConversationState, projectFiles: ReadonlySet<
   return [...s.plannedFiles].every((f) => s.producedFiles.has(f) || projectFiles.has(f))
 }
 
+// S5 复审修正（坑 97 单源）：结构化提议信号唯一探测（【目标确认】/【执行方案】/【已达成】——
+// agentLoop.evaluateTurnProgress 与 renderer proposalConsumed 共用——渲染层不再自写文本探测）
+export function isStructuredProposal(text: string): boolean {
+  return /【(目标确认|执行方案|已达成)/.test(text)
+}
+
+/** 已确认决策点的已消费提议（S5 复审——renderer 组装层单源判定）：提议信号 + 对应决策点已确认 →
+ * 该提议已消费（确认执行后上轮方案提议不再计「本轮推进」——应逼执行——L3 根因 3 回归）；
+ * 未确认的提议（pending 期/拒绝后重提议轮）仍算推进（auto——模型在走决策点流程）。
+ * 注意：resolutionConfirmed 收敛态下【已达成】恒为已消费——证据维度无意义（累积完成度分支已 auto） */
+export function isConsumedProposal(
+  content: string,
+  s: Pick<ConversationState, 'goalConfirmed' | 'planConfirmed' | 'resolutionConfirmed'>,
+): boolean {
+  if (!isStructuredProposal(content)) return false
+  if (s.goalConfirmed && /【目标确认/.test(content)) return true
+  if (s.planConfirmed && /【执行方案/.test(content)) return true
+  if (s.resolutionConfirmed && /【已达成/.test(content)) return true
+  return false
+}
+
 // S5：forceToolInput 已删除（decideTurnPolicy 语义并入 decideProgressGuarantee——§6 S5 唯一推进判定器；
 // 状态空间由 stateRef 直读 + projectFiles 传参，不再经 TurnPolicyInput 中转）
 
