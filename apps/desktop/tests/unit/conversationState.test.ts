@@ -18,6 +18,7 @@ import {
   classifyReadonly,
   classifyAction,
   verifyCompletion,
+  buildEvidenceBackfill,
   completionEvidenceComplete,
   decideProgressGuarantee,
   derivePlannedFiles,
@@ -940,5 +941,37 @@ describe('继承锁定——兼容壳（userConfirmed/userRejected/approvalGrant
     expect(s.lastToolFailed).toBe(true)
     s = applyToolResult(s, { name: 'bash', ok: true })
     expect(s.lastToolFailed).toBe(false)
+  })
+})
+
+// S4 spec TDD 网格：证据不足回填引导（§6 S4——ok=false 不弹卡 + 引导文本含清单；§3.3 unverifiable 显式提示）
+describe('buildEvidenceBackfill（S4——完成声明被拒的回填引导文本）', () => {
+  it('missing 清单 → 引导文本含各缺失项（验证命令/待答问题/diff 缺失）', () => {
+    const text = buildEvidenceBackfill({
+      ok: false,
+      missing: [
+        'verification:ls src',
+        'pending-question:支持哪些浏览器',
+        'diff:planned-not-produced',
+      ],
+      unverifiable: [],
+    })
+    expect(text).toContain('ls src')
+    expect(text).toContain('支持哪些浏览器')
+    expect(text).toContain('diff:planned-not-produced')
+  })
+
+  it('unverifiable 清单 → 引导文本显式提示「未经系统核验」', () => {
+    const text = buildEvidenceBackfill({
+      ok: false,
+      missing: [],
+      unverifiable: ['npm test'],
+    })
+    expect(text).toContain('npm test')
+    expect(text).toContain('未经系统核验')
+  })
+
+  it('ok=true（无缺失）→ 空引导（不注入）', () => {
+    expect(buildEvidenceBackfill({ ok: true, missing: [], unverifiable: [] })).toBe('')
   })
 })

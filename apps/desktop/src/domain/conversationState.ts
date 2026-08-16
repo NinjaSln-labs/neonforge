@@ -602,6 +602,29 @@ export function verifyCompletion(
   return { ok: missing.length === 0 && unverifiable.length === 0, missing, unverifiable }
 }
 
+/** V1b diff 对账系统派生（S4 单源——renderer/main 共用）：planned ∩ produced 匹配项。
+ * verifyCompletion 消费语义：匹配数 < planned 数 → missing diff:planned-not-produced（系统核对，非模型自述） */
+export function deriveDiffs(planned: Set<string>, produced: Set<string>): Array<{ path: string }> {
+  return [...produced].filter((p) => planned.has(p)).map((path) => ({ path }))
+}
+
+// —— 证据不足回填引导（S4——§6 S4 + §3.3：完成声明被拒 → 引导文本注入模型重新输出带证据声明） ——
+
+/** verifyCompletion 结果 → 回填引导文本（ok=true → 空串——不注入；ok=false → 缺失/未核验清单显式列出）。
+ * 纯函数（L1 可测）——注入时机与触发续轮由应用层（S4 接线）承担 */
+export function buildEvidenceBackfill(v: {
+  ok: boolean
+  missing: string[]
+  unverifiable: string[]
+}): string {
+  if (v.ok) return ''
+  const lines: string[] = []
+  if (v.missing.length > 0) lines.push(`证据不足：${v.missing.join('；')}`)
+  if (v.unverifiable.length > 0) lines.push(`以下证据未经系统核验：${v.unverifiable.join('；')}`)
+  lines.push('请补充可核验的验证证据（只读验证命令结果）后重新输出【已达成】声明。')
+  return lines.join('\n')
+}
+
 // —— 方案清单派生（不变量 6 承载：plannedFiles 只由已确认的 PlanProposal.files 派生——追加语义 A0 §5） ——
 
 /** 返回 state.plannedFiles ∪ proposal.files（追加/去重——路径规范化由解析层 trustPath 承担，S2） */

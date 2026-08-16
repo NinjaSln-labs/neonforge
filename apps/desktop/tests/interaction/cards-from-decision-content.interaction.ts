@@ -5,8 +5,8 @@
 //   3. 触发权切换：卡内容来自 decisionContent（pending 时唯一来源）
 // 装配：MockBridge 工厂 + 场景装配器（T0 基建——旧基建 S3 迁移后本文件为新场景承载）
 import { test, expect } from '@playwright/test'
-import { installMockBridge, chunk } from './mockBridge'
-import { compose, goalConfirm, startFromScratch } from './scenarios'
+import { installMockBridge, chunk, toolCall } from './mockBridge'
+import { compose, goalConfirm, planPropose, startFromScratch } from './scenarios'
 import { expectVisible, expectText } from '../helpers/assertions'
 
 test('S3-1：方案卡渲染 PlanProposal 三要素（文件含原因/关键假设/验证计划）', async ({ page }) => {
@@ -148,4 +148,190 @@ test('S3-4：拒绝超限回退——连续拒绝 3 次 → 澄清提示（不�
   }
   // 第 3 次拒绝后：对话区出现澄清提示（rejectStreak ≥3——§4.1 超限回退）
   await expectText(page.locator('.nf-reject-overflow'), '连续拒绝了 3 次', 10000)
+})
+
+// S4 完成证据对账场景（设计 §6 S4——已解决卡条件 = verifyCompletion 通过；证据不足不弹卡 + 回填引导）
+// 装配：MockBridge + 轮次脚本（goal → plan → 执行 write（producedFiles 非空——resolution 卡渲染前提）→ 完成声明）
+// 断言策略：verifyThenResolve 判定后引导 send 自动触发下一轮（~100ms）——「不弹卡」中间态窗口太窄——
+// 用 evidence_missing 打点（timeline 捕获）+ chatCount（引导 send 确实发生）+ 最终弹卡 三重证明
+// S4 场景 1a：证据不足（verification 空）→ 不弹卡 + evidence_missing 打点 + 引导 send 发生（无后续轮次——卡恒不出现）
+test('S4-1a：证据不足 → 不弹已解决卡 + evidence_missing 打点 + 回填引导触发', async ({ page }) => {
+  await installMockBridge(page, {
+    project: 'none',
+    capture: { chatCount: true },
+    // extraInit 逃生舱：函数字段直接改 bridge（extra 经 JSON 序列化会丢函数——不能用）
+    extraInit: `
+      const tlogs = []
+      window.__tlogs = tlogs
+      bridge.timeline = { log: async (evt) => { tlogs.push(evt) } }
+    `,
+    script: compose(
+      goalConfirm('完成待办应用'),
+      planPropose(['/test/app.ts（核心）']),
+      [[toolCall.write('/test/app.ts', 'x'), chunk.done()]], // 确认执行后写（producedFiles 非空）
+      [
+        [
+          // 证据不足：verification 空（无验证证据行）→ verifyCompletion 纯逻辑 missing → 不弹卡
+          chunk.content('【已达成】\n完成了。\n遗留问题：\n- 无'),
+          chunk.done(),
+        ],
+      ],
+    ),
+  })
+  await startFromScratch(page, '做个待办应用')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  await page.getByRole('button', { name: '确认执行' }).click()
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(1, { timeout: 10000 })
+  // 完成声明（证据不足）→ 已解决卡不出现（verifyCompletion ok=false——不变量 4 接线；脚本无后续轮次→恒不出现）
+  await page.waitForTimeout(2000)
+  await expect(page.getByRole('button', { name: '已解决' })).toHaveCount(0)
+  // evidence_missing 打点（ok:false + missing 含 verification）
+  const tlogs = await page.evaluate(() => (window as unknown as { __tlogs: unknown[] }).__tlogs)
+  const ev = tlogs.find((l) => (l as { type: string }).type === 'completion.evidence_missing') as
+    { detail?: { ok?: boolean; missing?: string[] } } | undefined
+  expect(ev).toBeTruthy()
+  expect(ev?.detail?.ok).toBe(false)
+  expect(ev?.detail?.missing).toContain('verification')
+  // 回填引导已触发模型下一轮（chatCount 达到 5：goal/plan/write/不足声明/引导 send——空 defaultRound 无内容）
+  expect(
+    await page.evaluate(() => (window as unknown as { __nfChatCount: number }).__nfChatCount),
+  ).toBe(5)
+})
+
+// S4 场景 1b：引导后模型重输出带证据声明 → 已解决卡出现（回填引导闭环）
+test('S4-1b：回填引导 → 模型重输出带证据声明 → 已解决卡出现', async ({ page }) => {
+  await installMockBridge(page, {
+    project: 'none',
+    script: compose(
+      goalConfirm('完成待办应用'),
+      planPropose(['/test/app.ts（核心）']),
+      [[toolCall.write('/test/app.ts', 'x'), chunk.done()]],
+      [
+        [
+          chunk.content('【已达成】\n完成了。\n遗留问题：\n- 无'), // 证据不足（第一轮）
+          chunk.done(),
+        ],
+      ],
+      [
+        [
+          // 引导 send 触发第二轮：带只读验证证据的完整声明 → verifyCompletion 通过 → 弹卡
+          chunk.content('【已达成】\n完成。\n验证证据：\n- ls dist（通过）'),
+          chunk.done(),
+        ],
+      ],
+    ),
+  })
+  await startFromScratch(page, '做个待办应用')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  await page.getByRole('button', { name: '确认执行' }).click()
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(1, { timeout: 10000 })
+  // 引导 → 模型重输出完整声明 → 已解决卡出现
+  await expectVisible(page.getByRole('button', { name: '已解决' }), 15000)
+})
+
+// S4 场景 2：证据完整 + 系统复核通过 → 直接弹已解决卡（V1a mock 核验 ok:true——verify 调用计数锁定 V1a 生效）
+test('S4-2：证据完整 + 系统复核通过 → 已解决卡出现（V1a 接线）', async ({ page }) => {
+  await installMockBridge(page, {
+    project: 'none',
+    // extraInit 逃生舱：mock V1a 系统核验（extra 经 JSON 序列化丢函数——此处直接改 bridge）
+    extraInit: `
+      let verifyCount = 0
+      window.__verifyCount = () => verifyCount
+      bridge.completion = {
+        verify: async (commands) => {
+          verifyCount++
+          return Object.fromEntries(commands.map((c) => [c, { ok: true, output: 'ok' }]))
+        },
+      }
+    `,
+    script: compose(
+      goalConfirm('完成待办应用'),
+      planPropose(['/test/app.ts（核心）']),
+      [[toolCall.write('/test/app.ts', 'x'), chunk.done()]],
+      [[chunk.content('【已达成】\n完成。\n验证证据：\n- ls dist（通过）'), chunk.done()]],
+    ),
+  })
+  await startFromScratch(page, '做个待办应用')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  await page.getByRole('button', { name: '确认执行' }).click()
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(1, { timeout: 10000 })
+  // 系统复核通过 → 已解决卡出现（不依赖引导）
+  await expectVisible(page.getByRole('button', { name: '已解决' }), 15000)
+  // V1a 真实生效：verify 被调用过（非纯逻辑路径）
+  expect(
+    await page.evaluate(() =>
+      (window as unknown as { __verifyCount: () => number }).__verifyCount(),
+    ),
+  ).toBe(1)
+})
+
+// S4 场景 3：系统复核失败（模型自报 passed 被推翻）→ evidence_missing 打点 + 引导 → 重输出复核通过 → 卡出现
+test('S4-3：系统复核失败推翻自报 → 不弹卡 + 引导 → 重输出复核通过 → 卡出现（V1a 拒绝侧）', async ({
+  page,
+}) => {
+  await installMockBridge(page, {
+    project: 'none',
+    capture: { chatCount: true },
+    // extraInit 逃生舱：timeline 捕获 + V1a mock（第一次复核失败、第二次通过——extra 经 JSON 序列化丢函数）
+    extraInit: `
+      const tlogs2 = []
+      window.__tlogs2 = tlogs2
+      bridge.timeline = { log: async (evt) => { tlogs2.push(evt) } }
+      let verifyCount = 0
+      window.__verifyCount2 = () => verifyCount
+      bridge.completion = {
+        verify: async (commands) => {
+          verifyCount++
+          const ok = verifyCount >= 2
+          return Object.fromEntries(commands.map((c) => [c, { ok, output: ok ? 'ok' : '失败' }]))
+        },
+      }
+    `,
+    script: compose(
+      goalConfirm('完成待办应用'),
+      planPropose(['/test/app.ts（核心）']),
+      [[toolCall.write('/test/app.ts', 'x'), chunk.done()]],
+      [
+        [
+          // 自报 passed 但系统复核失败 → verifyCompletion missing → 不弹卡 + 引导
+          chunk.content('【已达成】\n完成。\n验证证据：\n- ls dist（通过）'),
+          chunk.done(),
+        ],
+      ],
+      [
+        [
+          // 引导后重输出（再次自报）→ 第二次系统复核通过 → 弹卡
+          chunk.content('【已达成】\n完成。\n验证证据：\n- ls dist（通过）'),
+          chunk.done(),
+        ],
+      ],
+    ),
+  })
+  await startFromScratch(page, '做个待办应用')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  await page.getByRole('button', { name: '确认执行' }).click()
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(1, { timeout: 10000 })
+  // 引导后重输出 → 第二次复核通过 → 卡出现（第一次失败不弹卡的证据 = evidence_missing 打点）
+  await expectVisible(page.getByRole('button', { name: '已解决' }), 15000)
+  // evidence_missing 打点（第一次复核失败——missing 含 verification:ls dist）
+  const tlogs = await page.evaluate(() => (window as unknown as { __tlogs2: unknown[] }).__tlogs2)
+  const ev = tlogs.find((l) => (l as { type: string }).type === 'completion.evidence_missing') as
+    { detail?: { ok?: boolean; missing?: string[] } } | undefined
+  expect(ev).toBeTruthy()
+  expect(ev?.detail?.ok).toBe(false)
+  expect(ev?.detail?.missing).toContain('verification:ls dist')
+  // 两次核验都发生（第一次失败 + 第二次通过——V1a 真实生效）
+  expect(
+    await page.evaluate(() =>
+      (window as unknown as { __verifyCount2: () => number }).__verifyCount2(),
+    ),
+  ).toBe(2)
 })

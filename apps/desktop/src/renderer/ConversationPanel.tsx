@@ -29,8 +29,13 @@ import {
   pendingCardToShow,
   shouldStopContinuation,
   inPlannedFiles as inPlannedFilesDomain,
+  verifyCompletion,
+  buildEvidenceBackfill,
+  deriveDiffs,
+  type SystemVerifier,
   type GoalProposal,
   type PlanProposal,
+  type CompletionClaim,
 } from '../domain/conversationState'
 // S2 提议解析（S3 接线：done 分支结构化解析 → decisionContent 快照——卡渲染唯一来源）
 import { parsePlanProposal, extractAssumptionsSection } from '../domain/planProposalParser'
@@ -624,6 +629,50 @@ export default function ConversationPanel({
     toolCalls: [],
   })
   // 2026-08-07 无阶段重构 S4：TurnKind/turnKindRef 删除（advanceChat 随阶段体系移除——无 advance-turn；send/maybeContinue 不再需要轮次类型标记）
+  // S4 完成对账（不变量 4 接线）：已解决卡条件 = verifyCompletion(claim, systemState).ok
+  // V1a 系统代跑（main IPC——mock/降级无则纯逻辑）+ V1b diff 派生（领域层单源）→ 判定：
+  // ok → 置 resolution 决策点（弹已解决卡）；ok=false → evidence_missing 打点 + 回填引导（模型重新输出带证据声明）
+  // ADR-004：领域层同步消费快照——IO（代跑）在应用层（此处 await 后快照进 verifyCompletion）
+  const verifyThenResolve = async (claim: CompletionClaim): Promise<void> => {
+    const bridge = window.neonforge?.completion
+    let systemState: SystemVerifier | undefined
+    if (bridge?.verify) {
+      try {
+        const commands = claim.evidence.verification
+          .filter((v) => v.passed !== false)
+          .map((v) => v.command)
+        const results = await bridge.verify(commands, rootPath ?? null)
+        if (results) {
+          systemState = {
+            verificationResults: results,
+            deriveDiffs,
+            plannedFiles: stateRef.current.plannedFiles,
+            producedFiles: stateRef.current.producedFiles,
+          }
+        }
+      } catch {
+        // 核验服务异常 → 降级纯逻辑判定（不阻断弹卡路径）
+      }
+    }
+    const v = verifyCompletion(claim, systemState)
+    if (v.ok) {
+      // 核验期间可能已有其它决策点置位（竞态防护——pending 非 none 不覆盖）
+      if (stateRef.current.pending !== 'none') return
+      setPendingState('resolution', { proposal: claim, since: new Date().toISOString() })
+    } else {
+      // 证据不足 → 不弹卡（不产生决策点）+ evidence_missing 打点 + 回填引导（模型重新输出带证据声明）
+      tlog(
+        'completion.evidence_missing',
+        { ok: false, missing: v.missing, unverifiable: v.unverifiable },
+        'system',
+      )
+      const guide = buildEvidenceBackfill(v)
+      if (guide) {
+        inputRef.current = guide
+        void sendRef.current()
+      }
+    }
+  }
   const applyChunk = (chunk: {
     type: string
     text?: string
@@ -736,10 +785,10 @@ export default function ConversationPanel({
             since: new Date().toISOString(),
           })
         } else if (cardToShow === 'resolution') {
-          // 完成声明 → parseCompletionClaim 结构化解析 → decisionContent.proposal
+          // 完成声明 → parseCompletionClaim 结构化解析 → S4：已解决卡条件 = verifyCompletion 通过
+          // （不变量 4 接线——不再直接置决策点；异步系统核验（V1a 代跑 + V1b 派生）后判定）
           const claim = parseCompletionClaim(content)
           if (claim) {
-            setPendingState('resolution', { proposal: claim, since: new Date().toISOString() })
             tlog(
               'proposal.completion',
               {
@@ -750,6 +799,7 @@ export default function ConversationPanel({
               },
               'assistant',
             )
+            void verifyThenResolve(claim)
           } else {
             tlog('proposal.completion', { ok: false }, 'assistant')
           }

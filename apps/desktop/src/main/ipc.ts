@@ -20,6 +20,7 @@ import { initPlugins, pluginRegistry } from './pluginSystem.js'
 import { compaction } from './compact.js'
 import { appendChatLog, exportChatLog } from './chatLog.js'
 import { logTimeline, timelineLogger } from './timelineLogger.js'
+import { runVerificationCommands } from './verification.js'
 
 export function registerIpc(): void {
   initTools()
@@ -260,4 +261,8 @@ ipcMain.handle(
       return { ok: false, error: '历史未达压缩阈值' }
     return compaction.compact(apiKey, (k, h) => gateway.summarize(k, h), opts.history ?? [])
   },
+)
+// S4 完成对账 V1a：系统代跑只读验证命令（fail-closed——非只读不执行；超时/截断护栏见 verification.ts）
+ipcMain.handle('completion:verify', (_e, opts: { commands: string[]; rootPath?: string | null }) =>
+  runVerificationCommands(opts.commands ?? [], { cwd: opts.rootPath ?? undefined }),
 )
