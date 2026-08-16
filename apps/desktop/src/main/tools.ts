@@ -1,4 +1,4 @@
-import { promises as fs, existsSync } from 'fs'
+import { promises as fs } from 'fs'
 import path from 'path'
 import { execSync } from 'child_process'
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
@@ -350,7 +350,7 @@ async function openExecutor(args: Record<string, unknown>): Promise<unknown> {
     await shell.openExternal(url)
     return { ok: true, data: `已在默认浏览器打开 ${url}` }
   } catch (e) {
-    throw new Error(`open 失败: ${e instanceof Error ? e.message : String(e)}`)
+    throw new Error(`open 失败: ${e instanceof Error ? e.message : String(e)}`, { cause: e })
   }
 }
 

@@ -39,7 +39,7 @@ export default function MainWorkspace({
   onBackStart,
   onKeyExpired,
   onProjectCreated,
-  zeroToOneMode = false,
+  zeroToOneMode: _zeroToOneMode = false,
   initialPrompt
 }: {
   rootPath: string | null
@@ -244,7 +244,6 @@ function initProblems(): ProblemInstance[] {
     })
   }, [])
 
-  const zeroToOne = zeroToOneMode
   // 2026-08-07 无阶段重构 S4：阶段机（flowStage/flowModel/stageHint/stageAdvance/advanceHint/handleStageChange）全部移除——
   // 无阶段流程：目标确认 → 能力检查 → 执行确认 → 达成循环（状态由 goalConfirmed/planConfirmed 表达）
 

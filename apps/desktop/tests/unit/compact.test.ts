@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { decideCompact, compactHint, compaction, estimateTokens, COMPACT_MSG_LIMIT, COMPACT_KEEP_RECENT } from '../../src/main/compact'
+import { decideCompact, compactHint, compaction, estimateTokens, COMPACT_KEEP_RECENT } from '../../src/main/compact'
 
 describe('decideCompact（策略层——既有）', () => {
   it('未超阈值 → 不压缩', () => {

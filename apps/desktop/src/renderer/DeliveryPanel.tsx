@@ -7,7 +7,7 @@ import { IconCheck, IconClock, IconFile, IconRotateCcw, IconX } from './icons'
 // 视觉：深紫浮面 + 靛紫 accent；验收打勾交互；「确认关闭」= 问题终态（交付 ≠ 解决）
 export default function DeliveryPanel({
   pkg,
-  onClose,
+  onClose: _onClose,
   onAdjust,
   onRerun,
   onConfirmed

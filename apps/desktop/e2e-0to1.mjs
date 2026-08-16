@@ -410,7 +410,6 @@ class SessionDriver {
       if (fp !== lastFp) { lastFp = fp; idleSince = Date.now() }
       if (lastMsg && lastMsg.content !== fromContent) {
         if (/说要做但还没动手|回复.*继续/.test(lastMsg.content)) continue // 跳过 isActionPromise 系统提示（非模型回复）
-        lastReal = lastMsg
         return lastMsg
       }
       // 记录已出现的非提示消息（可能被提示挤到后面——用于超时容错）
@@ -989,7 +988,7 @@ class StageMachine {
     const tree = await this.driver.realFiles()
     const core = ['index.html', 'package.json']
     const missingCore = core.filter((c) => !tree.some((t) => t.endsWith(c)))
-    let msg = null
+    let msg
     if (missingCore.length > 0) {
       console.log(`   ⚠️ 部署前检查：核心产物缺失 ${missingCore.join(', ')}——先让模型补齐`)
       await this.driver.send(`${missingCore.join('、')} 还没写，补齐了再谈部署`)
@@ -1162,7 +1161,7 @@ console.log('=== NeonForge 0-1 完整流程 E2E（真实用户模拟 · DDD）==
 if (!KEY) { console.log('❌ 无可用 API Key'); process.exit(1) }
 console.log(`Key: ${KEY.slice(0, 5)}…${KEY.slice(-3)}（已脱敏） | PHASE=${PHASE} | MODE=${MODE}\n`)
 
-let ok = true
+let ok
 if (MODE === 'A') { ok = (await case_('场景 A：起始页填需求', 'fill')).ok }
 else if (MODE === 'B') { ok = (await case_('场景 B：对话输入', 'empty')).ok }
 else {

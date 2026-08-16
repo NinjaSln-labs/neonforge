@@ -144,7 +144,7 @@ await case_('需求分流 B 类（改文件内容→edit 直接执行）', async
   const { app, page } = await launch(TEST_DIR)
   await send(page, '把待办事项.txt 里的买牛奶改成买面包')
   // 需求确认（模型输出【需求确认】/确认需求——需求阶段不动手）
-  const r1 = await waitSettle(page, 30000)
+  await waitSettle(page, 30000)
   const msgs = await page.locator('.nf-msg').allInnerTexts()
   const hasTypeLabel = msgs.some((t) => t.includes('任务类型：B')) || msgs.some((t) => t.includes('需求确认'))
   // 用户确认推进（需求确认后 forceTool 强制——模型可能标 A（进设计——设计门控拦 edit 不弹卡）或标 B（直接执行）——循环推进直到文件改，最多 4 段

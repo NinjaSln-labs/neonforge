@@ -4,7 +4,7 @@
 // 事件目录对齐 docs/domain/06-domain-events.md（task.*/plan.*/tool.*/capability.*/execution.*/stuck.*/conversation.*/problem.*）
 // 纯逻辑无 React 依赖——L1 可测。
 
-import type { ConversationState, PendingKind } from './conversationState.js'
+import type { ConversationState } from './conversationState.js'
 
 // === Value Object: TimelineEvent（统一事件结构——对齐 04 §2.6 / session-timeline-domain §2.1） ===
 export interface TimelineEvent {

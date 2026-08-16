@@ -36,7 +36,7 @@ async function main() {
 
   // 轮询等结束：消息 done（最后消息不是"处理中"且非 streaming）或超时 75s
   const deadline = Date.now() + 75000
-  let lastText = ''
+  let lastText
   while (Date.now() < deadline) {
     await page.waitForTimeout(2000)
     const texts = await page.locator('.nf-msg').allInnerTexts()

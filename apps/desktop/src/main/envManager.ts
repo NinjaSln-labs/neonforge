@@ -217,7 +217,7 @@ export function detectExternalCapabilities(rootPath: string, env?: ProjectEnviro
     implementations: ['python3', 'python'], detail: py.status === 'ready' ? py.version : (py.status === 'failed' ? 'python 在 PATH 但不可用' : 'python3 未安装')
   })
   // 电子表格能力（任一实现即可——openpyxl 或 exceljs——不绑定具体工具：坑 74 教训）——实现检测按各自 runtime 门控（openpyxl←python、exceljs←node）
-  let spreadsheetImpls: string[] = []
+  const spreadsheetImpls: string[] = []
   if (py.status === 'ready') {
     const hasOpenpyxl = !!tryExec('python3', ['-c', 'import openpyxl'])
     if (hasOpenpyxl) spreadsheetImpls.push('openpyxl')

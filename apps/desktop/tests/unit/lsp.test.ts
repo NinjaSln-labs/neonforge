@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs'
+import { mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { lsp, extractImports, locateSymbol } from '../../src/main/lsp'
 
 const TMP = '/tmp/nf-unit-lsp'
