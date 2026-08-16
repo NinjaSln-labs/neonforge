@@ -325,10 +325,12 @@ export function classifyReadonly(name: string, command?: string): ActionKind {
   const netMatch = c.match(/^(curl|wget)\s+/)
   if (netMatch) {
     const method = c.match(/-X\s+(GET|HEAD)\b|--request\s+(GET|HEAD)\b/)
+    // 写副作用标志（S6 复审补全——curl -o/-O/-T/-a/-C/-J 与 wget -O 大小写敏感漏网→localhost 自动放行下成洞）：
+    // -o/--output 输出文件；-O/--remote-name/-J 落盘 CWD；-T/--upload-file 上传（写远端）；-a/--append 追加；-C/--continue-at 续传
     const hasBodyFlag =
-      /-d\b|--data\b|--data-raw\b|-F\b|--form\b|-o\b|--output\b|-X\s+(POST|PUT|PATCH|DELETE)\b/.test(
+      /-d\b|--data\b|--data-raw\b|-F\b|--form\b|-X\s+(POST|PUT|PATCH|DELETE)\b|-o\b|--output\b|--remote-name\b|-J\b|-T\b|--upload-file\b|-a\b|--append\b|-C\b|--continue-at\b|-O\b/.test(
         c,
-      ) // -o/--output 写文件 = 副作用（S6 暴露缺口）
+      ) // -O 大写（wget -O file——大小写敏感补全）
     if (!hasBodyFlag && (!method || method[1] === 'GET' || method[1] === 'HEAD'))
       return 'network-read'
     return 'hazardous'
@@ -352,9 +354,14 @@ export function classifyReadonly(name: string, command?: string): ActionKind {
 // network-read 语义升级：localhost 自动放行（非 side-effect）/ 外网 ask（side-effect——安全默认）。
 // 判定统一领域层（坑 97——renderer 6 处 + main preApproval 全部同源消费）。
 
-/** localhost 判定（拍板 3 单源——actionGate 与 isSideEffectAction 共享：localhost/127.0.0.1/::1） */
+/** localhost 判定（拍板 3 单源——actionGate 与 isSideEffectAction 共享；S6 复审：**host 精确匹配**——
+ * 防子串误报（127.0.0.1.attacker.com / localhost.evil.io 不得自动放行）——只认协议头后的 host 为
+ * localhost/127.0.0.1/::1（可带端口） */
 export function isLocalhostCommand(command: string): boolean {
-  return /localhost|127\.0\.0\.1|::1/.test(command)
+  // 匹配 http(s):// 或裸 host 开头的 localhost/127.0.0.1/[::1]（host 段结束于 / : 空白——精确边界）
+  return /(?:^|\s)(?:https?:\/\/)?(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/|$|\s)/.test(
+    command,
+  )
 }
 
 /** 动作是否构成「需用户决策的副作用」（S6 同源判定——renderer 确认卡/拦截 + main 授权流）：

@@ -269,7 +269,7 @@ describe('Inv 3 门控顺序——sessionGate × actionGate 双维正交', () =>
     )
   })
 
-  it('S1 过渡语义锁定：外网 network-read 双门放行（S6 变更点——actionGate 接入后 ask 必须由执行层消费为授权卡；运行时仍由 classifyAction 壳 fail-closed 兜底）', () => {
+  it('S1 过渡语义锁定：外网 network-read 双门放行（S6 变更点——actionGate 接入后 ask 由执行层消费为授权卡——isSideEffectAction 直连；S1 时 classifyAction 壳 fail-closed 兜底——壳已随 S6 移除）', () => {
     const s = confirmed()
     expect(sessionGate(s, { name: 'bash', command: 'curl -s https://example.com' }).ok).toBe(true)
     expect(canExecute(s, { name: 'bash', command: 'curl -s https://example.com' }, false).ok).toBe(
@@ -1020,5 +1020,22 @@ describe('isSideEffectAction / isLocalhostCommand（S6——拍板 3 + 坑 97 �
     expect(isLocalhostCommand('curl http://[::1]:3000')).toBe(true)
     expect(isLocalhostCommand('curl https://example.com')).toBe(false)
     expect(isLocalhostCommand('ls -la')).toBe(false)
+  })
+
+  it('S6 复审：isLocalhostCommand host 精确匹配——子串误报不自动放行（127.0.0.1.attacker.com / localhost.evil.io）', () => {
+    expect(isLocalhostCommand('curl http://127.0.0.1.attacker.com')).toBe(false)
+    expect(isLocalhostCommand('curl http://localhost.evil.io')).toBe(false)
+    expect(isLocalhostCommand('curl http://notlocalhost.com')).toBe(false)
+    expect(isLocalhostCommand('curl http://127.0.0.1:8080/api')).toBe(true) // 端口+路径仍命中
+  })
+
+  it('S6 复审：curl/wget 写副作用标志补全——-O/-T/-a/-C/-J/wget -O 大写 → hazardous（localhost 自动放行下不成洞）', () => {
+    expect(classifyReadonly('bash', 'curl -O http://localhost/x')).toBe('hazardous') // -O 落盘 CWD
+    expect(classifyReadonly('bash', 'wget -O out http://localhost/x')).toBe('hazardous') // 大写 O（大小写敏感补全）
+    expect(classifyReadonly('bash', 'curl -T file http://localhost')).toBe('hazardous') // 上传
+    expect(classifyReadonly('bash', 'curl -a http://localhost')).toBe('hazardous') // 追加
+    expect(classifyReadonly('bash', 'curl -C - http://localhost/x')).toBe('hazardous') // 续传
+    expect(classifyReadonly('bash', 'curl --remote-name http://localhost/x')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'curl -s http://localhost:5188/')).toBe('network-read') // 纯 GET 仍只读
   })
 })

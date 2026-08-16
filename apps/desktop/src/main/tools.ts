@@ -466,7 +466,7 @@ export function cancelActiveCommand(): { ok: true } | { ok: false; error: string
 
 // 2026-08-04 授权架构重构（用户授权疲劳）：bash 只读命令检测——ls/cat/grep 等查看类自动执行（零打断）；
 // 写命令（rm/mv/cp/npm/git/python/node/重定向）保持授权（main 进程裁决，renderer 不判断防绕过）
-// 2026-08-14 S3：判定上移领域层 classifyAction（单一权威——renderer 确认卡/门控与 main preApproval 同源，消除双源）
+// 2026-08-14 S3：判定上移领域层（单一权威——renderer 确认卡/门控与 main preApproval 同源，消除双源）；2026-08-16 S6：classifyAction 兼容壳移除——classifyReadonly/isLocalhostCommand 直连（拍板 3）
 // 2026-08-16 S6（§8.1 A + 拍板 3）：改引用 classifyReadonly + isLocalhostCommand——readonly → auto；
 // network-read localhost → auto（curl localhost 自动放行——拍板 3 main 侧同步）；外网 curl → 非 auto（ask 弹卡——安全默认）
 export function isReadOnlyBash(cmd: string): boolean {
