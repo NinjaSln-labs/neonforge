@@ -55,6 +55,8 @@ Say the problem → Clarify the goal (candidate buttons / free input) → [Goal 
 
 > Requires a DeepSeek API Key (get one at `https://platform.deepseek.com`).
 
+- **Download**: [GitHub Releases](https://github.com/NinjaSln-labs/neonforge/releases) (v0.1.0 pre-release — macOS `.dmg` / `.zip`; unsigned, first launch needs right-click → Open)
+
 ```bash
 cd apps/desktop
 npm install                # dependencies (Electron mirror fallback below)

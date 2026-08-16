@@ -55,6 +55,8 @@ NeonForge **不是 IDE，也不是 Chatbot**。你用自然语言描述问题，
 
 > 需要 DeepSeek API Key（`https://platform.deepseek.com` 获取）。
 
+- **直接下载**：[GitHub Releases](https://github.com/NinjaSln-labs/neonforge/releases)（v0.1.0 pre-release——macOS `.dmg` / `.zip`；未签名首次打开需右键 → 打开）
+
 ```bash
 cd apps/desktop
 npm install                # 安装依赖（Electron 下载失败见下方镜像）
