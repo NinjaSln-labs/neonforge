@@ -51,6 +51,8 @@ export interface MockBridgeOptions {
   fileContents?: Record<string, string>
   /** demo 注入（delivery/recentFiles/problems/trustLadder——纯数据） */
   demo?: Record<string, unknown>
+  /** D3：plannedFiles 初始状态（main 权威 mock——load 返回；默认空清单未批准） */
+  plannedFiles?: { files: string[]; approved: boolean }
   /** 模型行为脚本：按 chat 轮次（1-based）出 chunk 的轮次表 */
   script?: StreamChunk[][]
   /** 轮次表之外的轮次回复（默认静默） */
@@ -99,6 +101,7 @@ interface Spec {
   files: DirEntry[]
   fileContents: Record<string, string>
   demo: Record<string, unknown> | null
+  plannedFiles: { files: string[]; approved: boolean }
   rounds: StreamChunk[][]
   defaultRound: StreamChunk[]
   streamDelay: number
@@ -123,6 +126,7 @@ export async function installMockBridge(
     files: opts.files ?? [],
     fileContents: opts.fileContents ?? {},
     demo: opts.demo ?? null,
+    plannedFiles: opts.plannedFiles ?? { files: [], approved: false },
     rounds: opts.script ?? [],
     defaultRound: opts.defaultRound ?? [],
     streamDelay: opts.streamDelay ?? 50,
@@ -249,9 +253,24 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
       execute: executeImpl,
       revert: async () => ({ ok: true }),
       cancel: async () => ({ ok: false, error: '无活动命令' }),
-      filesApproved: async () => ({ ok: true }),
-      filesApprovedReset: async () => ({ ok: true }),
     },
+    // D3（ADR-005）：PlannedFiles 三件套契约（main 权威 mock——内存态；恢复场景经 plannedFiles 选项预置）
+    plannedFiles: (() => {
+      const state = { files: ${json(spec.plannedFiles.files)}, approved: ${json(spec.plannedFiles.approved)} }
+      return {
+        load: async () => ({ files: state.files, approved: state.approved }),
+        add: async (files) => {
+          state.files = [...new Set([...state.files, ...(files || [])])]
+          state.approved = true
+          return { files: state.files, approved: state.approved }
+        },
+        reset: async () => {
+          state.files = []
+          state.approved = false
+          return { files: state.files, approved: state.approved }
+        },
+      }
+    })(),
     context: { resolve: async () => ({ fragments: [] }) },
     rag: { search: async () => ({ hits: [] }) },
     plugins: { list: async () => [], toggle: async () => true },
