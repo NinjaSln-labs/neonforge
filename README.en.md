@@ -70,7 +70,7 @@ npm run dev:electron       # full app (dev mode, connects to :5173)
 
 ```bash
 cd apps/desktop
-npm run dist               # outputs to release/ (macOS: .dmg + .zip; win: .nsis; linux: AppImage)
+npm run dist               # outputs to release/ (macOS: .zip (.dmg planned); win: .nsis; linux: AppImage)
 ```
 
 > **ExFAT/external volumes**: electron-builder produces a corrupted asar on ExFAT volumes (`chromium-pickle` offset error) — output to a local volume instead: `npm run build && npx electron-builder -c.directories.output=/tmp/nf-release`
@@ -94,7 +94,7 @@ neonforge/
 
 ## Architecture
 
-**Stack**: Electron 36 + React 19 + TypeScript + Vite + esbuild + Monaco (artifact viewer) + Vitest + Playwright. DeepSeek-only gateway in V1 (params converge at `toDeepSeekParams` — V2 multi-model only touches the gateway).
+**Stack**: Electron 43 + React 19 + TypeScript + Vite + esbuild + Monaco (artifact viewer) + Vitest + Playwright. DeepSeek-only gateway in V1 (params converge at `toDeepSeekParams` — V2 multi-model only touches the gateway).
 
 **Domain architecture (stage-free, goal-driven)**:
 
@@ -119,14 +119,14 @@ The domain layer is pure functions (no React dependency); L1 unit tests lock the
 ## Testing
 
 ```bash
-npx vitest run                            # L1 domain logic (344)
+npx vitest run                            # L1 domain logic (434)
 npx tsc -p tsconfig.json --noEmit         # L2 contracts (renderer + main)
-npx playwright test --project=interaction # L3 component interaction (27)
+npx playwright test --project=interaction # L3 component interaction (49)
 npx playwright test                       # L5 visual + L3
 NF_TEST_KEY=<key> node e2e-suite.mjs      # L4 real-API E2E (prereq: mkdir -p /tmp/nf-e2e-test)
 ```
 
-CI (GitHub Actions): push runs L1+L2+L3 automatically; L4 needs repo Secret `NF_TEST_KEY` (manual trigger).
+CI (GitHub Actions): push runs L1+L2+L3+L5 automatically; L4 needs repo Secret `NF_TEST_KEY` (manual trigger).
 
 ### Electron mirror (if download fails)
 
@@ -141,7 +141,7 @@ ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ node install.js
 
 ## Known Limitations (V1)
 
-- **Resume scope**: after restart, the conversation history and problem ledger (goal / authorized) are restored, but **confirmation state and execution progress do not survive restarts** (resuming re-starts from goal clarification — safe fallback; session-snapshot persistence is planned for V2)
+- **Resume scope**: after restart, the conversation history, problem ledger (goal / authorized) and the **approved file plan (D3 — approval facts survive restarts: no re-batch-approval needed to keep writing in-plan files)** are restored, but **confirmation state and execution progress do not survive restarts** (resuming re-starts from goal clarification — safe fallback; session-snapshot persistence is planned for V2)
 - **LSP in packaged builds**: full LSP in dev mode; if `typescript-language-server` isn't installed system-wide, LSP tools report "not connected" in packaged builds — chat/tools/delivery main flow unaffected
 - macOS unsigned (see above); Windows/Linux packaging targets configured but not yet validated
 - Single-instance lock is per-app-scope; watch for leftover test instances (see CI scripts)
