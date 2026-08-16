@@ -13,8 +13,8 @@
     "test": "vitest run",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "format": "prettier --write \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"*.mjs\" \"*.config.*\"",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"*.mjs\" \"*.config.*\"",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"*.mjs\" \"*.config.*\" \"../../.prettierrc.json\" \"../../lefthook.yml\" \"../../.github/workflows/qa.yml\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"*.mjs\" \"*.config.*\" \"../../.prettierrc.json\" \"../../lefthook.yml\" \"../../.github/workflows/qa.yml\"",
     "dist": "npm run build && electron-builder"
   },
   "lint-staged": {
