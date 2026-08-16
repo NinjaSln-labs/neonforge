@@ -23,7 +23,6 @@ import {
   decideProgressGuarantee,
   derivePlannedFiles,
   plannedComplete,
-  forceToolInput,
   isProgressing,
   pendingCardToShow,
   shouldStopContinuation,
@@ -795,17 +794,19 @@ describe('继承锁定——classifyReadonly/classifyAction（缝隙 4 单一权
   })
 })
 
-describe('继承锁定——plannedComplete / forceToolInput（缝隙 3 + P1）', () => {
+describe('继承锁定——plannedComplete / decideProgressGuarantee（缝隙 3 + P1——S5 迁移自 forceToolInput）', () => {
+  const noTurn = { produced: false, proposed: false, providedEvidence: false, toolsAvailable: true }
+
   it('无计划 + 有产出 → 完成（A0 §4 补行——防 forceTool 死锁）', () => {
     let s = confirmed()
     s = applyToolResult(s, { name: 'write', ok: true, file: '/test/a.js' })
     expect(plannedComplete(s, new Set())).toBe(true)
-    expect(forceToolInput(s, new Set()).plannedComplete).toBe(true)
+    expect(decideProgressGuarantee(s, noTurn, new Set()).mode).toBe('auto') // 完成收敛
   })
 
-  it('无计划 + 无产出 → 未完成 → forceTool 强制（防只说不做）', () => {
+  it('无计划 + 无产出 → 未完成 → require-action（防只说不做）', () => {
     expect(plannedComplete(confirmed(), new Set())).toBe(false)
-    expect(forceToolInput(confirmed(), new Set()).produced).toBe(false)
+    expect(decideProgressGuarantee(confirmed(), noTurn, new Set()).mode).toBe('require-action')
   })
 
   it('有计划：全部产出（produced ∪ 文件树）→ 完成；缺一个 → 未完成', () => {
@@ -816,24 +817,34 @@ describe('继承锁定——plannedComplete / forceToolInput（缝隙 3 + P1）'
     expect(plannedComplete(s, new Set(['/test/b.js']))).toBe(true)
   })
 
-  it('forceToolInput：字段语义映射到新状态（planConfirmed→executionConfirmed 契约、resolutionConfirmed→goalAchieved）', () => {
-    const input = forceToolInput(confirmed(), new Set())
-    expect(input.executionConfirmed).toBe(true)
-    expect(input.goalAchieved).toBe(false)
-    expect(forceToolInput(fullyConfirmed(), new Set()).goalAchieved).toBe(true)
+  it('decideProgressGuarantee：累积完成度判定（写 1 文件 ≠ 达成——坑 12 冒烟 11；计划完成/达成确认 → 收敛）', () => {
+    // 有产出 + 计划未完成 → require-action（继续完成计划）
+    let s = confirmed()
+    s = approvalGranted(s, ['/test/a.js', '/test/b.js'])
+    s = applyToolResult(s, { name: 'write', ok: true, file: '/test/a.js' })
+    expect(decideProgressGuarantee(s, noTurn, new Set()).mode).toBe('require-action')
+    // 计划完成（produced ∪ 文件树）→ auto
+    expect(decideProgressGuarantee(s, noTurn, new Set(['/test/b.js'])).mode).toBe('auto')
+    // 达成确认（resolutionConfirmed + 有产出）→ auto（收敛到对话结束）
+    let done = confirmed()
+    done = applyToolResult(done, { name: 'write', ok: true, file: '/test/a.js' })
+    done = userDecided(done, 'resolution', { confirm: true })
+    expect(decideProgressGuarantee(done, noTurn, new Set()).mode).toBe('auto')
   })
 
   it('lastToolFailed → 释放强制（模型可诊断——A0 §4）', () => {
     let s = confirmed()
     s = applyToolResult(s, { name: 'bash', ok: false })
-    expect(forceToolInput(s, new Set()).lastToolFailed).toBe(true)
+    expect(decideProgressGuarantee(s, noTurn, new Set()).mode).toBe('auto')
   })
 
-  it('pending 非 none → forceToolInput.pending=true（P1——与 canExecute 同源）', () => {
+  it('pending 非 none → 恒 auto（P1——与 canExecute 同源）', () => {
     for (const kind of ['goal', 'plan', 'resolution', 'approval'] as const) {
-      expect(forceToolInput(setPending(confirmed(), kind), new Set()).pending).toBe(true)
+      expect(decideProgressGuarantee(setPending(confirmed(), kind), noTurn, new Set()).mode).toBe(
+        'auto',
+      )
     }
-    expect(forceToolInput(initialState(), new Set()).pending).toBe(false)
+    expect(decideProgressGuarantee(initialState(), noTurn, new Set()).mode).toBe('auto')
   })
 })
 

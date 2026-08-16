@@ -6,7 +6,7 @@
 // 装配：MockBridge 工厂 + 场景装配器（T0 基建——旧基建 S3 迁移后本文件为新场景承载）
 import { test, expect } from '@playwright/test'
 import { installMockBridge, chunk, toolCall } from './mockBridge'
-import { compose, goalConfirm, planPropose, startFromScratch } from './scenarios'
+import { compose, goalConfirm, planPropose, startFromScratch, sendChat } from './scenarios'
 import { expectVisible, expectText } from '../helpers/assertions'
 
 test('S3-1：方案卡渲染 PlanProposal 三要素（文件含原因/关键假设/验证计划）', async ({ page }) => {
@@ -342,4 +342,89 @@ test('S4-3：系统复核失败推翻自报 → 不弹卡 + 引导 → 重输出
       (window as unknown as { __verifyCount2: () => number }).__verifyCount2(),
     ),
   ).toBe(2)
+})
+
+// S5 推进保障场景（设计 §6 S5 + §8.1 B 331——结构化提议/证据算推进——StuckDetector 不打断；纯文本承诺仍 escalate）
+test('S5-1：结构化提议算推进——确认执行后模型连续输出【执行方案】修正不被打断（StuckDetector 对齐）', async ({
+  page,
+}) => {
+  await installMockBridge(page, {
+    project: 'none',
+    script: compose(
+      goalConfirm('做一个待办应用'),
+      planPropose(['/test/app.ts（核心）']),
+      // 确认执行后：模型不调工具，连续两轮输出结构化提议（方案修正——S5 推进维度）
+      [
+        [
+          chunk.content(
+            '【执行方案】\n- /test/app.ts（核心）\n- /test/store.ts（状态）\n修正一下。',
+          ),
+          chunk.done(),
+        ],
+        [
+          chunk.content(
+            '【执行方案】\n- /test/app.ts（核心）\n- /test/store.ts（状态）\n- /test/api.ts（接口）\n再补一个。',
+          ),
+          chunk.done(),
+        ],
+      ],
+    ),
+  })
+  await startFromScratch(page, '做个待办应用')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  await page.getByRole('button', { name: '确认执行' }).click()
+  // 第一轮结构化提议（无工具）→ 不 escalate（用户手动催下一轮——sendChat 驱动）
+  await page.waitForTimeout(2000)
+  await expect(page.locator('.nf-chat__list')).not.toContainText('没有产出改动')
+  await sendChat(page, '继续')
+  // 第二轮提议 → 仍不 escalate（proposed 推进——停滞计数重置）
+  await page.waitForTimeout(3000)
+  await expect(page.locator('.nf-chat__list')).not.toContainText('没有产出改动')
+  await expect(page.locator('.nf-chat__list')).not.toContainText('连续几轮')
+})
+
+test('S5-2：纯文本承诺不算推进——确认执行后模型连续 2 轮「马上改」→ escalate（只说不做保留——坑 79）', async ({
+  page,
+}) => {
+  await installMockBridge(page, {
+    project: 'none',
+    // escalate 走 silent send（消息不渲染到对话）——断言用 timeline stuck.escalated 打点
+    extraInit: `
+      const tlogs5 = []
+      window.__tlogs5 = tlogs5
+      bridge.timeline = { log: async (evt) => { tlogs5.push(evt) } }
+    `,
+    script: compose(
+      goalConfirm('做一个待办应用'),
+      planPropose(['/test/app.ts（核心）']),
+      // 确认执行后：模型只输出纯文本承诺（无结构化提议/无工具）——「只说不做」
+      [
+        [chunk.content('我马上就去改，稍等一下。'), chunk.done()],
+        [chunk.content('这就动手，别急。'), chunk.done()],
+      ],
+    ),
+  })
+  await startFromScratch(page, '做个待办应用')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  await page.getByRole('button', { name: '确认执行' }).click()
+  // 第一轮纯文本承诺 → 停滞计数累积（不 escalate——首轮 no-progress）
+  await page.waitForTimeout(2000)
+  await expect(page.locator('.nf-chat__list')).not.toContainText('没有产出改动')
+  await sendChat(page, '继续')
+  // 第二轮承诺 → escalate（连续 2 轮无推进——stuck.escalated 打点；silent send 不渲染对话文本）
+  await expect
+    .poll(
+      async () =>
+        (
+          await page.evaluate(
+            () => (window as unknown as { __tlogs5: Array<{ type: string }> }).__tlogs5,
+          )
+        ).filter((l) => l.type === 'stuck.escalated').length,
+      { timeout: 10000 },
+    )
+    .toBe(1)
 })

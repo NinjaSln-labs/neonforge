@@ -7,9 +7,8 @@
 // - 派生：deriveDecisionPoint（不变量 2/7）/ sessionGate×actionGate（不变量 3）/ verifyCompletion（不变量 4）/
 //         decideProgressGuarantee（不变量 5）/ derivePlannedFiles（不变量 6）
 // - 继承：单一 PENDING、plannedFiles 追加语义、producedFiles、lastToolFailed、shouldStopContinuation、classifyAction（兼容壳）
-// 纯逻辑无 React 依赖——L1 可测。依赖关系：turnPolicy（TurnPolicyInput 消费 forceToolInput 输出）；tools.ts preApproval 消费 classifyAction（同源——缝隙 4）。
-
-import type { TurnPolicyInput } from './turnPolicy.js'
+// 纯逻辑无 React 依赖——L1 可测。依赖关系：tools.ts preApproval 消费 classifyAction（同源——缝隙 4）。
+// S5：turnPolicy.ts 已移除（decideTurnPolicy/TurnPolicyInput 语义并入 decideProgressGuarantee——§6 S5 唯一推进判定器）。
 
 // ============================================================================
 // 值对象（设计 §3.2）
@@ -650,19 +649,32 @@ export interface ProgressGuaranteeDecision {
   reason: string
 }
 
-/** 推进保障判定（设计 §3.3——替代 forceTool=required 语义；S5 接线） */
+/** 推进保障判定（设计 §3.3 + §6 S5——替代 forceTool=required 语义；S5 起唯一推进判定器：
+ * 吸收 turnPolicy 状态空间（lastToolFailed 失败诊断释放/plannedComplete 写完释放/resolutionConfirmed
+ * 达成释放——坑 12 冒烟 11/12 完成度语义）+ S5 推进维度（proposed/providedEvidence））
+ * projectFiles 可选（无 → plannedComplete 以 producedFiles 判定；renderer 传文件树快照） */
 export function decideProgressGuarantee(
   s: ConversationState,
   turn: TurnProgress,
+  projectFiles?: ReadonlySet<string>,
 ): ProgressGuaranteeDecision {
   // pending 非 none → 恒 auto（P1 继承：等用户决策不强制——模型停住等用户）
   if (s.pending !== 'none') return { mode: 'auto', reason: 'pending-user-decision' }
   // 未确认目标/方案 → 不强制（澄清/方案期模型自由输出）
   if (!s.goalConfirmed || !s.planConfirmed) return { mode: 'auto', reason: 'not-confirmed' }
-  // 已有推进（产出/提议/证据）→ 不强制
+  // 失败诊断优先（坑 93——turnPolicy 继承：上一轮工具失败 → 释放强制，模型停下看 stderr 修正）
+  if (s.lastToolFailed) return { mode: 'auto', reason: 'tool-failed-diagnose' }
+  // 本轮推进（S5 维度：本轮产出/结构化提议/完成声明带证据）→ 不强制（模型在推进）
   if (turn.produced || turn.proposed || turn.providedEvidence)
     return { mode: 'auto', reason: 'has-progress' }
-  // 确认后无任何推进：工具可用 → 逼工具产出（原 required）；工具不可用 → 逼「推进」（允许提议/证据/提问——不逼调工具）
+  // 累积完成度（turnPolicy 继承——坑 12 冒烟 11/12：写 1 文件 ≠ 任务达成；
+  // 已有产出但计划未写完且未确认达成 → 逼继续；计划写完或达成确认 → 收敛 auto）
+  const complete = plannedComplete(s, projectFiles ?? new Set())
+  if (s.producedFiles.size > 0 && !complete && !s.resolutionConfirmed)
+    return { mode: 'require-action', reason: 'goal-exec-until-achieved' }
+  if (s.producedFiles.size > 0 && (complete || s.resolutionConfirmed))
+    return { mode: 'auto', reason: 'produced-auto' }
+  // 无产出无推进：工具可用 → 逼工具产出（原 required）；工具不可用 → 逼「推进」（允许提议/证据/提问——不逼调工具）
   if (turn.toolsAvailable)
     return { mode: 'require-action', reason: 'confirmed-no-progress-tools-available' }
   return { mode: 'require-advance', reason: 'confirmed-no-progress-no-tools' }
@@ -678,21 +690,8 @@ export function plannedComplete(s: ConversationState, projectFiles: ReadonlySet<
   return [...s.plannedFiles].every((f) => s.producedFiles.has(f) || projectFiles.has(f))
 }
 
-// forceTool 输入（turnPolicy 消费——S5 由 decideProgressGuarantee 取代；输出字段名保持 turnPolicy 契约）
-export function forceToolInput(
-  s: ConversationState,
-  projectFiles: ReadonlySet<string>,
-): TurnPolicyInput {
-  return {
-    goalConfirmed: s.goalConfirmed,
-    executionConfirmed: s.planConfirmed,
-    produced: s.producedFiles.size > 0,
-    lastToolFailed: s.lastToolFailed,
-    goalAchieved: s.resolutionConfirmed,
-    plannedComplete: plannedComplete(s, projectFiles),
-    pending: s.pending !== 'none',
-  }
-}
+// S5：forceToolInput 已删除（decideTurnPolicy 语义并入 decideProgressGuarantee——§6 S5 唯一推进判定器；
+// 状态空间由 stateRef 直读 + projectFiles 传参，不再经 TurnPolicyInput 中转）
 
 // 进展判定（缝隙 2：有副作用的工具成功执行 = 任务推进）
 export function isProgressing(

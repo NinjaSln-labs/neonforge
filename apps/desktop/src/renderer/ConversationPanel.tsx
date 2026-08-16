@@ -25,7 +25,7 @@ import {
 import {
   classifyAction,
   canExecute,
-  forceToolInput as buildForceToolInput,
+  decideProgressGuarantee,
   pendingCardToShow,
   shouldStopContinuation,
   inPlannedFiles as inPlannedFilesDomain,
@@ -44,8 +44,7 @@ import { parseCompletionClaim } from '../domain/completionClaimParser'
 import { useConversationState } from './useConversationState'
 // 2026-08-15 Q1b：工具授权 handler 封装（组件瘦身）
 import { useToolApproval } from './useToolApproval'
-// 2026-08-07 DDD 落地（坑 89 forceTool/advanceChat 领域化——Conversation BC 轮次执行保障 + AgentChain BC 产品阶段流转）
-import { decideTurnPolicy } from '../domain/turnPolicy'
+// S5：turnPolicy.ts 已移除（decideTurnPolicy 语义并入 decideProgressGuarantee——§6 S5 唯一推进判定器）
 // 2026-08-07 无阶段重构 S4：buildAdvanceInstruction/stageFlow import 删除（advanceChat 随阶段体系移除）
 // 2026-08-05 方案 3：结构化候选按钮——<candidates> 块解析/剥离（点选文本替代序号，消除模型序号解析漂移）
 import { parseCandidates, stripCandidates, stripTags } from './candidates'
@@ -415,6 +414,9 @@ export default function ConversationPanel({
   // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层状态）：连续无进展计数 + 升级次数（不可变 StuckState）+ 已读文件集合
   const stuckStateRef = useRef(initialStuckState)
   const prevReadFilesRef = useRef<Set<string>>(new Set())
+  // S5：toolsAvailable 能力快照（require-advance 前提——工具不可用时逼「推进」不逼调工具；
+  // 由 check-capability 结果更新；无检测记录默认 true——工具总是可用）
+  const capReadyRef = useRef(true)
   // 2026-08-14 会话状态机（Task 聚合——S2 迁移）：原 7 个散 ref（plannedFiles/producedFiles/goalAchieved/
   // lastToolFailed/filesApproved/goalConfirmed/planConfirmed）合并为单一 ConversationState——
   // 读 = stateRef.current.x；写 = useConversationState 转换方法（Q1a+Q2——唯一入口）
@@ -1420,6 +1422,9 @@ export default function ConversationPanel({
           const missing = caps
             .filter((c) => c.status === 'missing' || c.status === 'failed')
             .map((c) => c.id)
+          // S5：toolsAvailable 能力快照（require-advance 前提——ready 能力非空 = 工具可用）；
+          // 无能力数据（caps 空——mock/降级环境）→ 默认可用（未知不降级——仅明确缺失/失败才判不可用）
+          capReadyRef.current = caps.length === 0 ? true : ready.length > 0
           envHint = `【当前环境】项目根目录：${rootPath}；runtime：${data?.runtime ?? '?'} ${data?.runtimeVersion ?? ''}；依赖：${data?.hasNodeModules ? '已装' : '未装'}；可用能力：${ready.join('/') || '无'}；${missing.length > 0 ? `缺失/异常：${missing.join('/')}` : '能力齐备'}。`
           // 2026-08-15 M8：环境注入事件（06 §1.4 environment.injected 对应打点——模型 02 §4.7 事实来源前置呈现可观测）
           tlog(
@@ -1455,24 +1460,51 @@ export default function ConversationPanel({
     const sysHint = buildSysHint(envHint, planHint, langRule)
     try {
       // 2026-08-06 调研驱动根治「只说不做」（官方 issue #1376 + 文档 + 实测三源交叉验证——工具模式 thinking disabled 下 required 可用）：
-      // 2026-08-07 无阶段重构 S1/S3/S4：判定改由领域层 TurnExecutionPolicy 三态推导（goalConfirmed/planConfirmed/produced）——
-      // 目标+执行确认但无产出 → required 强制模型必须调工具（不能只输出文本承诺）；其余 auto（澄清/等确认/已有产出）
-      // isPureAck 词表随无阶段终结（S3——T4「保持现状」决策被取代：纯确认进入目标/执行确认状态流转，无需独立豁免名单）
-      // 2026-08-14 S4（缝隙 3）：forceTool 输入统一走状态机派生 buildForceToolInput——
-      // plannedComplete 从「size 宽松比较」切换为领域层严格判定（plannedFiles ⊆ produced ∪ projectFiles；
-      // 无计划以 produced 为准——A0 §4 补行语义，L1 已锁定）
-      // 2026-08-08 根因 3 修复①：判定改读 **ref** 而非 prop 闭包——确认卡按钮同事件触发 send 时
-      // （onClick 内 setState 异步 + sendRef 同步调用）prop 还是旧渲染值 → forceTool 恒 auto → 模型纯文本承诺后停住
-      const { forceTool } = decideTurnPolicy(
-        buildForceToolInput(
-          stateRef.current,
-          new Set((recentFilesExternal ?? []).map((f) => trustPath(f))),
-        ),
+      // S5（§6 S5 + §3.3——唯一推进判定器）：decideProgressGuarantee 替代 decideTurnPolicy——
+      // 吸收 turnPolicy 状态空间（lastToolFailed 失败诊断释放/plannedComplete 写完释放/resolutionConfirmed
+      // 达成释放）+ S5 推进维度（上轮结构化提议/证据——evaluateTurnProgress 扩展）+ toolsAvailable（能力快照）
+      // 坑 93 保持：判定读 ref（stateRef.current）——确认卡按钮同事件触发 send 时 prop 闭包滞后 → forceTool 恒 auto
+      const lastAssistantMsg = [...messagesRef.current]
+        .reverse()
+        .find((m) => m.role === 'assistant')
+      const lastContent = lastAssistantMsg?.content ?? ''
+      const turnInput = evaluateTurnProgress({
+        toolCalls:
+          lastAssistantMsg?.toolCalls?.map((c) => ({
+            name: c.name,
+            status: c.status,
+            file: c.file,
+            command: String((c.args as { command?: string } | undefined)?.command ?? ''),
+          })) ?? [],
+        content: lastContent,
+        prevReadFiles: prevReadFilesRef.current,
+        plannedFiles: stateRef.current.plannedFiles,
+        producedFiles: stateRef.current.producedFiles,
+        projectFiles: new Set((recentFilesExternal ?? []).map((f) => trustPath(f))),
+      })
+      // S5 修正（L3 根因 3 回归）：已确认决策点的提议不再计「本轮推进」——方案确认后上轮【执行方案】
+      // 消息是**已消费的提议**（用户点了确认）→ 新一轮应逼执行（require-action）；未确认的提议
+      // （pending 期/拒绝后重提议轮）仍算推进（auto——模型在走决策点流程）
+      const proposalConsumed =
+        (stateRef.current.goalConfirmed && /【目标确认/.test(lastContent)) ||
+        (stateRef.current.planConfirmed && /【执行方案/.test(lastContent)) ||
+        (stateRef.current.resolutionConfirmed && /【已达成/.test(lastContent))
+      const decision = decideProgressGuarantee(
+        stateRef.current,
+        {
+          produced: turnInput.artifactProduced || turnInput.sideEffectSucceeded,
+          proposed: turnInput.proposed && !proposalConsumed,
+          providedEvidence: turnInput.providedEvidence && !proposalConsumed,
+          toolsAvailable: capReadyRef.current,
+        },
+        new Set((recentFilesExternal ?? []).map((f) => trustPath(f))),
       )
-      // 2026-08-15 补齐：执行保障事件（06 §1.5 execution.forced/released——forceTool 轨迹可回放）
+      const forceTool = decision.mode === 'require-action'
+      // S5：execution.forced/released 事件语义更新——mode/reason 可回放（区分「逼工具」require-action
+      // 与「逼推进」require-advance——forceTool 布尔同 true 语义但轨迹可诊断）
       tlog(
         forceTool ? 'execution.forced' : 'execution.released',
-        { reason: 'turn-policy' },
+        { mode: decision.mode, reason: decision.reason },
         'system',
       )
       // 2026-08-14 取证打点（用户实测「一直读取操作」——plannedComplete 未收敛）：dump 三集合供 timeline 比对
