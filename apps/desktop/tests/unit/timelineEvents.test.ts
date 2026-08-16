@@ -162,14 +162,18 @@ describe('deriveStateEvents（decision.* 领域决策点事件——设计 §3.5
     expect(evt?.detail).toEqual({ point: 'plan', action: 'confirm' })
   })
 
-  it('plan 拒绝 → decision.resolved（point: plan, action: reject）', () => {
+  it('plan 拒绝 → decision.resolved（point: plan, action: reject + reason——S7 P1-4）', () => {
     const s = setPending(userConfirmed(initialState(), 'goal'), 'plan', {
       proposal: { summary: 'p', files: [], assumptions: [], verificationPlan: [] },
       since: 't',
     })
-    const next = userRejected(s, 'plan', { kind: 'scope' })
+    const next = userRejected(s, 'plan', { kind: 'scope', target: 'plan' })
     const evt = deriveStateEvents(s, next).find((e) => e.type === 'decision.resolved')
-    expect(evt?.detail).toEqual({ point: 'plan', action: 'reject' })
+    expect(evt?.detail).toEqual({
+      point: 'plan',
+      action: 'reject',
+      reason: { kind: 'scope', target: 'plan' },
+    })
   })
 
   it('approval 允许 → decision.resolved（point: approval, action: confirm）；拒绝 → reject（拒绝记忆 diff 推断）', () => {
@@ -190,7 +194,31 @@ describe('deriveStateEvents（decision.* 领域决策点事件——设计 §3.5
     expect(deny.find((e) => e.type === 'decision.resolved')?.detail).toEqual({
       point: 'approval',
       action: 'reject',
+      reason: { kind: 'direction' }, // S7 P1-4：拒绝原因入载荷
     })
+  })
+})
+
+// S7（A0 审校 P1-3）：proposal.goal 事件登记断言（设计 §3.5——statement+assumptions）
+describe('proposal.goal 事件（S7——A0 审校 P1-3 补登）', () => {
+  it('注册表 schema：domain=proposal + detailKeys statement/?assumptions', () => {
+    const spec = TIMELINE_EVENT_SPECS['proposal.goal']
+    expect(spec.domain).toBe('proposal')
+    expect(spec.role).toBe('assistant')
+    expect(spec.detailKeys).toEqual(['statement', '?assumptions'])
+  })
+
+  it('validateTimelineEvent：目标提议载荷（statement + assumptions）通过校验', () => {
+    const warns = validateTimelineEvent('proposal.goal', {
+      statement: '做一个待办应用',
+      assumptions: ['使用 React 19'],
+    })
+    expect(warns).toEqual([])
+  })
+
+  it('validateTimelineEvent：缺 statement（必选）→ warn', () => {
+    const warns = validateTimelineEvent('proposal.goal', { assumptions: ['x'] })
+    expect(warns.some((w) => w.includes('statement'))).toBe(true)
   })
 })
 

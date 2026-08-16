@@ -1039,3 +1039,58 @@ describe('isSideEffectAction / isLocalhostCommand（S6——拍板 3 + 坑 97 �
     expect(classifyReadonly('bash', 'curl -s http://localhost:5188/')).toBe('network-read') // 纯 GET 仍只读
   })
 })
+
+// S7（A0 审校 P1-2）：拒绝记忆短封（§3.4 C6——approvalDecided 接线 + canExecute 消费 deniedApprovals）
+describe('拒绝记忆（S7 P1-2——C6 同轮同类短封接线）', () => {
+  it('approvalDecided 拒绝 → deniedApprovals 登记（toolName+subject）+ lastRejectReason', () => {
+    const s = setPending(userConfirmed(userConfirmed(initialState(), 'goal'), 'plan'), 'approval', {
+      approval: { toolName: 'bash', subject: 'rm -rf /tmp/x', reason: '高危', risk: 'high' },
+      since: 't',
+    })
+    const next = approvalDecided(
+      s,
+      { toolName: 'bash', subject: 'rm -rf /tmp/x', reason: '高危', risk: 'high' },
+      {
+        confirm: false,
+        reason: { kind: 'direction' },
+      },
+    )
+    expect(next.deniedApprovals).toHaveLength(1)
+    expect(next.deniedApprovals[0]).toEqual({ toolName: 'bash', subject: 'rm -rf /tmp/x' })
+    expect(next.lastRejectReason).toEqual({ kind: 'direction' })
+    expect(next.pending).toBe('none')
+  })
+
+  it('canExecute：被拒同类动作（同 toolName + 同命令）→ deny（短封——不绕过）', () => {
+    let s = userConfirmed(userConfirmed(initialState(), 'goal'), 'plan')
+    s = approvalDecided(
+      s,
+      { toolName: 'bash', subject: 'rm -rf /tmp/x', reason: '高危', risk: 'high' },
+      { confirm: false, reason: { kind: 'direction' } },
+    )
+    const r = canExecute(s, { name: 'bash', command: 'rm -rf /tmp/x' }, false)
+    expect(r.ok).toBe(false)
+    expect(r.reason).toContain('拒绝记忆')
+  })
+
+  it('canExecute：不同命令类（拒绝 rm——ls 不受影响）→ 放行（短封只封同类）', () => {
+    let s = userConfirmed(userConfirmed(initialState(), 'goal'), 'plan')
+    s = approvalDecided(
+      s,
+      { toolName: 'bash', subject: 'rm -rf /tmp/x', reason: '高危', risk: 'high' },
+      { confirm: false, reason: { kind: 'direction' } },
+    )
+    expect(canExecute(s, { name: 'bash', command: 'ls -la' }, false).ok).toBe(true)
+  })
+
+  it('任务边界重置：goal 确认清 deniedApprovals（新任务重新授权）', () => {
+    let s = userConfirmed(userConfirmed(initialState(), 'goal'), 'plan')
+    s = approvalDecided(
+      s,
+      { toolName: 'bash', subject: 'rm -rf /tmp/x', reason: '高危', risk: 'high' },
+      { confirm: false, reason: { kind: 'direction' } },
+    )
+    s = userConfirmed(s, 'goal') // 新目标 = 新任务
+    expect(s.deniedApprovals).toHaveLength(0)
+  })
+})

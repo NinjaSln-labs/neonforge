@@ -114,6 +114,7 @@ export interface ConversationState {
   decisionContent?: DecisionContent // 当前待决策内容快照（决策点呈现与审计唯一来源）
   deniedApprovals: Array<{ toolName: string; subject: string }> // 拒绝记忆（§3.4 C6——同轮同类动作短封，S6 actionGate 消费；任务边界重置）
   rejectStreak: number // 同一决策点连续拒绝计数（§4.1 C8——上限 3 超限回退澄清/人工接管；随确认/新提议重置；S3 消费）
+  lastRejectReason?: RejectReason // S7（A0 审校 P1-4）：最近一次拒绝的原因（诊断——decision.resolved 载荷；confirm/其他转换清除）
 }
 
 export const initialState = (): ConversationState => ({
@@ -145,6 +146,7 @@ export function userDecided(
   }
   const next: ConversationState = { ...s, pending: 'none', decisionContent: undefined }
   if (decision.confirm) {
+    next.lastRejectReason = undefined // S7（P1-4）：确认清除拒绝原因（诊断字段只保留最近一次拒绝）
     next.rejectStreak = 0 // §4.1 C8：决策点确认 → 连续拒绝计数重置
     if (point === 'goal') {
       // 目标确认 = 任务边界（A0 §9 目标驱动原点；对齐 clearTrust 语义）——新任务清零进度/清单/达成/拒绝记忆
@@ -184,8 +186,8 @@ export function userDecided(
     if (point === 'resolution') next.resolutionConfirmed = false
     // §4.1 C8：同一决策点连续拒绝计数（含 kind='modify'——修改=拒绝）——超限处理（AskToAct 澄清/人工接管）S3 消费
     next.rejectStreak = s.rejectStreak + 1
-    // reason 由事件层回填模型（decision.resolved detail.reason——S3 接线）；状态层只回退 + 清 pending
-    void reason
+    // S7（A0 审校 P1-4）：拒绝原因入状态（诊断——decision.resolved 载荷由 deriveStateEvents 读取；事件层回填模型）
+    next.lastRejectReason = reason
   }
   return next
 }
@@ -206,6 +208,10 @@ export function approvalDecided(
       ...s.deniedApprovals,
       { toolName: request.toolName, subject: request.subject },
     ]
+    // S7（P1-4）：授权拒绝原因同样入诊断字段
+    next.lastRejectReason = decision.reason
+  } else {
+    next.lastRejectReason = undefined
   }
   return next
 }
@@ -492,6 +498,19 @@ export function canExecute(
 ): { ok: boolean; reason: string } {
   const gate = sessionGate(s, action)
   if (!gate.ok) return gate
+  // S7（A0 审校 P1-2 接线——§3.4 C6 短封）：拒绝记忆——同任务内被拒绝的同类动作直接 deny
+  // （「不要绕过」机制层落地——拒绝的 toolName+命令类匹配；任务边界重置（goal 确认清 deniedApprovals））
+  const denied = s.deniedApprovals.some(
+    (d) =>
+      d.toolName === action.name &&
+      (!d.subject ||
+        d.subject === String(action.command ?? action.path ?? '') ||
+        // bash 命令匹配命令头（同命令类拒绝——rm 类的另一条 rm 也短封）
+        (action.command !== undefined &&
+          d.subject.length > 0 &&
+          String(action.command).startsWith(d.subject.split(/\s+/)[0] ?? ''))),
+  )
+  if (denied) return { ok: false, reason: '动作已被你拒绝（拒绝记忆——同轮同类短封）' }
   // 清单为空（无计划）→ 无文件边界（写放行由确认点把关——继承现状语义）
   const effectiveInPlanned =
     (action.name === 'write' || action.name === 'edit') && s.plannedFiles.size === 0

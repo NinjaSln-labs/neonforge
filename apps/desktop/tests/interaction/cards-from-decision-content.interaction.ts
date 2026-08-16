@@ -472,3 +472,30 @@ test('S6-2：外网 curl GET → ask 弹授权卡（拍板 3——安全默认�
   // 外网 curl（network-read 非 localhost）→ ask（need-approval 授权卡——安全默认）
   await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(1, { timeout: 10000 })
 })
+
+// S7（A0 审校 P1-5 接入——设计 §3.4 C2）：pending 期用户自由文本 = 隐式拒绝当前决策点
+test('S7-1：方案卡待确认时用户直接打字 → 卡消失 + 模型收到新意图（隐式 reject——C2）', async ({
+  page,
+}) => {
+  await installMockBridge(page, {
+    project: 'none',
+    script: compose(
+      goalConfirm('做一个待办应用'),
+      // 方案确认前用户打字（pending='plan' 期间）→ 隐式 reject → 模型重提议方案
+      planPropose(['/test/app.ts（核心）']),
+      planPropose(['/test/store.ts（状态）']),
+    ),
+  })
+  await startFromScratch(page, '做个待办应用')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  // 方案卡出现（pending='plan'）
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  // pending 期用户直接打字（不点按钮）——隐式 reject（C2——direction + 新意图文本）
+  await sendChat(page, '换个思路，做桌面版')
+  // 卡消失（隐式拒绝——pending 清除 + dcKind 清）
+  await expect(page.getByRole('button', { name: '确认执行' })).toHaveCount(0, { timeout: 10000 })
+  // 模型下一轮重提议（chat4 消费第二个 planPropose）→ 方案卡重现
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 15000)
+  await expectText(page.locator('.nf-chat__list'), '/test/store.ts（状态）', 5000)
+})
