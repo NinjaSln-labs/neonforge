@@ -13,3 +13,4 @@
 | 002 | 网络只读 S1 过渡语义（外网 curl 双门放行——S6 变更点） | accepted | 2026-08-16 |
 | 003 | Inv4 单源（evidenceVerifiable 公共谓词） | accepted | 2026-08-16 |
 | 004 | verifyCompletion 领域层消费系统核验同步快照（V1a/V1b——IO 归应用层） | accepted | 2026-08-16 |
+| 005 | PlannedFiles 权威下沉 main + 批准事实跨重启（D3——IPlannedFilesRepository） | accepted | 2026-08-16 |
