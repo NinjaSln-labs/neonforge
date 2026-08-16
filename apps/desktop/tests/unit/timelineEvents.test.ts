@@ -24,7 +24,7 @@ describe('deriveStateEvents（转换 diff → 领域事件）', () => {
     const s = initialState()
     const confirmed = userConfirmed(s, 'goal')
     expect(deriveStateEvents(s, confirmed).map((e) => e.type)).toContain('task.goal_confirmed')
-    const rejected = userRejected(confirmed, 'goal')
+    const rejected = userRejected(confirmed, 'goal', { kind: 'direction' })
     expect(deriveStateEvents(confirmed, rejected).map((e) => e.type)).toContain(
       'task.goal_rejected',
     )
@@ -38,9 +38,9 @@ describe('deriveStateEvents（转换 diff → 领域事件）', () => {
     s = exec
     const ach = userConfirmed(s, 'resolution')
     expect(deriveStateEvents(s, ach).map((e) => e.type)).toContain('task.achievement_confirmed')
-    expect(deriveStateEvents(ach, userRejected(ach, 'resolution')).map((e) => e.type)).toContain(
-      'task.achievement_rejected',
-    )
+    expect(
+      deriveStateEvents(ach, userRejected(ach, 'resolution', { kind: 'scope' })).map((e) => e.type),
+    ).toContain('task.achievement_rejected')
   })
 
   it('pending 置位/清除 → session.pending_set/cleared（含 kind）', () => {
@@ -194,21 +194,22 @@ describe('deriveStateEvents（decision.* 领域决策点事件——设计 §3.5
   })
 })
 
-// S3 spec TDD 网格：proposal.* 事件断言（A-003 关闭——注册表 schema + 载荷语义）
-describe('proposal.* 事件（S3 接线断言——A-003）', () => {
-  it('注册表 schema：proposal.plan/proposal.completion domain=proposal + detailKeys 公共字段', () => {
+// S3 spec TDD 网格：proposal.* 事件断言（A-003 关闭 + A-007 schema 与载荷对齐）
+describe('proposal.* 事件（S3 接线断言——A-003/A-007）', () => {
+  it('注册表 schema：proposal.plan/completion domain=proposal + detailKeys 两形态表达（? 可选标记）', () => {
     const plan = TIMELINE_EVENT_SPECS['proposal.plan']
     const completion = TIMELINE_EVENT_SPECS['proposal.completion']
     expect(plan.domain).toBe('proposal')
     expect(plan.role).toBe('assistant')
-    expect(plan.detailKeys).toEqual(['ok']) // 两形态公共字段（成功/失败载荷各异——宽松约定）
+    // A-007：ok 必选 + 形态字段可选（成功 summary/files；失败 reason）
+    expect(plan.detailKeys).toEqual(['ok', '?summary', '?files', '?reason'])
     expect(completion.domain).toBe('proposal')
     expect(completion.detailKeys).toEqual(
-      expect.arrayContaining(['ok', 'summary', 'verification', 'pendingQuestions']),
+      expect.arrayContaining(['ok', '?summary', '?verification', '?pendingQuestions']),
     )
   })
 
-  it('validateTimelineEvent：proposal.plan 载荷通过校验（parse 成功载荷）', () => {
+  it('validateTimelineEvent：proposal.plan 载荷通过校验（parse 成功载荷——形态字段在场）', () => {
     const warns = validateTimelineEvent('proposal.plan', {
       ok: true,
       summary: '重构',
@@ -217,8 +218,13 @@ describe('proposal.* 事件（S3 接线断言——A-003）', () => {
     expect(warns).toEqual([])
   })
 
-  it('validateTimelineEvent：proposal.plan parse-error 载荷（ok:false + reason: malformed）通过校验', () => {
+  it('validateTimelineEvent：proposal.plan parse-error 载荷（ok:false + reason: malformed——形态字段缺省不 warn）', () => {
     const warns = validateTimelineEvent('proposal.plan', { ok: false, reason: 'malformed' })
     expect(warns).toEqual([])
+  })
+
+  it('validateTimelineEvent：proposal.plan 缺 ok（必选字段）→ warn（schema 有校验价值）', () => {
+    const warns = validateTimelineEvent('proposal.plan', { summary: '重构' })
+    expect(warns.some((w) => w.includes('ok'))).toBe(true)
   })
 })

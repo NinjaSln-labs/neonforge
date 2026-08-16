@@ -151,4 +151,21 @@ describe('sessionStore decisionContent 序列化（S3——§8.2 E）', () => {
     const loaded = loadSession()
     expect(loaded?.[0].decisionContent).toBeUndefined()
   })
+
+  it('A-009：决策点已清除（decisionContent undefined）→ 历史消息快照被剥离（防恢复命中旧卡）', () => {
+    // 模拟历史消息带旧快照（决策点已确认后 stateRef.decisionContent 为 undefined——
+    // renderer 持久化 effect 剥离路径：messages.map({...m, decisionContent: undefined})）
+    const msgs = [
+      {
+        role: 'assistant' as const,
+        content: '【执行方案】\n- a.js',
+        status: 'done' as const,
+        decisionContent: PLAN_CONTENT,
+      },
+    ]
+    // 剥离后序列化 → 无快照
+    const stripped = msgs.map((m) => ({ ...m, decisionContent: undefined }))
+    const out = serializeMessages(stripped)
+    expect(out[0].decisionContent).toBeUndefined()
+  })
 })

@@ -56,20 +56,21 @@ test('T0 自测 1：根因3 重搭——轮次脚本 + forceTool/approved 捕获
   expect((await h.approvedFlags())[0]).toBe(true)
 })
 
-test('T0 自测 2：合并授权重搭——manualEmit 手动推流 + 同批多 write 合并授权按钮', async ({
+test('T0 自测 2：S3 语义重写——manualEmit 手动推流 + 方案确认后清单内 write 自动放行', async ({
   page,
 }) => {
   const h = await installMockBridge(page, {
     project: 'open',
     manualEmit: true,
     approval: 'write-edit',
+    capture: { approvedFlags: true },
   })
   await enterWorkspace(page)
   await sendChat(page, '批量整理文件')
   await h.emit([
     chunk.content('好的。【目标确认：批量整理文件】【任务类型：B 文件操作】'),
     toolCall.write('/test/a.txt', 'x'),
-    toolCall.edit('/test/b.txt', 'a', 'b'),
+    toolCall.write('/test/c.txt', 'y'),
     chunk.done(),
   ])
   // 会话级单一 PENDING：确认卡待决策 → write 被拦（未执行）——先确认目标
@@ -77,25 +78,25 @@ test('T0 自测 2：合并授权重搭——manualEmit 手动推流 + 同批多 
   await page.getByRole('button', { name: '确认目标' }).click()
   // 等 send 的流式消息创建（send 是 async——click 完成时消息可能未 push，emit 会被丢弃）
   await expectAssistantMsg(page, '搭档处理中', 5000)
-  await h.emit([chunk.content('好的，方案如下，等你确认。'), chunk.done()])
+  // S3 场景：结构化方案块（C3——无文件行文本不弹卡）+ 方案文件 = write 目标
+  await h.emit([
+    chunk.content(
+      '好的，方案如下，等你确认。\n【执行方案】\n- /test/a.txt（整理）\n- /test/c.txt（整理）',
+    ),
+    chunk.done(),
+  ])
   await expectVisible(page.getByRole('button', { name: '确认执行' }))
   await page.getByRole('button', { name: '确认执行' }).click()
   await page.waitForTimeout(300)
   await h.emit([
     toolCall.write('/test/a.txt', 'x'),
-    toolCall.edit('/test/b.txt', 'a', 'b'),
+    toolCall.write('/test/c.txt', 'y'),
     chunk.done(),
   ])
-  // 授权卡风险明示 + 疲劳防护：同批 ≥2 低危待授权 → 合并授权按钮
-  await expectText(page.locator('.nf-toolcall__hint').first(), '需要授权 · 写入文件')
-  await expectText(page.locator('.nf-toolcall__impact').first(), '/test/a.txt')
-  await expectText(page.locator('.nf-toolcall__note').first(), '备份')
-  await expectVisible(page.locator('.nf-toolcall__approveall'))
-  // 点击合并授权 → 4 张 done（第一次 pending 拦截的 2 个「未执行」+ 本次 2 个执行完成）
-  await page.locator('.nf-toolcall__approveall').click()
-  await page.waitForTimeout(600)
-  await expectToolCallState(page, 'done', 4)
+  // S3 语义：方案确认后清单内 write 自动放行（根因 3 修复——approved=true 直接 done，无授权卡）
+  await expectToolCallState(page, 'done', 4, 15000)
   await expectAbsent(page.locator('.nf-toolcall__approveall'))
+  expect((await h.approvedFlags())?.length).toBeGreaterThanOrEqual(1)
 })
 
 test('T0 自测 3：P2 双卡重搭——approval all + defaultRound + 卡按 id 精确定位', async ({ page }) => {

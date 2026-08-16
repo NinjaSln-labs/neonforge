@@ -329,7 +329,9 @@ test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 1
     page.locator('.nf-msg--assistant .nf-msg__body').filter({ hasText: '搭档处理中' }),
   ).toBeVisible({ timeout: 5000 })
   await page.evaluate(() => {
-    window.__emit({ type: 'content', text: '好的，方案如下，等你确认。' })
+    // 方案征询文本 + 方案标记（hasPlan → execSignal 定位当前消息；无文件行 → C3 不置方案清单——
+    // 确认执行后 plannedFiles 空 → write 走授权卡——合并授权场景）
+    window.__emit({ type: 'content', text: '好的，方案如下，等你确认。\n【执行方案】' })
     window.__emit({ type: 'done' })
   })
   await expect(page.getByRole('button', { name: '确认执行' })).toBeVisible()
@@ -1118,7 +1120,11 @@ test('0-1 授权 v4 完整路径：允许并记住 → 同文件自动 → 新�
               // 原「收到，继续。」无总结语义 → 正确不弹 → 测试死等
               streamCb?.({ type: 'content', text: '你的需求是做网页游戏——就按这个做，行不行？' })
             } else if (chatCount === 2) {
-              streamCb?.({ type: 'content', text: '方案如下：写 index.html 游戏页面，等你确认。' })
+              // 方案征询 + 方案标记占位（无文件行 → C3 不置清单——确认执行后 write 走授权卡——授权 v4 场景）
+              streamCb?.({
+                type: 'content',
+                text: '方案如下：写 index.html 游戏页面，等你确认。\n【执行方案】',
+              })
             } else if (chatCount >= 3 && chatCount <= 5) {
               const w = writes[chatCount - 3]
               streamCb?.({

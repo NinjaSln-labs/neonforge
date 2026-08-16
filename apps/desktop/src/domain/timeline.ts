@@ -163,13 +163,13 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
   'proposal.plan': {
     domain: 'proposal',
     role: 'assistant',
-    // 两形态载荷：成功 { ok:true, summary, files } / 失败 { ok:false, reason }——detailKeys 只列公共字段（宽松约定）
-    detailKeys: ['ok'],
+    // A-007：两形态载荷精确表达——ok 必选；成功 { summary, files } / 失败 { reason } 形态字段可选
+    detailKeys: ['ok', '?summary', '?files', '?reason'],
   },
   'proposal.completion': {
     domain: 'proposal',
     role: 'assistant',
-    detailKeys: ['ok', 'summary', 'verification', 'pendingQuestions'],
+    detailKeys: ['ok', '?summary', '?verification', '?pendingQuestions'],
   },
   'conversation.status_change': { domain: 'conversation', role: 'system', detailKeys: ['status'] },
   'conversation.error': { domain: 'conversation', role: 'system', detailKeys: ['errorType'] },
@@ -181,6 +181,7 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
 }
 
 // dev 校验（纯函数——未登记 type / 缺关键载荷字段 → warn 提示；消费方不阻断）
+// A-007：detailKeys 支持 `?` 前缀可选标记（两形态载荷的公共字段必选、形态字段可选——schema 与载荷对齐）
 export function validateTimelineEvent(type: string, detail: Record<string, unknown>): string[] {
   const warns: string[] = []
   const spec = TIMELINE_EVENT_SPECS[type as TimelineEventType]
@@ -189,7 +190,9 @@ export function validateTimelineEvent(type: string, detail: Record<string, unkno
     return warns
   }
   for (const k of spec.detailKeys ?? []) {
-    if (!(k in detail)) warns.push(`timeline 事件 ${type} 缺载荷字段：${k}`)
+    const optional = k.startsWith('?')
+    const key = optional ? k.slice(1) : k
+    if (!(key in detail) && !optional) warns.push(`timeline 事件 ${type} 缺载荷字段：${key}`)
   }
   return warns
 }

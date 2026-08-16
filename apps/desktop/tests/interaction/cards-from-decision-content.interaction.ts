@@ -88,6 +88,23 @@ test('S3-3：触发权切换——goal 卡内容来自 decisionContent 快照（
   await expectText(page.locator('.nf-confirmcard'), '用 React 实现', 5000)
 })
 
+test('S3-3b：无 decisionContent 不弹卡——纯文本含标记但解析失败（C3 降级）不产生决策点', async ({
+  page,
+}) => {
+  await installMockBridge(page, {
+    project: 'none',
+    script: compose(
+      // 消息含【执行方案】标记但无合法文件行 → parsePlanProposal 返回 malformed → 无快照 → 卡不弹
+      [[chunk.content('【执行方案】\n我先分析一下再动手。'), chunk.done()]],
+    ),
+  })
+  await startFromScratch(page, '做个待办应用')
+  // 无目标卡（goal 未提议——第一条消息不是目标确认）
+  // 无方案卡（plan 解析失败——C3 降级：不产生决策点）
+  await page.waitForTimeout(2500)
+  await expect(page.getByRole('button', { name: '确认执行' })).toHaveCount(0)
+})
+
 test('S3-4：拒绝超限回退——连续拒绝 3 次 → 澄清提示（不弹卡轰炸）', async ({ page }) => {
   await installMockBridge(page, {
     project: 'none',

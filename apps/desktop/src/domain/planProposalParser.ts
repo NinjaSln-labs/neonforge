@@ -22,6 +22,19 @@ export function isLikelyPath(p: string): boolean {
   return /\.[a-zA-Z0-9]{1,5}$/.test(p) // 含空白但带扩展名（中文文件名容错）
 }
 
+/** 「关键假设：」节提取（A-008 单源——parsePlanProposal 内部与 renderer 目标提议共用；
+ * 任意文本中的「关键假设：」→ `- ` 行列表；无节 → 空数组。§8.1 C ⑬ 契约） */
+export function extractAssumptionsSection(text: string): string[] {
+  const block = text.match(/关键假设[:：]([\s\S]*?)(?:【|$)/)
+  if (!block) return []
+  return block[1]
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => /^[-•]\s*/.test(l))
+    .map((l) => l.replace(/^[-•]\s*/, '').trim())
+    .filter(Boolean)
+}
+
 /**
  * 结构化解析【执行方案】块 → PlanProposal。
  * - 无【执行方案】标记 → { ok: false, reason: 'no-block' }（不产生决策点）

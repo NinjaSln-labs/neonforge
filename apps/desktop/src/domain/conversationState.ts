@@ -222,12 +222,10 @@ export function userConfirmed(
 export function userRejected(
   s: ConversationState,
   point: 'goal' | 'plan' | 'resolution',
-  reason?: RejectReason,
+  reason: RejectReason,
 ): ConversationState {
-  return userDecided(s, point, {
-    confirm: false,
-    reason: reason ?? { kind: 'other', text: '用户拒绝' },
-  })
+  // A-006：reason 必传——不变量 8 真身（userDecided throw）不得被兼容壳缺省绕过
+  return userDecided(s, point, { confirm: false, reason })
 }
 
 // 卡弹出 → 会话进入 PENDING（A0 §3.2 单一 PENDING——pending 只有一个；不变量 7）
