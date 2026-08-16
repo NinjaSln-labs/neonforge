@@ -881,9 +881,12 @@ class StageMachine {
   // ---- 需求阶段：一轮一轮真实交互（看回复 → 理解 → 决策 → 验证） ----
   // 循环不变量：每轮处理一条「未处理过」的模型消息（打印 + 决策 + 执行）；
   // 决策后等模型新回复（内容必须变化），下轮对它决策——像真人一轮一轮对话。
+  // 2026-08-16 #9 收敛判定（探索容忍）：进展轮（消息内容变化）不消耗轮次上限——
+  // 只数「连续停滞轮」（重复内容/无进展——模型循环），20 轮停滞判死；总轮 60 硬上限防无限提问
   async requirement() {
     let lastProcessed = '' // 已处理（打印+决策）的消息内容
-    for (let i = 0; i < 20; i++) {
+    let staleRounds = 0 // 连续停滞轮（内容无变化）
+    for (let i = 0; i < 60; i++) {
       // 2026-08-05 阶段自动推进检测：模型输出【需求确认】标记 → UI 自动推进到设计——跟住阶段
       const stNow = await this.driver.currentStage().catch(() => '')
       if (stNow && stNow.includes('设计')) {
@@ -904,10 +907,22 @@ class StageMachine {
         continue
       }
       const msg = await this.driver.waitSettled()
-      if (!msg || msg.content === lastProcessed) {
+      if (!msg) {
         await this.driver.page.waitForTimeout(3000)
         continue
       }
+      if (msg.content === lastProcessed) {
+        // #9：连续停滞轮计数（探索进展轮不消耗——见循环头注释）
+        staleRounds++
+        if (staleRounds >= 20) {
+          throw new Error(
+            `需求阶段连续 ${staleRounds} 轮停滞（模型循环重复同一回复——"${msg.content.slice(0, 40)}"）`,
+          )
+        }
+        await this.driver.page.waitForTimeout(3000)
+        continue
+      }
+      staleRounds = 0 // 有新内容 = 进展——重置停滞计数
       lastProcessed = msg.content
       // 2026-08-05 需求阶段模型越界（输出技术方案——STAGE_HINT 需求规则禁止给方案）→ 提醒先确认需求（防阶段错位）
       if (
@@ -977,12 +992,14 @@ class StageMachine {
       )
       // lastProcessed 保持 msg.content——next 是未处理的新消息，下轮循环会打印并决策
     }
-    throw new Error('需求阶段 20 轮未收敛（模型持续提问/循环）')
+    throw new Error('需求阶段 60 轮未收敛（模型持续提问/循环——停滞 20 轮判死已兜底）')
   }
 
   // ---- 设计阶段：真实用户——模型输出方案（可能还有设计选择题要问）→ 答选择题 → 模型明确「方案完整/确认推进」→ 才推进 ----
+  // 2026-08-16 #9 收敛判定：连续停滞轮（waitSettled 返回同一内容）15 轮 → 判死（原干等 6 分钟 deadline）
   async design() {
     let lastProcessed = ''
+    let staleRounds = 0 // #9：连续停滞轮计数
     const deadline = Date.now() + 360000
     while (Date.now() < deadline) {
       // 2026-08-05 阶段自动推进检测：模型/UI 可能主动推进阶段（用户「推进」消息触发）——e2e 必须跟住，不能在本阶段循环里处理下一阶段消息
@@ -999,10 +1016,22 @@ class StageMachine {
         continue
       }
       const msg = await this.driver.waitSettled(120000)
-      if (!msg || msg.content === lastProcessed) {
+      if (!msg) {
         await this.driver.page.waitForTimeout(3000)
         continue
       }
+      if (msg.content === lastProcessed) {
+        // #9：停滞轮计数——模型循环重复（探索轮有新内容不计数）
+        staleRounds++
+        if (staleRounds >= 15) {
+          throw new Error(
+            `设计阶段连续 ${staleRounds} 轮停滞（模型循环重复——"${msg.content.slice(0, 40)}"）`,
+          )
+        }
+        await this.driver.page.waitForTimeout(3000)
+        continue
+      }
+      staleRounds = 0 // 有新内容 = 进展——重置
       lastProcessed = msg.content
       if (/说要做但还没动手|回复.*继续/.test(msg.content)) {
         console.log(`   🧑 模型说要做但没动手——回复「继续」让它干完`)
@@ -1081,9 +1110,11 @@ class StageMachine {
   }
 
   // ---- 开发阶段：真实用户——批准清单 → 看着模型逐个写 → 模型说完成 → 检查文件齐全 → 缺则补齐 → 推进 ----
+  // 2026-08-16 #9 收敛判定：连续停滞轮（waitSettled 返回同一内容）15 轮 → 判死（原干等 8 分钟 deadline）
   async development() {
     let planned = [] // 批准的文件清单（approve-files）
     let lastProcessed = '' // 已处理消息（防同一条重复打印/处理）
+    let staleRounds = 0 // #9：连续停滞轮计数
     const deadline = Date.now() + 480000
     while (Date.now() < deadline) {
       // 2026-08-05 阶段自动推进检测：模型/UI 可能主动推进到测试（用户「推进测试」消息触发）——跟住阶段，防本阶段循环超时
@@ -1103,10 +1134,22 @@ class StageMachine {
         continue
       }
       const msg = await this.driver.waitSettled(120000)
-      if (!msg || msg.content === lastProcessed) {
+      if (!msg) {
         await this.driver.page.waitForTimeout(3000)
         continue
       }
+      if (msg.content === lastProcessed) {
+        // #9：停滞轮计数——模型循环重复（探索轮有新内容不计数）
+        staleRounds++
+        if (staleRounds >= 15) {
+          throw new Error(
+            `开发阶段连续 ${staleRounds} 轮停滞（模型循环重复——"${msg.content.slice(0, 40)}"）`,
+          )
+        }
+        await this.driver.page.waitForTimeout(3000)
+        continue
+      }
+      staleRounds = 0 // 有新内容 = 进展——重置
       lastProcessed = msg.content
       // 模型请求批准文件清单（二次 approve-files 被 UI 幂等处理不弹卡——模型以为在等批准）→ 显式放行
       if (/(请求你批准|请批准|等你批准|需要你批准|请求批准)/.test(msg.content)) {
@@ -1226,8 +1269,10 @@ class StageMachine {
   }
 
   // ---- 测试阶段：真实用户——模型必须实际调工具验证（跑起来/检查）并说通过，才能推进 ----
+  // 2026-08-16 #9 收敛判定：连续停滞轮 15 轮 → 判死（原干等 8 分钟 deadline）
   async test() {
     let lastProcessed = '' // 已处理消息（防同一条重复打印/处理）
+    let staleRounds = 0 // #9：连续停滞轮计数
     const deadline = Date.now() + 480000
     while (Date.now() < deadline) {
       // 2026-08-05 阶段自动推进检测：模型/UI 可能主动推进到部署——跟住阶段
@@ -1243,10 +1288,22 @@ class StageMachine {
         continue
       }
       const msg = await this.driver.waitSettled(120000)
-      if (!msg || msg.content === lastProcessed) {
+      if (!msg) {
         await this.driver.page.waitForTimeout(3000)
         continue
       }
+      if (msg.content === lastProcessed) {
+        // #9：停滞轮计数——模型循环重复（探索轮有新内容不计数）
+        staleRounds++
+        if (staleRounds >= 15) {
+          throw new Error(
+            `测试阶段连续 ${staleRounds} 轮停滞（模型循环重复——"${msg.content.slice(0, 40)}"）`,
+          )
+        }
+        await this.driver.page.waitForTimeout(3000)
+        continue
+      }
+      staleRounds = 0 // 有新内容 = 进展——重置
       lastProcessed = msg.content
       printModel(msg)
       // 2026-08-05 LLM 语义理解（用户指示：真实用户模拟必须语义理解，非正则穷举）
