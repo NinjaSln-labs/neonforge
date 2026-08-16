@@ -70,7 +70,7 @@ npm run dev:electron       # 完整应用（dev 模式，连接 :5173）
 
 ```bash
 cd apps/desktop
-npm run dist               # 产出 release/（macOS: .zip（.dmg 后补）；win: .nsis；linux: AppImage）
+npm run dist               # 产出 release/（macOS: .dmg + .zip；win: .nsis；linux: AppImage——Electron 下载失败时见下方镜像）
 ```
 
 > **ExFAT/外置卷已知问题**：electron-builder 在 ExFAT 卷打包会生成损坏的 asar（`chromium-pickle` offset 越界）——输出到本地卷：`npm run build && npx electron-builder -c.directories.output=/tmp/nf-release`
