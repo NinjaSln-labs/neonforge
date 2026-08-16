@@ -633,6 +633,9 @@ export default function ConversationPanel({
   // V1a 系统代跑（main IPC——mock/降级无则纯逻辑）+ V1b diff 派生（领域层单源）→ 判定：
   // ok → 置 resolution 决策点（弹已解决卡）；ok=false → evidence_missing 打点 + 回填引导（模型重新输出带证据声明）
   // ADR-004：领域层同步消费快照——IO（代跑）在应用层（此处 await 后快照进 verifyCompletion）
+  // 引导护栏（S4 复审）：连续引导计数——≥2 次证据不足不再自动 send（防回填死循环——坑 103 同构：
+  // 任何自动机制必须配套收敛判定；超限后停止自动引导，用户可见引导消息后手动处理）
+  const evidenceGuideCountRef = useRef(0)
   const verifyThenResolve = async (claim: CompletionClaim): Promise<void> => {
     const bridge = window.neonforge?.completion
     let systemState: SystemVerifier | undefined
@@ -656,6 +659,7 @@ export default function ConversationPanel({
     }
     const v = verifyCompletion(claim, systemState)
     if (v.ok) {
+      evidenceGuideCountRef.current = 0 // 证据通过 → 计数重置
       // 核验期间可能已有其它决策点置位（竞态防护——pending 非 none 不覆盖）
       if (stateRef.current.pending !== 'none') return
       setPendingState('resolution', { proposal: claim, since: new Date().toISOString() })
@@ -667,10 +671,12 @@ export default function ConversationPanel({
         'system',
       )
       const guide = buildEvidenceBackfill(v)
-      if (guide) {
+      evidenceGuideCountRef.current++
+      if (guide && evidenceGuideCountRef.current < 2) {
         inputRef.current = guide
         void sendRef.current()
       }
+      // ≥2 次：停止自动引导（防死循环——引导消息已注入过一次，用户可见；等用户输入或手动处理）
     }
   }
   const applyChunk = (chunk: {
