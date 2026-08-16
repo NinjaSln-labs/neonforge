@@ -58,6 +58,7 @@ test('断点续做：发送 → reload → 会话恢复', async ({ page }) => {
         openFolder: async () => '/test',
         listDir: async () => [],
         readFile: async () => ({ ok: true, content: '// x' }),
+        updateProjectTitle: async () => ({ ok: true }),
       },
       gateway: {
         validate: async () => ({ ok: true }),

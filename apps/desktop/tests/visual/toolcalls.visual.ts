@@ -1,9 +1,11 @@
 import { test, expect } from '@playwright/test'
 
 // 工具卡片（真实执行 V1）：mock SSE 发 tool-call → 卡片渲染（read 自动✅ / bash 需授权🔒）
-async function mockBridge(page: import('@playwright/test').Page) {
-  await page.addInitScript(() => {
+async function mockBridge(page: import('@playwright/test').Page, multiRound = false) {
+  await page.addInitScript((mr) => {
     window.__emit = null
+    // S7 L5 基线更新：multiRound=true 时多轮脚本（chat1 目标确认/chat2 方案占位——确认卡门控流程）
+    window.__multiRound = mr
     window.neonforge = {
       version: 'test',
       config: {
@@ -16,10 +18,31 @@ async function mockBridge(page: import('@playwright/test').Page) {
         openFolder: async () => '/test',
         listDir: async () => [],
         readFile: async () => ({ ok: true, content: '// x' }),
+        updateProjectTitle: async () => ({ ok: true }),
       },
       gateway: {
         validate: async () => ({ ok: true }),
-        streamChat: async () => ({ ok: true }),
+        streamChat: async () => {
+          // S7 L5 基线更新（确认卡门控）：multiRound 多轮脚本——chat1 目标确认 / chat2 方案占位（等你确认）/
+          // chat3+ 工具轮（emit 由场景手动推——确认流程驱动）；单轮场景（read 自动执行）保持静默
+          const mr = window.__multiRound
+          if (mr) {
+            const n = window
+            n.__chatN = (n.__chatN ?? 0) + 1
+            if (n.__chatN === 1) {
+              setTimeout(() => {
+                window.__emit({ type: 'content', text: '好的。【目标确认：写一个 notes 文件】' })
+                window.__emit({ type: 'done' })
+              }, 30)
+            } else if (n.__chatN === 2) {
+              setTimeout(() => {
+                window.__emit({ type: 'content', text: '好的，方案如下，等你确认。\n【执行方案】' })
+                window.__emit({ type: 'done' })
+              }, 30)
+            }
+          }
+          return { ok: true }
+        },
         onStreamChunk: (cb: (c: unknown) => void) => {
           window.__emit = cb
           return () => {}
@@ -46,7 +69,7 @@ async function mockBridge(page: import('@playwright/test').Page) {
         revert: async () => ({ ok: true }),
       },
     }
-  })
+  }, multiRound)
 }
 
 test('工具卡片（read 自动执行 ✅）', async ({ page }) => {
@@ -76,13 +99,18 @@ test('工具卡片（read 自动执行 ✅）', async ({ page }) => {
 })
 
 test('工具卡片（bash 需授权 🔒）', async ({ page }) => {
-  await mockBridge(page)
+  await mockBridge(page, true)
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.locator('.nf-chat__input textarea').fill('看看当前目录')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
-  await page.waitForTimeout(300)
+  // S7 L5 基线更新（确认卡门控）：目标确认 → 执行确认 → 工具授权（bash 高危需授权）
+  await expect(page.getByRole('button', { name: '确认目标' })).toBeVisible({ timeout: 8000 })
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expect(page.getByRole('button', { name: '确认执行' })).toBeVisible({ timeout: 8000 })
+  await page.getByRole('button', { name: '确认执行' }).click()
+  await page.waitForTimeout(600)
   await page.evaluate(() => {
     window.__emit({ type: 'reasoning', text: '需要查看目录' })
     window.__emit({
@@ -104,13 +132,18 @@ test('工具卡片（bash 需授权 🔒）', async ({ page }) => {
 })
 
 test('工具卡片（write 授权执行 → 可回滚 ↩️ → 已回滚）', async ({ page }) => {
-  await mockBridge(page)
+  await mockBridge(page, true)
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.locator('.nf-chat__input textarea').fill('帮我写一个 notes 文件')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
-  await page.waitForTimeout(300)
+  // S7 L5 基线更新（确认卡门控）：目标确认 → 执行确认 → write 授权（方案占位——清单外需授权）
+  await expect(page.getByRole('button', { name: '确认目标' })).toBeVisible({ timeout: 8000 })
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expect(page.getByRole('button', { name: '确认执行' })).toBeVisible({ timeout: 8000 })
+  await page.getByRole('button', { name: '确认执行' }).click()
+  await page.waitForTimeout(600)
   await page.evaluate(() => {
     window.__emit({ type: 'reasoning', text: '需要写入文件' })
     window.__emit({

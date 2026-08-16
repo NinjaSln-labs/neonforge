@@ -16,6 +16,7 @@ import {
   initialStuckState,
   isQuestionLike,
   isCommunicationLike,
+  isConfirmIntent,
   isDoneLike,
   parseExecutionPlan,
   summarizeCapability,
@@ -1794,12 +1795,29 @@ export default function ConversationPanel({
     inputRef.current = ''
     setInput('')
     if (!opts?.silent) {
-      // S7（A0 审校 P1-5 接入——设计 §3.4 C2）：pending 期用户自由文本 = 隐式拒绝当前决策点
-      // （reason.direction + text=新意图——pending 清除 + 卡消失；模型下一轮看到新文本重提议——
-      // 用户打字替代按钮；approval 排除——授权待批时发送=直接处理（现有语义——用户未批准给新指令））
+      // S7（A0 审校 P1-5 + C2 完善——e2e-0to1 场景 B 暴露）：pending 期用户文本分流——
+      // 确认语义（isConfirmIntent——「行/按这个方案」）→ 自动确认当前决策点（等价点按钮——确认卡时代
+      // 遗漏文本确认——真实用户打字确认）；新意图文本 → 隐式拒绝（C2——reason.direction + text——
+      // 卡消失 + 模型重提议）；approval 期确认文本 → 触发当前授权卡批准（下方 approveToolCall 路径）
       const pendingKind = stateRef.current.pending
       if (pendingKind !== 'none' && pendingKind !== 'approval') {
-        reject(pendingKind, { kind: 'direction', text })
+        if (isConfirmIntent(text)) {
+          confirm(pendingKind)
+        } else {
+          reject(pendingKind, { kind: 'direction', text })
+        }
+      } else if (
+        pendingKind === 'approval' &&
+        // 收紧（T0-3/P2 回归修正）：approval 期只认**明确批准词**（「批准/可以/行/同意」——
+        // 「继续」等非批准语义不自动批——手动按卡测试与真实「让模型继续」路径保持手动）
+        /^(行|好|可以|批准|同意|没问题|确认|就这么办)[。！!~～]?$|批准|同意/.test(text)
+      ) {
+        // S7（C2 完善——e2e-0to1 场景 B）：approval 期确认文本 → 自动批准当前待批授权卡
+        // （真实用户打字「行/批准」——确认卡时代只处理按钮批准遗漏文本批准）
+        const lastMsg = messagesRef.current[messagesRef.current.length - 1]
+        if (lastMsg?.role === 'assistant' && lastMsg.toolCalls?.length) {
+          approveAllToolCalls(lastMsg.toolCalls)
+        }
       }
       // 13 复跑入口：上报用户输入（真实交付包 rerunPrompt 用）
       onUserMessage?.(text)
