@@ -26,6 +26,7 @@ import {
   classifyAction,
   canExecute,
   decideProgressGuarantee,
+  isConsumedProposal,
   pendingCardToShow,
   shouldStopContinuation,
   inPlannedFiles as inPlannedFilesDomain,
@@ -1482,13 +1483,11 @@ export default function ConversationPanel({
         producedFiles: stateRef.current.producedFiles,
         projectFiles: new Set((recentFilesExternal ?? []).map((f) => trustPath(f))),
       })
-      // S5 修正（L3 根因 3 回归）：已确认决策点的提议不再计「本轮推进」——方案确认后上轮【执行方案】
-      // 消息是**已消费的提议**（用户点了确认）→ 新一轮应逼执行（require-action）；未确认的提议
-      // （pending 期/拒绝后重提议轮）仍算推进（auto——模型在走决策点流程）
-      const proposalConsumed =
-        (stateRef.current.goalConfirmed && /【目标确认/.test(lastContent)) ||
-        (stateRef.current.planConfirmed && /【执行方案/.test(lastContent)) ||
-        (stateRef.current.resolutionConfirmed && /【已达成/.test(lastContent))
+      // S5 修正（L3 根因 3 回归——S5 复审坑 97 单源）：已确认决策点的提议不再计「本轮推进」——
+      // 方案确认后上轮【执行方案】消息是**已消费的提议**（用户点了确认）→ 新一轮应逼执行（require-action）；
+      // 未确认的提议（pending 期/拒绝后重提议轮）仍算推进（auto——模型在走决策点流程）。
+      // isConsumedProposal 领域层单源（isStructuredProposal 唯一探测——渲染层不自写正则）
+      const proposalConsumed = isConsumedProposal(lastContent, stateRef.current)
       const decision = decideProgressGuarantee(
         stateRef.current,
         {

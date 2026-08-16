@@ -252,3 +252,29 @@ describe('completion.evidence_missing 事件（S4 接线断言）', () => {
     expect(warns.some((w) => w.includes('ok'))).toBe(true)
   })
 })
+
+// S5 spec TDD 网格：execution.forced/released 事件语义更新（mode/reason 可回放——区分「逼工具」与「逼推进」）
+describe('execution.forced/released（S5——mode/reason 事件语义）', () => {
+  it('注册表 schema：detailKeys 含 reason + ?mode（S5 语义更新）', () => {
+    expect(TIMELINE_EVENT_SPECS['execution.forced'].detailKeys).toEqual(['reason', '?mode'])
+    expect(TIMELINE_EVENT_SPECS['execution.released'].detailKeys).toEqual(['reason', '?mode'])
+  })
+
+  it('validateTimelineEvent：mode/reason 载荷通过校验（require-action/require-advance/auto 可回放）', () => {
+    const warns = validateTimelineEvent('execution.forced', {
+      mode: 'require-action',
+      reason: 'confirmed-no-progress-tools-available',
+    })
+    expect(warns).toEqual([])
+    const warns2 = validateTimelineEvent('execution.released', {
+      mode: 'require-advance',
+      reason: 'confirmed-no-progress-no-tools',
+    })
+    expect(warns2).toEqual([])
+  })
+
+  it('validateTimelineEvent：缺 reason（必选）→ warn（schema 有校验价值）', () => {
+    const warns = validateTimelineEvent('execution.forced', { mode: 'require-action' })
+    expect(warns.some((w) => w.includes('reason'))).toBe(true)
+  })
+})
