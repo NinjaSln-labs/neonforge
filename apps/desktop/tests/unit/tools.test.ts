@@ -8,9 +8,11 @@ import {
   cancelActiveCommand,
   markPlanApproved,
   resetPlanApproved,
+  syncPlanApprovedFromStore,
   isValidOpenUrl,
   isReadOnlyBash,
 } from '../../src/main/tools'
+import { getPlannedFilesStore } from '../../src/main/plannedFilesStore.instance'
 
 // 2026-08-06 open 工具（用户「帮我打开」）：mock electron shell——vitest node 环境无 electron
 const { openExternalMock } = vi.hoisted(() => ({ openExternalMock: vi.fn(async () => {}) }))
@@ -58,6 +60,22 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     expect(r.needApproval).toBeUndefined() // 不是授权请求（引导先规划，不逐个授权）
     expect(r.error).toContain('approve-files')
     expect(existsSync(file)).toBe(false)
+  })
+
+  // D3（ADR-005）：main 门控跨重启一致——syncPlanApprovedFromStore（registerIpc 启动恢复路径）从
+  // 持久化 store 恢复 approved → write 不再被「先调 approve-files」规划引导拦（policy 放行）；
+  // 授权判定（needApproval）仍正常（approved 由 renderer 侧状态机判定——approved 恢复 ≠ 授权放行）
+  it('D3：syncPlanApprovedFromStore 从 store 恢复 approved → write 规划引导放行（跨重启一致）', async () => {
+    resetPlanApproved()
+    const file = path.join(TMP, 'd3.txt')
+    // 预写 store（模拟上次会话批准过——跨重启保留；afterEach 清 TMP 自动隔离）
+    getPlannedFilesStore().add([file])
+    // registerIpc 启动恢复路径
+    syncPlanApprovedFromStore()
+    const r = await toolRegistry.execute('write', { path: file, content: 'x' }, {})
+    expect(r.ok).toBe(false)
+    expect(r.policy).toBeUndefined() // 规划引导已放行（approved 恢复——不引导先调 approve-files）
+    expect(r.needApproval).toBe(true) // 正常授权判定（write 需 approved——由 renderer 状态机提供）
   })
 
   it('write：授权后写文件 + 写前快照 .nf-bak + 回滚恢复原样', async () => {

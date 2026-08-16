@@ -6,7 +6,14 @@
 // 装配：MockBridge 工厂 + 场景装配器（T0 基建——旧基建 S3 迁移后本文件为新场景承载）
 import { test, expect } from '@playwright/test'
 import { installMockBridge, chunk, toolCall } from './mockBridge'
-import { compose, goalConfirm, planPropose, startFromScratch, sendChat } from './scenarios'
+import {
+  compose,
+  goalConfirm,
+  planPropose,
+  planProposeWithApproval,
+  startFromScratch,
+  sendChat,
+} from './scenarios'
 import { expectVisible, expectText } from '../helpers/assertions'
 
 test('S3-1：方案卡渲染 PlanProposal 三要素（文件含原因/关键假设/验证计划）', async ({ page }) => {
@@ -479,6 +486,9 @@ test('S7-1：方案卡待确认时用户直接打字 → 卡消失 + 模型收�
 }) => {
   await installMockBridge(page, {
     project: 'none',
+    // D3 回归暴露的既有 flaky 修复：模型重提议延迟拉长（默认 50ms < Playwright 轮询间隔——
+    // 「卡消失」窗口被压缩 → 断言等到的已是重提议后的卡；300ms 给消失窗口留足轮询时间）
+    streamDelay: 300,
     script: compose(
       goalConfirm('做一个待办应用'),
       // 方案确认前用户打字（pending='plan' 期间）→ 隐式 reject → 模型重提议方案
@@ -551,4 +561,81 @@ test('S7-3：授权卡待批时用户打字「批准」→ 自动批准（approv
   // 用户打字「批准」→ 自动批准（approval 文本确认）
   await sendChat(page, '批准')
   await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(0, { timeout: 10000 })
+})
+
+// D3（ADR-005）：PlannedFiles 权威下沉 main——恢复接线（load）+ 批准链（add）+ 任务边界重置（reset）
+// 恢复窗口语义（ADR-005）：目标确认 = 任务边界（领域层清清单——铁律）——恢复价值窗口 = 未确认新目标前
+// （刷新/重开同一会话）+ main 门控跨重启一致（syncPlanApprovedFromStore——L1 tools 门控测试承载）
+test('D3-1：启动恢复接线——挂载时 planned-files:load 被调（main 权威→镜像）+ 主流程正常', async ({
+  page,
+}) => {
+  await installMockBridge(page, {
+    project: 'none',
+    // main plannedFilesStore 持久化状态（模拟上次会话批准过——跨重启保留）
+    plannedFiles: { files: ['/test/app.ts'], approved: true },
+    // load/add 调用捕获（逃生舱——同作用域包装）
+    extraInit: `
+      window.__nfPlannedLoadCalls = 0
+      window.__nfPlannedAddCalls = 0
+      window.__nfPlannedAddArgs = []
+      const origLoad = bridge.plannedFiles.load
+      const origAdd = bridge.plannedFiles.add
+      bridge.plannedFiles.load = async () => { window.__nfPlannedLoadCalls++; return origLoad() }
+      bridge.plannedFiles.add = async (files) => { window.__nfPlannedAddCalls++; window.__nfPlannedAddArgs.push(files); return origAdd(files) }
+    `,
+    script: compose(
+      goalConfirm('做一个待办应用'),
+      planProposeWithApproval([{ path: '/test/app.ts', reason: '核心' }]),
+      [toolCall.write('/test/app.ts'), chunk.done()],
+    ),
+  })
+  await startFromScratch(page, '做个待办应用')
+  // 主流程正常（目标确认 = 任务边界——恢复清单被领域层清空是正确语义；重新批准走 IPC）
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  await page.getByRole('button', { name: '确认执行' }).click()
+  // 批准链走 IPC：planned-files:add 被调（main 权威同步——与 grantPlan 同清单）
+  await expectVisible(page.getByRole('button', { name: '批准这批文件' }), 10000)
+  await page.getByRole('button', { name: '批准这批文件' }).click()
+  // 批准后写清单内文件 → 自动 done（无授权卡）——done 卡出现保证批准链已走完
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(1, { timeout: 10000 })
+  await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(0)
+  // 恢复接线 + 批准链走 IPC：load 挂载时被调（main 权威→镜像——StrictMode 双挂载 ≥1）；
+  // add 恰好一次（批准按钮单次点击 → 单次 add——main 权威同步）
+  const counts = await page.evaluate(() => ({
+    load: (window as unknown as { __nfPlannedLoadCalls?: number }).__nfPlannedLoadCalls ?? 0,
+    add: (window as unknown as { __nfPlannedAddCalls?: number }).__nfPlannedAddCalls ?? 0,
+  }))
+  expect(counts.load).toBeGreaterThanOrEqual(1)
+  expect(counts.add).toBe(1)
+})
+
+test('D3-2：任务边界重置——目标确认 → planned-files:reset 同步 main（批准事实不跨任务）', async ({
+  page,
+}) => {
+  await installMockBridge(page, {
+    project: 'none',
+    // reset 调用捕获（逃生舱——同作用域包装）
+    extraInit: `
+      const origReset = bridge.plannedFiles.reset
+      window.__nfPlannedResetCalls = 0
+      bridge.plannedFiles.reset = async () => {
+        window.__nfPlannedResetCalls++
+        return origReset()
+      }
+    `,
+    script: compose(goalConfirm('做一个待办应用'), planPropose(['/test/app.ts（核心）'])),
+  })
+  await startFromScratch(page, '做个待办应用')
+  // 目标确认（goalSeq 0→1 = 任务边界 → ConversationPanel clearTrust → planned-files:reset 同步 main）
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  // reset 已同步 main（权威清空——批准事实不跨任务；与既有 clearTrust→filesApprovedReset 语义一致）
+  const resetCalls = await page.evaluate(
+    () => (window as unknown as { __nfPlannedResetCalls?: number }).__nfPlannedResetCalls ?? 0,
+  )
+  expect(resetCalls).toBe(1)
+  // 方案卡流程正常（重置后任务继续——新任务重新规划）
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
 })
