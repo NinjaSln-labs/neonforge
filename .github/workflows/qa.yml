@@ -34,6 +34,16 @@ jobs:
         working-directory: apps/desktop
         run: npx playwright install --with-deps chromium
 
+      # B1 lint 门禁（快且确定项——pre-commit 增量 + CI 全量兜底）
+      - name: Lint（ESLint 全量）
+        working-directory: apps/desktop
+        run: npx eslint .
+
+      # B1 格式化一致性（CI 全量校验——pre-commit 已增量修复）
+      - name: Format check（Prettier）
+        working-directory: apps/desktop
+        run: npx prettier --check "src/**/*.{ts,tsx}" "tests/**/*.{ts,tsx}" "*.mjs" "*.config.*" "eslint.config.js"
+
       # L1 领域逻辑（确定性——CI 必跑）
       - name: L1 领域逻辑（Vitest）
         working-directory: apps/desktop
