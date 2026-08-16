@@ -7,8 +7,17 @@ import { slugify, projectBaseDir, initProjectFiles, updateProjectTitle } from '.
 import { TEST_HOOKS } from './testHooks.js'
 
 const IGNORE = new Set([
-  'node_modules', '.git', 'dist', 'out', 'build', 'coverage',
-  '.DS_Store', '.vite', '.next', '.turbo', '__pycache__'
+  'node_modules',
+  '.git',
+  'dist',
+  'out',
+  'build',
+  'coverage',
+  '.DS_Store',
+  '.vite',
+  '.next',
+  '.turbo',
+  '__pycache__',
 ])
 
 export interface DirEntry {
@@ -19,8 +28,12 @@ export interface DirEntry {
 
 export class WorkspaceService {
   private currentRoot: string | null = null
-  getCurrentRoot(): string | null { return this.currentRoot }
-  setCurrentRoot(p: string | null): void { this.currentRoot = p }
+  getCurrentRoot(): string | null {
+    return this.currentRoot
+  }
+  setCurrentRoot(p: string | null): void {
+    this.currentRoot = p
+  }
 
   async openFolder(win: BrowserWindow | null): Promise<string | null> {
     // 测试钩子：跳过系统对话框，直接打开指定目录
@@ -30,11 +43,9 @@ export class WorkspaceService {
     }
     const opts: Electron.OpenDialogOptions = {
       properties: ['openDirectory'],
-      title: '打开已有项目'
+      title: '打开已有项目',
     }
-    const result = win
-      ? await dialog.showOpenDialog(win, opts)
-      : await dialog.showOpenDialog(opts)
+    const result = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
     if (result.canceled || result.filePaths.length === 0) return null
     this.currentRoot = result.filePaths[0] ?? null
     return this.currentRoot
@@ -52,7 +63,7 @@ export class WorkspaceService {
         entries.push({
           name,
           path: full,
-          kind: st.isDirectory() ? 'dir' : 'file'
+          kind: st.isDirectory() ? 'dir' : 'file',
         })
       } catch {
         // skip unreadable
@@ -77,7 +88,9 @@ export class WorkspaceService {
   }
 
   // ticket 08d：搭档须知 .neonforge——项目根约定文件（存在则返回内容，无则 null）
-  async readNotebook(rootPath: string | null): Promise<{ ok: true; content: string } | { ok: false; error: string } | null> {
+  async readNotebook(
+    rootPath: string | null,
+  ): Promise<{ ok: true; content: string } | { ok: false; error: string } | null> {
     if (!rootPath) return null
     try {
       const p = join(rootPath, '.neonforge')
@@ -90,7 +103,9 @@ export class WorkspaceService {
 
   // ticket 07：0-1 项目初始化——从零开始 → 创建真实项目目录 + 骨架（Documents/NeonForge/<slug>）
   // 2026-08-04：同名目录已存在 → 自动加序号（slug-2、slug-3…）——绝不覆盖已有项目（用户反馈「会不会改已有目录」）
-  initProject(title: string): { ok: true; path: string; title: string } | { ok: false; error: string } {
+  initProject(
+    title: string,
+  ): { ok: true; path: string; title: string } | { ok: false; error: string } {
     try {
       const base = slugify(title)
       let slug = base

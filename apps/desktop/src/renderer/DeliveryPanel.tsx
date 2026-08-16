@@ -10,7 +10,7 @@ export default function DeliveryPanel({
   onClose: _onClose,
   onAdjust,
   onRerun,
-  onConfirmed
+  onConfirmed,
 }: {
   pkg: DeliveryPackage | null
   onClose: () => void
@@ -19,7 +19,9 @@ export default function DeliveryPanel({
   onConfirmed?: () => void // 2026-08-03 A5 审计修复：确认问题关闭 → 通知上层同步台账状态（closed）
 }) {
   const [items, setItems] = useState(pkg?.acceptance ?? [])
-  const [status, setStatus] = useState<'delivered' | 'closed'>(pkg?.status === 'closed' ? 'closed' : 'delivered')
+  const [status, setStatus] = useState<'delivered' | 'closed'>(
+    pkg?.status === 'closed' ? 'closed' : 'delivered',
+  )
   // 2026-08-03 A3 审计修复：操作失败内联错误条（替代原生 alert——深色 UI 割裂 + 阻断式）
   const [error, setError] = useState<string | null>(null)
   // 双渲染保活：pkg 延迟更新（如 07 阶段推进/真实执行后）→ 同步 items/status（useState 不随 prop 变）
@@ -50,7 +52,11 @@ export default function DeliveryPanel({
     const res = await window.neonforge.delivery.revertDiff(d.path)
     if (res.ok) {
       setReverted((s) => new Set(s).add(d.path))
-      setApplied((s) => { const n = new Set(s); n.delete(d.path); return n })
+      setApplied((s) => {
+        const n = new Set(s)
+        n.delete(d.path)
+        return n
+      })
     } else {
       setError(`回滚失败：${res.error ?? '未知错误'}`)
     }
@@ -70,18 +76,28 @@ export default function DeliveryPanel({
       if (res.ok) ok.push(d.path)
       else fail.push({ path: d.path, error: res.error ?? '未知错误' })
     }
-    setApplied((s) => { const n = new Set(s); ok.forEach((p) => n.add(p)); return n })
+    setApplied((s) => {
+      const n = new Set(s)
+      ok.forEach((p) => n.add(p))
+      return n
+    })
     setAcceptAllBusy(false)
-    if (fail.length > 0) setError(`有 ${fail.length} 个改动未应用：${fail.map((f) => `${f.path}（${f.error}）`).join('；')}`)
+    if (fail.length > 0)
+      setError(
+        `有 ${fail.length} 个改动未应用：${fail.map((f) => `${f.path}（${f.error}）`).join('；')}`,
+      )
   }
 
   // 目视 diff：展开/折叠（默认展开小 diff，大 diff 折叠——>80 行收起）
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const diffLineClass = (l: DiffLine) =>
-    l.type === 'hunk' ? 'nf-diffline nf-diffline--hunk'
-    : l.type === 'add' ? 'nf-diffline nf-diffline--add'
-    : l.type === 'del' ? 'nf-diffline nf-diffline--del'
-    : 'nf-diffline nf-diffline--ctx'
+    l.type === 'hunk'
+      ? 'nf-diffline nf-diffline--hunk'
+      : l.type === 'add'
+        ? 'nf-diffline nf-diffline--add'
+        : l.type === 'del'
+          ? 'nf-diffline nf-diffline--del'
+          : 'nf-diffline nf-diffline--ctx'
   const renderDiffLines = (d: { path: string; diff: string }, isExpanded: boolean) => {
     const lines = parseDiffLines(d.diff)
     if (lines.length === 0) return <pre className="nf-diffcard__body">{d.diff.slice(0, 400)}</pre> // 解析失败 fallback
@@ -90,8 +106,13 @@ export default function DeliveryPanel({
       <pre className="nf-diffcard__body nf-diffcard__body--lines">
         {shown.map((l, i) => (
           <div key={i} className={diffLineClass(l)}>
-            <span className="nf-diffline__ln">{l.type === 'hunk' ? '' : l.oldLine ?? '·'} {l.type === 'hunk' ? '' : l.newLine ?? '·'}</span>
-            <span className="nf-diffline__mark">{l.type === 'add' ? '+' : l.type === 'del' ? '−' : l.type === 'hunk' ? '@@' : ' '}</span>
+            <span className="nf-diffline__ln">
+              {l.type === 'hunk' ? '' : (l.oldLine ?? '·')}{' '}
+              {l.type === 'hunk' ? '' : (l.newLine ?? '·')}
+            </span>
+            <span className="nf-diffline__mark">
+              {l.type === 'add' ? '+' : l.type === 'del' ? '−' : l.type === 'hunk' ? '@@' : ' '}
+            </span>
             <span className="nf-diffline__text">{l.content || ' '}</span>
           </div>
         ))}
@@ -112,20 +133,36 @@ export default function DeliveryPanel({
   return (
     <div className="nf-delivery">
       <div className="nf-delivery__head">
-        <span className={`nf-delivery__badge${status === 'closed' ? ' nf-delivery__badge--closed' : ''}`}>
-          {status === 'closed' ? <><IconCheck size={12} /> 已关闭</> : <><IconCheck size={12} /> 已解决</>}
+        <span
+          className={`nf-delivery__badge${status === 'closed' ? ' nf-delivery__badge--closed' : ''}`}
+        >
+          {status === 'closed' ? (
+            <>
+              <IconCheck size={12} /> 已关闭
+            </>
+          ) : (
+            <>
+              <IconCheck size={12} /> 已解决
+            </>
+          )}
         </span>
       </div>
       <p className="nf-delivery__summary">{pkg.summary}</p>
       {error && (
-        <div className="nf-delivery__error" role="alert"><IconX size={14} /> {error}</div>
+        <div className="nf-delivery__error" role="alert">
+          <IconX size={14} /> {error}
+        </div>
       )}
 
       {pkg.artifacts.length > 0 && (
         <section className="nf-delivery__block">
           <h4>产物</h4>
           <ul className="nf-delivery__artifacts">
-            {pkg.artifacts.map((a) => <li key={a}><IconFile size={12} /> {a}</li>)}
+            {pkg.artifacts.map((a) => (
+              <li key={a}>
+                <IconFile size={12} /> {a}
+              </li>
+            ))}
           </ul>
         </section>
       )}
@@ -155,10 +192,17 @@ export default function DeliveryPanel({
         <section className="nf-delivery__block">
           <h4>开发者视图 · 改动审核（需授权）</h4>
           {/* 非技术视图主路径（D0 §3.8）：改动说明先行，全部接受为默认操作——免逐条确认 */}
-          {(pkg.diffs.some((d) => !applied.has(d.path) && !reverted.has(d.path))) && (
+          {pkg.diffs.some((d) => !applied.has(d.path) && !reverted.has(d.path)) && (
             <div className="nf-diffcard__acceptall">
-              <span className="nf-diffcard__hint">以上改动已审阅——全部接受并写入（已备份，可逐条还原）</span>
-              <button type="button" className="nf-diffcard__acceptall-btn" disabled={acceptAllBusy} onClick={() => void acceptAll(pkg.diffs ?? [])}>
+              <span className="nf-diffcard__hint">
+                以上改动已审阅——全部接受并写入（已备份，可逐条还原）
+              </span>
+              <button
+                type="button"
+                className="nf-diffcard__acceptall-btn"
+                disabled={acceptAllBusy}
+                onClick={() => void acceptAll(pkg.diffs ?? [])}
+              >
                 {acceptAllBusy ? '写入中…' : '全部接受并写入'}
               </button>
             </div>
@@ -173,9 +217,23 @@ export default function DeliveryPanel({
             return (
               <div key={i} className="nf-diffcard">
                 <div className="nf-diffcard__head">
-                  <span className="nf-diffcard__path"><IconFile size={12} /> {d.path}</span>
+                  <span className="nf-diffcard__path">
+                    <IconFile size={12} /> {d.path}
+                  </span>
                   <span className="nf-diffcard__state">
-                    {isReverted ? <><IconRotateCcw size={12} /> 已回滚</> : isApplied ? <><IconCheck size={12} /> 已应用</> : <><IconClock size={12} /> 待审核</>}
+                    {isReverted ? (
+                      <>
+                        <IconRotateCcw size={12} /> 已回滚
+                      </>
+                    ) : isApplied ? (
+                      <>
+                        <IconCheck size={12} /> 已应用
+                      </>
+                    ) : (
+                      <>
+                        <IconClock size={12} /> 待审核
+                      </>
+                    )}
                   </span>
                 </div>
                 {renderDiffLines(d, isExpanded || !canExpand)}
@@ -183,25 +241,64 @@ export default function DeliveryPanel({
                   <button
                     type="button"
                     className="nf-diffcard__expand"
-                    onClick={() => setExpanded((s) => { const n = new Set(s); if (n.has(d.path)) n.delete(d.path); else n.add(d.path); return n })}
+                    onClick={() =>
+                      setExpanded((s) => {
+                        const n = new Set(s)
+                        if (n.has(d.path)) n.delete(d.path)
+                        else n.add(d.path)
+                        return n
+                      })
+                    }
                   >
                     {isExpanded ? '▲ 收起' : `▼ 展开全部（${totalLines} 行）`}
                   </button>
                 )}
                 {isConfirming ? (
                   <div className="nf-diffcard__actions">
-                    <span className="nf-diffcard__hint">将写入 {d.path}（已备份可还原）——确认？</span>
-                    <button type="button" className="nf-diffcard__confirm" onClick={() => void applyDiff(d)}>确认写入</button>
-                    <button type="button" className="nf-diffcard__cancel" onClick={() => setConfirming(null)}>取消</button>
+                    <span className="nf-diffcard__hint">
+                      将写入 {d.path}（已备份可还原）——确认？
+                    </span>
+                    <button
+                      type="button"
+                      className="nf-diffcard__confirm"
+                      onClick={() => void applyDiff(d)}
+                    >
+                      确认写入
+                    </button>
+                    <button
+                      type="button"
+                      className="nf-diffcard__cancel"
+                      onClick={() => setConfirming(null)}
+                    >
+                      取消
+                    </button>
                   </div>
                 ) : isApplied ? (
                   <div className="nf-diffcard__actions">
-                    <button type="button" className="nf-diffcard__revert" onClick={() => void revertDiff(d)}><IconRotateCcw size={12} /> 回滚</button>
+                    <button
+                      type="button"
+                      className="nf-diffcard__revert"
+                      onClick={() => void revertDiff(d)}
+                    >
+                      <IconRotateCcw size={12} /> 回滚
+                    </button>
                   </div>
                 ) : (
                   <div className="nf-diffcard__actions">
-                    <button type="button" className="nf-diffcard__accept" onClick={() => setConfirming(d.path)}>接受并写入</button>
-                    <button type="button" className="nf-diffcard__reject" onClick={() => setReverted((s) => new Set(s).add(d.path))}>拒绝</button>
+                    <button
+                      type="button"
+                      className="nf-diffcard__accept"
+                      onClick={() => setConfirming(d.path)}
+                    >
+                      接受并写入
+                    </button>
+                    <button
+                      type="button"
+                      className="nf-diffcard__reject"
+                      onClick={() => setReverted((s) => new Set(s).add(d.path))}
+                    >
+                      拒绝
+                    </button>
                   </div>
                 )}
               </div>
@@ -215,7 +312,9 @@ export default function DeliveryPanel({
           <h4>下一步 / 指导</h4>
           <ul className="nf-delivery__steps">
             {/* 2026-08-04 重审：`→` 移出文本节点 → CSS ::before（读屏不读伪元素——符号清零 + 无障碍） */}
-            {pkg.nextSteps.map((s, i) => <li key={i}>{s}</li>)}
+            {pkg.nextSteps.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
           </ul>
         </section>
       )}
@@ -238,7 +337,10 @@ export default function DeliveryPanel({
               className="nf-delivery__primary"
               disabled={!allDone}
               title={allDone ? '验收全部通过，问题关闭' : '请先勾选全部验收项'}
-              onClick={() => { setStatus('closed'); onConfirmed?.() }}
+              onClick={() => {
+                setStatus('closed')
+                onConfirmed?.()
+              }}
             >
               确认问题关闭
             </button>
@@ -246,7 +348,9 @@ export default function DeliveryPanel({
           </>
         )}
         {status !== 'closed' && (
-          <button type="button" className="nf-delivery__ghost" onClick={onAdjust}>继续调整</button>
+          <button type="button" className="nf-delivery__ghost" onClick={onAdjust}>
+            继续调整
+          </button>
         )}
       </div>
     </div>

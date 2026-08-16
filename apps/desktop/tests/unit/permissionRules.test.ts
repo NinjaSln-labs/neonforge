@@ -5,21 +5,55 @@ import { matchesRule, isInSandbox } from '../../src/main/tools.js'
 
 describe('matchesRule（Tool(specifier) 匹配）', () => {
   it('tool 名不匹配 → false', () => {
-    expect(matchesRule('write', { path: '/a/b.ts' }, { action: 'allow', tool: 'edit', specifier: '' })).toBe(false)
+    expect(
+      matchesRule('write', { path: '/a/b.ts' }, { action: 'allow', tool: 'edit', specifier: '' }),
+    ).toBe(false)
   })
   it('specifier 空 = 该工具全部匹配', () => {
-    expect(matchesRule('bash', { command: 'rm -rf /' }, { action: 'deny', tool: 'bash', specifier: '' })).toBe(true)
+    expect(
+      matchesRule('bash', { command: 'rm -rf /' }, { action: 'deny', tool: 'bash', specifier: '' }),
+    ).toBe(true)
   })
   it('路径前缀匹配（path）', () => {
-    expect(matchesRule('write', { path: '/proj/src/main.ts' }, { action: 'allow', tool: 'write', specifier: '/proj/src/' })).toBe(true)
+    expect(
+      matchesRule(
+        'write',
+        { path: '/proj/src/main.ts' },
+        { action: 'allow', tool: 'write', specifier: '/proj/src/' },
+      ),
+    ).toBe(true)
   })
   it('命令前缀匹配（command）', () => {
-    expect(matchesRule('bash', { command: 'npm run test' }, { action: 'allow', tool: 'bash', specifier: 'npm run ' })).toBe(true)
-    expect(matchesRule('bash', { command: 'git push' }, { action: 'allow', tool: 'bash', specifier: 'npm run ' })).toBe(false)
+    expect(
+      matchesRule(
+        'bash',
+        { command: 'npm run test' },
+        { action: 'allow', tool: 'bash', specifier: 'npm run ' },
+      ),
+    ).toBe(true)
+    expect(
+      matchesRule(
+        'bash',
+        { command: 'git push' },
+        { action: 'allow', tool: 'bash', specifier: 'npm run ' },
+      ),
+    ).toBe(false)
   })
   it('filePath/file 参数也能匹配', () => {
-    expect(matchesRule('edit', { filePath: '/proj/a.ts' }, { action: 'allow', tool: 'edit', specifier: '/proj/' })).toBe(true)
-    expect(matchesRule('write', { file: '/proj/b.ts' }, { action: 'allow', tool: 'write', specifier: '/proj/' })).toBe(true)
+    expect(
+      matchesRule(
+        'edit',
+        { filePath: '/proj/a.ts' },
+        { action: 'allow', tool: 'edit', specifier: '/proj/' },
+      ),
+    ).toBe(true)
+    expect(
+      matchesRule(
+        'write',
+        { file: '/proj/b.ts' },
+        { action: 'allow', tool: 'write', specifier: '/proj/' },
+      ),
+    ).toBe(true)
   })
 })
 

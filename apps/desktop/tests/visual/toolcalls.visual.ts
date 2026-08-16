@@ -6,23 +6,45 @@ async function mockBridge(page: import('@playwright/test').Page) {
     window.__emit = null
     window.neonforge = {
       version: 'test',
-      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
-      workspace: { openFolder: async () => '/test', listDir: async () => [], readFile: async () => ({ ok: true, content: '// x' }) },
+      config: {
+        hasKey: async () => true,
+        getKey: async () => 'test-key',
+        setKey: async () => {},
+        clearKey: async () => {},
+      },
+      workspace: {
+        openFolder: async () => '/test',
+        listDir: async () => [],
+        readFile: async () => ({ ok: true, content: '// x' }),
+      },
       gateway: {
         validate: async () => ({ ok: true }),
         streamChat: async () => ({ ok: true }),
-        onStreamChunk: (cb: (c: unknown) => void) => { window.__emit = cb; return () => {} }
+        onStreamChunk: (cb: (c: unknown) => void) => {
+          window.__emit = cb
+          return () => {}
+        },
       },
       tools: {
         list: async () => [],
-        execute: async (name: string, args: Record<string, unknown>, opts?: { approved?: boolean }) => {
-          if (name === 'read') return { ok: true, data: '{"name":"neonforge-desktop","version":"0.1.0"}' }
-          if (name === 'write' && opts?.approved) return { ok: true, data: { file: '/test/notes.txt', snapshot: true } }
+        execute: async (
+          name: string,
+          args: Record<string, unknown>,
+          opts?: { approved?: boolean },
+        ) => {
+          if (name === 'read')
+            return { ok: true, data: '{"name":"neonforge-desktop","version":"0.1.0"}' }
+          if (name === 'write' && opts?.approved)
+            return { ok: true, data: { file: '/test/notes.txt', snapshot: true } }
           // 2026-08-07 T2（regex-todo）：needApproval 结构化字段——renderer 读字段判定授权卡（不再 includes('授权') 文本）
-          return { ok: false, needApproval: true, error: `「${name}」需要授权（L3）——approved=true 后执行` }
+          return {
+            ok: false,
+            needApproval: true,
+            error: `「${name}」需要授权（L3）——approved=true 后执行`,
+          }
         },
-        revert: async () => ({ ok: true })
-      }
+        revert: async () => ({ ok: true }),
+      },
     }
   })
 }
@@ -37,7 +59,10 @@ test('工具卡片（read 自动执行 ✅）', async ({ page }) => {
   await page.waitForTimeout(300)
   await page.evaluate(() => {
     window.__emit({ type: 'reasoning', text: '需要读取 package.json' })
-    window.__emit({ type: 'tool-call', toolCall: { name: 'read', args: { path: '/test/package.json' } } })
+    window.__emit({
+      type: 'tool-call',
+      toolCall: { name: 'read', args: { path: '/test/package.json' } },
+    })
     window.__emit({ type: 'done' })
   })
   await page.waitForTimeout(800)
@@ -60,7 +85,10 @@ test('工具卡片（bash 需授权 🔒）', async ({ page }) => {
   await page.waitForTimeout(300)
   await page.evaluate(() => {
     window.__emit({ type: 'reasoning', text: '需要查看目录' })
-    window.__emit({ type: 'tool-call', toolCall: { name: 'bash', args: { command: 'pwd && ls -la' } } })
+    window.__emit({
+      type: 'tool-call',
+      toolCall: { name: 'bash', args: { command: 'pwd && ls -la' } },
+    })
     window.__emit({ type: 'done' })
   })
   await page.waitForTimeout(800)
@@ -85,7 +113,10 @@ test('工具卡片（write 授权执行 → 可回滚 ↩️ → 已回滚）', 
   await page.waitForTimeout(300)
   await page.evaluate(() => {
     window.__emit({ type: 'reasoning', text: '需要写入文件' })
-    window.__emit({ type: 'tool-call', toolCall: { name: 'write', args: { path: '/test/notes.txt', content: 'hello' } } })
+    window.__emit({
+      type: 'tool-call',
+      toolCall: { name: 'write', args: { path: '/test/notes.txt', content: 'hello' } },
+    })
     window.__emit({ type: 'done' })
   })
   await page.waitForTimeout(800)

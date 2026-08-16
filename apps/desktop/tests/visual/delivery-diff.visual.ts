@@ -5,12 +5,25 @@ async function mockBridge(page: import('@playwright/test').Page) {
   await page.addInitScript(() => {
     window.neonforge = {
       version: 'test',
-      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
-      workspace: { openFolder: async () => '/test', listDir: async () => [], readFile: async () => ({ ok: true, content: '// x' }) },
-      gateway: { validate: async () => ({ ok: true }), streamChat: async () => ({ ok: true }), onStreamChunk: () => () => {} },
+      config: {
+        hasKey: async () => true,
+        getKey: async () => 'test-key',
+        setKey: async () => {},
+        clearKey: async () => {},
+      },
+      workspace: {
+        openFolder: async () => '/test',
+        listDir: async () => [],
+        readFile: async () => ({ ok: true, content: '// x' }),
+      },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        streamChat: async () => ({ ok: true }),
+        onStreamChunk: () => () => {},
+      },
       delivery: {
         applyDiff: async () => ({ ok: true, file: '/test/a.txt' }),
-        revertDiff: async () => ({ ok: true })
+        revertDiff: async () => ({ ok: true }),
       },
       demo: {
         delivery: {
@@ -21,10 +34,13 @@ async function mockBridge(page: import('@playwright/test').Page) {
           nextSteps: ['重新运行验证'],
           rerunLabel: '上次那个再跑一遍',
           diffs: [
-            { path: '/test/a.txt', diff: '--- a/a.txt\n+++ b/a.txt\n@@ -1,2 +1,2 @@\n-hello worl\n+hello world' }
-          ]
-        }
-      }
+            {
+              path: '/test/a.txt',
+              diff: '--- a/a.txt\n+++ b/a.txt\n@@ -1,2 +1,2 @@\n-hello worl\n+hello world',
+            },
+          ],
+        },
+      },
     }
   })
 }

@@ -5,7 +5,14 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { readFileSync, existsSync } from 'node:fs'
 import path from 'node:path'
 
-const LSP_TOOLS = ['find_definition', 'find_references', 'get_imports', 'get_call_chain', 'get_type_info', 'get_diagnostics'] as const
+const LSP_TOOLS = [
+  'find_definition',
+  'find_references',
+  'get_imports',
+  'get_call_chain',
+  'get_type_info',
+  'get_diagnostics',
+] as const
 
 // JSON-RPC 帧：Content-Length 头 + 消息体（LSP stdio 传输）
 class LspConnection {
@@ -17,20 +24,35 @@ class LspConnection {
 
   async start(projectPath: string): Promise<void> {
     const bin = path.join(process.cwd(), 'node_modules', '.bin', 'typescript-language-server')
-    if (!existsSync(bin)) throw new Error('typescript-language-server 未安装——npm i -D typescript-language-server')
+    if (!existsSync(bin))
+      throw new Error('typescript-language-server 未安装——npm i -D typescript-language-server')
     this.proc = spawn(bin, ['--stdio'], { stdio: ['pipe', 'pipe', 'pipe'] })
     this.proc.stdout?.setEncoding('utf-8')
     this.proc.stdout?.on('data', (d: string) => this.onData(d))
-    this.proc.stderr?.on('data', (d: Buffer) => console.log('[lsp] stderr:', String(d).slice(0, 300)))
-    this.proc.on('exit', () => { this.rejectAll(new Error('LSP 进程退出')) })
+    this.proc.stderr?.on('data', (d: Buffer) =>
+      console.log('[lsp] stderr:', String(d).slice(0, 300)),
+    )
+    this.proc.on('exit', () => {
+      this.rejectAll(new Error('LSP 进程退出'))
+    })
 
     await this.request('initialize', {
       processId: process.pid,
       rootUri: pathToUri(projectPath),
-      capabilities: { textDocument: { hover: { contentFormat: ['plaintext'] }, definition: {}, references: {}, documentSymbol: {}, diagnostic: {} } }
+      capabilities: {
+        textDocument: {
+          hover: { contentFormat: ['plaintext'] },
+          definition: {},
+          references: {},
+          documentSymbol: {},
+          diagnostic: {},
+        },
+      },
     })
     this.notify('initialized', {})
-    this.notify('workspace/didChangeConfiguration', { settings: { typescript: {}, javascript: {} } })
+    this.notify('workspace/didChangeConfiguration', {
+      settings: { typescript: {}, javascript: {} },
+    })
   }
 
   async request(method: string, params: unknown, timeoutMs = 15000): Promise<unknown> {
@@ -52,14 +74,24 @@ class LspConnection {
   }
 
   stop(): void {
-    try { this.notify('shutdown', null) } catch { /* ignore */ }
-    try { this.notify('exit', null) } catch { /* ignore */ }
+    try {
+      this.notify('shutdown', null)
+    } catch {
+      /* ignore */
+    }
+    try {
+      this.notify('exit', null)
+    } catch {
+      /* ignore */
+    }
     this.proc?.kill()
     this.proc = null
     this.rejectAll(new Error('LSP 已关闭'))
   }
 
-  isRunning(): boolean { return !!this.proc }
+  isRunning(): boolean {
+    return !!this.proc
+  }
 
   private send(msg: unknown): void {
     if (!this.proc?.stdin?.writable) throw new Error('LSP 未连接')
@@ -75,7 +107,10 @@ class LspConnection {
       if (headEnd === -1) return
       const header = this.buffer.slice(0, headEnd)
       const m = header.match(/Content-Length:\s*(\d+)/i)
-      if (!m) { this.buffer = this.buffer.slice(headEnd + 4); continue }
+      if (!m) {
+        this.buffer = this.buffer.slice(headEnd + 4)
+        continue
+      }
       const len = parseInt(m[1], 10)
       const bodyStart = headEnd + 4
       if (this.buffer.length < bodyStart + len) return
@@ -86,7 +121,8 @@ class LspConnection {
         if (msg.id !== undefined && this.pending.has(msg.id)) {
           const p = this.pending.get(msg.id)!
           this.pending.delete(msg.id)
-          if (msg.error) p.reject(new Error(`LSP 错误: ${msg.error.message ?? JSON.stringify(msg.error)}`))
+          if (msg.error)
+            p.reject(new Error(`LSP 错误: ${msg.error.message ?? JSON.stringify(msg.error)}`))
           else p.resolve(msg.result)
         } else if (msg.method && this.onNotification) {
           this.onNotification(msg.method, msg.params)
@@ -104,7 +140,14 @@ class LspConnection {
 }
 
 function pathToUri(p: string): string {
-  return 'file://' + p.split(path.sep).map(encodeURIComponent).join('/').replace(/^file:\/\/\//, 'file:///')
+  return (
+    'file://' +
+    p
+      .split(path.sep)
+      .map(encodeURIComponent)
+      .join('/')
+      .replace(/^file:\/\/\//, 'file:///')
+  )
 }
 
 // LSP definition/references 可返回 Location | Location[] | LocationLink[]——统一为 {uri, range}（LocationLink 用 targetUri/targetRange）
@@ -147,7 +190,9 @@ export class LspService {
     this.diagnostics.clear()
   }
 
-  isConnected(): boolean { return !!this.conn?.isRunning() }
+  isConnected(): boolean {
+    return !!this.conn?.isRunning()
+  }
 
   private requireConn(): LspConnection {
     if (!this.conn || !this.conn.isRunning()) throw new Error('LSP 未连接——打开项目后自动连接')
@@ -162,16 +207,27 @@ export class LspService {
     let openedAny = false
     if (!this.opened.has(uri)) {
       const text = existsSync(filePath) ? readFileSync(filePath, 'utf-8') : ''
-      conn.notify('textDocument/didOpen', { textDocument: { uri, languageId: 'typescript', version: 1, text } })
+      conn.notify('textDocument/didOpen', {
+        textDocument: { uri, languageId: 'typescript', version: 1, text },
+      })
       this.opened.add(uri)
       openedAny = true
       for (const imp of extractImports(text)) {
         const target = resolveImportPath(filePath, imp.from, this.projectPath)
         if (!target || this.opened.has(pathToUri(target))) continue
         try {
-          conn.notify('textDocument/didOpen', { textDocument: { uri: pathToUri(target), languageId: 'typescript', version: 1, text: readFileSync(target, 'utf-8') } })
+          conn.notify('textDocument/didOpen', {
+            textDocument: {
+              uri: pathToUri(target),
+              languageId: 'typescript',
+              version: 1,
+              text: readFileSync(target, 'utf-8'),
+            },
+          })
           this.opened.add(pathToUri(target))
-        } catch { /* 不可读文件跳过 */ }
+        } catch {
+          /* 不可读文件跳过 */
+        }
       }
     }
     // didOpen 为 notify（异步）——等一拍保证 tsserver 已处理（definition 紧随查询）
@@ -190,7 +246,10 @@ export class LspService {
     let character = hasExplicitPos ? Number(args.character) : 0
     if (!hasExplicitPos && args.symbol && existsSync(filePath)) {
       const pos = locateSymbol(readFileSync(filePath, 'utf-8'), String(args.symbol))
-      if (pos) { line = pos.line; character = pos.character }
+      if (pos) {
+        line = pos.line
+        character = pos.character
+      }
     }
     const uri = await this.ensureOpen(filePath)
     const position = { line, character }
@@ -198,9 +257,17 @@ export class LspService {
 
     switch (kind) {
       case 'find_definition':
-        return normalizeLocations(await conn.request('textDocument/definition', { textDocument: doc, position }))
+        return normalizeLocations(
+          await conn.request('textDocument/definition', { textDocument: doc, position }),
+        )
       case 'find_references':
-        return normalizeLocations(await conn.request('textDocument/references', { textDocument: doc, position, context: { includeDeclaration: true } }))
+        return normalizeLocations(
+          await conn.request('textDocument/references', {
+            textDocument: doc,
+            position,
+            context: { includeDeclaration: true },
+          }),
+        )
       case 'get_type_info':
         return conn.request('textDocument/hover', { textDocument: doc, position })
       case 'get_diagnostics':
@@ -210,7 +277,9 @@ export class LspService {
         return this.diagnostics.get(uri) ?? []
       case 'get_imports':
         // 本地文本扫描（LSP 无 imports 查询——零成本确定性）
-        return { imports: extractImports(existsSync(filePath) ? readFileSync(filePath, 'utf-8') : '') }
+        return {
+          imports: extractImports(existsSync(filePath) ? readFileSync(filePath, 'utf-8') : ''),
+        }
       case 'get_call_chain':
         // 降级：documentSymbol 返回符号结构（V1 说明——真实调用图后续）
         return conn.request('textDocument/documentSymbol', { textDocument: doc })
@@ -227,7 +296,10 @@ export function extractImports(text: string): Array<{ from: string; names: strin
     const t = line.trim()
     const esm = t.match(/^import\s+(?:type\s+)?(?:\{([^}]*)\}|([^'"]+?))\s+from\s+['"]([^'"]+)['"]/)
     if (esm) {
-      const names = (esm[1] ?? esm[2] ?? '').split(',').map((s) => s.trim().split(/\s+as\s+/)[0]).filter(Boolean)
+      const names = (esm[1] ?? esm[2] ?? '')
+        .split(',')
+        .map((s) => s.trim().split(/\s+as\s+/)[0])
+        .filter(Boolean)
       out.push({ from: esm[3], names })
       continue
     }
@@ -238,7 +310,11 @@ export function extractImports(text: string): Array<{ from: string; names: strin
 }
 
 // 本地相对 import → 目标文件解析（.ts/.tsx/index 候选；仅项目内——防逃逸）
-function resolveImportPath(fromFile: string, spec: string, projectPath: string | null): string | null {
+function resolveImportPath(
+  fromFile: string,
+  spec: string,
+  projectPath: string | null,
+): string | null {
   if (!spec.startsWith('.')) return null // 包导入（node_modules 无需 didOpen）
   const base = path.dirname(fromFile)
   const candidates = [
@@ -246,7 +322,7 @@ function resolveImportPath(fromFile: string, spec: string, projectPath: string |
     path.resolve(base, spec + '.ts'),
     path.resolve(base, spec + '.tsx'),
     path.resolve(base, spec, 'index.ts'),
-    path.resolve(base, spec, 'index.tsx')
+    path.resolve(base, spec, 'index.tsx'),
   ]
   for (const c of candidates) {
     if (existsSync(c) && (!projectPath || c.startsWith(projectPath))) return c
@@ -265,7 +341,10 @@ function resolveLspPath(p: string, rootPath?: string): string {
 }
 
 // 文本扫描定位符号（symbol → line/character）——确定性零 token，模型无需算行号
-export function locateSymbol(text: string, symbol: string): { line: number; character: number } | null {
+export function locateSymbol(
+  text: string,
+  symbol: string,
+): { line: number; character: number } | null {
   if (!symbol) return null
   const lines = text.split(/\r?\n/)
   for (let i = 0; i < lines.length; i++) {
@@ -279,7 +358,13 @@ export const lsp = new LspService()
 
 // 注册 6 LSP 工具到 ToolRegistry（source: 'lsp'；2026-08-02 起加入模型 TOOL_DEFS——deepseek 模型可自主调用查询真实代码上下文）
 export function registerLspTools(registry: {
-  register(t: { name: string; source: 'lsp'; requiresApproval: boolean; risk: 'none'; execute: (args: Record<string, unknown>, ctx: { rootPath?: string }) => Promise<unknown> }): void
+  register(t: {
+    name: string
+    source: 'lsp'
+    requiresApproval: boolean
+    risk: 'none'
+    execute: (args: Record<string, unknown>, ctx: { rootPath?: string }) => Promise<unknown>
+  }): void
 }): void {
   for (const name of LSP_TOOLS) {
     registry.register({
@@ -287,7 +372,7 @@ export function registerLspTools(registry: {
       source: 'lsp',
       requiresApproval: false,
       risk: 'none',
-      execute: (args, ctx) => lsp.query(name, args, ctx?.rootPath)
+      execute: (args, ctx) => lsp.query(name, args, ctx?.rootPath),
     })
   }
 }

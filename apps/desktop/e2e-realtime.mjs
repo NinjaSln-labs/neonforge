@@ -7,7 +7,10 @@ const KEY = process.env.NF_TEST_KEY
 const TEST_DIR = '/tmp/nf-e2e-test' // 空目录（模拟 neorforge-test）
 
 async function main() {
-  if (!KEY) { console.log('❌ 需要 NF_TEST_KEY'); process.exit(1) }
+  if (!KEY) {
+    console.log('❌ 需要 NF_TEST_KEY')
+    process.exit(1)
+  }
   // 确保空目录存在
   if (!existsSync(TEST_DIR)) mkdirSync(TEST_DIR, { recursive: true })
   console.log('=== 真实环境 E2E：空目录 + 真实 DeepSeek API ===')
@@ -15,7 +18,12 @@ async function main() {
 
   const app = await _electron.launch({
     args: ['.'],
-    env: { ...process.env, VITE_DEV_SERVER_URL: 'http://localhost:5173', NF_TEST_PROJECT: TEST_DIR, ELECTRON_RUN_AS_NODE: '' }
+    env: {
+      ...process.env,
+      VITE_DEV_SERVER_URL: 'http://localhost:5173',
+      NF_TEST_PROJECT: TEST_DIR,
+      ELECTRON_RUN_AS_NODE: '',
+    },
   })
   const page = await app.firstWindow()
   page.on('pageerror', (e) => console.log('[pageerror]', String(e).slice(0, 200)))
@@ -42,9 +50,13 @@ async function main() {
     const texts = await page.locator('.nf-msg').allInnerTexts()
     lastText = texts[texts.length - 1] ?? ''
     // 结束判断：最后消息不含"处理中"且非空且状态栏就绪
-    const statusbar = await page.locator('.nf-statusbar').innerText().catch(() => '')
+    const statusbar = await page
+      .locator('.nf-statusbar')
+      .innerText()
+      .catch(() => '')
     const busy = await page.locator('.nf-working').count()
-    if (!lastText.includes('处理中') && lastText.trim() && busy === 0 && statusbar.includes('就绪')) break
+    if (!lastText.includes('处理中') && lastText.trim() && busy === 0 && statusbar.includes('就绪'))
+      break
   }
 
   const duration = ((Date.now() - start) / 1000).toFixed(1)
@@ -64,4 +76,7 @@ async function main() {
   process.exit(ok ? 0 : 1)
 }
 
-main().catch((e) => { console.error('E2E ERROR:', e); process.exit(1) })
+main().catch((e) => {
+  console.error('E2E ERROR:', e)
+  process.exit(1)
+})

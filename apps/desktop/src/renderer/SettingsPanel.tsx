@@ -5,13 +5,21 @@ import { IconCheck, IconDot, IconSettings } from './icons'
 // 保留真实内容：内置插件（真实 IPC 注册表）+ 快捷键表（真实已实现）
 // 2026-08-04：L4 委托开关产品入口（原只在 demo TrustLadderPanel——产品运行时不可达）；与 ConversationPanel 同 localStorage key + 事件联动
 const DELEGATE_KEY = 'nf-delegate-lowrisk'
-const readDelegate = () => { try { return localStorage.getItem(DELEGATE_KEY) === '1' } catch { return false } }
+const readDelegate = () => {
+  try {
+    return localStorage.getItem(DELEGATE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
 
 export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
   // 2026-08-04 审计修复（D3）：Esc 关闭设置（页内面板——键盘用户退出路径；点击外部关闭留给后续）
   useEffect(() => {
     if (!onClose) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
@@ -20,11 +28,17 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
   useEffect(() => {
     void window.neonforge.plugins?.list?.().then(setPlugins)
   }, [])
-  const pluginList = plugins ?? ['code-rag', 'mcp-bridge', 'git', 'stats', 'language-server'].map((name) => ({ name, active: true }))
+  const pluginList =
+    plugins ??
+    ['code-rag', 'mcp-bridge', 'git', 'stats', 'language-server'].map((name) => ({
+      name,
+      active: true,
+    }))
 
   const togglePlugin = (name: string, active: boolean) => {
     void window.neonforge.plugins?.toggle?.(name, active).then((ok) => {
-      if (ok) setPlugins((prev) => prev?.map((p) => (p.name === name ? { ...p, active } : p)) ?? null)
+      if (ok)
+        setPlugins((prev) => prev?.map((p) => (p.name === name ? { ...p, active } : p)) ?? null)
     })
   }
 
@@ -32,7 +46,11 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
   const [delegate, setDelegate] = useState(readDelegate)
   const handleDelegate = (v: boolean) => {
     setDelegate(v)
-    try { localStorage.setItem(DELEGATE_KEY, v ? '1' : '0') } catch { /* 存储不可用——本次会话仍生效 */ }
+    try {
+      localStorage.setItem(DELEGATE_KEY, v ? '1' : '0')
+    } catch {
+      /* 存储不可用——本次会话仍生效 */
+    }
     window.dispatchEvent(new Event('nf-delegate-changed'))
   }
 
@@ -48,13 +66,20 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
   return (
     <div className="nf-settings">
       <div className="nf-flow__head">
-        <span className="nf-flow__title"><IconSettings size={14} /> 设置</span>
+        <span className="nf-flow__title">
+          <IconSettings size={14} /> 设置
+        </span>
       </div>
 
       {/* 2026-08-04：对话记录导出（自动记录对话日志——可导出 .md 发给 AI 反馈） */}
       <div className="nf-settings__row">
-        <span>导出对话记录 <em>把最近对话导出为 .md 文件（保存到 下载 文件夹），方便反馈时发给搭档看实际情况</em></span>
-        <button type="button" className="nf-settings__export" onClick={handleExport}>导出</button>
+        <span>
+          导出对话记录{' '}
+          <em>把最近对话导出为 .md 文件（保存到 下载 文件夹），方便反馈时发给搭档看实际情况</em>
+        </span>
+        <button type="button" className="nf-settings__export" onClick={handleExport}>
+          导出
+        </button>
       </div>
       {exportMsg && <p className="nf-settings__export-msg">{exportMsg}</p>}
 
@@ -79,7 +104,10 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
 
       {/* 2026-08-04：L4 委托开关（真实——与对话授权联动；原仅 demo TrustLadderPanel 可开，产品无入口） */}
       <div className="nf-settings__row">
-        <span>低风险文件操作自动授权 <em>写入/修改文件不再每次确认——会先备份、可随时关闭；执行命令始终单独确认</em></span>
+        <span>
+          低风险文件操作自动授权{' '}
+          <em>写入/修改文件不再每次确认——会先备份、可随时关闭；执行命令始终单独确认</em>
+        </span>
         <label className="nf-settings__row--switch">
           <input
             type="checkbox"

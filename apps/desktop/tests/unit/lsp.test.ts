@@ -11,7 +11,7 @@ describe('extractImports（本地文本扫描——零成本确定性）', () =>
       { from: 'react', names: ['React'] },
       { from: 'react', names: ['useState', 'useEffect'] },
       { from: 'react', names: ['FC'] },
-      { from: './styles.css', names: [] }
+      { from: './styles.css', names: [] },
     ])
   })
 
@@ -39,8 +39,21 @@ describe('LSP 真实连接（typescript-language-server）', () => {
   beforeAll(async () => {
     // 临时 TS 项目：a.ts 定义 greet，b.ts 引用
     mkdirSync(`${TMP}/src`, { recursive: true })
-    writeFileSync(`${TMP}/tsconfig.json`, JSON.stringify({ compilerOptions: { strict: true, module: 'esnext', target: 'es2020', moduleResolution: 'bundler' } }))
-    writeFileSync(`${TMP}/src/a.ts`, 'export function greet(name: string): string {\n  return `hi ${name}`\n}\n')
+    writeFileSync(
+      `${TMP}/tsconfig.json`,
+      JSON.stringify({
+        compilerOptions: {
+          strict: true,
+          module: 'esnext',
+          target: 'es2020',
+          moduleResolution: 'bundler',
+        },
+      }),
+    )
+    writeFileSync(
+      `${TMP}/src/a.ts`,
+      'export function greet(name: string): string {\n  return `hi ${name}`\n}\n',
+    )
     writeFileSync(`${TMP}/src/b.ts`, "import { greet } from './a'\nconst msg = greet('Neon')\n")
     await lsp.connect(TMP)
   }, 30000)
@@ -51,7 +64,11 @@ describe('LSP 真实连接（typescript-language-server）', () => {
   })
 
   it('find_definition：b.ts 引用 greet → 跳到 a.ts 定义行', async () => {
-    const r = (await lsp.query('find_definition', { path: `${TMP}/src/b.ts`, line: 1, character: 13 })) as Array<{ uri?: string; range?: { start: { line: number } } }>
+    const r = (await lsp.query('find_definition', {
+      path: `${TMP}/src/b.ts`,
+      line: 1,
+      character: 13,
+    })) as Array<{ uri?: string; range?: { start: { line: number } } }>
     expect(Array.isArray(r)).toBe(true)
     expect(r.length).toBeGreaterThan(0)
     expect(r[0].uri).toContain('a.ts')
@@ -60,7 +77,11 @@ describe('LSP 真实连接（typescript-language-server）', () => {
 
   it('find_definition：模型视角——path+symbol（无行号）+ rootPath 相对路径', async () => {
     // 模型传相对路径（src/b.ts）→ rootPath join；symbol=greet → 文本扫描定位 → LSP 查询
-    const r = (await lsp.query('find_definition', { path: 'src/b.ts', symbol: 'greet' }, TMP)) as Array<{ uri?: string; range?: { start: { line: number } } }>
+    const r = (await lsp.query(
+      'find_definition',
+      { path: 'src/b.ts', symbol: 'greet' },
+      TMP,
+    )) as Array<{ uri?: string; range?: { start: { line: number } } }>
     expect(Array.isArray(r)).toBe(true)
     expect(r.length).toBeGreaterThan(0)
     expect(r[0].uri).toContain('a.ts')
@@ -69,7 +90,11 @@ describe('LSP 真实连接（typescript-language-server）', () => {
 
   it('find_definition：模型视角——类绝对路径（/src/b.ts）也解析到 rootPath', async () => {
     // 模型可能返回 /src/b.ts（对齐 tools.ts：/package.json 语义 → 项目根下）
-    const r = (await lsp.query('find_definition', { path: '/src/b.ts', symbol: 'greet' }, TMP)) as Array<{ uri?: string }>
+    const r = (await lsp.query(
+      'find_definition',
+      { path: '/src/b.ts', symbol: 'greet' },
+      TMP,
+    )) as Array<{ uri?: string }>
     expect(Array.isArray(r)).toBe(true)
     expect(r.length).toBeGreaterThan(0)
     expect(r[0].uri).toContain('a.ts')
@@ -81,7 +106,9 @@ describe('LSP 真实连接（typescript-language-server）', () => {
   }, 30000)
 
   it('get_imports：b.ts 提取 import', async () => {
-    const r = (await lsp.query('get_imports', { path: `${TMP}/src/b.ts` })) as { imports: Array<{ from: string; names: string[] }> }
+    const r = (await lsp.query('get_imports', { path: `${TMP}/src/b.ts` })) as {
+      imports: Array<{ from: string; names: string[] }>
+    }
     expect(r.imports).toEqual([{ from: './a', names: ['greet'] }])
   }, 30000)
 })

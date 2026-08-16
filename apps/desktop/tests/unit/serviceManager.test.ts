@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { parseLocalUrl, isServerCommand, isServerLikeCommand, isInstallCommand } from '../../src/main/serviceManager'
+import {
+  parseLocalUrl,
+  isServerCommand,
+  isServerLikeCommand,
+  isInstallCommand,
+} from '../../src/main/serviceManager'
 // 2026-08-06 环境单源（d4c6e2c）：normalizeServerCommand/HOST_RESERVED_PORTS 移到 envManager（显式端口替换 --port 0——坑 77 vite 忽略 0）
 import { normalizeServerCommand, HOST_RESERVED_PORTS } from '../../src/main/envManager'
 
@@ -8,7 +13,9 @@ import { normalizeServerCommand, HOST_RESERVED_PORTS } from '../../src/main/envM
 
 describe('ServiceManager 服务管理（2026-08-06 设计层升级）', () => {
   it('parseLocalUrl：解析 vite/构建工具输出里的本地地址', () => {
-    expect(parseLocalUrl('  VITE v5.4.21  ready in 975 ms\n  ➜  Local:   http://localhost:5174/\n')).toBe('http://localhost:5174/')
+    expect(
+      parseLocalUrl('  VITE v5.4.21  ready in 975 ms\n  ➜  Local:   http://localhost:5174/\n'),
+    ).toBe('http://localhost:5174/')
     expect(parseLocalUrl('Local: http://127.0.0.1:8080/')).toBe('http://127.0.0.1:8080/')
     expect(parseLocalUrl('plain text no url')).toBeNull()
     expect(parseLocalUrl('')).toBeNull()

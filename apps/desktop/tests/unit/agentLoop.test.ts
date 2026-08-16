@@ -1,12 +1,21 @@
 import { describe, it, expect } from 'vitest'
-import { evaluateTurnProgress, detectStuck, initialStuckState, parseExecutionPlan, summarizeCapability, goalFallbackTrigger, isQuestionLike } from '../../src/domain/agentLoop'
+import {
+  evaluateTurnProgress,
+  detectStuck,
+  initialStuckState,
+  parseExecutionPlan,
+  summarizeCapability,
+  goalFallbackTrigger,
+  isQuestionLike,
+} from '../../src/domain/agentLoop'
 
 // 领域层：progress-aware 卡住检测（2026-08-06 DDD 落地——行业调研 tavily+serper 双源：activity≠progress + 连续无进展升级 + needs-human）
 
 // 2026-08-07 无阶段重构 S5：执行方案清单解析（plannedFiles 来源 ∪ 执行方案清单）
 describe('parseExecutionPlan（执行方案清单解析）', () => {
   it('【执行方案】块内 - 行提取文件路径（去括号原因）', () => {
-    const text = '以下是执行方案：【执行方案】\n- index.html（页面骨架）\n- src/main.js（游戏逻辑）\n- style.css\n确认后开始。'
+    const text =
+      '以下是执行方案：【执行方案】\n- index.html（页面骨架）\n- src/main.js（游戏逻辑）\n- style.css\n确认后开始。'
     expect(parseExecutionPlan(text)).toEqual(['index.html', 'src/main.js', 'style.css'])
   })
   it('无【执行方案】标记 → 返回空数组（防误抓正文 - 行）', () => {
@@ -20,11 +29,14 @@ describe('parseExecutionPlan（执行方案清单解析）', () => {
     expect(parseExecutionPlan('【执行方案】\n• b.js（改配置）')).toEqual(['b.js'])
   })
   it('自然语言说明行过滤（坑 102 取证 fa596cdd：模型把备注当行首——「项目说明 README 保持不动」入清单 → plannedComplete 永不收敛 → forceTool 恒 true → read 自检循环）', () => {
-    const text = '【执行方案】\n- index.html（页面骨架）\n- 项目说明 README 保持不动\n- src/game.js（游戏逻辑）'
+    const text =
+      '【执行方案】\n- index.html（页面骨架）\n- 项目说明 README 保持不动\n- src/game.js（游戏逻辑）'
     expect(parseExecutionPlan(text)).toEqual(['index.html', 'src/game.js'])
   })
   it('绝对路径与含空格但带扩展名的合法路径保留（中文文件名容错——不误伤）', () => {
-    expect(parseExecutionPlan('【执行方案】\n- /Users/sin/test/package.html\n- docs/我的 文件.md')).toEqual(['/Users/sin/test/package.html', 'docs/我的 文件.md'])
+    expect(
+      parseExecutionPlan('【执行方案】\n- /Users/sin/test/package.html\n- docs/我的 文件.md'),
+    ).toEqual(['/Users/sin/test/package.html', 'docs/我的 文件.md'])
   })
   it('目录行（无扩展名无空格）保留', () => {
     expect(parseExecutionPlan('【执行方案】\n- src/\n- assets')).toEqual(['src/', 'assets'])
@@ -35,36 +47,79 @@ describe('ProgressEvaluator（单轮进展评估）', () => {
   const empty = new Set<string>()
 
   it('write/edit 成功 = 真实产出（artifactProduced）', () => {
-    const p = evaluateTurnProgress({ toolCalls: [{ name: 'edit', status: 'done', file: 'main.js' }], content: '改好了', prevReadFiles: empty })
+    const p = evaluateTurnProgress({
+      toolCalls: [{ name: 'edit', status: 'done', file: 'main.js' }],
+      content: '改好了',
+      prevReadFiles: empty,
+    })
     expect(p.artifactProduced).toBe(true)
   })
 
   // 2026-08-14 缝隙 2：副作用工具成功（bash 安装/验证）也算进展——安装/验证阶段不再被 escalate 打断合法链
   it('副作用工具成功 = 进展（sideEffectSucceeded——bash 安装/验证）；只读 bash 成功不算', () => {
-    const install = evaluateTurnProgress({ toolCalls: [{ name: 'bash', status: 'done', command: 'npm install three' }], content: '', prevReadFiles: empty })
+    const install = evaluateTurnProgress({
+      toolCalls: [{ name: 'bash', status: 'done', command: 'npm install three' }],
+      content: '',
+      prevReadFiles: empty,
+    })
     expect(install.sideEffectSucceeded).toBe(true)
-    const readonly = evaluateTurnProgress({ toolCalls: [{ name: 'bash', status: 'done', command: 'ls -la' }], content: '', prevReadFiles: empty })
+    const readonly = evaluateTurnProgress({
+      toolCalls: [{ name: 'bash', status: 'done', command: 'ls -la' }],
+      content: '',
+      prevReadFiles: empty,
+    })
     expect(readonly.sideEffectSucceeded).toBe(false) // 防换文件/换只读命令假装进展（坑 81）
   })
 
   it('read 新文件 = 新信息（readNewFile）；同文件重复 read = 非进展', () => {
     const prev = new Set(['main.js'])
-    expect(evaluateTurnProgress({ toolCalls: [{ name: 'read', status: 'done', file: 'main.js' }], content: '', prevReadFiles: prev }).readNewFile).toBe(false)
-    expect(evaluateTurnProgress({ toolCalls: [{ name: 'read', status: 'done', file: 'other.js' }], content: '', prevReadFiles: prev }).readNewFile).toBe(true)
+    expect(
+      evaluateTurnProgress({
+        toolCalls: [{ name: 'read', status: 'done', file: 'main.js' }],
+        content: '',
+        prevReadFiles: prev,
+      }).readNewFile,
+    ).toBe(false)
+    expect(
+      evaluateTurnProgress({
+        toolCalls: [{ name: 'read', status: 'done', file: 'other.js' }],
+        content: '',
+        prevReadFiles: prev,
+      }).readNewFile,
+    ).toBe(true)
   })
 
   it('问句/沟通/完成态 = 正常对话（排除——不算停滞）', () => {
-    expect(evaluateTurnProgress({ toolCalls: [], content: '这样可以吗？', prevReadFiles: empty }).isQuestion).toBe(true)
-    expect(evaluateTurnProgress({ toolCalls: [], content: '我先和你确认一下', prevReadFiles: empty }).isCommunication).toBe(true)
-    expect(evaluateTurnProgress({ toolCalls: [], content: '游戏已经做好了', prevReadFiles: empty }).isDone).toBe(true)
+    expect(
+      evaluateTurnProgress({ toolCalls: [], content: '这样可以吗？', prevReadFiles: empty })
+        .isQuestion,
+    ).toBe(true)
+    expect(
+      evaluateTurnProgress({ toolCalls: [], content: '我先和你确认一下', prevReadFiles: empty })
+        .isCommunication,
+    ).toBe(true)
+    expect(
+      evaluateTurnProgress({ toolCalls: [], content: '游戏已经做好了', prevReadFiles: empty })
+        .isDone,
+    ).toBe(true)
   })
 })
 
 describe('StuckDetector（卡住检测——连续无进展升级）', () => {
-  const turn = (over: Partial<Parameters<typeof evaluateTurnProgress>[0] & { toolCalls: Array<{ name: string; status: string; file?: string }> }> = {}) => {
+  const turn = (
+    over: Partial<
+      Parameters<typeof evaluateTurnProgress>[0] & {
+        toolCalls: Array<{ name: string; status: string; file?: string }>
+      }
+    > = {},
+  ) => {
     const toolCalls = over.toolCalls ?? []
     const content = over.content ?? ''
-    return evaluateTurnProgress({ toolCalls: toolCalls as Array<{ name: string; status: string; file?: string }>, content, prevReadFiles: over.prevReadFiles ?? new Set() })
+    return evaluateTurnProgress({
+      toolCalls: toolCalls as Array<{ name: string; status: string; file?: string }>,
+      content,
+      prevReadFiles: over.prevReadFiles ?? new Set(),
+    })
   }
   const noProgressTurn = () => turn({ toolCalls: [], content: '我看到了，问题是阴影导致卡顿' }) // 分析结论无工具
 
@@ -80,7 +135,11 @@ describe('StuckDetector（卡住检测——连续无进展升级）', () => {
   // 2026-08-14 缝隙 2：安装/验证阶段（bash 成功）→ 停滞计数重置——不 escalate 打断合法工具链
   it('副作用工具成功（bash 安装）→ 重置停滞计数（不 escalate）', () => {
     const r1 = detectStuck({ turn: noProgressTurn(), prev: initialStuckState }) // 累积 1
-    const installing = evaluateTurnProgress({ toolCalls: [{ name: 'bash', status: 'done', command: 'npm install three' }], content: '', prevReadFiles: new Set() })
+    const installing = evaluateTurnProgress({
+      toolCalls: [{ name: 'bash', status: 'done', command: 'npm install three' }],
+      content: '',
+      prevReadFiles: new Set(),
+    })
     const r2 = detectStuck({ turn: installing, prev: r1.state }) // 进展 → 重置
     expect(r2.state).toEqual(initialStuckState)
     const r3 = detectStuck({ turn: noProgressTurn(), prev: r2.state }) // 重新累积
@@ -114,7 +173,13 @@ describe('StuckDetector（卡住检测——连续无进展升级）', () => {
   it('规划文件全部产出 → 无工具结束 = 阶段完成（不 escalate）', () => {
     const planned = new Set(['index.html', 'main.js'])
     const produced = new Set(['index.html', 'main.js'])
-    const doneTurn = evaluateTurnProgress({ toolCalls: [], content: '文件都写完了', prevReadFiles: new Set(), plannedFiles: planned, producedFiles: produced })
+    const doneTurn = evaluateTurnProgress({
+      toolCalls: [],
+      content: '文件都写完了',
+      prevReadFiles: new Set(),
+      plannedFiles: planned,
+      producedFiles: produced,
+    })
     expect(doneTurn.hasPlannedFiles).toBe(true)
     expect(doneTurn.hasRemainingPlanned).toBe(false)
     const r = detectStuck({ turn: doneTurn, prev: { consecutiveNoProgress: 1, escalations: 0 } })
@@ -125,13 +190,21 @@ describe('StuckDetector（卡住检测——连续无进展升级）', () => {
   it('规划文件未全部产出 → 无工具结束 = 任务未完成（escalate 消息带剩余数）', () => {
     const planned = new Set(['index.html', 'main.js'])
     const produced = new Set(['index.html']) // main.js 未产出
-    const incompleteTurn = evaluateTurnProgress({ toolCalls: [], content: '我看到了问题', prevReadFiles: new Set(), plannedFiles: planned, producedFiles: produced })
+    const incompleteTurn = evaluateTurnProgress({
+      toolCalls: [],
+      content: '我看到了问题',
+      prevReadFiles: new Set(),
+      plannedFiles: planned,
+      producedFiles: produced,
+    })
     expect(incompleteTurn.hasRemainingPlanned).toBe(true)
     expect(incompleteTurn.remainingCount).toBe(1)
     const r1 = detectStuck({ turn: incompleteTurn, prev: initialStuckState })
     const r2 = detectStuck({ turn: incompleteTurn, prev: r1.state })
     expect(r2.event?.type).toBe('escalate')
-    expect(r2.event && 'message' in r2.event ? r2.event.message : '').toContain('规划文件还有 1 个没写')
+    expect(r2.event && 'message' in r2.event ? r2.event.message : '').toContain(
+      '规划文件还有 1 个没写',
+    )
   })
 
   // 2026-08-06 补充（用户「清单来源不只 approve-files」——③ projectFiles 项目文件树产出校验）
@@ -139,7 +212,14 @@ describe('StuckDetector（卡住检测——连续无进展升级）', () => {
     const planned = new Set(['index.html', 'main.js'])
     const produced = new Set(['index.html']) // write 记录只有 index.html
     const projectFiles = new Set(['index.html', 'main.js']) // 但 main.js 已在文件树（树刷新确认产出）
-    const turn = evaluateTurnProgress({ toolCalls: [], content: '都写好了', prevReadFiles: new Set(), plannedFiles: planned, producedFiles: produced, projectFiles })
+    const turn = evaluateTurnProgress({
+      toolCalls: [],
+      content: '都写好了',
+      prevReadFiles: new Set(),
+      plannedFiles: planned,
+      producedFiles: produced,
+      projectFiles,
+    })
     expect(turn.hasRemainingPlanned).toBe(false) // 树中已有 → 无剩余
     const r = detectStuck({ turn, prev: { consecutiveNoProgress: 1, escalations: 0 } })
     expect(r.event).toBeUndefined()
@@ -150,20 +230,24 @@ describe('StuckDetector（卡住检测——连续无进展升级）', () => {
 // 能力检测结果判定——是否需要用户实质决策（missing/failed）+ 人类化摘要（领域层纯函数——L1 可测）
 describe('summarizeCapability（能力检测结果——是否需用户决策）', () => {
   it('能力全部 ready → 无需用户决策（needsUser=false——工具卡默认隐藏）', () => {
-    const r = summarizeCapability({ capabilities: [
-      { id: 'text-edit', status: 'ready' },
-      { id: 'node-runtime', status: 'ready' }
-    ] })
+    const r = summarizeCapability({
+      capabilities: [
+        { id: 'text-edit', status: 'ready' },
+        { id: 'node-runtime', status: 'ready' },
+      ],
+    })
     expect(r.needsUser).toBe(false)
     expect(r.summary).toContain('能力齐备')
   })
 
   it('存在 missing/failed → 需要用户决策（needsUser=true——工具卡展示）+ 摘要列出缺失', () => {
-    const r = summarizeCapability({ capabilities: [
-      { id: 'text-edit', status: 'ready' },
-      { id: 'node-runtime', status: 'missing', detail: 'node 未安装' },
-      { id: 'dev-tools', status: 'failed' }
-    ] })
+    const r = summarizeCapability({
+      capabilities: [
+        { id: 'text-edit', status: 'ready' },
+        { id: 'node-runtime', status: 'missing', detail: 'node 未安装' },
+        { id: 'dev-tools', status: 'failed' },
+      ],
+    })
     expect(r.needsUser).toBe(true)
     expect(r.summary).toContain('node-runtime')
     expect(r.summary).toContain('dev-tools')
@@ -183,12 +267,15 @@ describe('StuckDetector 待授权轮排除（根因 2——write 授权卡被当
     content: 'text',
     prevReadFiles: new Set<string>(),
     plannedFiles: new Set<string>(['/p/a.js']),
-    producedFiles: new Set<string>()
+    producedFiles: new Set<string>(),
   }
   it('need-approval 工具（write 授权卡）→ 连续多轮不 escalate（重置——等用户批准不是卡住）', () => {
     let state = initialStuckState
     for (let i = 0; i < 5; i++) {
-      const turn = evaluateTurnProgress({ ...baseInput, toolCalls: [{ name: 'write', status: 'need-approval', file: '/p/a.js' }] })
+      const turn = evaluateTurnProgress({
+        ...baseInput,
+        toolCalls: [{ name: 'write', status: 'need-approval', file: '/p/a.js' }],
+      })
       const r = detectStuck({ turn, prev: state })
       state = r.state
       expect(r.event?.type ?? 'none').not.toBe('escalate')
@@ -198,7 +285,10 @@ describe('StuckDetector 待授权轮排除（根因 2——write 授权卡被当
   it('plan-approval 卡同理（approve-files 待批准——不 escalate）', () => {
     let state = initialStuckState
     for (let i = 0; i < 4; i++) {
-      const turn = evaluateTurnProgress({ ...baseInput, toolCalls: [{ name: 'approve-files', status: 'file-approval' }] })
+      const turn = evaluateTurnProgress({
+        ...baseInput,
+        toolCalls: [{ name: 'approve-files', status: 'file-approval' }],
+      })
       const r = detectStuck({ turn, prev: state })
       state = r.state
       expect(r.event?.type ?? 'none').not.toBe('escalate')

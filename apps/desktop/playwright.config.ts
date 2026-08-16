@@ -15,7 +15,7 @@ export default defineConfig({
   webServer: {
     command: 'npx vite --config vite.config.ts --port 5175 --strictPort',
     url: 'http://localhost:5175',
-    reuseExistingServer: true
+    reuseExistingServer: true,
   },
   use: {
     baseURL: 'http://localhost:5175',
@@ -26,21 +26,21 @@ export default defineConfig({
         maxDiffPixels: 100,
         maxDiffPixelRatio: 0.01,
         threshold: 0.2,
-        animations: 'disabled'
-      }
-    }
+        animations: 'disabled',
+      },
+    },
   },
   projects: [
     {
       name: 'visual', // L5 视觉回归（像素基线）
       testDir: './tests/visual',
-      testMatch: '**/*.visual.ts'
+      testMatch: '**/*.visual.ts',
     },
     {
       name: 'interaction', // L3 组件交互（无截图——CI 可跑）
       testDir: './tests/interaction',
       testMatch: '**/*.interaction.ts',
-      use: { expect: { toHaveScreenshot: undefined } } // 禁用截图断言（L3 无像素基线）
-    }
-  ]
+      use: { expect: { toHaveScreenshot: undefined } }, // 禁用截图断言（L3 无像素基线）
+    },
+  ],
 })

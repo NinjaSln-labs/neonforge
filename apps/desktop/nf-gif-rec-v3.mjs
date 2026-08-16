@@ -10,10 +10,15 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const KEY = process.env.NF_TEST_KEY
-if (!KEY) { console.error('缺少 NF_TEST_KEY'); process.exit(1) }
+if (!KEY) {
+  console.error('缺少 NF_TEST_KEY')
+  process.exit(1)
+}
 
 // 产物路径：仓库根 demo/（相对本脚本定位，任意 cwd 可跑）；NF_GIF_OUT 可覆盖
-const OUT = process.env.NF_GIF_OUT ?? path.resolve(fileURLToPath(new URL('../../demo/neonforge-demo.mov', import.meta.url)))
+const OUT =
+  process.env.NF_GIF_OUT ??
+  path.resolve(fileURLToPath(new URL('../../demo/neonforge-demo.mov', import.meta.url)))
 // 窗口固定位置（避菜单栏/Dock）：1200x800 内容区（含标题栏）
 const WIN = { x: 120, y: 80, w: 1200, h: 800 }
 const TMP = '/tmp/nf-gif-frames'
@@ -31,7 +36,11 @@ console.log('已清理 userData 会话存档 + Key 缓存（干净首启）')
 const app = await _electron.launch({
   args: ['.'],
   cwd: process.cwd(), // 约定在 apps/desktop 目录运行（与 HANDOFF §4 一致）
-  env: { ...process.env, VITE_DEV_SERVER_URL: 'http://localhost:5173', NF_TEST_PROJECT: '/tmp/nf-gif-demo' }
+  env: {
+    ...process.env,
+    VITE_DEV_SERVER_URL: 'http://localhost:5173',
+    NF_TEST_PROJECT: '/tmp/nf-gif-demo',
+  },
 })
 const win = await app.firstWindow()
 await win.waitForSelector('.nf-app', { timeout: 20000 })
@@ -55,8 +64,10 @@ const rec = spawn('screencapture', ['-v', '-R', `${WIN.x},${WIN.y},${WIN.w},${WI
 rec.on('error', (e) => console.error('录屏启动失败', e.message))
 
 // 首次启动：config 页（首次安装第一屏——输 Key，password 掩码入镜安全）→ 填 Key → 验证
-await win.waitForSelector('.nf-config', { timeout: 12000 }).catch(() => console.log('no config (cached key)'))
-if (await win.locator('.nf-config').count() > 0) {
+await win
+  .waitForSelector('.nf-config', { timeout: 12000 })
+  .catch(() => console.log('no config (cached key)'))
+if ((await win.locator('.nf-config').count()) > 0) {
   await win.waitForTimeout(700) // config 屏入镜（第一屏）
   console.log('[rec] 首次配置页')
   await win.locator('.nf-config__input').fill(KEY)
@@ -87,9 +98,15 @@ async function sendAndRecord(question, maxMs) {
     await win.waitForTimeout(300)
     const roundStart = Date.now()
     while (Date.now() - roundStart < 45000) {
-      const status = await win.locator('.nf-statusbar').innerText().catch(() => '')
+      const status = await win
+        .locator('.nf-statusbar')
+        .innerText()
+        .catch(() => '')
       if (status.includes('就绪')) {
-        const bodyText = await win.locator('.nf-chat').innerText().catch(() => '')
+        const bodyText = await win
+          .locator('.nf-chat')
+          .innerText()
+          .catch(() => '')
         const hasError = ERROR_TEXTS.some((t) => bodyText.includes(t))
         if (hasError) {
           console.log('检测到错误消息，重发（attempt ' + (attempts + 1) + '）')

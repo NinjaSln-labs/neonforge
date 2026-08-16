@@ -16,7 +16,11 @@ export default function ConfigPage({ onDone }: { onDone: () => void }) {
     }
     if (res.error === 'network' || res.error === 'timeout' || res.error === 'service-error') {
       setStatus('network')
-      setErrorText(res.error === 'service-error' ? 'DeepSeek 服务暂时不可用，稍后重试。' : '无法连接，请检查网络。')
+      setErrorText(
+        res.error === 'service-error'
+          ? 'DeepSeek 服务暂时不可用，稍后重试。'
+          : '无法连接，请检查网络。',
+      )
     } else {
       setStatus('fail')
       setErrorText('验证失败，请检查 Key')
@@ -41,16 +45,27 @@ export default function ConfigPage({ onDone }: { onDone: () => void }) {
         aria-label="DeepSeek API Key"
         autoComplete="current-password"
         value={key}
-        onChange={(e) => { setKey(e.target.value); if (status !== 'idle') setStatus('idle') }}
-        onKeyDown={(e) => { if (e.key === 'Enter') submit() }}
+        onChange={(e) => {
+          setKey(e.target.value)
+          if (status !== 'idle') setStatus('idle')
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') submit()
+        }}
         autoFocus
       />
 
-      {status === 'fail' && <p className="nf-config__err" aria-live="polite">{errorText}</p>}
+      {status === 'fail' && (
+        <p className="nf-config__err" aria-live="polite">
+          {errorText}
+        </p>
+      )}
       {status === 'network' && (
         <div className="nf-config__banner" aria-live="polite">
           <span>{errorText}</span>
-          <button className="nf-config__link" onClick={onDone}>跳过（离线不可用）</button>
+          <button className="nf-config__link" onClick={onDone}>
+            跳过（离线不可用）
+          </button>
         </div>
       )}
 
@@ -62,13 +77,15 @@ export default function ConfigPage({ onDone }: { onDone: () => void }) {
       <details className="nf-config__why">
         <summary>怎么获取 DeepSeek API Key？</summary>
         <p className="nf-config__why-text">
-          ① 打开 platform.deepseek.com 注册/登录 → ② 左侧「API Keys」→ 新建 → ③ 复制 <em>sk-</em> 开头的 Key 粘贴到上方输入框。
+          ① 打开 platform.deepseek.com 注册/登录 → ② 左侧「API Keys」→ 新建 → ③ 复制 <em>sk-</em>{' '}
+          开头的 Key 粘贴到上方输入框。
         </p>
       </details>
       <details className="nf-config__why">
         <summary>为什么需要？</summary>
         <p className="nf-config__why-text">
-          NeonForge 通过 DeepSeek API 提供 AI 能力，Key 存储在你本地（系统加密），仅用于请求 DeepSeek API。
+          NeonForge 通过 DeepSeek API 提供 AI 能力，Key 存储在你本地（系统加密），仅用于请求
+          DeepSeek API。
         </p>
       </details>
     </div>

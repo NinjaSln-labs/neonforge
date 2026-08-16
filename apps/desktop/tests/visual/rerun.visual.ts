@@ -7,15 +7,24 @@ async function mockBridge(page: import('@playwright/test').Page) {
     ;(window as unknown as Record<string, unknown>).__sent = sent
     window.neonforge = {
       version: 'test',
-      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
-      workspace: { openFolder: async () => '/test', listDir: async () => [], readFile: async () => ({ ok: true, content: '// x' }) },
+      config: {
+        hasKey: async () => true,
+        getKey: async () => 'test-key',
+        setKey: async () => {},
+        clearKey: async () => {},
+      },
+      workspace: {
+        openFolder: async () => '/test',
+        listDir: async () => [],
+        readFile: async () => ({ ok: true, content: '// x' }),
+      },
       gateway: {
         validate: async () => ({ ok: true }),
         streamChat: async (opts: { messages?: Array<{ content?: string | null }> }) => {
           sent.push(opts.messages?.at(-1)?.content ?? '')
           return { ok: true }
         },
-        onStreamChunk: () => () => {}
+        onStreamChunk: () => () => {},
       },
       delivery: { applyDiff: async () => ({ ok: true }), revertDiff: async () => ({ ok: true }) },
       demo: {
@@ -26,9 +35,9 @@ async function mockBridge(page: import('@playwright/test').Page) {
           acceptance: [{ label: 'ok', done: true }],
           nextSteps: [],
           rerunLabel: '上次那个整理，再跑一遍',
-          rerunPrompt: '帮我整理一下这个目录'
-        }
-      }
+          rerunPrompt: '帮我整理一下这个目录',
+        },
+      },
     }
   })
 }

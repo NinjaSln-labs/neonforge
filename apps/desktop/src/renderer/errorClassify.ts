@@ -18,6 +18,7 @@ export const classifyChatError = (err: string): ChatErrorType => {
     /(^|\D)(5\d{2})(\D|$)/.test(err) || // 5xx 状态码（500/502/503…）——状态码边界匹配，防 5000/x5x 误伤
     /tim(?:eout|ed out)/i.test(err) || // 超时语义：'timeout' 字面 / 'The operation was aborted due to timeout' / 'timed out after 45s'
     err.startsWith('gateway') // 我方网关错误（gateway: http-xxx / gateway: no-body）
-  ) return 'service'
+  )
+    return 'service'
   return 'unknown'
 }

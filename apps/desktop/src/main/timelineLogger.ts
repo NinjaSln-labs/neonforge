@@ -20,8 +20,14 @@ function safeName(s: string): string {
 
 export function timelineFile(session?: string): string {
   const dir = path.join(os.homedir(), 'Library/Application Support/neonforge-desktop/logs')
-  try { mkdirSync(dir, { recursive: true }) } catch { /* 目录创建失败不影响 */ }
-  const name = session ? `timeline-${safeName(session)}.jsonl` : `timeline-${new Date().toISOString().slice(0, 10)}.jsonl`
+  try {
+    mkdirSync(dir, { recursive: true })
+  } catch {
+    /* 目录创建失败不影响 */
+  }
+  const name = session
+    ? `timeline-${safeName(session)}.jsonl`
+    : `timeline-${new Date().toISOString().slice(0, 10)}.jsonl`
   return path.join(dir, name)
 }
 
@@ -46,16 +52,24 @@ export function logTimeline(evt: {
       session: evt.session ?? 'default',
       type: evt.type,
       role: evt.role,
-      detail: evt.detail ?? {}
+      detail: evt.detail ?? {},
     })
     appendFileSync(timelineFile(evt.session), line + '\n')
-  } catch { /* 日志失败不影响运行 */ }
+  } catch {
+    /* 日志失败不影响运行 */
+  }
 }
 
 // === 2026-08-15 DDD 重建：TimelineLogger 领域服务实现（对齐 domain/timeline.ts 接口） ===
 // append = logTimeline（现有）；query = JSONL 顺序读 + 过滤（纯函数式——通用接入 A3 查询层）
 export const timelineLogger: TimelineLogger = {
-  append: (event) => logTimeline({ session: event.session, type: event.type, role: event.role, detail: event.detail }),
+  append: (event) =>
+    logTimeline({
+      session: event.session,
+      type: event.type,
+      role: event.role,
+      detail: event.detail,
+    }),
   query: (filter) => {
     try {
       const file = timelineFile(filter.session)
@@ -72,9 +86,13 @@ export const timelineLogger: TimelineLogger = {
           if (filter.to && evt.ts > filter.to) continue
           out.push(evt)
           if (filter.limit && out.length >= filter.limit) break
-        } catch { /* 坏行跳过（JSONL 崩溃保留已写行——容忍） */ }
+        } catch {
+          /* 坏行跳过（JSONL 崩溃保留已写行——容忍） */
+        }
       }
       return out
-    } catch { return [] }
-  }
+    } catch {
+      return []
+    }
+  },
 }

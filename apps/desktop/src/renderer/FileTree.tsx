@@ -8,7 +8,7 @@ function TreeNode({
   depth,
   selectedPath,
   onOpenFile,
-  refreshKey
+  refreshKey,
 }: {
   entry: DirEntry
   depth: number
@@ -25,7 +25,9 @@ function TreeNode({
     void window.neonforge.workspace.listDir(entry.path).then((list) => {
       if (alive) setChildren(list)
     })
-    return () => { alive = false }
+    return () => {
+      alive = false
+    }
   }, [entry.kind, entry.path, open, refreshKey])
 
   if (entry.kind === 'file') {
@@ -36,7 +38,9 @@ function TreeNode({
         style={{ paddingLeft: 8 + depth * 12 }}
         onClick={() => onOpenFile(entry.path)}
       >
-        <span className="nf-tree__icon"><IconFile size={12} /></span>
+        <span className="nf-tree__icon">
+          <IconFile size={12} />
+        </span>
         <span className="nf-tree__name">{entry.name}</span>
       </button>
     )
@@ -50,19 +54,22 @@ function TreeNode({
         style={{ paddingLeft: 8 + depth * 12 }}
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="nf-tree__icon">{open ? <IconFolderOpen size={12} /> : <IconFolder size={12} />}</span>
+        <span className="nf-tree__icon">
+          {open ? <IconFolderOpen size={12} /> : <IconFolder size={12} />}
+        </span>
         <span className="nf-tree__name">{entry.name}</span>
       </button>
-      {open && children?.map((child) => (
-        <TreeNode
-          key={child.path}
-          entry={child}
-          depth={depth + 1}
-          selectedPath={selectedPath}
-          onOpenFile={onOpenFile}
-          refreshKey={refreshKey}
-        />
-      ))}
+      {open &&
+        children?.map((child) => (
+          <TreeNode
+            key={child.path}
+            entry={child}
+            depth={depth + 1}
+            selectedPath={selectedPath}
+            onOpenFile={onOpenFile}
+            refreshKey={refreshKey}
+          />
+        ))}
     </div>
   )
 }
@@ -73,7 +80,7 @@ export default function FileTree({
   onOpenFile,
   collapsed,
   onToggle,
-  refreshKey
+  refreshKey,
 }: {
   rootPath: string
   selectedPath: string | null
@@ -89,19 +96,39 @@ export default function FileTree({
     <aside className={`nf-filetree${collapsed ? ' nf-filetree--collapsed' : ''}`}>
       <header className="nf-filetree__header">
         {/* 2026-08-03 v31 A3：面板标题语义化（aria heading） */}
-        {!collapsed && <span className="nf-filetree__title" role="heading" aria-level={2}>文件</span>}
+        {!collapsed && (
+          <span className="nf-filetree__title" role="heading" aria-level={2}>
+            文件
+          </span>
+        )}
         {/* 2026-08-03 C4 审计修复：纯图标按钮补 aria-label（title 不构成无障碍名） */}
-        <button type="button" className="nf-filetree__fold" onClick={onToggle} aria-label={collapsed ? '展开文件树' : '折叠文件树'} title={collapsed ? '展开文件树' : '折叠文件树'}>
+        <button
+          type="button"
+          className="nf-filetree__fold"
+          onClick={onToggle}
+          aria-label={collapsed ? '展开文件树' : '折叠文件树'}
+          title={collapsed ? '展开文件树' : '折叠文件树'}
+        >
           {collapsed ? '→' : '←'}
         </button>
       </header>
       {!collapsed && (
         <div className="nf-filetree__body">
           {/* 2026-08-04 用户反馈：文件树不显示完整路径——用户不知道当前是哪个目录；小字路径行（可截断，hover 看全） */}
-          {rootPath && <p className="nf-filetree__path" title={rootPath}>{rootPath}</p>}
+          {rootPath && (
+            <p className="nf-filetree__path" title={rootPath}>
+              {rootPath}
+            </p>
+          )}
           {/* 2026-08-04 审计修复（A1）：空 rootPath（从零开始未创建项目）显示占位——原渲染空名目录按钮（axe button-name critical） */}
           {rootPath ? (
-            <TreeNode entry={rootEntry} depth={0} selectedPath={selectedPath} onOpenFile={onOpenFile} refreshKey={refreshKey} />
+            <TreeNode
+              entry={rootEntry}
+              depth={0}
+              selectedPath={selectedPath}
+              onOpenFile={onOpenFile}
+              refreshKey={refreshKey}
+            />
           ) : (
             <p className="nf-placeholder">项目创建后显示文件</p>
           )}

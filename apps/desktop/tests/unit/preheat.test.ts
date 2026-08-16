@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { buildStandardPrefix, estimateTokens, PrefixCache, PreheatingService } from '../../src/main/preheat'
+import {
+  buildStandardPrefix,
+  estimateTokens,
+  PrefixCache,
+  PreheatingService,
+} from '../../src/main/preheat'
 
 describe('StandardPrefix 构建（ticket 09——确定性零 token 成本）', () => {
   it('结构：含叙述/工具/文件树 + 同输入同 hash', () => {
@@ -85,7 +90,11 @@ describe('PreheatingService（真实 API 预热——D-C7）', () => {
   it('防并发：preheating 中重复 run → 直接返回当前状态（不重复请求）', async () => {
     const s = new PreheatingService()
     let calls = 0
-    const fn = async () => { calls++; await new Promise((r) => setTimeout(r, 50)); return { ok: true as const, ms: 10 } }
+    const fn = async () => {
+      calls++
+      await new Promise((r) => setTimeout(r, 50))
+      return { ok: true as const, ms: 10 }
+    }
     const p1 = s.run('key', prefix, fn)
     const p2 = s.run('key', prefix, fn)
     await Promise.all([p1, p2])

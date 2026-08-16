@@ -34,7 +34,11 @@ describe('classifyGatewayError（ipc 层分类——renderer 不再正则解析�
   })
 
   it('AbortSignal 超时（DOMException TimeoutError）→ service', () => {
-    expect(classifyGatewayError(new DOMException('The operation was aborted due to timeout', 'TimeoutError'))).toBe('service')
+    expect(
+      classifyGatewayError(
+        new DOMException('The operation was aborted due to timeout', 'TimeoutError'),
+      ),
+    ).toBe('service')
   })
 
   it('fetch 网络错误（TypeError）→ service', () => {

@@ -16,23 +16,29 @@ export type StreamChunk =
 
 export const chunk = {
   content: (text: string): StreamChunk => ({ type: 'content', text }),
-  tool: (name: string, args: Record<string, unknown> = {}): StreamChunk => ({ type: 'tool-call', toolCall: { name, args } }),
+  tool: (name: string, args: Record<string, unknown> = {}): StreamChunk => ({
+    type: 'tool-call',
+    toolCall: { name, args },
+  }),
   done: (): StreamChunk => ({ type: 'done' }),
 }
 
 // 常用工具调用（减少测试样板）
 export const toolCall = {
   write: (path: string, content = 'x'): StreamChunk => chunk.tool('write', { path, content }),
-  edit: (path: string, oldText: string, newText: string): StreamChunk => chunk.tool('edit', { path, old: oldText, new: newText }),
+  edit: (path: string, oldText: string, newText: string): StreamChunk =>
+    chunk.tool('edit', { path, old: oldText, new: newText }),
   read: (path: string): StreamChunk => chunk.tool('read', { path }),
   bash: (command: string): StreamChunk => chunk.tool('bash', { command }),
-  approveFiles: (summary: string, files: Array<{ path: string; reason: string }>): StreamChunk => chunk.tool('approve-files', { summary, files }),
+  approveFiles: (summary: string, files: Array<{ path: string; reason: string }>): StreamChunk =>
+    chunk.tool('approve-files', { summary, files }),
   checkCapability: (dir = '/test'): StreamChunk => chunk.tool('check-capability', { dir }),
 }
 
 // 模型语义块（测试域 §2——与领域术语对齐的标记文本）
 export const goalConfirmText = (goal: string) => `好的。【目标确认：${goal}】`
-export const planProposeText = (files: string[]) => `【执行方案】\n${files.map((f) => `- ${f}`).join('\n')}`
+export const planProposeText = (files: string[]) =>
+  `【执行方案】\n${files.map((f) => `- ${f}`).join('\n')}`
 
 // ── 工厂参数 ──────────────────────────────────────────────────────────────
 
@@ -59,11 +65,11 @@ export interface MockBridgeOptions {
   executeResults?: Record<string, unknown>
   /** 捕获通道开关（handle.* 读取） */
   capture?: {
-    chatCount?: boolean   // window.__nfChatCount（getter）
-    sentMsgs?: boolean    // window.__nfSentMsgs（每次 streamChat 的 messages）
+    chatCount?: boolean // window.__nfChatCount（getter）
+    sentMsgs?: boolean // window.__nfSentMsgs（每次 streamChat 的 messages）
     forceToolCalls?: boolean // window.__nfForceToolCalls（每次 streamChat 的 forceTool）
-    approvedFlags?: boolean  // window.__nfApprovedFlags（write/edit 的 approved 标记）
-    titleCalls?: boolean     // window.__nfTitleCalls（updateProjectTitle 调用记录）
+    approvedFlags?: boolean // window.__nfApprovedFlags（write/edit 的 approved 标记）
+    titleCalls?: boolean // window.__nfTitleCalls（updateProjectTitle 调用记录）
   }
   /** 逃生舱：与 bridge 同作用域的附加源（可声明闭包状态、定义捕获 getter、改 bridge 字段） */
   extraInit?: string
@@ -99,10 +105,19 @@ interface Spec {
   manualEmit: boolean
   approval: 'none' | 'write-edit' | 'all'
   executeResults: Record<string, unknown>
-  capture: { chatCount: boolean; sentMsgs: boolean; forceToolCalls: boolean; approvedFlags: boolean; titleCalls: boolean }
+  capture: {
+    chatCount: boolean
+    sentMsgs: boolean
+    forceToolCalls: boolean
+    approvedFlags: boolean
+    titleCalls: boolean
+  }
 }
 
-export async function installMockBridge(page: Page, opts: MockBridgeOptions = {}): Promise<MockBridgeHandle> {
+export async function installMockBridge(
+  page: Page,
+  opts: MockBridgeOptions = {},
+): Promise<MockBridgeHandle> {
   const spec: Spec = {
     project: opts.project ?? 'open',
     files: opts.files ?? [],
@@ -143,17 +158,21 @@ export async function installMockBridge(page: Page, opts: MockBridgeOptions = {}
 }
 
 function read<T>(name: string, page: Page): Promise<T | undefined> {
-  return page.evaluate((n) => (window as unknown as Record<string, unknown>)[n] as T | undefined, name)
+  return page.evaluate(
+    (n) => (window as unknown as Record<string, unknown>)[n] as T | undefined,
+    name,
+  )
 }
 
 /** 生成 addInitScript 源码：spec 数据内联 + 逃生舱片段同作用域追加 */
 function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
   const json = (v: unknown) => JSON.stringify(v)
-  const needApprovalCond = spec.approval === 'none'
-    ? 'false'
-    : spec.approval === 'all'
-      ? 'true'
-      : `(name === 'write' || name === 'edit')`
+  const needApprovalCond =
+    spec.approval === 'none'
+      ? 'false'
+      : spec.approval === 'all'
+        ? 'true'
+        : `(name === 'write' || name === 'edit')`
 
   return `
 (() => {
@@ -164,7 +183,9 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
   const titleCalls = []
   const cbRef = { cb: null }
 
-  const executeImpl = ${opts.executeSource ?? `
+  const executeImpl = ${
+    opts.executeSource ??
+    `
     async (name, args, opts) => {
       if (${needApprovalCond} && !(opts && opts.approved)) {
         return { ok: false, needApproval: true, error: '「' + name + '」需要授权（L3）——approved=true 后执行' }
@@ -175,7 +196,8 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
       if (name === 'write' || name === 'edit') return { ok: true, data: { file: '/test/' + String((args && args.path) || '').split('/').pop(), snapshot: true } }
       if (name === 'read') return { ok: true, data: 'x' }
       return { ok: true, data: {} }
-    }`}
+    }`
+  }
 
   const bridge = {
     version: 'test',

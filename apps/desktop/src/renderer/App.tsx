@@ -24,13 +24,18 @@ export default function App() {
       setScreen('config')
       return
     }
-    void bridge.config.hasKey().then((v) => {
-      if (mounted) setScreen(v ? 'start' : 'config')
-    }).catch((err) => {
-      console.error('[App] hasKey failed', err)
-      if (mounted) setScreen('config')
-    })
-    return () => { mounted = false }
+    void bridge.config
+      .hasKey()
+      .then((v) => {
+        if (mounted) setScreen(v ? 'start' : 'config')
+      })
+      .catch((err) => {
+        console.error('[App] hasKey failed', err)
+        if (mounted) setScreen('config')
+      })
+    return () => {
+      mounted = false
+    }
   }, [])
 
   const openExisting = async () => {
@@ -54,8 +59,18 @@ export default function App() {
     return (
       <div className="nf-app nf-app--start">
         <StartPage
-          onOpenProject={(prefill) => { setPrefillPrompt(prefill); void openExisting() }}
-          onNewProject={(prefill) => { setPrefillPrompt(prefill); clearSession(); saveProblems([]); setRootPath(null); setZeroToOne(true); setScreen('workspace') }}
+          onOpenProject={(prefill) => {
+            setPrefillPrompt(prefill)
+            void openExisting()
+          }}
+          onNewProject={(prefill) => {
+            setPrefillPrompt(prefill)
+            clearSession()
+            saveProblems([])
+            setRootPath(null)
+            setZeroToOne(true)
+            setScreen('workspace')
+          }}
         />
       </div>
     )
@@ -65,7 +80,11 @@ export default function App() {
     return (
       <MainWorkspace
         rootPath={rootPath ?? null}
-        onBackStart={() => { setRootPath(null); setZeroToOne(false); setScreen('start') }}
+        onBackStart={() => {
+          setRootPath(null)
+          setZeroToOne(false)
+          setScreen('start')
+        }}
         onKeyExpired={() => setScreen('config')}
         onProjectCreated={(p) => setRootPath(p)}
         zeroToOneMode={zeroToOne}

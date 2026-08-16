@@ -13,5 +13,5 @@ export const SCENES: Scene[] = [
   { icon: IconWrench, label: '做小工具', q: '帮我做一个每周记账的小工具' },
   { icon: IconSparkles, label: '修系统', q: 'X 系统今天出异常了，帮我看看' },
   { icon: IconGamepad, label: '做游戏', q: '我要做一个3D射击小游戏（第一人称，科幻风格）' },
-  { icon: IconRocket, label: '做新项目', q: '我要做一个能发给朋友的旅行手册网页' }
+  { icon: IconRocket, label: '做新项目', q: '我要做一个能发给朋友的旅行手册网页' },
 ]

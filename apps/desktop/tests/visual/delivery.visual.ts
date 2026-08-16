@@ -5,26 +5,42 @@ async function mockBridge(page: import('@playwright/test').Page, demoDelivery: b
   await page.addInitScript((withDelivery) => {
     const bridge = {
       version: 'test',
-      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
-      workspace: { openFolder: async () => '/test', listDir: async () => [], readFile: async () => ({ ok: true, content: '// x' }) },
-      gateway: { validate: async () => ({ ok: true }), streamChat: async () => ({ ok: true }), onStreamChunk: () => () => {} },
-      demo: withDelivery ? {
-        delivery: {
-          status: 'delivered',
-          summary: '整理了 Downloads 里的发票和合同：按类型分类、统一命名、重复文件标出（未删除）',
-          artifacts: ['发票/2026-08.xlsx', '合同/2026-07-15-服务协议.pdf', '重复文件清单.csv'],
-          acceptance: [
-            { label: '发票都在「发票」文件夹', done: false },
-            { label: '文件名含日期 + 商户', done: false },
-            { label: '重复文件已标出（未删，待你确认）', done: false }
-          ],
-          nextSteps: [
-            '重复文件确认后我帮你删（授权后）',
-            '需要发布网站？域名/备案超出数字工具能力——源码已给，我指导你发布'
-          ],
-          rerunLabel: '上次那个整理，再跑一遍'
-        }
-      } : null
+      config: {
+        hasKey: async () => true,
+        getKey: async () => 'test-key',
+        setKey: async () => {},
+        clearKey: async () => {},
+      },
+      workspace: {
+        openFolder: async () => '/test',
+        listDir: async () => [],
+        readFile: async () => ({ ok: true, content: '// x' }),
+      },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        streamChat: async () => ({ ok: true }),
+        onStreamChunk: () => () => {},
+      },
+      demo: withDelivery
+        ? {
+            delivery: {
+              status: 'delivered',
+              summary:
+                '整理了 Downloads 里的发票和合同：按类型分类、统一命名、重复文件标出（未删除）',
+              artifacts: ['发票/2026-08.xlsx', '合同/2026-07-15-服务协议.pdf', '重复文件清单.csv'],
+              acceptance: [
+                { label: '发票都在「发票」文件夹', done: false },
+                { label: '文件名含日期 + 商户', done: false },
+                { label: '重复文件已标出（未删，待你确认）', done: false },
+              ],
+              nextSteps: [
+                '重复文件确认后我帮你删（授权后）',
+                '需要发布网站？域名/备案超出数字工具能力——源码已给，我指导你发布',
+              ],
+              rerunLabel: '上次那个整理，再跑一遍',
+            },
+          }
+        : null,
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = bridge
   }, demoDelivery)
@@ -52,7 +68,9 @@ test('验收交互：打勾 → 确认问题关闭', async ({ page }) => {
   await expect(page.getByRole('button', { name: '确认问题关闭' })).toBeDisabled()
   // 逐项打勾
   const checks = page.locator('.nf-check')
-  for (let i = 0; i < 3; i++) { await checks.nth(i).click() }
+  for (let i = 0; i < 3; i++) {
+    await checks.nth(i).click()
+  }
   await expect(page.getByRole('button', { name: '确认问题关闭' })).toBeEnabled()
   await page.getByRole('button', { name: '确认问题关闭' }).click()
   await expect(page.locator('.nf-delivery__badge')).toHaveText('已关闭')
@@ -74,22 +92,42 @@ test('真实执行 → 产物区交付包联动（write 授权后）', async ({ 
     window.__emit = null
     window.neonforge = {
       version: 'test',
-      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
-      workspace: { openFolder: async () => '/test', listDir: async () => [], readFile: async () => ({ ok: true, content: '// x' }) },
+      config: {
+        hasKey: async () => true,
+        getKey: async () => 'test-key',
+        setKey: async () => {},
+        clearKey: async () => {},
+      },
+      workspace: {
+        openFolder: async () => '/test',
+        listDir: async () => [],
+        readFile: async () => ({ ok: true, content: '// x' }),
+      },
       gateway: {
         validate: async () => ({ ok: true }),
         streamChat: async () => ({ ok: true }),
-        onStreamChunk: (cb: (c: unknown) => void) => { window.__emit = cb; return () => {} }
+        onStreamChunk: (cb: (c: unknown) => void) => {
+          window.__emit = cb
+          return () => {}
+        },
       },
       tools: {
         list: async () => [],
-        execute: async (name: string, _args: Record<string, unknown>, opts?: { approved?: boolean }) =>
+        execute: async (
+          name: string,
+          _args: Record<string, unknown>,
+          opts?: { approved?: boolean },
+        ) =>
           name === 'write' && opts?.approved
             ? { ok: true, data: { file: '/test/notes.txt', snapshot: true } }
-            // 2026-08-07 T2（regex-todo）：needApproval 结构化字段
-            : { ok: false, needApproval: true, error: `「${name}」需要授权（L3）——approved=true 后执行` },
-        revert: async () => ({ ok: true })
-      }
+            : // 2026-08-07 T2（regex-todo）：needApproval 结构化字段
+              {
+                ok: false,
+                needApproval: true,
+                error: `「${name}」需要授权（L3）——approved=true 后执行`,
+              },
+        revert: async () => ({ ok: true }),
+      },
     }
   })
   await page.goto('http://localhost:5175/')
@@ -100,7 +138,10 @@ test('真实执行 → 产物区交付包联动（write 授权后）', async ({ 
   await page.waitForTimeout(300)
   await page.evaluate(() => {
     window.__emit({ type: 'reasoning', text: '需要写入文件' })
-    window.__emit({ type: 'tool-call', toolCall: { name: 'write', args: { path: '/test/notes.txt', content: 'hello' } } })
+    window.__emit({
+      type: 'tool-call',
+      toolCall: { name: 'write', args: { path: '/test/notes.txt', content: 'hello' } },
+    })
     window.__emit({ type: 'done' })
   })
   await page.waitForTimeout(500)

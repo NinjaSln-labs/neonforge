@@ -38,8 +38,12 @@ describe('TurnExecutionPolicy（三态——无阶段重构 S1）', () => {
     expect(r.forceTool).toBe(false)
     expect(r.reason).toBe('goal-clarify')
     // 防御：目标未确认但其他状态为 true（状态不一致）——仍按目标未确认处理
-    expect(decideTurnPolicy({ goalConfirmed: false, executionConfirmed: true, produced: false }).reason).toBe('goal-clarify')
-    expect(decideTurnPolicy({ goalConfirmed: false, executionConfirmed: true, produced: true }).reason).toBe('goal-clarify')
+    expect(
+      decideTurnPolicy({ goalConfirmed: false, executionConfirmed: true, produced: false }).reason,
+    ).toBe('goal-clarify')
+    expect(
+      decideTurnPolicy({ goalConfirmed: false, executionConfirmed: true, produced: true }).reason,
+    ).toBe('goal-clarify')
   })
 
   // === 执行未确认 → 等用户确认执行方案 ===
@@ -50,12 +54,19 @@ describe('TurnExecutionPolicy（三态——无阶段重构 S1）', () => {
   })
 
   it('目标已确认 + 执行未确认 + 已有产出（防御——状态不一致）→ awaiting-exec-confirm', () => {
-    expect(decideTurnPolicy({ goalConfirmed: true, executionConfirmed: false, produced: true }).reason).toBe('awaiting-exec-confirm')
+    expect(
+      decideTurnPolicy({ goalConfirmed: true, executionConfirmed: false, produced: true }).reason,
+    ).toBe('awaiting-exec-confirm')
   })
 
   // === 已产出优先（状态优先级：produced 生效早于 awaiting——但 reason 按状态机顺序） ===
   it('全部 true + goalAchieved → produced-auto（已产出且已汇报达成收敛）', () => {
-    const r = decideTurnPolicy({ goalConfirmed: true, executionConfirmed: true, produced: true, goalAchieved: true })
+    const r = decideTurnPolicy({
+      goalConfirmed: true,
+      executionConfirmed: true,
+      produced: true,
+      goalAchieved: true,
+    })
     expect(r.forceTool).toBe(false)
     expect(r.reason).toBe('produced-auto')
   })
@@ -67,7 +78,12 @@ describe('TurnExecutionPolicy（三态——无阶段重构 S1）', () => {
   })
 
   it('工具失败优先于任务完成度（lastToolFailed → 释放诊断，即使 produced 未达成）', () => {
-    const r = decideTurnPolicy({ goalConfirmed: true, executionConfirmed: true, produced: true, lastToolFailed: true })
+    const r = decideTurnPolicy({
+      goalConfirmed: true,
+      executionConfirmed: true,
+      produced: true,
+      lastToolFailed: true,
+    })
     expect(r.forceTool).toBe(false)
     expect(r.reason).toBe('tool-failed-diagnose')
   })
@@ -75,17 +91,47 @@ describe('TurnExecutionPolicy（三态——无阶段重构 S1）', () => {
   // === 2026-08-15 P1（A0 §3.4/§4 补行）：PENDING 期间不强制——pending 下模型不做任何事 ===
   it('PENDING（等用户决策）→ 不强制（reason=pending-user-decision）——强制组合下也释放', () => {
     // 最强制组合（目标+执行确认、无产出）+ pending → 释放（授权卡/确认卡悬挂时 required 会逼模型调工具被拦）
-    const r = decideTurnPolicy({ goalConfirmed: true, executionConfirmed: true, produced: false, pending: true })
+    const r = decideTurnPolicy({
+      goalConfirmed: true,
+      executionConfirmed: true,
+      produced: false,
+      pending: true,
+    })
     expect(r.forceTool).toBe(false)
     expect(r.reason).toBe('pending-user-decision')
     // pending 优先于其他一切释放条件（含 lastToolFailed——用户在决策时无强制可言）
-    expect(decideTurnPolicy({ goalConfirmed: true, executionConfirmed: true, produced: true, lastToolFailed: true, pending: true }).reason).toBe('pending-user-decision')
-    expect(decideTurnPolicy({ goalConfirmed: false, executionConfirmed: false, produced: false, pending: true }).reason).toBe('pending-user-decision')
+    expect(
+      decideTurnPolicy({
+        goalConfirmed: true,
+        executionConfirmed: true,
+        produced: true,
+        lastToolFailed: true,
+        pending: true,
+      }).reason,
+    ).toBe('pending-user-decision')
+    expect(
+      decideTurnPolicy({
+        goalConfirmed: false,
+        executionConfirmed: false,
+        produced: false,
+        pending: true,
+      }).reason,
+    ).toBe('pending-user-decision')
   })
 
   it('pending 未传/为 false → 原语义不变（强制组合仍强制）', () => {
-    expect(decideTurnPolicy({ goalConfirmed: true, executionConfirmed: true, produced: false, pending: false }).forceTool).toBe(true)
-    expect(decideTurnPolicy({ goalConfirmed: true, executionConfirmed: true, produced: false }).forceTool).toBe(true)
+    expect(
+      decideTurnPolicy({
+        goalConfirmed: true,
+        executionConfirmed: true,
+        produced: false,
+        pending: false,
+      }).forceTool,
+    ).toBe(true)
+    expect(
+      decideTurnPolicy({ goalConfirmed: true, executionConfirmed: true, produced: false })
+        .forceTool,
+    ).toBe(true)
   })
 
   it('全部 false → goal-clarify', () => {
@@ -113,7 +159,9 @@ describe('TurnExecutionPolicy（三态——无阶段重构 S1）', () => {
     cases.forEach((c) => {
       const r = decideTurnPolicy(c)
       // 2026-08-07 任务完成度：produced 未达成也强制（goal-exec-until-achieved）；2026-08-15 P1：pending 不强制
-      expect(r.forceTool).toBe(c.goalConfirmed && c.executionConfirmed && (!c.produced || !c.goalAchieved) && !c.pending)
+      expect(r.forceTool).toBe(
+        c.goalConfirmed && c.executionConfirmed && (!c.produced || !c.goalAchieved) && !c.pending,
+      )
     })
   })
 })

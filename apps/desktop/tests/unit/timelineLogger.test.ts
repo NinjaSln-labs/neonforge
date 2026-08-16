@@ -8,7 +8,9 @@ vi.mock('node:os', () => ({ default: { homedir: () => '/tmp/nf-timeline-test' } 
 describe('timelineLogger（会话时间线——2026-08-08 会话级文件）', () => {
   beforeEach(() => {
     rmSync('/tmp/nf-timeline-test', { recursive: true, force: true })
-    mkdirSync('/tmp/nf-timeline-test/Library/Application Support/neonforge-desktop/logs', { recursive: true })
+    mkdirSync('/tmp/nf-timeline-test/Library/Application Support/neonforge-desktop/logs', {
+      recursive: true,
+    })
   })
   afterEach(() => {
     rmSync('/tmp/nf-timeline-test', { recursive: true, force: true })
@@ -29,7 +31,12 @@ describe('timelineLogger（会话时间线——2026-08-08 会话级文件）', 
   it('logTimeline：会话 ID → 写入该会话文件 + seq 会话内自增（从 1 开始）', () => {
     const sid = 'aaa11111-0000-4000-8000-000000000001'
     logTimeline({ session: sid, type: 'user-message', role: 'user', detail: { content: '你好' } })
-    logTimeline({ session: sid, type: 'assistant-start', role: 'assistant', detail: { forceTool: true } })
+    logTimeline({
+      session: sid,
+      type: 'assistant-start',
+      role: 'assistant',
+      detail: { forceTool: true },
+    })
     const lines = readFileSync(timelineFile(sid), 'utf-8').trim().split('\n')
     expect(lines).toHaveLength(2)
     const e1 = JSON.parse(lines[0])
@@ -63,7 +70,12 @@ describe('timelineLogger（会话时间线——2026-08-08 会话级文件）', 
 describe('timelineLogger.query（2026-08-15 DDD 重建——通用接入 A3）', () => {
   it('按会话 + 类型过滤 + limit（含坏行容忍）', () => {
     const sid = 'query-0000-4000-8000-000000000001'
-    logTimeline({ session: sid, type: 'conversation.message_sent', role: 'user', detail: { content: 'hi' } })
+    logTimeline({
+      session: sid,
+      type: 'conversation.message_sent',
+      role: 'user',
+      detail: { content: 'hi' },
+    })
     logTimeline({ session: sid, type: 'tool.requested', role: 'tool', detail: { name: 'read' } })
     // 坏行（崩溃残留半行）容忍
     const f = timelineFile(sid)

@@ -21,7 +21,7 @@ export const BUILTIN_PLUGINS: Array<{ name: string; version: string }> = [
   { name: 'mcp-bridge', version: '0.1.0' }, // 外部工具桥（V1 占位）
   { name: 'git', version: '0.1.0' }, // git 集成（V1 占位）
   { name: 'stats', version: '0.1.0' }, // 用量统计（V1 占位）
-  { name: 'language-server', version: '0.1.0' } // LSP 连接（lsp.ts）
+  { name: 'language-server', version: '0.1.0' }, // LSP 连接（lsp.ts）
 ]
 
 export class PluginRegistry {
@@ -37,7 +37,11 @@ export class PluginRegistry {
   }
 
   list(): PluginInfo[] {
-    return [...this.plugins.values()].map(({ name, version, active }) => ({ name, version, active }))
+    return [...this.plugins.values()].map(({ name, version, active }) => ({
+      name,
+      version,
+      active,
+    }))
   }
 
   get(name: string): Plugin | null {
@@ -48,8 +52,14 @@ export class PluginRegistry {
   setActive(name: string, active: boolean): boolean {
     const p = this.plugins.get(name)
     if (!p) return false
-    if (active && !p.active) { p.active = true; p.activate?.() }
-    if (!active && p.active) { p.active = false; p.deactivate?.() }
+    if (active && !p.active) {
+      p.active = true
+      p.activate?.()
+    }
+    if (!active && p.active) {
+      p.active = false
+      p.deactivate?.()
+    }
     return true
   }
 }

@@ -13,15 +13,21 @@ const isOptionLine = (t: string): boolean =>
   /^[-*+]/.test(t) || /^\d+[.)、]/.test(t) || /^[①②③④⑤⑥⑦⑧⑨⑩]/.test(t)
 
 // 选项行清洗（去列表/序号/圈号前缀）
-const cleanOption = (t: string): string => t
-  .replace(/^[-*+]\s+/, '')
-  .replace(/^\d+[.)、]\s*/, '')
-  .replace(/^[①②③④⑤⑥⑦⑧⑨⑩]\s*/, '')
-  .trim()
+const cleanOption = (t: string): string =>
+  t
+    .replace(/^[-*+]\s+/, '')
+    .replace(/^\d+[.)、]\s*/, '')
+    .replace(/^[①②③④⑤⑥⑦⑧⑨⑩]\s*/, '')
+    .trim()
 
 // 闭合块内解析：所有非空行都算选项（含纯文本行——2026-08-05 测试锁定）
 const parseClosedOptions = (body: string): string[] | null => {
-  const options = body.split('\n').map((l) => l.trim()).filter(Boolean).map(cleanOption).filter(Boolean)
+  const options = body
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map(cleanOption)
+    .filter(Boolean)
   return options.length > 0 ? options : null
 }
 
@@ -32,8 +38,10 @@ const parseUnclosedOptions = (rest: string): string[] | null => {
   for (const line of rest.split('\n')) {
     const t = line.trim()
     if (!t) continue
-    if (isOptionLine(t)) { opts.push(cleanOption(t)); sawOption = true }
-    else if (sawOption) break // 列表行之后遇正文 → 块结束
+    if (isOptionLine(t)) {
+      opts.push(cleanOption(t))
+      sawOption = true
+    } else if (sawOption) break // 列表行之后遇正文 → 块结束
     // 未见选项时的非列表行（块内前导说明）——跳过
   }
   return opts.length > 0 ? opts : null
@@ -55,19 +63,28 @@ export function stripCandidates(content: string): string {
   // 完整块：整体移除
   const closed = content.replace(BLOCK_RE, '')
   // 未闭合块：剥 <candidates> 行 + 其后的选项列表行；选项行之后的正文（含空行）全部保留
-  return closed.replace(/<candidates>[\s\S]*$/gi, (block) => {
-    const lines = block.split('\n')
-    const kept: string[] = []
-    let sawOption = false
-    for (let i = 1; i < lines.length; i++) {
-      const t = lines[i].trim()
-      if (isOptionLine(t)) { sawOption = true; continue } // 选项行剥
-      if (sawOption) { kept.push(lines[i]); continue } // 块后正文（含空行）保留
-      if (t === '') continue // 未见选项时的空行剥
-      kept.push(lines[i]) // 未见选项时的正文（块内前导说明）——保留
-    }
-    return kept.join('\n')
-  }).replace(/\n{2,}/g, '\n').trim()
+  return closed
+    .replace(/<candidates>[\s\S]*$/gi, (block) => {
+      const lines = block.split('\n')
+      const kept: string[] = []
+      let sawOption = false
+      for (let i = 1; i < lines.length; i++) {
+        const t = lines[i].trim()
+        if (isOptionLine(t)) {
+          sawOption = true
+          continue
+        } // 选项行剥
+        if (sawOption) {
+          kept.push(lines[i])
+          continue
+        } // 块后正文（含空行）保留
+        if (t === '') continue // 未见选项时的空行剥
+        kept.push(lines[i]) // 未见选项时的正文（块内前导说明）——保留
+      }
+      return kept.join('\n')
+    })
+    .replace(/\n{2,}/g, '\n')
+    .trim()
 }
 
 // 2026-08-05：通用去标签（展示层兜底）——模型会自发发明尖括号标签（实测 <one-question>，模仿 <candidates> 模式）

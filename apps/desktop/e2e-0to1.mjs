@@ -16,11 +16,16 @@ import os from 'node:os'
 //
 // 2026-08-05 双语语义（用户指出「中英双语卡住」）：模型偶发转英文（受英文工具结果/代码带动）——
 // 语义检测必须中英兼容；模型保持中文回复靠产品侧 langRule 强化，这里兜底识别
-const SEM_DONE = /(写完了|都写好了|全部完成|都完成了|搞定|写好了|做完了|搭好了|跑起来了|完成|done|finished|all set|complete|written|ready)/i
-const SEM_PROMISE = /(开始|我来|马上|这就|现在|先|让我|我先|待会|稍后).{0,4}(写|做|创建|生成|搭|部署|读|看|检查|确认|验证|测试|启动|查一下|看看)|I'?ll|let me|going to|start writing|gonna|will (write|start|make|read|check)/i
-const SEM_PLAY = /(能玩|可以玩|地址|localhost|端口|试试|体验|访问|打开.*玩|playable|works|running|visit|open|try|have a look)/i
-const SEM_CONFUSE = /(工具返回异常|读取结果|同一个文件|重新读取|确认一下实际|something wrong|same content|re-?read|verify the actual)/i
-const SEM_ASK = /(要不要|还是说|还是先|你觉得|你看|想不想要|如何|怎么样|可以吗|行吗|先玩几把|感受一下|你定|你来定|看你的)/i
+const SEM_DONE =
+  /(写完了|都写好了|全部完成|都完成了|搞定|写好了|做完了|搭好了|跑起来了|完成|done|finished|all set|complete|written|ready)/i
+const SEM_PROMISE =
+  /(开始|我来|马上|这就|现在|先|让我|我先|待会|稍后).{0,4}(写|做|创建|生成|搭|部署|读|看|检查|确认|验证|测试|启动|查一下|看看)|I'?ll|let me|going to|start writing|gonna|will (write|start|make|read|check)/i
+const SEM_PLAY =
+  /(能玩|可以玩|地址|localhost|端口|试试|体验|访问|打开.*玩|playable|works|running|visit|open|try|have a look)/i
+const SEM_CONFUSE =
+  /(工具返回异常|读取结果|同一个文件|重新读取|确认一下实际|something wrong|same content|re-?read|verify the actual)/i
+const SEM_ASK =
+  /(要不要|还是说|还是先|你觉得|你看|想不想要|如何|怎么样|可以吗|行吗|先玩几把|感受一下|你定|你来定|看你的)/i
 //
 // 用法：
 //   PHASE=req  node e2e-0to1.mjs   # 只跑需求阶段（逐步验证）
@@ -28,12 +33,23 @@ const SEM_ASK = /(要不要|还是说|还是先|你觉得|你看|想不想要|�
 //   MODE=A/B   node e2e-0to1.mjs   # 场景（起始页填/不填）
 // ============================================================================
 
-const KEY = process.env.NF_TEST_KEY
-  || (() => {
+const KEY =
+  process.env.NF_TEST_KEY ||
+  (() => {
     try {
-      const cfg = JSON.parse(fs.readFileSync(path.join(os.homedir(), 'Library/Application Support/neonforge-desktop/config/neonforge-config.json'), 'utf8'))
+      const cfg = JSON.parse(
+        fs.readFileSync(
+          path.join(
+            os.homedir(),
+            'Library/Application Support/neonforge-desktop/config/neonforge-config.json',
+          ),
+          'utf8',
+        ),
+      )
       return cfg.apiKeyPlain || ''
-    } catch { return '' }
+    } catch {
+      return ''
+    }
   })()
 const WORK_DIR = '/tmp/nf-e2e-test'
 const LOCK_DIR = path.join(os.homedir(), 'Library/Application Support/neonforge-desktop')
@@ -46,12 +62,21 @@ const LOCK_DIR = path.join(os.homedir(), 'Library/Application Support/neonforge-
 /** @typedef {{ role: 'user'|'assistant', content: string, candidates: string[], tools: string[] }} Msg */
 
 /** 问题类别（需求阶段领域分类） */
-const Q = { WHAT: '做什么', AUDIENCE: '给谁玩', PLATFORM: '在哪儿玩', DONE: '做成什么样', UNKNOWN: '?' }
+const Q = {
+  WHAT: '做什么',
+  AUDIENCE: '给谁玩',
+  PLATFORM: '在哪儿玩',
+  DONE: '做成什么样',
+  UNKNOWN: '?',
+}
 
 /** 用户决策（领域 → UI 动作）：每个决策带理解与理由（模拟真人） */
 /** @typedef {{ action: 'click-option'|'type'|'advance'|'approve'|'continue'|'wait', text?: string, understanding: string, reason: string }} Decision */
 
-const cleanOpt = (o) => String(o).replace(/^[①-⑩]\s*\n?\s*/, '').trim()
+const cleanOpt = (o) =>
+  String(o)
+    .replace(/^[①-⑩]\s*\n?\s*/, '')
+    .trim()
 
 // ============================================================================
 // UserAgent —— 模拟真实用户（读 → 理解 → 思考 → 决策）
@@ -59,8 +84,8 @@ const cleanOpt = (o) => String(o).replace(/^[①-⑩]\s*\n?\s*/, '').trim()
 
 class UserAgent {
   constructor() {
-    this.profile = {}   // 用户画像（我的选择）
-    this.steps = []     // 逐步决策记录（可复现）
+    this.profile = {} // 用户画像（我的选择）
+    this.steps = [] // 逐步决策记录（可复现）
   }
 
   // 理解模型消息：这轮模型在说什么？（供打印 + 决策）
@@ -69,8 +94,10 @@ class UserAgent {
     if (msg.candidates.length > 0) {
       return `模型给了 ${msg.candidates.length} 个候选选项让我选（同音/理解确认）`
     }
-    if (/(【需求确认|需求确认|确认完毕|点.*确认推进)/.test(c)) return '模型总结并确认需求，等我点「确认推进」'
-    if (/(说要做但还没动手|回复.*继续)/.test(c)) return '模型提示：它说了要做但还没动手，让我回复「继续」'
+    if (/(【需求确认|需求确认|确认完毕|点.*确认推进)/.test(c))
+      return '模型总结并确认需求，等我点「确认推进」'
+    if (/(说要做但还没动手|回复.*继续)/.test(c))
+      return '模型提示：它说了要做但还没动手，让我回复「继续」'
     if (/[?？]/.test(c)) return '模型在向我提问'
     return '模型在陈述/说明'
   }
@@ -80,7 +107,11 @@ class UserAgent {
     const c = msg.content ?? ''
     // —— 需求确认完成 → 推进 ——
     if (/(【需求确认|需求确认|确认完毕|点.*「?确认推进|确认无误|就这样定)/.test(c)) {
-      return { action: 'advance', understanding: '模型已确认需求', reason: '需求确认完成——点「确认推进」进入设计' }
+      return {
+        action: 'advance',
+        understanding: '模型已确认需求',
+        reason: '需求确认完成——点「确认推进」进入设计',
+      }
     }
     // —— 有候选按钮 → 语义理解后选择 ——
     if (msg.candidates.length > 0) {
@@ -94,25 +125,57 @@ class UserAgent {
       }
       // 附加问题（非标准 4 问）：核心需求已问全 → 放权让模型收敛（真实用户会不耐烦）；否则兜底选第一个
       if (this.profileComplete()) {
-        return { action: 'type', text: '都行，你按合适的来', understanding: '附加问题（核心 4 问已确认完）', reason: '放权给模型决定——让它收敛到需求确认' }
+        return {
+          action: 'type',
+          text: '都行，你按合适的来',
+          understanding: '附加问题（核心 4 问已确认完）',
+          reason: '放权给模型决定——让它收敛到需求确认',
+        }
       }
       const text = cleanOpt(msg.candidates[0])
-      return { action: 'click-option', text, understanding: '附加问题（核心 4 问未问全）', reason: `先选第一个：${text.slice(0, 15)}` }
+      return {
+        action: 'click-option',
+        text,
+        understanding: '附加问题（核心 4 问未问全）',
+        reason: `先选第一个：${text.slice(0, 15)}`,
+      }
     }
     // —— 无候选 → 判断是提问（打字回答）还是提示/陈述 ——
     if (/(说要做但还没动手|回复.*继续)/.test(c)) {
-      return { action: 'continue', understanding: '模型说要做但没动手', reason: '回复「继续」让它接着干' }
+      return {
+        action: 'continue',
+        understanding: '模型说要做但没动手',
+        reason: '回复「继续」让它接着干',
+      }
     }
     // 2026-08-05 模型确认方案方向/操作（「方向没意见吧/按这个来/按常规定/可以吗」）→ 真实用户确认（不答非所问——A7 教训：
     // 模型问方向 e2e 因 classify 的「设计」误判 WHAT 答「射击游戏」→ 模型被带偏直接出方案 → 阶段错位）
-    if (/(没意见|可以吗|行吗|好不好|按这个|按常规定|方向.*吗|这样.*吗|同意|没问题吧|你看行|你看怎么样|按你说的)/.test(c) && /[?？]|吧|吗/.test(c)) {
-      return { action: 'type', text: 'OK，按你这个方向来，没问题——还有要确认的吗？没有就确认需求吧', understanding: '模型在确认方案方向', reason: '真实用户确认方向并推动收敛' }
+    if (
+      /(没意见|可以吗|行吗|好不好|按这个|按常规定|方向.*吗|这样.*吗|同意|没问题吧|你看行|你看怎么样|按你说的)/.test(
+        c,
+      ) &&
+      /[?？]|吧|吗/.test(c)
+    ) {
+      return {
+        action: 'type',
+        text: 'OK，按你这个方向来，没问题——还有要确认的吗？没有就确认需求吧',
+        understanding: '模型在确认方案方向',
+        reason: '真实用户确认方向并推动收敛',
+      }
     }
     const qClass = this.classify(c)
     // 无候选但模型在问（疑问语义——问号/哪个/什么/确认/理解/意思/想法）→ 打字回答（模型偶尔不出候选块直接问）
-    if (qClass !== Q.UNKNOWN && (/[?？]|哪个|哪几种|哪一种|什么|吗$|呢$|确认|理解|意思|想法|看看你|你觉得/.test(c))) {
+    if (
+      qClass !== Q.UNKNOWN &&
+      /[?？]|哪个|哪几种|哪一种|什么|吗$|呢$|确认|理解|意思|想法|看看你|你觉得/.test(c)
+    ) {
       const answer = this.typeAnswer(qClass)
-      return { action: 'type', text: answer, understanding: `模型在问「${qClass}」`, reason: `打字回答：${answer.slice(0, 15)}` }
+      return {
+        action: 'type',
+        text: answer,
+        understanding: `模型在问「${qClass}」`,
+        reason: `打字回答：${answer.slice(0, 15)}`,
+      }
     }
     return { action: 'wait', understanding: '模型在陈述', reason: '暂不需要我操作——等它下一步' }
   }
@@ -120,7 +183,8 @@ class UserAgent {
   // 问题分类（领域规则）——DONE 强特征优先（「做成什么样算完成」含「网页上玩」会误判 PLATFORM）
   classify(content) {
     const c = content ?? ''
-    if (/(做成什么样|算完成|算完|做到哪|完成标准|做完|什么时候算|做到什么程度)/.test(c)) return Q.DONE
+    if (/(做成什么样|算完成|算完|做到哪|完成标准|做完|什么时候算|做到什么程度)/.test(c))
+      return Q.DONE
     if (/(给谁玩|谁玩|面向|玩家|对象)/.test(c)) return Q.AUDIENCE
     if (/(在哪|哪儿玩|平台|网页|电脑|手机|浏览器|运行|设备)/.test(c)) return Q.PLATFORM
     if (/(设计|意思|理解|指什么|哪个意思|什么游戏|哪种|哪一档)/.test(c)) return Q.WHAT
@@ -130,7 +194,12 @@ class UserAgent {
 
   // 标准 4 问是否都已确认（核心需求完整——附加问题可放权让模型收敛）
   profileComplete() {
-    return !!(this.profile[Q.WHAT] && this.profile[Q.AUDIENCE] && this.profile[Q.PLATFORM] && this.profile[Q.DONE])
+    return !!(
+      this.profile[Q.WHAT] &&
+      this.profile[Q.AUDIENCE] &&
+      this.profile[Q.PLATFORM] &&
+      this.profile[Q.DONE]
+    )
   }
 
   // 候选选项匹配（我的意图：同音泛化选「射击」，其余选贴合画像的）
@@ -140,7 +209,7 @@ class UserAgent {
       [Q.WHAT]: /射击/,
       [Q.AUDIENCE]: /大众|普通|随便谁|自己|单人|朋友/,
       [Q.PLATFORM]: /网页|浏览器/,
-      [Q.DONE]: /简单|能玩|先|基础|够|开局/
+      [Q.DONE]: /简单|能玩|先|基础|够|开局/,
     }
     const pat = patterns[qClass]
     if (!pat) return -1
@@ -150,10 +219,22 @@ class UserAgent {
   // 理解所选选项的含义（供打印——真人知道自己为什么选这个）
   understandOption(qClass, text) {
     const map = {
-      [Q.WHAT]: { understanding: '这是「做什么」——我本意是射击游戏（设计≈射击，打字谐音）', reason: `选「${text.slice(0, 12)}」——射击符合我的本意` },
-      [Q.AUDIENCE]: { understanding: '这是「给谁玩」——选择目标玩家', reason: `选「${text.slice(0, 12)}」——贴合我的场景` },
-      [Q.PLATFORM]: { understanding: '这是「在哪儿玩」——选择运行平台', reason: `选「${text.slice(0, 12)}」——网页最方便` },
-      [Q.DONE]: { understanding: '这是「做成什么样算完」——选择完成标准', reason: `选「${text.slice(0, 12)}」——先跑起来就行` }
+      [Q.WHAT]: {
+        understanding: '这是「做什么」——我本意是射击游戏（设计≈射击，打字谐音）',
+        reason: `选「${text.slice(0, 12)}」——射击符合我的本意`,
+      },
+      [Q.AUDIENCE]: {
+        understanding: '这是「给谁玩」——选择目标玩家',
+        reason: `选「${text.slice(0, 12)}」——贴合我的场景`,
+      },
+      [Q.PLATFORM]: {
+        understanding: '这是「在哪儿玩」——选择运行平台',
+        reason: `选「${text.slice(0, 12)}」——网页最方便`,
+      },
+      [Q.DONE]: {
+        understanding: '这是「做成什么样算完」——选择完成标准',
+        reason: `选「${text.slice(0, 12)}」——先跑起来就行`,
+      },
     }
     return map[qClass] ?? { understanding: '选择该项', reason: `选「${text.slice(0, 12)}」` }
   }
@@ -170,7 +251,10 @@ class UserAgent {
   // 验证模型是否理解了我们的选择（复述确认——语义核心词命中即可）
   verifyEcho(lastReply, chosenText) {
     if (!chosenText) return true
-    const sem = chosenText.match(/(射击|解谜|建造|网页|浏览器|大众|普通|随便|简单|能玩|单机|朋友|得分|自己|电脑|手机|闯关|对战|开枪|分数|打中|练手|学习|键盘|鼠标|调试|关卡|怪)/g) ?? []
+    const sem =
+      chosenText.match(
+        /(射击|解谜|建造|网页|浏览器|大众|普通|随便|简单|能玩|单机|朋友|得分|自己|电脑|手机|闯关|对战|开枪|分数|打中|练手|学习|键盘|鼠标|调试|关卡|怪)/g,
+      ) ?? []
     const phrases = chosenText.match(/[^：:、\-—()（）\s]{2,8}/g) ?? []
     const tests = [...new Set([...sem, ...phrases])]
     return tests.some((k) => k && lastReply.includes(k))
@@ -188,8 +272,8 @@ class UserAgent {
 
 class UserSimulator {
   constructor(agent) {
-    this.agent = agent        // UserAgent：画像 + fallback 正则决策
-    this.history = []         // 最近模型消息（供上下文理解）
+    this.agent = agent // UserAgent：画像 + fallback 正则决策
+    this.history = [] // 最近模型消息（供上下文理解）
   }
 
   personaText() {
@@ -234,7 +318,10 @@ ${this.personaText()}
   // 语义理解：把模型最新消息 + 最近历史 + 阶段 + 画像交给 LLM，返回 { action, text, understanding }
   async understand(msg, stage) {
     const c = msg.content ?? ''
-    const hist = this.history.slice(-2).map((h) => `AI 搭档之前说：${h.slice(0, 120)}`).join('\n')
+    const hist = this.history
+      .slice(-2)
+      .map((h) => `AI 搭档之前说：${h.slice(0, 120)}`)
+      .join('\n')
     const prompt = `AI 搭档最新对你说（${c.length} 字）：\n${c.slice(0, 800)}${c.length > 800 ? '…' : ''}\n${msg.candidates.length > 0 ? `\n候选选项：${msg.candidates.join(' | ')}` : ''}`
     const body = JSON.stringify({
       model: 'deepseek-chat',
@@ -271,13 +358,27 @@ ${this.personaText()}
   fallback(msg) {
     const c = msg.content ?? ''
     const urlMatch = c.match(/https?:\/\/localhost:\d+/)
-    if (urlMatch && SEM_PLAY.test(c)) return { action: 'play-test', text: '', understanding: '模型给地址让我试玩' }
-    if (SEM_DONE.test(c) && !SEM_ASK.test(c)) return { action: 'confirm', text: '', understanding: '模型说完成/交付' }
-    if (SEM_ASK.test(c) && !SEM_DONE.test(c)) return { action: 'type', text: '我玩了几把，手感还行——先这样吧，确认完成，我们推进', understanding: '模型征求决策' }
-    if (SEM_CONFUSE.test(c) && !SEM_DONE.test(c)) return { action: 'type', text: '好，你确认排查一下，没问题了再告诉我', understanding: '模型对工具结果困惑' }
-    if (SEM_PROMISE.test(c)) return { action: 'continue', text: '', understanding: '模型说要做但没动手' }
+    if (urlMatch && SEM_PLAY.test(c))
+      return { action: 'play-test', text: '', understanding: '模型给地址让我试玩' }
+    if (SEM_DONE.test(c) && !SEM_ASK.test(c))
+      return { action: 'confirm', text: '', understanding: '模型说完成/交付' }
+    if (SEM_ASK.test(c) && !SEM_DONE.test(c))
+      return {
+        action: 'type',
+        text: '我玩了几把，手感还行——先这样吧，确认完成，我们推进',
+        understanding: '模型征求决策',
+      }
+    if (SEM_CONFUSE.test(c) && !SEM_DONE.test(c))
+      return {
+        action: 'type',
+        text: '好，你确认排查一下，没问题了再告诉我',
+        understanding: '模型对工具结果困惑',
+      }
+    if (SEM_PROMISE.test(c))
+      return { action: 'continue', text: '', understanding: '模型说要做但没动手' }
     const d = this.agent.decide(msg)
-    if (d.action === 'click-option') return { action: 'click-option', text: d.text, understanding: d.understanding }
+    if (d.action === 'click-option')
+      return { action: 'click-option', text: d.text, understanding: d.understanding }
     if (d.action === 'type') return { action: 'type', text: d.text, understanding: d.understanding }
     if (d.action === 'continue') return { action: 'continue', text: '', understanding: d.reason }
     if (d.action === 'advance') return { action: 'confirm', text: '', understanding: d.reason }
@@ -290,7 +391,9 @@ ${this.personaText()}
 // ============================================================================
 
 class SessionDriver {
-  constructor(page) { this.page = page }
+  constructor(page) {
+    this.page = page
+  }
 
   async readTranscript() {
     const out = []
@@ -300,9 +403,18 @@ class SessionDriver {
       const m = msgs.nth(i)
       const cls = await m.getAttribute('class')
       const role = cls.includes('nf-msg--user') ? 'user' : 'assistant'
-      const content = (await m.locator('.nf-msg__body').innerText().catch(() => ''))
-      const candidates = (await m.locator('.nf-candidates__btn').allInnerTexts().catch(() => []))
-      const tools = (await m.locator('.nf-toolcall').allInnerTexts().catch(() => []))
+      const content = await m
+        .locator('.nf-msg__body')
+        .innerText()
+        .catch(() => '')
+      const candidates = await m
+        .locator('.nf-candidates__btn')
+        .allInnerTexts()
+        .catch(() => [])
+      const tools = await m
+        .locator('.nf-toolcall')
+        .allInnerTexts()
+        .catch(() => [])
       out.push({ role, content, candidates, tools })
     }
     return out
@@ -335,24 +447,51 @@ class SessionDriver {
       // 用户消息（如确认按钮 send）不能当模型回复返回（主循环拿到用户消息就误判模型回复完成）
       const msgs = t.filter((m) => m.role === 'assistant' && m.content.trim())
       const lastMsg = msgs[msgs.length - 1]
-      sb = await this.page.locator('.nf-statusbar').innerText().catch(() => '')
-      const working = await this.page.locator('.nf-statusbar__dot--working').count().catch(() => 0)
+      sb = await this.page
+        .locator('.nf-statusbar')
+        .innerText()
+        .catch(() => '')
+      const working = await this.page
+        .locator('.nf-statusbar__dot--working')
+        .count()
+        .catch(() => 0)
       // 2026-08-05 打断根因修复：模型工具链执行中（工具卡 running/pending）绝不能返回让用户发送——
       // 发送会触发「处理中发送=打断+新指令优先」→ 模型工具链上下文重置 → 反复重启（写文件永远到不了）
-      const runningTools = await this.page.locator('.nf-toolcall--running, .nf-toolcall--pending').count().catch(() => 0)
+      const runningTools = await this.page
+        .locator('.nf-toolcall--running, .nf-toolcall--pending')
+        .count()
+        .catch(() => 0)
       // ① 放宽 tool-only：指纹 = 消息数 + 内容摘要 + 工具卡数/文本——纯工具链持续变化也算进展
-      const fp = t.map((m) => `${m.role}|${m.content.slice(0, 30)}|${m.tools.length}|${m.tools.join('|').slice(0, 40)}`).join('~')
-      if (fp !== lastFp) { lastFp = fp; idleSince = Date.now() }
+      const fp = t
+        .map(
+          (m) =>
+            `${m.role}|${m.content.slice(0, 30)}|${m.tools.length}|${m.tools.join('|').slice(0, 40)}`,
+        )
+        .join('~')
+      if (fp !== lastFp) {
+        lastFp = fp
+        idleSince = Date.now()
+      }
       const msgChanged = last && lastMsg && lastMsg.content !== last.content
       // 授权卡待批（「有操作待你批准」）——模型在等用户批准（maybeContinue 已停），不是没回复——返回让上层处理授权
       if (sb.includes('有操作待你批准') && lastMsg) return lastMsg
       // 2026-08-05：状态栏 isActionPromise 提示（「说要做但还没动手」）= 模型已回复完在等用户（0e12ea6 状态栏化后非「就绪」）——视为就绪返回，上层再推动
       if (sb.includes('说要做但还没动手') && lastMsg && !msgChanged) return lastMsg
       // ② 状态栏容错：读失败/为空（sb===''）→ 不据此判忙——就绪判定退化为 working/工具卡计数
-      const ready = sb === '' ? (working === 0 && runningTools === 0) : sb.includes('就绪')
+      const ready = sb === '' ? working === 0 && runningTools === 0 : sb.includes('就绪')
       // 模型完全空闲才返回：working=0 + 无工具执行 + 状态「就绪」+ 消息稳定——连续 2 轮（防工具链间隙的「就绪」误判）
-      if (lastMsg && lastMsg.content.trim() && ready && working === 0 && runningTools === 0 && !msgChanged) {
-        if (/说要做但还没动手|回复.*继续/.test(lastMsg.content)) { last = lastMsg; return null } // 跳过 isActionPromise 系统提示（UI 插入，非模型回复）
+      if (
+        lastMsg &&
+        lastMsg.content.trim() &&
+        ready &&
+        working === 0 &&
+        runningTools === 0 &&
+        !msgChanged
+      ) {
+        if (/说要做但还没动手|回复.*继续/.test(lastMsg.content)) {
+          last = lastMsg
+          return null
+        } // 跳过 isActionPromise 系统提示（UI 插入，非模型回复）
         stableCount++
         if (stableCount >= 2) return lastMsg
       } else {
@@ -373,12 +512,16 @@ class SessionDriver {
         continue
       }
       if (last) {
-        console.log(`   ⚠️ waitSettled 窗口耗尽（${timeoutMs / 1000}s）——状态栏="${sb}"，返回最后一条已知回复（${last.content.slice(0, 30)}…）让上层去重/推动`)
+        console.log(
+          `   ⚠️ waitSettled 窗口耗尽（${timeoutMs / 1000}s）——状态栏="${sb}"，返回最后一条已知回复（${last.content.slice(0, 30)}…）让上层去重/推动`,
+        )
         return last
       }
       windowEnd = Date.now() + 30000 // 首条消息迟迟不来（模型预热/流式慢）——继续等到硬上限
     }
-    throw new Error(`waitSettled 硬超时 ${(timeoutMs * 4) / 1000}s（工具链停滞/模型无回复——状态栏="${sb}"，最后消息="${last?.content.slice(0, 40) ?? ''}"）`)
+    throw new Error(
+      `waitSettled 硬超时 ${(timeoutMs * 4) / 1000}s（工具链停滞/模型无回复——状态栏="${sb}"，最后消息="${last?.content.slice(0, 40) ?? ''}"）`,
+    )
   }
 
   // 等模型「新」回复（内容必须变化——用于决策后等待模型对操作的回复，防点击没生效）
@@ -395,7 +538,10 @@ class SessionDriver {
       // 2026-08-15 问题 A 修复后适配：模型调工具被拦 → 授权卡弹出 → maybeContinue 停（正确行为——不再 14 轮循环）→
       // waitNew 若只等「新回复」会死等 480s（tool-only 轮内容为空被 content 过滤跳过）。检测「有操作待你批准」
       // → 点授权卡（approvePending 完整策略）→ 继续等模型对操作的回复。waitSettled 已有同款检测（348 行）——补 waitNew
-      const sbNow = await this.page.locator('.nf-statusbar').innerText().catch(() => '')
+      const sbNow = await this.page
+        .locator('.nf-statusbar')
+        .innerText()
+        .catch(() => '')
       if (sbNow.includes('有操作待你批准') && Date.now() - lastApprovalAt > 2000) {
         const ap = await this.approvePending()
         if (ap) {
@@ -406,33 +552,68 @@ class SessionDriver {
       }
       const t = await this.readTranscript()
       const lastMsg = [...t].reverse().find((m) => m.role === 'assistant' && m.content.trim())
-      const fp = t.map((m) => `${m.role}|${m.content.slice(0, 30)}|${m.tools.length}|${m.tools.join('|').slice(0, 40)}`).join('~')
-      if (fp !== lastFp) { lastFp = fp; idleSince = Date.now() }
+      const fp = t
+        .map(
+          (m) =>
+            `${m.role}|${m.content.slice(0, 30)}|${m.tools.length}|${m.tools.join('|').slice(0, 40)}`,
+        )
+        .join('~')
+      if (fp !== lastFp) {
+        lastFp = fp
+        idleSince = Date.now()
+      }
       if (lastMsg && lastMsg.content !== fromContent) {
         if (/说要做但还没动手|回复.*继续/.test(lastMsg.content)) continue // 跳过 isActionPromise 系统提示（非模型回复）
         return lastMsg
       }
       // 记录已出现的非提示消息（可能被提示挤到后面——用于超时容错）
-      const real = [...t].reverse().find((m) => m.role === 'assistant' && m.content.trim() && !/说要做但还没动手|回复.*继续/.test(m.content))
+      const real = [...t]
+        .reverse()
+        .find(
+          (m) =>
+            m.role === 'assistant' &&
+            m.content.trim() &&
+            !/说要做但还没动手|回复.*继续/.test(m.content),
+        )
       if (real && real.content !== fromContent) lastReal = real
       if (Date.now() >= windowEnd) {
-        const busy = (await this.page.locator('.nf-statusbar__dot--working').count().catch(() => 0)) > 0
-          || (await this.page.locator('.nf-toolcall--running, .nf-toolcall--pending').count().catch(() => 0)) > 0
+        const busy =
+          (await this.page
+            .locator('.nf-statusbar__dot--working')
+            .count()
+            .catch(() => 0)) > 0 ||
+          (await this.page
+            .locator('.nf-toolcall--running, .nf-toolcall--pending')
+            .count()
+            .catch(() => 0)) > 0
         const progressing = Date.now() - idleSince < 25000
-        if (busy && progressing) { windowEnd = Date.now() + 30000; continue } // 链在推进——顺延
+        if (busy && progressing) {
+          windowEnd = Date.now() + 30000
+          continue
+        } // 链在推进——顺延
         // 超时容错：模型回复完成后被 isActionPromise 提示插入（提示是最后一条）——此时返回提示前的模型回复（流程可继续）
         if (lastReal && lastReal.content !== fromContent) {
-          console.log(`   ⚠️ 模型回复后插入系统提示（isActionPromise），返回提示前的模型回复继续流程`)
+          console.log(
+            `   ⚠️ 模型回复后插入系统提示（isActionPromise），返回提示前的模型回复继续流程`,
+          )
           return lastReal
         }
         windowEnd = Date.now() + 30000 // 首条新回复迟迟不来（模型预热/流式慢）——继续等到硬上限
       }
     }
     // 超时诊断：区分「模型流式中断/无响应」vs「操作未生效」（模拟真实用户遇到卡住时看状态）
-    const sb = await this.page.locator('.nf-statusbar').innerText().catch(() => '?')
+    const sb = await this.page
+      .locator('.nf-statusbar')
+      .innerText()
+      .catch(() => '?')
     const last = await this.latestAssistant()
-    const working = await this.page.locator('.nf-statusbar__dot--working').count().catch(() => -1)
-    throw new Error(`模型对操作无新回复（${(timeoutMs * 4) / 1000}s）——状态栏="${sb}" working=${working} 最后消息="${last?.content.slice(0, 40) ?? ''}"（可能流式中断/模型无响应）`)
+    const working = await this.page
+      .locator('.nf-statusbar__dot--working')
+      .count()
+      .catch(() => -1)
+    throw new Error(
+      `模型对操作无新回复（${(timeoutMs * 4) / 1000}s）——状态栏="${sb}" working=${working} 最后消息="${last?.content.slice(0, 40) ?? ''}"（可能流式中断/模型无响应）`,
+    )
   }
 
   async send(text) {
@@ -444,22 +625,33 @@ class SessionDriver {
     const clean = cleanOpt(text ?? '')
     // ① 精确匹配（LLM/正则返回的选项原文）
     let btn = this.page.locator('.nf-candidates__btn').filter({ hasText: clean })
-    if (await btn.count() > 0) { await btn.click(); return }
+    if ((await btn.count()) > 0) {
+      await btn.click()
+      return
+    }
     // ② 核心词匹配（LLM 可能加序号前缀/简化——取冒号前 2-4 字）
-    const core = clean.split(/[：:]/)[0].replace(/[①-⑩\d\s.、]/g, '').slice(0, 4)
+    const core = clean
+      .split(/[：:]/)[0]
+      .replace(/[①-⑩\d\s.、]/g, '')
+      .slice(0, 4)
     if (core) {
       btn = this.page.locator('.nf-candidates__btn').filter({ hasText: core })
-      if (await btn.count() > 0) { await btn.click(); return }
+      if ((await btn.count()) > 0) {
+        await btn.click()
+        return
+      }
     }
     // 2026-08-15 降级（实测：模型输出非标准候选标签如 <异值候选> → 产品只去标签不渲染按钮——坑 100 ① 同类
     // 格式漂移）：真实用户面对「有选项文本但无按钮」会直接打字表达选择——降级为发送文本，不抛错中断流程
-    console.log(`   ⚠️ 候选按钮「${text}」未找到（模型未用标准 <candidates> 块）——降级为直接输入文本`)
+    console.log(
+      `   ⚠️ 候选按钮「${text}」未找到（模型未用标准 <candidates> 块）——降级为直接输入文本`,
+    )
     await this.send(clean)
   }
 
   async currentStage() {
     const active = this.page.locator('.nf-flow__stage--active')
-    if (await active.count() === 0) return ''
+    if ((await active.count()) === 0) return ''
     return (await active.innerText()).trim()
   }
 
@@ -481,7 +673,14 @@ class SessionDriver {
       await this.page.waitForTimeout(1000)
     }
     if (!(await btn.isEnabled().catch(() => false))) {
-      throw new Error(`推进按钮未解锁（等 ${expectStage}）：${(await this.page.locator('.nf-flow__advance').innerText().catch(() => '')).slice(0, 100)}`)
+      throw new Error(
+        `推进按钮未解锁（等 ${expectStage}）：${(
+          await this.page
+            .locator('.nf-flow__advance')
+            .innerText()
+            .catch(() => '')
+        ).slice(0, 100)}`,
+      )
     }
     await btn.click()
     if (expectStage) {
@@ -499,24 +698,50 @@ class SessionDriver {
   async approvePending() {
     const p = this.page
     const plan = p.locator('.nf-toolcall__approve', { hasText: '批准这批文件' })
-    if (await plan.count() > 0) {
+    if ((await plan.count()) > 0) {
       // 提取文件清单（路径 + 原因）——真实用户批准前会看清单
-      const files = await p.locator('.nf-plan__file').allInnerTexts().catch(() => [])
-      const paths = await p.locator('.nf-plan__path').allInnerTexts().catch(() => [])
+      const files = await p
+        .locator('.nf-plan__file')
+        .allInnerTexts()
+        .catch(() => [])
+      const paths = await p
+        .locator('.nf-plan__path')
+        .allInnerTexts()
+        .catch(() => [])
       await plan.first().click()
-      return { label: '批准这批文件', detail: `文件清单(${files.length})：${files.slice(0, 6).map((f) => f.replace(/\n/g, ' ').slice(0, 35)).join(' | ')}`, planFiles: paths.map((s) => s.trim()).filter(Boolean) }
+      return {
+        label: '批准这批文件',
+        detail: `文件清单(${files.length})：${files
+          .slice(0, 6)
+          .map((f) => f.replace(/\n/g, ' ').slice(0, 35))
+          .join(' | ')}`,
+        planFiles: paths.map((s) => s.trim()).filter(Boolean),
+      }
     }
     const batch = p.locator('.nf-toolcall__batch-approve')
-    if (await batch.count() > 0) { await batch.first().click(); return { label: '全部允许并记住', detail: '' } }
+    if ((await batch.count()) > 0) {
+      await batch.first().click()
+      return { label: '全部允许并记住', detail: '' }
+    }
     const remember = p.locator('.nf-toolcall__remember')
-    if (await remember.count() > 0) {
-      const target = await remember.first().locator('xpath=ancestor::div[contains(@class,"nf-toolcall")]').locator('.nf-toolcall__args').innerText().catch(() => '')
+    if ((await remember.count()) > 0) {
+      const target = await remember
+        .first()
+        .locator('xpath=ancestor::div[contains(@class,"nf-toolcall")]')
+        .locator('.nf-toolcall__args')
+        .innerText()
+        .catch(() => '')
       await remember.first().click()
       return { label: '允许并记住', detail: target }
     }
     const approve = p.locator('.nf-toolcall__approve')
-    if (await approve.count() > 0) {
-      const target = await approve.first().locator('xpath=ancestor::div[contains(@class,"nf-toolcall")]').locator('.nf-toolcall__args').innerText().catch(() => '')
+    if ((await approve.count()) > 0) {
+      const target = await approve
+        .first()
+        .locator('xpath=ancestor::div[contains(@class,"nf-toolcall")]')
+        .locator('.nf-toolcall__args')
+        .innerText()
+        .catch(() => '')
       await approve.first().click()
       return { label: '允许执行', detail: target }
     }
@@ -535,24 +760,35 @@ class SessionDriver {
     const confirmBtns = only && only.length > 0 ? only : ['确认目标', '确认执行', '已解决']
     for (const name of confirmBtns) {
       const btn = p.getByRole('button', { name })
-      if (await btn.count() > 0) {
+      if ((await btn.count()) > 0) {
         await btn.first().click()
         return { label: `点确认卡「${name}」` }
       }
     }
     // 授权卡（approve-files 批量/单卡/允许并记住/允许执行）
     const ap = await this.approvePending()
-    return ap ? { label: `批准授权：${ap.label}`, detail: ap.detail, planFiles: ap.planFiles } : null
+    return ap
+      ? { label: `批准授权：${ap.label}`, detail: ap.detail, planFiles: ap.planFiles }
+      : null
   }
 
   async fileTree() {
-    return (await this.page.locator('.nf-filetree span, [class*="filetree"] span').allInnerTexts().catch(() => []))
-      .map((s) => s.trim()).filter(Boolean)
+    return (
+      await this.page
+        .locator('.nf-filetree span, [class*="filetree"] span')
+        .allInnerTexts()
+        .catch(() => [])
+    )
+      .map((s) => s.trim())
+      .filter(Boolean)
   }
 
   // 是否有未完成的工具卡（running/pending——bash 长任务如 npm install 执行中）
   async toolsRunning() {
-    return await this.page.locator('.nf-toolcall--running, .nf-toolcall--pending').count().catch(() => 0)
+    return await this.page
+      .locator('.nf-toolcall--running, .nf-toolcall--pending')
+      .count()
+      .catch(() => 0)
   }
 
   // 项目根目录（状态栏「│ 目录名」→ Documents/NeonForge/目录名）
@@ -580,7 +816,10 @@ class SessionDriver {
   }
 
   async statusbar() {
-    return this.page.locator('.nf-statusbar').innerText().catch(() => '')
+    return this.page
+      .locator('.nf-statusbar')
+      .innerText()
+      .catch(() => '')
   }
 }
 
@@ -597,7 +836,12 @@ function printModel(msg, prefix = '🤖') {
     msg.candidates.forEach((c, i) => console.log(`         ${i + 1}. ${cleanOpt(c)}`))
   }
   if (msg.tools.length > 0) {
-    console.log(`       [工具卡] ${msg.tools.slice(0, 4).map((t) => t.replace(/\n/g, ' ').slice(0, 50)).join(' | ')}`)
+    console.log(
+      `       [工具卡] ${msg.tools
+        .slice(0, 4)
+        .map((t) => t.replace(/\n/g, ' ').slice(0, 50))
+        .join(' | ')}`,
+    )
   }
 }
 
@@ -609,18 +853,27 @@ class StageMachine {
   constructor(driver, agent, phase) {
     this.driver = driver
     this.agent = agent
-    this.sim = new UserSimulator(agent)   // LLM 语义理解模拟用户（2026-08-05）
+    this.sim = new UserSimulator(agent) // LLM 语义理解模拟用户（2026-08-05）
     this.phase = phase
     this.verdicts = []
   }
 
   async run() {
     await this.requirement()
-    if (this.phase === 'req') { console.log('\n   [PHASE=req] 需求阶段验证完成——停止'); return }
+    if (this.phase === 'req') {
+      console.log('\n   [PHASE=req] 需求阶段验证完成——停止')
+      return
+    }
     await this.design()
-    if (this.phase === 'design') { console.log('\n   [PHASE=design] 设计阶段验证完成——停止'); return }
+    if (this.phase === 'design') {
+      console.log('\n   [PHASE=design] 设计阶段验证完成——停止')
+      return
+    }
     await this.development()
-    if (this.phase === 'dev') { console.log('\n   [PHASE=dev] 开发阶段验证完成——停止'); return }
+    if (this.phase === 'dev') {
+      console.log('\n   [PHASE=dev] 开发阶段验证完成——停止')
+      return
+    }
     await this.test()
     await this.deploy()
   }
@@ -633,7 +886,10 @@ class StageMachine {
     for (let i = 0; i < 20; i++) {
       // 2026-08-05 阶段自动推进检测：模型输出【需求确认】标记 → UI 自动推进到设计——跟住阶段
       const stNow = await this.driver.currentStage().catch(() => '')
-      if (stNow && stNow.includes('设计')) { console.log('   ↪ 阶段已自动推进到设计——进入设计阶段'); return }
+      if (stNow && stNow.includes('设计')) {
+        console.log('   ↪ 阶段已自动推进到设计——进入设计阶段')
+        return
+      }
       // 2026-08-08 第 4 个问题修复（卡片优先——移到循环开头）：确认卡/授权卡出现**立即**点，不等模型 idle——
       // 否则 approve-files 卡弹出后模型继续调工具（write 被拦）→ waitSettled 永不 settle → 卡死（「批准这批文件没点」根因）
       // 2026-08-15 E1/E2（无阶段语义对齐）：需求阶段**只点「确认目标」卡**——点掉即需求收敛进入设计；
@@ -654,10 +910,17 @@ class StageMachine {
       }
       lastProcessed = msg.content
       // 2026-08-05 需求阶段模型越界（输出技术方案——STAGE_HINT 需求规则禁止给方案）→ 提醒先确认需求（防阶段错位）
-      if (/(技术选型|整体方案|页面结构|模块划分|Three\.js|Vite|代码结构|用.*做.*引擎|渲染库)/.test(msg.content) && !/(【需求确认|需求确认：|确认完毕)/.test(msg.content)) {
+      if (
+        /(技术选型|整体方案|页面结构|模块划分|Three\.js|Vite|代码结构|用.*做.*引擎|渲染库)/.test(
+          msg.content,
+        ) &&
+        !/(【需求确认|需求确认：|确认完毕)/.test(msg.content)
+      ) {
         printModel(msg)
         console.log(`   ⚠️ 模型需求阶段输出技术方案（越界）——提醒先完成需求确认`)
-        await this.driver.send('先别急着设计方案——先把需求确认清楚（做什么/给谁玩/在哪玩/做完什么样），方案到设计阶段再出')
+        await this.driver.send(
+          '先别急着设计方案——先把需求确认清楚（做什么/给谁玩/在哪玩/做完什么样），方案到设计阶段再出',
+        )
         continue
       }
       // 需求确认 → 推进（2026-08-15 无阶段化适配：产品 S4 已移除阶段 UI/advanceChat——无「确认推进」按钮；
@@ -679,7 +942,11 @@ class StageMachine {
       if (decision.action === 'click-option') {
         console.log(`   🧑 我的理解：${und}\n      → 选「${decision.text}」`)
         await this.driver.clickCandidate(decision.text)
-      } else if (decision.action === 'type' || decision.action === 'play-test' || decision.action === 'confirm') {
+      } else if (
+        decision.action === 'type' ||
+        decision.action === 'play-test' ||
+        decision.action === 'confirm'
+      ) {
         console.log(`   🧑 我的理解：${und}\n      → 说「${(decision.text ?? '').slice(0, 40)}」`)
         await this.driver.send(decision.text || '好的，继续')
       } else if (decision.action === 'continue') {
@@ -692,12 +959,22 @@ class StageMachine {
         await this.driver.page.waitForTimeout(3000)
         continue
       }
-      this.agent.steps.push({ msg: msg.content.slice(0, 80), decision: decision.text ?? decision.action })
+      this.agent.steps.push({
+        msg: msg.content.slice(0, 80),
+        decision: decision.text ?? decision.action,
+      })
       // 等模型对这次操作的回复（必须是新消息——防点击没生效/模型没回复）
       const next = await this.driver.waitNew(msg.content)
       const echoed = this.agent.verifyEcho(next.content, decision.text ?? '')
-      this.verdicts.push({ stage: '需求', echoed, chosen: decision.text, reply: next.content.slice(0, 60) })
-      console.log(`   ${echoed ? '✅ 模型正确复述了我的选择' : '⚠️ 模型未复述我的选择关键词——需要关注'}\n`)
+      this.verdicts.push({
+        stage: '需求',
+        echoed,
+        chosen: decision.text,
+        reply: next.content.slice(0, 60),
+      })
+      console.log(
+        `   ${echoed ? '✅ 模型正确复述了我的选择' : '⚠️ 模型未复述我的选择关键词——需要关注'}\n`,
+      )
       // lastProcessed 保持 msg.content——next 是未处理的新消息，下轮循环会打印并决策
     }
     throw new Error('需求阶段 20 轮未收敛（模型持续提问/循环）')
@@ -710,13 +987,22 @@ class StageMachine {
     while (Date.now() < deadline) {
       // 2026-08-05 阶段自动推进检测：模型/UI 可能主动推进阶段（用户「推进」消息触发）——e2e 必须跟住，不能在本阶段循环里处理下一阶段消息
       const stNow = await this.driver.currentStage().catch(() => '')
-      if (stNow && stNow.includes('开发')) { console.log('   ↪ 阶段已自动推进到开发——进入开发阶段'); return }
+      if (stNow && stNow.includes('开发')) {
+        console.log('   ↪ 阶段已自动推进到开发——进入开发阶段')
+        return
+      }
       // 2026-08-13 卡片优先（同 requirement——tool-only 链期间授权卡出现在空内容消息，waitSettled 只返回旧消息；
       // 卡放在 dedup 之后 = 永不被点 → 模型等批准 → 死锁。本轮冒烟实测 write×3 + bash 授权卡全被跳过）
       const ap = await this.driver.handleCards()
-      if (ap) { console.log(`   🔓 授权：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`); continue }
+      if (ap) {
+        console.log(`   🔓 授权：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`)
+        continue
+      }
       const msg = await this.driver.waitSettled(120000)
-      if (!msg || msg.content === lastProcessed) { await this.driver.page.waitForTimeout(3000); continue }
+      if (!msg || msg.content === lastProcessed) {
+        await this.driver.page.waitForTimeout(3000)
+        continue
+      }
       lastProcessed = msg.content
       if (/说要做但还没动手|回复.*继续/.test(msg.content)) {
         console.log(`   🧑 模型说要做但没动手——回复「继续」让它干完`)
@@ -731,7 +1017,11 @@ class StageMachine {
         console.log(`   🧑 设计选择（${und}）：选「${decision.text}」`)
         await this.driver.clickCandidate(decision.text)
         const next = await this.driver.waitNew(msg.content)
-        this.verdicts.push({ stage: '设计', answered: decision.text, reply: next.content.slice(0, 50) })
+        this.verdicts.push({
+          stage: '设计',
+          answered: decision.text,
+          reply: next.content.slice(0, 50),
+        })
         console.log(`   ✅ 模型回复：「${next.content.slice(0, 50).replace(/\n/g, ' ')}」\n`)
         lastProcessed = next.content
         continue
@@ -740,7 +1030,11 @@ class StageMachine {
         console.log(`   🧑 设计回答（${und}）：说「${(decision.text ?? '').slice(0, 40)}」`)
         await this.driver.send(decision.text || '好的，继续')
         const next = await this.driver.waitNew(msg.content)
-        this.verdicts.push({ stage: '设计', answered: decision.text, reply: next.content.slice(0, 50) })
+        this.verdicts.push({
+          stage: '设计',
+          answered: decision.text,
+          reply: next.content.slice(0, 50),
+        })
         console.log(`   ✅ 模型回复：「${next.content.slice(0, 50).replace(/\n/g, ' ')}」\n`)
         lastProcessed = next.content
         continue
@@ -767,7 +1061,10 @@ class StageMachine {
       // wait：模型在陈述方案 → 确定性检查「方案完整/确认推进」→ 推进
       const okLen = msg.content.length >= 60
       const okKw = /(方案|技术|用|结构|界面|页面|模块|整体)/.test(msg.content)
-      const confirmed = /(方案.*(完整|没问题|确认|定了)|确认.*方案|没问题.*确认推进|你确认|确认推进|就这样|可以了|没问题)/.test(msg.content)
+      const confirmed =
+        /(方案.*(完整|没问题|确认|定了)|确认.*方案|没问题.*确认推进|你确认|确认推进|就这样|可以了|没问题)/.test(
+          msg.content,
+        )
       if (okLen && okKw && confirmed) {
         this.verdicts.push({ stage: '设计', okLen, okKw, len: msg.content.length })
         console.log(`   📐 设计验证：${msg.content.length} 字 ✓ 含方案要素 ✓ 模型确认完整`)
@@ -791,7 +1088,10 @@ class StageMachine {
     while (Date.now() < deadline) {
       // 2026-08-05 阶段自动推进检测：模型/UI 可能主动推进到测试（用户「推进测试」消息触发）——跟住阶段，防本阶段循环超时
       const stNow = await this.driver.currentStage().catch(() => '')
-      if (stNow && stNow.includes('测试')) { console.log('   ↪ 阶段已自动推进到测试——进入测试阶段'); return }
+      if (stNow && stNow.includes('测试')) {
+        console.log('   ↪ 阶段已自动推进到测试——进入测试阶段')
+        return
+      }
       // 2026-08-13 卡片优先（同 requirement——tool-only 链期间授权卡出现在空内容消息）
       const ap = await this.driver.handleCards()
       if (ap) {
@@ -803,7 +1103,10 @@ class StageMachine {
         continue
       }
       const msg = await this.driver.waitSettled(120000)
-      if (!msg || msg.content === lastProcessed) { await this.driver.page.waitForTimeout(3000); continue }
+      if (!msg || msg.content === lastProcessed) {
+        await this.driver.page.waitForTimeout(3000)
+        continue
+      }
       lastProcessed = msg.content
       // 模型请求批准文件清单（二次 approve-files 被 UI 幂等处理不弹卡——模型以为在等批准）→ 显式放行
       if (/(请求你批准|请批准|等你批准|需要你批准|请求批准)/.test(msg.content)) {
@@ -821,15 +1124,19 @@ class StageMachine {
       const und = decision.understanding ?? this.agent.understand(msg)
       // 试玩反馈：模型给地址/让你试玩 = 交付体验等你反馈 → 真实用户打开验证（确定性 HTTP 验证）
       const urlMatch = msg.content.match(/https?:\/\/localhost:\d+/)
-      if (decision.action === 'play-test' || (urlMatch && /(试|玩|打开|访问|体验|看看|感受)/.test(msg.content))) {
+      if (
+        decision.action === 'play-test' ||
+        (urlMatch && /(试|玩|打开|访问|体验|看看|感受)/.test(msg.content))
+      ) {
         let feedback
         if (urlMatch) {
           try {
             const res = await fetch(urlMatch[0], { signal: AbortSignal.timeout(6000) })
             const text = await res.text()
-            feedback = res.ok && text.length > 50
-              ? `我打开了 ${urlMatch[0]}，页面加载出来了（${res.status}，${text.length} 字节），能玩`
-              : `我打开 ${urlMatch[0]} 是空白的（${res.status}，${text.length} 字节）——页面没加载出来，看看怎么回事`
+            feedback =
+              res.ok && text.length > 50
+                ? `我打开了 ${urlMatch[0]}，页面加载出来了（${res.status}，${text.length} 字节），能玩`
+                : `我打开 ${urlMatch[0]} 是空白的（${res.status}，${text.length} 字节）——页面没加载出来，看看怎么回事`
           } catch (e) {
             feedback = `我打开 ${urlMatch[0]} 打不开（${String(e).slice(0, 60)}）——服务没起来？`
           }
@@ -854,12 +1161,19 @@ class StageMachine {
       }
       // 2026-08-05 兜底：模型明确说「进入测试/测试阶段/推进测试」= 开发完成语义——模型文本推进 ≠ UI 阶段切换
       // （开发→测试需用户点确认推进按钮）——即使 LLM 用户误判 wait，也走清单确定性检查推进（防卡开发循环超时）
-      if (decision.action === 'wait' && /(进入测试阶段|测试阶段启动|推进测试|开发完成|测试阶段了|进测试)/.test(msg.content)) {
+      if (
+        decision.action === 'wait' &&
+        /(进入测试阶段|测试阶段启动|推进测试|开发完成|测试阶段了|进测试)/.test(msg.content)
+      ) {
         console.log(`   ⚠️ 模型明确表示进入测试阶段（${und}）——走清单检查推进`)
-        const missing = planned.filter((pf) => !have.some((h) => h === pf || h.endsWith(pf) || pf.endsWith(h)))
+        const missing = planned.filter(
+          (pf) => !have.some((h) => h === pf || h.endsWith(pf) || pf.endsWith(h)),
+        )
         if (missing.length === 0) {
           this.verdicts.push({ stage: '开发', planned: planned.length, have: have.length })
-          console.log(`   ✅ 开发完成（清单 ${planned.length}/${planned.length} 文件齐全）——点「确认推进」进入测试`)
+          console.log(
+            `   ✅ 开发完成（清单 ${planned.length}/${planned.length} 文件齐全）——点「确认推进」进入测试`,
+          )
           await this.driver.clickAdvance('测试')
           return
         }
@@ -869,18 +1183,24 @@ class StageMachine {
       }
       // 模型说写完/交付（confirm）→ 清单确定性检查（真实文件系统）——LLM 说完成不直接推进，查证据
       if (decision.action === 'confirm') {
-        const missing = planned.filter((pf) => !have.some((h) => h === pf || h.endsWith(pf) || pf.endsWith(h)))
+        const missing = planned.filter(
+          (pf) => !have.some((h) => h === pf || h.endsWith(pf) || pf.endsWith(h)),
+        )
         console.log(`   📦 已完成文件：${have.slice(0, 10).join(', ') || '(空)'}`)
         if (missing.length > 0) {
           // 真实用户：模型说写完但清单缺文件 → 指出并让补齐
           console.log(`   ⚠️ 模型说写完了，但清单里还缺：${missing.join(', ')}`)
           console.log(`   🧑 我检查发现缺文件——提醒模型补齐`)
-          await this.driver.send(`清单里的 ${missing.slice(0, 3).join('、')} 还没看到，补一下再确认`)
+          await this.driver.send(
+            `清单里的 ${missing.slice(0, 3).join('、')} 还没看到，补一下再确认`,
+          )
           continue
         }
         // 清单齐全 → 推进（不强制等工具全部 done——dev server 常驻进程工具卡会一直 pending，属正常；只看模型说完成 + 清单齐全）
         this.verdicts.push({ stage: '开发', planned: planned.length, have: have.length })
-        console.log(`   ✅ 开发完成（清单 ${planned.length}/${planned.length} 文件齐全）——点「确认推进」进入测试`)
+        console.log(
+          `   ✅ 开发完成（清单 ${planned.length}/${planned.length} 文件齐全）——点「确认推进」进入测试`,
+        )
         await this.driver.clickAdvance('测试')
         return
       }
@@ -912,12 +1232,21 @@ class StageMachine {
     while (Date.now() < deadline) {
       // 2026-08-05 阶段自动推进检测：模型/UI 可能主动推进到部署——跟住阶段
       const stNow = await this.driver.currentStage().catch(() => '')
-      if (stNow && stNow.includes('部署')) { console.log('   ↪ 阶段已自动推进到部署——进入部署阶段'); return }
+      if (stNow && stNow.includes('部署')) {
+        console.log('   ↪ 阶段已自动推进到部署——进入部署阶段')
+        return
+      }
       // 2026-08-13 卡片优先（同 requirement——tool-only 链期间授权卡出现在空内容消息）
       const ap = await this.driver.handleCards()
-      if (ap) { console.log(`   🔓 授权：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`); continue }
+      if (ap) {
+        console.log(`   🔓 授权：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`)
+        continue
+      }
       const msg = await this.driver.waitSettled(120000)
-      if (!msg || msg.content === lastProcessed) { await this.driver.page.waitForTimeout(3000); continue }
+      if (!msg || msg.content === lastProcessed) {
+        await this.driver.page.waitForTimeout(3000)
+        continue
+      }
       lastProcessed = msg.content
       printModel(msg)
       // 2026-08-05 LLM 语义理解（用户指示：真实用户模拟必须语义理解，非正则穷举）
@@ -925,15 +1254,19 @@ class StageMachine {
       const und = decision.understanding ?? this.agent.understand(msg)
       // 试玩反馈：模型给地址/要我实测 = 等用户打开确认 → 真实用户打开验证（确定性 HTTP）
       const tUrl = msg.content.match(/https?:\/\/localhost:\d+/)
-      if (decision.action === 'play-test' || (tUrl && /(试|玩|打开|访问|体验|看看|感受|确认)/.test(msg.content))) {
+      if (
+        decision.action === 'play-test' ||
+        (tUrl && /(试|玩|打开|访问|体验|看看|感受|确认)/.test(msg.content))
+      ) {
         let fb
         if (tUrl) {
           try {
             const res = await fetch(tUrl[0], { signal: AbortSignal.timeout(6000) })
             const text = await res.text()
-            fb = res.ok && text.length > 50
-              ? `我打开了 ${tUrl[0]}，页面正常（${res.status}，${text.length} 字节）——确认可以`
-              : `我打开 ${tUrl[0]} 是空白的（${res.status}，${text.length} 字节）——页面没加载出来`
+            fb =
+              res.ok && text.length > 50
+                ? `我打开了 ${tUrl[0]}，页面正常（${res.status}，${text.length} 字节）——确认可以`
+                : `我打开 ${tUrl[0]} 是空白的（${res.status}，${text.length} 字节）——页面没加载出来`
           } catch (e) {
             fb = `我打开 ${tUrl[0]} 打不开（${String(e).slice(0, 60)}）——服务没起来？`
           }
@@ -946,8 +1279,12 @@ class StageMachine {
       }
       // 真实验证（确定性）：模型实际调了工具（bash 跑/检查/启动）+ 明确说验证通过——LLM confirm 与正则 saidPass 双保险
       const t = await this.driver.readTranscript()
-      const hasBashRun = t.some((m) => m.tools.some((x) => /(npm|vite|serve|启动|运行|执行|检查|ls|测试|验证|test)/.test(x)))
-      const saidPass = SEM_DONE.test(msg.content) || /(验证通过|测试通过|能跑|正常运行|没问题|启动成功|检查通过)/.test(msg.content)
+      const hasBashRun = t.some((m) =>
+        m.tools.some((x) => /(npm|vite|serve|启动|运行|执行|检查|ls|测试|验证|test)/.test(x)),
+      )
+      const saidPass =
+        SEM_DONE.test(msg.content) ||
+        /(验证通过|测试通过|能跑|正常运行|没问题|启动成功|检查通过)/.test(msg.content)
       if ((decision.action === 'confirm' || saidPass) && hasBashRun) {
         this.verdicts.push({ stage: '测试', hasBashRun, saidPass })
         console.log(`   ✅ 测试验证通过（有实际运行/检查动作 + 模型确认）——点「确认推进」进入部署`)
@@ -993,14 +1330,16 @@ class StageMachine {
       console.log(`   ⚠️ 部署前检查：核心产物缺失 ${missingCore.join(', ')}——先让模型补齐`)
       await this.driver.send(`${missingCore.join('、')} 还没写，补齐了再谈部署`)
       msg = await this.driver.waitSettled(180000)
-      if (!msg) { // isActionPromise 提示（UI 插入非模型回复）——再等一轮真实回复
+      if (!msg) {
+        // isActionPromise 提示（UI 插入非模型回复）——再等一轮真实回复
         msg = await this.driver.waitSettled(120000)
       }
       printModel(msg ?? { content: '', candidates: [], tools: [] }, '✅')
       // 补齐后再查一次
       const tree2 = await this.driver.realFiles()
       const missing2 = core.filter((c) => !tree2.some((t) => t.endsWith(c)))
-      if (missing2.length > 0) throw new Error(`部署阶段产物补齐失败（仍缺 ${missing2.join(', ')}）`)
+      if (missing2.length > 0)
+        throw new Error(`部署阶段产物补齐失败（仍缺 ${missing2.join(', ')}）`)
       console.log(`   ✅ 产物已补齐（${core.join(', ')} 在）`)
     } else {
       console.log(`   📦 产物检查：${core.join(', ')} 都在 ✓`)
@@ -1010,9 +1349,15 @@ class StageMachine {
     while (Date.now() < deadline) {
       // 2026-08-13 卡片优先（同 requirement——tool-only 链期间授权卡出现在空内容消息）
       const ap = await this.driver.handleCards()
-      if (ap) { console.log(`   🔓 授权：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`); continue }
+      if (ap) {
+        console.log(`   🔓 授权：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`)
+        continue
+      }
       msg = await this.driver.waitSettled(120000)
-      if (!msg) { await this.driver.page.waitForTimeout(2000); continue }
+      if (!msg) {
+        await this.driver.page.waitForTimeout(2000)
+        continue
+      }
       if (/说要做但还没动手|回复.*继续/.test(msg.content) || SEM_PROMISE.test(msg.content)) {
         console.log(`   🧑 模型说要做但没动手——回复「继续」让它干完`)
         await this.driver.send('继续')
@@ -1024,15 +1369,19 @@ class StageMachine {
       const und = decision.understanding ?? this.agent.understand(msg)
       // 试玩反馈：模型「部署好了/上线了 + 地址」= 等用户打开确认——真实用户打开验证（确定性 HTTP）
       const dUrl = msg.content.match(/https?:\/\/localhost:\d+/)
-      if (decision.action === 'play-test' || (dUrl && /(试|玩|打开|访问|体验|看看|感受|确认)/.test(msg.content))) {
+      if (
+        decision.action === 'play-test' ||
+        (dUrl && /(试|玩|打开|访问|体验|看看|感受|确认)/.test(msg.content))
+      ) {
         let fb
         if (dUrl) {
           try {
             const res = await fetch(dUrl[0], { signal: AbortSignal.timeout(6000) })
             const text = await res.text()
-            fb = res.ok && text.length > 50
-              ? `我打开了 ${dUrl[0]}，能正常访问（${res.status}）——确认没问题`
-              : `我打开 ${dUrl[0]} 是空白的（${res.status}，${text.length} 字节）——有问题`
+            fb =
+              res.ok && text.length > 50
+                ? `我打开了 ${dUrl[0]}，能正常访问（${res.status}）——确认没问题`
+                : `我打开 ${dUrl[0]} 是空白的（${res.status}，${text.length} 字节）——有问题`
           } catch (e) {
             fb = `我打开 ${dUrl[0]} 打不开（${String(e).slice(0, 60)}）`
           }
@@ -1044,7 +1393,10 @@ class StageMachine {
         continue
       }
       // 可执行部署（确定性）：给了命令/平台/链接/实际部署动作——LLM confirm 与 actionable 双保险
-      const actionable = /(npm run|vercel|部署|上线|链接|地址|端口|localhost|npm i|npm install|访问|打开.*玩|部署好了|可以玩|deployed|live|online)/i.test(msg.content)
+      const actionable =
+        /(npm run|vercel|部署|上线|链接|地址|端口|localhost|npm i|npm install|访问|打开.*玩|部署好了|可以玩|deployed|live|online)/i.test(
+          msg.content,
+        )
       if ((decision.action === 'confirm' || decision.action === 'type') && actionable) {
         this.verdicts.push({ stage: '部署', actionable })
         console.log(`   ✅ 部署方案可执行（${msg.content.slice(0, 40)}…）`)
@@ -1073,7 +1425,9 @@ class StageMachine {
     const treeF = await this.driver.realFiles()
     const hasFiles = treeF.some((f) => /package|\.(js|ts|html|css|json)$/.test(f))
     this.verdicts.push({ stage: '产物', rootHint, hasFiles })
-    console.log(`   📦 产物：项目=${rootHint}，${hasFiles ? '✓ 有真实文件' : '✗ 无产物'}，到达阶段=${await this.driver.currentStage()}${done ? '（交付完成）' : ''}`)
+    console.log(
+      `   📦 产物：项目=${rootHint}，${hasFiles ? '✓ 有真实文件' : '✗ 无产物'}，到达阶段=${await this.driver.currentStage()}${done ? '（交付完成）' : ''}`,
+    )
     return { rootHint, hasFiles, done, stage: await this.driver.currentStage() }
   }
 }
@@ -1090,11 +1444,22 @@ async function launch0to1(mode) {
   } catch {}
   const app = await _electron.launch({
     args: ['.'],
-    env: { ...process.env, VITE_DEV_SERVER_URL: 'http://localhost:5173', NF_TEST_PROJECT: WORK_DIR, ELECTRON_RUN_AS_NODE: '' }
+    env: {
+      ...process.env,
+      VITE_DEV_SERVER_URL: 'http://localhost:5173',
+      NF_TEST_PROJECT: WORK_DIR,
+      ELECTRON_RUN_AS_NODE: '',
+    },
   })
   const proc = app.process()
-  proc.stdout?.on('data', (d) => { const s = String(d).trim(); if (s.includes('[ws:diag]')) console.log('  [main]', s) })
-  proc.stderr?.on('data', (d) => { const s = String(d).trim(); if (s.includes('[ws:diag]')) console.log('  [main]', s) })
+  proc.stdout?.on('data', (d) => {
+    const s = String(d).trim()
+    if (s.includes('[ws:diag]')) console.log('  [main]', s)
+  })
+  proc.stderr?.on('data', (d) => {
+    const s = String(d).trim()
+    if (s.includes('[ws:diag]')) console.log('  [main]', s)
+  })
   const page = await app.firstWindow()
   await page.waitForSelector('.nf-start', { timeout: 20000 })
   await page.evaluate(() => {
@@ -1132,11 +1497,17 @@ async function case_(name, mode) {
     await machine.run()
     const secs = ((Date.now() - t0) / 1000).toFixed(1)
     const end = machine.verdicts[machine.verdicts.length - 1]
-    const reqEchoed = machine.verdicts.filter((v) => v.stage === '需求' && v.echoed !== undefined).some((v) => v.echoed)
-    const ok = (PHASE !== 'all' || (end?.stage === '产物' && end?.hasFiles && reqEchoed))
+    const reqEchoed = machine.verdicts
+      .filter((v) => v.stage === '需求' && v.echoed !== undefined)
+      .some((v) => v.echoed)
+    const ok = PHASE !== 'all' || (end?.stage === '产物' && end?.hasFiles && reqEchoed)
     console.log(`\n${ok ? '✅' : '⚠️'} ${name} ${ok ? '通过' : '部分验证'} (${secs}s)`)
     console.log(`   决策轨迹（可复现）：`)
-    agent.steps.forEach((s, i) => console.log(`     ${i + 1}. 模型：「${s.msg.replace(/\n/g, ' ').slice(0, 40)}」→ 我：${s.decision}`))
+    agent.steps.forEach((s, i) =>
+      console.log(
+        `     ${i + 1}. 模型：「${s.msg.replace(/\n/g, ' ').slice(0, 40)}」→ 我：${s.decision}`,
+      ),
+    )
     return { ok }
   } catch (e) {
     console.log(`\n❌ ${name} 异常: ${String(e).slice(0, 200)}`)
@@ -1146,7 +1517,10 @@ async function case_(name, mode) {
       try {
         const proc = app.process()
         await app.close()
-        await Promise.race([new Promise((r) => proc.once('exit', r)), new Promise((r) => setTimeout(r, 8000))])
+        await Promise.race([
+          new Promise((r) => proc.once('exit', r)),
+          new Promise((r) => setTimeout(r, 8000)),
+        ])
       } catch {}
       try {
         for (const f of fs.readdirSync(LOCK_DIR)) {
@@ -1158,13 +1532,18 @@ async function case_(name, mode) {
 }
 
 console.log('=== NeonForge 0-1 完整流程 E2E（真实用户模拟 · DDD）===\n')
-if (!KEY) { console.log('❌ 无可用 API Key'); process.exit(1) }
+if (!KEY) {
+  console.log('❌ 无可用 API Key')
+  process.exit(1)
+}
 console.log(`Key: ${KEY.slice(0, 5)}…${KEY.slice(-3)}（已脱敏） | PHASE=${PHASE} | MODE=${MODE}\n`)
 
 let ok
-if (MODE === 'A') { ok = (await case_('场景 A：起始页填需求', 'fill')).ok }
-else if (MODE === 'B') { ok = (await case_('场景 B：对话输入', 'empty')).ok }
-else {
+if (MODE === 'A') {
+  ok = (await case_('场景 A：起始页填需求', 'fill')).ok
+} else if (MODE === 'B') {
+  ok = (await case_('场景 B：对话输入', 'empty')).ok
+} else {
   const r1 = await case_('场景 A：起始页填需求', 'fill')
   const r2 = await case_('场景 B：对话输入', 'empty')
   ok = r1.ok && r2.ok

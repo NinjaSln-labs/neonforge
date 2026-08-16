@@ -1,18 +1,41 @@
 import { useState } from 'react'
 import type { DeliveryPackage } from './types'
-import { IconCheck, IconClock, IconFile, IconFolder, IconMerge, IconRotateCcw, IconSparkles } from './icons'
+import {
+  IconCheck,
+  IconClock,
+  IconFile,
+  IconFolder,
+  IconMerge,
+  IconRotateCcw,
+  IconSparkles,
+} from './icons'
 
 // 数字产物交付（ticket 13）：非技术主路径——文件整理/数据加工 → 变更预览 → L3 授权 → 交付
-const DEMO_FILES = ['发票/2026-07-10-淘宝.pdf', '发票/2026-07-15-京东.pdf', '发票/2026-07-22-美团.pdf', '合同/2026-07-18-服务协议.docx', '合同/2026-07-25-采购单.pdf', '重复/2026-07-10-淘宝-副本.pdf']
+const DEMO_FILES = [
+  '发票/2026-07-10-淘宝.pdf',
+  '发票/2026-07-15-京东.pdf',
+  '发票/2026-07-22-美团.pdf',
+  '合同/2026-07-18-服务协议.docx',
+  '合同/2026-07-25-采购单.pdf',
+  '重复/2026-07-10-淘宝-副本.pdf',
+]
 
-const TASKS: Array<{ icon: (p: { size?: number }) => React.ReactElement; label: string; q: string }> = [
+const TASKS: Array<{
+  icon: (p: { size?: number }) => React.ReactElement
+  label: string
+  q: string
+}> = [
   { icon: IconFolder, label: '按类型整理分类', q: '把文件按 发票/合同/其他 分文件夹' },
   { icon: IconMerge, label: '合并同类文件', q: '发票合并成一张表' },
   { icon: IconFile, label: '格式转换', q: 'docx → pdf' },
-  { icon: IconSparkles, label: '数据清洗', q: '去掉重复/补全格式' }
+  { icon: IconSparkles, label: '数据清洗', q: '去掉重复/补全格式' },
 ]
 
-export default function DigitalDeliveryPanel({ onDeliver }: { onDeliver: (pkg: DeliveryPackage) => void }) {
+export default function DigitalDeliveryPanel({
+  onDeliver,
+}: {
+  onDeliver: (pkg: DeliveryPackage) => void
+}) {
   const [task, setTask] = useState<string | null>(null)
   const [preview, setPreview] = useState(false)
   const [processing, setProcessing] = useState(false)
@@ -29,15 +52,16 @@ export default function DigitalDeliveryPanel({ onDeliver }: { onDeliver: (pkg: D
       setDone(true)
       onDeliver({
         status: 'delivered',
-        summary: '已按类型整理 6 个文件：发票 4 份归入「发票」、合同 2 份归入「合同」，重复文件已标出（未删除）',
+        summary:
+          '已按类型整理 6 个文件：发票 4 份归入「发票」、合同 2 份归入「合同」，重复文件已标出（未删除）',
         artifacts: ['发票/（4 份）', '合同/（2 份）', '重复文件清单.csv'],
         acceptance: [
           { label: '发票都在「发票」文件夹', done: false },
           { label: '文件名含日期 + 商户', done: false },
-          { label: '重复文件已标出（未删，待你确认）', done: false }
+          { label: '重复文件已标出（未删，待你确认）', done: false },
         ],
         nextSteps: ['重复文件确认后我帮你删（授权后）'],
-        rerunLabel: '上次那个整理，再跑一遍'
+        rerunLabel: '上次那个整理，再跑一遍',
       })
     }, 600)
   }
@@ -45,21 +69,34 @@ export default function DigitalDeliveryPanel({ onDeliver }: { onDeliver: (pkg: D
   return (
     <div className="nf-digital">
       <div className="nf-flow__head">
-        <span className="nf-flow__title"><IconFolder size={14} /> 数字产物交付</span>
+        <span className="nf-flow__title">
+          <IconFolder size={14} /> 数字产物交付
+        </span>
         <span className="nf-flow__model">{DEMO_FILES.length} 个文件 · 待处理</span>
       </div>
 
       {/* 文件列表 */}
       <ul className="nf-digital__files">
-        {DEMO_FILES.map((f) => <li key={f}><IconFile size={12} /> {f}</li>)}
+        {DEMO_FILES.map((f) => (
+          <li key={f}>
+            <IconFile size={12} /> {f}
+          </li>
+        ))}
       </ul>
 
       {/* 处理任务选择 */}
       {!task && (
         <div className="nf-flow__models">
           {TASKS.map(({ icon: Icon, label, q }) => (
-            <button key={label} type="button" className="nf-flow__model-btn" onClick={() => setTask(label)}>
-              <span><Icon size={14} /> {label}</span>
+            <button
+              key={label}
+              type="button"
+              className="nf-flow__model-btn"
+              onClick={() => setTask(label)}
+            >
+              <span>
+                <Icon size={14} /> {label}
+              </span>
               <span className="nf-flow__hint">{q}</span>
             </button>
           ))}
@@ -69,26 +106,50 @@ export default function DigitalDeliveryPanel({ onDeliver }: { onDeliver: (pkg: D
       {/* 变更预览（L3 授权） */}
       {task && !preview && !done && (
         <div className="nf-digital__preview">
-          <p className="nf-flow__stage-label">将处理 {DEMO_FILES.length} 个文件：{task}——影响范围如上清单，确认后执行</p>
-          <button type="button" className="nf-delivery__primary" onClick={startProcess}>开始处理（需授权）</button>
+          <p className="nf-flow__stage-label">
+            将处理 {DEMO_FILES.length} 个文件：{task}——影响范围如上清单，确认后执行
+          </p>
+          <button type="button" className="nf-delivery__primary" onClick={startProcess}>
+            开始处理（需授权）
+          </button>
         </div>
       )}
 
       {/* 执行中 */}
       {preview && !done && (
         <div className="nf-digital__preview">
-          <p className="nf-flow__stage-label">{processing ? <><IconClock size={12} /> 处理中…</> : '变更预览：按类型分类 → 发票 4 / 合同 2 / 重复标出（不删除）'}</p>
+          <p className="nf-flow__stage-label">
+            {processing ? (
+              <>
+                <IconClock size={12} /> 处理中…
+              </>
+            ) : (
+              '变更预览：按类型分类 → 发票 4 / 合同 2 / 重复标出（不删除）'
+            )}
+          </p>
           {!processing && (
-            <button type="button" className="nf-delivery__primary" onClick={confirmAndDeliver}>确认并交付</button>
+            <button type="button" className="nf-delivery__primary" onClick={confirmAndDeliver}>
+              确认并交付
+            </button>
           )}
         </div>
       )}
 
       {done && (
         <>
-          <div className="nf-flow__done"><IconCheck size={12} /> 处理完成——交付包已在「产物」区，验收后确认关闭</div>
+          <div className="nf-flow__done">
+            <IconCheck size={12} /> 处理完成——交付包已在「产物」区，验收后确认关闭
+          </div>
           <div className="nf-digital__preview">
-            <button type="button" className="nf-delivery__ghost" onClick={() => { setTask(null); setPreview(false); setDone(false) }}>
+            <button
+              type="button"
+              className="nf-delivery__ghost"
+              onClick={() => {
+                setTask(null)
+                setPreview(false)
+                setDone(false)
+              }}
+            >
               <IconRotateCcw size={12} /> 继续处理其他任务
             </button>
           </div>

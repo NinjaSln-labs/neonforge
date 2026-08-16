@@ -9,7 +9,7 @@ export default function DoDAlignPanel() {
   const dod = [
     '打开这个链接能看到我的照片和介绍',
     '手机和电脑上都能正常打开',
-    '别人点链接也能访问（源码已交付 + 发布指导）'
+    '别人点链接也能访问（源码已交付 + 发布指导）',
   ]
 
   const allAccepted = accepted.length === dod.length && accepted.every(Boolean)
@@ -25,8 +25,14 @@ export default function DoDAlignPanel() {
   return (
     <div className="nf-dod">
       <div className="nf-flow__head">
-        <span className="nf-flow__title"><IconTarget size={14} /> 对齐：什么叫「解决」</span>
-        {confirmed && <span className="nf-flow__model"><IconCheck size={11} /> 已确认</span>}
+        <span className="nf-flow__title">
+          <IconTarget size={14} /> 对齐：什么叫「解决」
+        </span>
+        {confirmed && (
+          <span className="nf-flow__model">
+            <IconCheck size={11} /> 已确认
+          </span>
+        )}
       </div>
 
       <p className="nf-dod__restate">
@@ -62,7 +68,11 @@ export default function DoDAlignPanel() {
           {/* 2026-08-04：移除空函数「调整理解」按钮（原无 onClick——假交互）；调整需求请回对话重说 */}
         </div>
       )}
-      {confirmed && <p className="nf-flow__done"><IconCheck size={12} /> 验收标准已对齐——开始解决（按此对照交付）</p>}
+      {confirmed && (
+        <p className="nf-flow__done">
+          <IconCheck size={12} /> 验收标准已对齐——开始解决（按此对照交付）
+        </p>
+      )}
     </div>
   )
 }

@@ -9,11 +9,13 @@ import type { DeliveryPackage } from './types'
 
 // 2026-08-03 v30 D3：Monaco 本地打包（@monaco-editor/react 默认 CDN 加载——离线空白；改为本地 monaco-editor 包 + vite worker）
 // 只读查看器：TS worker 足够；其他语言回退 editor worker
-;(self as unknown as { MonacoEnvironment: { getWorker: (_: string, label: string) => Worker } }).MonacoEnvironment = {
+;(
+  self as unknown as { MonacoEnvironment: { getWorker: (_: string, label: string) => Worker } }
+).MonacoEnvironment = {
   getWorker(_: string, label: string) {
     if (label === 'typescript' || label === 'javascript') return new tsWorker()
     return new editorWorker()
-  }
+  },
 }
 loader.config({ monaco })
 
@@ -28,7 +30,7 @@ export default function OutputPanel({
   onAdjustProblem,
   onConfirmed,
   onRerun,
-  fileTreeRefreshKey
+  fileTreeRefreshKey,
 }: {
   rootPath: string
   activePath: string | null
@@ -89,9 +91,18 @@ export default function OutputPanel({
           </div>
         )}
       </div>
-      <div className="nf-output__body" style={{ display: tab === 'output' ? 'flex' : 'none', padding: 0 }}>
+      <div
+        className="nf-output__body"
+        style={{ display: tab === 'output' ? 'flex' : 'none', padding: 0 }}
+      >
         {deliveryPkg ? (
-          <DeliveryPanel pkg={deliveryPkg} onClose={onCloseProblem} onAdjust={onAdjustProblem} onRerun={onRerun} onConfirmed={onConfirmed} />
+          <DeliveryPanel
+            pkg={deliveryPkg}
+            onClose={onCloseProblem}
+            onAdjust={onAdjustProblem}
+            onRerun={onRerun}
+            onConfirmed={onConfirmed}
+          />
         ) : activePath ? (
           <Editor
             height="100%"
@@ -102,7 +113,13 @@ export default function OutputPanel({
             options={{ readOnly: true, minimap: { enabled: false }, fontSize: 13 }}
           />
         ) : (
-          <DeliveryPanel pkg={null} onClose={onCloseProblem} onAdjust={onAdjustProblem} onRerun={onRerun} onConfirmed={onConfirmed} />
+          <DeliveryPanel
+            pkg={null}
+            onClose={onCloseProblem}
+            onAdjust={onAdjustProblem}
+            onRerun={onRerun}
+            onConfirmed={onConfirmed}
+          />
         )}
       </div>
     </section>

@@ -5,9 +5,22 @@ async function mockBridge(page: import('@playwright/test').Page) {
   await page.addInitScript(() => {
     const bridge = {
       version: 'test',
-      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
-      workspace: { openFolder: async () => '/test', listDir: async () => [], readFile: async () => ({ ok: true, content: '// x' }) },
-      gateway: { validate: async () => ({ ok: true }), streamChat: async () => ({ ok: true }), onStreamChunk: () => () => {} }
+      config: {
+        hasKey: async () => true,
+        getKey: async () => 'test-key',
+        setKey: async () => {},
+        clearKey: async () => {},
+      },
+      workspace: {
+        openFolder: async () => '/test',
+        listDir: async () => [],
+        readFile: async () => ({ ok: true, content: '// x' }),
+      },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        streamChat: async () => ({ ok: true }),
+        onStreamChunk: () => () => {},
+      },
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = bridge
   })
@@ -32,6 +45,8 @@ test('点击场景卡片预填输入框', async ({ page }) => {
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.getByRole('button', { name: /整理文件/ }).click()
-  await expect(page.locator('.nf-chat__input textarea')).toHaveValue(/把 Downloads 里的发票和合同分类整理/)
+  await expect(page.locator('.nf-chat__input textarea')).toHaveValue(
+    /把 Downloads 里的发票和合同分类整理/,
+  )
   await expect(page.locator('.nf-chat')).toHaveScreenshot('scenes-prefilled.png')
 })

@@ -3,25 +3,73 @@
 // 覆盖矩阵（§9.2 追溯关系）：每个不变量 describe 顶部标注承载函数
 import { describe, it, expect } from 'vitest'
 import {
-  initialState, userDecided, approvalDecided, userConfirmed, userRejected, setPending, approvalGranted, applyToolResult,
-  deriveDecisionPoint, sessionGate, actionGate, canExecute, classifyReadonly, classifyAction,
-  verifyCompletion, completionEvidenceComplete, decideProgressGuarantee, derivePlannedFiles,
-  plannedComplete, forceToolInput, isProgressing, pendingCardToShow, shouldStopContinuation, actionNeedsApproval,
-  type ConversationState, type GoalProposal, type PlanProposal, type CompletionClaim, type CompletionEvidence,
-  type ApprovalRequest, type RejectReason, type ActionAttribute, type PendingKind,
+  initialState,
+  userDecided,
+  approvalDecided,
+  userConfirmed,
+  userRejected,
+  setPending,
+  approvalGranted,
+  applyToolResult,
+  deriveDecisionPoint,
+  sessionGate,
+  actionGate,
+  canExecute,
+  classifyReadonly,
+  classifyAction,
+  verifyCompletion,
+  completionEvidenceComplete,
+  decideProgressGuarantee,
+  derivePlannedFiles,
+  plannedComplete,
+  forceToolInput,
+  isProgressing,
+  pendingCardToShow,
+  shouldStopContinuation,
+  actionNeedsApproval,
+  type ConversationState,
+  type GoalProposal,
+  type PlanProposal,
+  type CompletionClaim,
+  type CompletionEvidence,
+  type ApprovalRequest,
+  type RejectReason,
+  type ActionAttribute,
+  type PendingKind,
 } from '../../src/domain/conversationState'
 
 // —— 测试夹具（值对象——§9.2 测试对象 1：构造即校验） ——
-const goal = (statement: string, assumptions: string[] = []): GoalProposal => ({ statement, assumptions })
-const plan = (files: Array<{ path: string; reason: string }>, extra: Partial<PlanProposal> = {}): PlanProposal => ({
-  summary: '方案', files, assumptions: [], verificationPlan: [], ...extra,
+const goal = (statement: string, assumptions: string[] = []): GoalProposal => ({
+  statement,
+  assumptions,
+})
+const plan = (
+  files: Array<{ path: string; reason: string }>,
+  extra: Partial<PlanProposal> = {},
+): PlanProposal => ({
+  summary: '方案',
+  files,
+  assumptions: [],
+  verificationPlan: [],
+  ...extra,
 })
 const evidence = (e: Partial<CompletionEvidence> = {}): CompletionEvidence => ({
-  verification: [{ command: 'ls /test', passed: true }], diffs: [], pendingQuestions: [], ...e,
+  verification: [{ command: 'ls /test', passed: true }],
+  diffs: [],
+  pendingQuestions: [],
+  ...e,
 })
-const claim = (c: Partial<CompletionClaim> = {}): CompletionClaim => ({ summary: '做完了', evidence: evidence(), ...c })
+const claim = (c: Partial<CompletionClaim> = {}): CompletionClaim => ({
+  summary: '做完了',
+  evidence: evidence(),
+  ...c,
+})
 const approvalReq = (r: Partial<ApprovalRequest> = {}): ApprovalRequest => ({
-  toolName: 'bash', subject: 'rm -rf /', reason: '高危', risk: 'high', ...r,
+  toolName: 'bash',
+  subject: 'rm -rf /',
+  reason: '高危',
+  risk: 'high',
+  ...r,
 })
 const reason = (kind: RejectReason['kind'], text?: string): RejectReason => ({ kind, text })
 
@@ -91,22 +139,32 @@ describe('Inv 1 决策唯一输入——无决策无推进', () => {
 describe('Inv 2 决策点确定性——deriveDecisionPoint 纯函数', () => {
   it('目标提议存在 && 目标未确认 → goal（与方案/完成声明并存时仍 goal——优先级）', () => {
     const s = initialState()
-    expect(deriveDecisionPoint(s, { goal: goal('做一个游戏'), plan: plan([]), completion: claim() })).toBe('goal')
+    expect(
+      deriveDecisionPoint(s, { goal: goal('做一个游戏'), plan: plan([]), completion: claim() }),
+    ).toBe('goal')
   })
 
   it('目标已确认 && 方案提议存在 && 方案未确认 → plan', () => {
     const s = userConfirmed(initialState(), 'goal')
-    expect(deriveDecisionPoint(s, { plan: plan([{ path: '/test/a.js', reason: 'x' }]) })).toBe('plan')
+    expect(deriveDecisionPoint(s, { plan: plan([{ path: '/test/a.js', reason: 'x' }]) })).toBe(
+      'plan',
+    )
   })
 
   it('目标+方案已确认 && 存在需授权动作 → approval', () => {
     const s = confirmed()
-    expect(deriveDecisionPoint(s, {}, [{ kind: 'out-of-plan', basis: 'plan-list' }])).toBe('approval')
-    expect(deriveDecisionPoint(s, {}, [{ kind: 'hazardous', basis: 'command-chain' }])).toBe('approval')
+    expect(deriveDecisionPoint(s, {}, [{ kind: 'out-of-plan', basis: 'plan-list' }])).toBe(
+      'approval',
+    )
+    expect(deriveDecisionPoint(s, {}, [{ kind: 'hazardous', basis: 'command-chain' }])).toBe(
+      'approval',
+    )
     // 只读/清单内/网络只读动作不触发授权决策点
     expect(deriveDecisionPoint(s, {}, [{ kind: 'readonly', basis: 'tool-type' }])).toBe('none')
     expect(deriveDecisionPoint(s, {}, [{ kind: 'in-plan', basis: 'plan-list' }])).toBe('none')
-    expect(deriveDecisionPoint(s, {}, [{ kind: 'network-read', basis: 'command-head' }])).toBe('none')
+    expect(deriveDecisionPoint(s, {}, [{ kind: 'network-read', basis: 'command-head' }])).toBe(
+      'none',
+    )
   })
 
   it('完成声明存在（含证据）&& 未确认解决 → resolution', () => {
@@ -115,7 +173,9 @@ describe('Inv 2 决策点确定性——deriveDecisionPoint 纯函数', () => {
   })
 
   it('已确认的决策点不再触发（确认点一次性）', () => {
-    expect(deriveDecisionPoint(userConfirmed(initialState(), 'goal'), { goal: goal('x') })).toBe('none')
+    expect(deriveDecisionPoint(userConfirmed(initialState(), 'goal'), { goal: goal('x') })).toBe(
+      'none',
+    )
     expect(deriveDecisionPoint(confirmed(), { plan: plan([]) })).toBe('none')
     expect(deriveDecisionPoint(fullyConfirmed(), { completion: claim() })).toBe('none')
   })
@@ -181,31 +241,49 @@ describe('Inv 3 门控顺序——sessionGate × actionGate 双维正交', () =>
   it('actionGate：只读/清单内/网络只读(localhost) 自动放行——拍板 3', () => {
     expect(actionGate({ name: 'read' }, false).verdict).toBe('allow')
     expect(actionGate({ name: 'write', path: '/test/a.js' }, true).verdict).toBe('allow')
-    expect(actionGate({ name: 'bash', command: 'curl -s http://localhost:6696' }, false).verdict).toBe('allow')
+    expect(
+      actionGate({ name: 'bash', command: 'curl -s http://localhost:6696' }, false).verdict,
+    ).toBe('allow')
   })
 
   it('actionGate：清单外/高危 ask；外网网络只读 ask（拍板 3——localhost 自动，外网 ask）', () => {
     expect(actionGate({ name: 'write', path: '/test/outside.js' }, false).verdict).toBe('ask')
     expect(actionGate({ name: 'bash', command: 'rm -rf /' }, false).verdict).toBe('ask')
-    expect(actionGate({ name: 'bash', command: 'curl -s https://example.com' }, false).verdict).toBe('ask')
+    expect(
+      actionGate({ name: 'bash', command: 'curl -s https://example.com' }, false).verdict,
+    ).toBe('ask')
   })
 
   it('actionGate：属性带判定依据（审计——basis）', () => {
-    expect(actionGate({ name: 'write', path: '/test/a.js' }, true).attribute).toEqual({ kind: 'in-plan', basis: 'plan-list' })
-    expect(actionGate({ name: 'read' }, false).attribute).toEqual({ kind: 'readonly', basis: 'tool-type' })
-    expect(actionGate({ name: 'bash', command: 'rm -rf /' }, false).attribute.kind).toBe('hazardous')
+    expect(actionGate({ name: 'write', path: '/test/a.js' }, true).attribute).toEqual({
+      kind: 'in-plan',
+      basis: 'plan-list',
+    })
+    expect(actionGate({ name: 'read' }, false).attribute).toEqual({
+      kind: 'readonly',
+      basis: 'tool-type',
+    })
+    expect(actionGate({ name: 'bash', command: 'rm -rf /' }, false).attribute.kind).toBe(
+      'hazardous',
+    )
   })
 
   it('S1 过渡语义锁定：外网 network-read 双门放行（S6 变更点——actionGate 接入后 ask 必须由执行层消费为授权卡；运行时仍由 classifyAction 壳 fail-closed 兜底）', () => {
     const s = confirmed()
     expect(sessionGate(s, { name: 'bash', command: 'curl -s https://example.com' }).ok).toBe(true)
-    expect(canExecute(s, { name: 'bash', command: 'curl -s https://example.com' }, false).ok).toBe(true)
+    expect(canExecute(s, { name: 'bash', command: 'curl -s https://example.com' }, false).ok).toBe(
+      true,
+    )
     // actionGate 本身已按拍板 3 判外网 ask（localhost 自动）——S6 接线消费点
-    expect(actionGate({ name: 'bash', command: 'curl -s https://example.com' }, false).verdict).toBe('ask')
+    expect(
+      actionGate({ name: 'bash', command: 'curl -s https://example.com' }, false).verdict,
+    ).toBe('ask')
   })
 
   it('actionGate 策略：hazardous deny（机制拦截——S6 配置化入口）', () => {
-    expect(actionGate({ name: 'bash', command: 'rm -rf /' }, false, { hazardous: 'deny' }).verdict).toBe('deny')
+    expect(
+      actionGate({ name: 'bash', command: 'rm -rf /' }, false, { hazardous: 'deny' }).verdict,
+    ).toBe('deny')
   })
 
   it('canExecute 组合：SessionGate 优先（pending 冻结先于属性判定）；ask 放行给执行层（S6 前现状授权卡机制）', () => {
@@ -220,7 +298,9 @@ describe('Inv 3 门控顺序——sessionGate × actionGate 双维正交', () =>
     // ask（高危 bash）→ 放行——授权卡由执行层机制处理（main needApproval——P2 授权卡场景）
     expect(canExecute(confirmed(), { name: 'bash', command: 'npm install' }, false).ok).toBe(true)
     // deny 策略 → 拦截（S6 机制拦截入口）
-    const d = canExecute(confirmed(), { name: 'bash', command: 'rm -rf /' }, false, { hazardous: 'deny' })
+    const d = canExecute(confirmed(), { name: 'bash', command: 'rm -rf /' }, false, {
+      hazardous: 'deny',
+    })
     expect(d.ok).toBe(false)
     expect(d.reason).toContain('策略拦截')
   })
@@ -261,14 +341,18 @@ describe('Inv 4 无证据不对账——verifyCompletion/completionEvidenceCompl
   })
 
   it('验证命令 passed=false → 证据不通过', () => {
-    const c = claim({ evidence: evidence({ verification: [{ command: 'grep x /test/a.js', passed: false }] }) })
+    const c = claim({
+      evidence: evidence({ verification: [{ command: 'grep x /test/a.js', passed: false }] }),
+    })
     const r = verifyCompletion(c)
     expect(r.ok).toBe(false)
     expect(r.missing).toContain('verification:grep x /test/a.js')
   })
 
   it('非只读验证命令（系统不可代跑）→ unverifiable + 不进入对账（拍板 4；P0 审计修复——Inv 4 单源）', () => {
-    const c = claim({ evidence: evidence({ verification: [{ command: 'npm install', passed: true }] }) })
+    const c = claim({
+      evidence: evidence({ verification: [{ command: 'npm install', passed: true }] }),
+    })
     const r = verifyCompletion(c)
     expect(r.ok).toBe(false) // 存在 unverifiable → 不通过（需用户对账）
     expect(r.unverifiable).toContain('npm install')
@@ -278,7 +362,9 @@ describe('Inv 4 无证据不对账——verifyCompletion/completionEvidenceCompl
   })
 
   it('只读验证命令不标记 unverifiable（系统可代跑核验——V1a 前置）', () => {
-    const c = claim({ evidence: evidence({ verification: [{ command: 'ls /test', passed: true }] }) })
+    const c = claim({
+      evidence: evidence({ verification: [{ command: 'ls /test', passed: true }] }),
+    })
     expect(verifyCompletion(c).unverifiable).toEqual([])
   })
 })
@@ -290,22 +376,53 @@ describe('Inv 5 推进保障——decideProgressGuarantee', () => {
   it('pending 非 none → 恒 auto（P1 继承——模型停住等用户，不强制）', () => {
     for (const kind of ['goal', 'plan', 'resolution', 'approval'] as const) {
       const s = setPending(confirmed(), kind)
-      expect(decideProgressGuarantee(s, { produced: false, proposed: false, providedEvidence: false, toolsAvailable: true }).mode).toBe('auto')
+      expect(
+        decideProgressGuarantee(s, {
+          produced: false,
+          proposed: false,
+          providedEvidence: false,
+          toolsAvailable: true,
+        }).mode,
+      ).toBe('auto')
     }
   })
 
   it('未确认目标/方案 → auto（澄清/方案期模型自由输出）', () => {
-    expect(decideProgressGuarantee(initialState(), { produced: false, proposed: false, providedEvidence: false, toolsAvailable: true }).mode).toBe('auto')
-    expect(decideProgressGuarantee(userConfirmed(initialState(), 'goal'), { produced: false, proposed: false, providedEvidence: false, toolsAvailable: true }).mode).toBe('auto')
+    expect(
+      decideProgressGuarantee(initialState(), {
+        produced: false,
+        proposed: false,
+        providedEvidence: false,
+        toolsAvailable: true,
+      }).mode,
+    ).toBe('auto')
+    expect(
+      decideProgressGuarantee(userConfirmed(initialState(), 'goal'), {
+        produced: false,
+        proposed: false,
+        providedEvidence: false,
+        toolsAvailable: true,
+      }).mode,
+    ).toBe('auto')
   })
 
   it('确认后无推进 + 工具可用 → require-action（原 required——逼工具产出）', () => {
-    const r = decideProgressGuarantee(confirmed(), { produced: false, proposed: false, providedEvidence: false, toolsAvailable: true })
+    const r = decideProgressGuarantee(confirmed(), {
+      produced: false,
+      proposed: false,
+      providedEvidence: false,
+      toolsAvailable: true,
+    })
     expect(r.mode).toBe('require-action')
   })
 
   it('确认后无推进 + 工具不可用 → require-advance（逼「推进」——允许提议/证据/提问，不逼调工具）', () => {
-    const r = decideProgressGuarantee(confirmed(), { produced: false, proposed: false, providedEvidence: false, toolsAvailable: false })
+    const r = decideProgressGuarantee(confirmed(), {
+      produced: false,
+      proposed: false,
+      providedEvidence: false,
+      toolsAvailable: false,
+    })
     expect(r.mode).toBe('require-advance')
   })
 
@@ -313,7 +430,9 @@ describe('Inv 5 推进保障——decideProgressGuarantee', () => {
     const base = { toolsAvailable: true }
     expect(decideProgressGuarantee(confirmed(), { produced: true, ...base }).mode).toBe('auto')
     expect(decideProgressGuarantee(confirmed(), { proposed: true, ...base }).mode).toBe('auto')
-    expect(decideProgressGuarantee(confirmed(), { providedEvidence: true, ...base }).mode).toBe('auto')
+    expect(decideProgressGuarantee(confirmed(), { providedEvidence: true, ...base }).mode).toBe(
+      'auto',
+    )
   })
 })
 
@@ -327,7 +446,10 @@ describe('Inv 6 方案单一来源——derivePlannedFiles / plan 确认派生',
     const next = userDecided(s, 'plan', { confirm: true })
     expect(next.plannedFiles.size).toBe(1)
     // 第二个方案确认（重提议后）→ 追加不覆盖
-    const s2 = setPending(s, 'plan', { proposal: plan([{ path: '/test/b.js', reason: 'y' }]), since: 't' })
+    const s2 = setPending(s, 'plan', {
+      proposal: plan([{ path: '/test/b.js', reason: 'y' }]),
+      since: 't',
+    })
     const next2 = userDecided(s2, 'plan', { confirm: true })
     expect(next2.plannedFiles.has('/test/a.js')).toBe(true)
     expect(next2.plannedFiles.has('/test/b.js')).toBe(true)
@@ -335,7 +457,10 @@ describe('Inv 6 方案单一来源——derivePlannedFiles / plan 确认派生',
 
   it('plan 确认时 plannedFiles 由 decisionContent.proposal 派生（不变量 6 承载——确认方案 → 派生清单）', () => {
     const s = setPending(userConfirmed(initialState(), 'goal'), 'plan', {
-      proposal: plan([{ path: '/test/a.js', reason: '入口' }, { path: '/test/b.js', reason: '样式' }]),
+      proposal: plan([
+        { path: '/test/a.js', reason: '入口' },
+        { path: '/test/b.js', reason: '样式' },
+      ]),
       since: 't1',
     })
     const next = userDecided(s, 'plan', { confirm: true })
@@ -350,13 +475,21 @@ describe('Inv 6 方案单一来源——derivePlannedFiles / plan 确认派生',
   })
 
   it('去重 + 空白路径过滤 + 追加合并', () => {
-    const files = derivePlannedFiles(initialState(), plan([
-      { path: '/test/a.js', reason: 'x' }, { path: '/test/a.js', reason: 'y' }, { path: '  ', reason: 'z' },
-    ]))
+    const files = derivePlannedFiles(
+      initialState(),
+      plan([
+        { path: '/test/a.js', reason: 'x' },
+        { path: '/test/a.js', reason: 'y' },
+        { path: '  ', reason: 'z' },
+      ]),
+    )
     expect(files.has('/test/a.js')).toBe(true)
     expect(files.size).toBe(1) // 去重 + 空白过滤
     // 追加语义：已有清单 ∪ 新方案（不覆盖）
-    const merged = derivePlannedFiles(approvalGranted(initialState(), ['/test/b.js']), plan([{ path: '/test/a.js', reason: 'x' }]))
+    const merged = derivePlannedFiles(
+      approvalGranted(initialState(), ['/test/b.js']),
+      plan([{ path: '/test/a.js', reason: 'x' }]),
+    )
     expect(merged.has('/test/a.js')).toBe(true)
     expect(merged.has('/test/b.js')).toBe(true)
     expect(merged.size).toBe(2)
@@ -378,22 +511,76 @@ describe('Inv 6 方案单一来源——derivePlannedFiles / plan 确认派生',
 describe('Inv 7 PENDING 单一——deriveDecisionPoint 单值 + 状态空间', () => {
   it('多提议/多动作并存 → 按优先级单值返回（goal > plan > approval > resolution）', () => {
     const s0 = initialState()
-    expect(deriveDecisionPoint(s0, { goal: goal('g'), plan: plan([]), completion: claim() }, [{ kind: 'hazardous', basis: 'command-chain' }])).toBe('goal')
+    expect(
+      deriveDecisionPoint(s0, { goal: goal('g'), plan: plan([]), completion: claim() }, [
+        { kind: 'hazardous', basis: 'command-chain' },
+      ]),
+    ).toBe('goal')
     const s1 = userConfirmed(initialState(), 'goal')
-    expect(deriveDecisionPoint(s1, { plan: plan([]), completion: claim() }, [{ kind: 'hazardous', basis: 'command-chain' }])).toBe('plan')
+    expect(
+      deriveDecisionPoint(s1, { plan: plan([]), completion: claim() }, [
+        { kind: 'hazardous', basis: 'command-chain' },
+      ]),
+    ).toBe('plan')
     const s2 = confirmed()
-    expect(deriveDecisionPoint(s2, { completion: claim() }, [{ kind: 'hazardous', basis: 'command-chain' }])).toBe('approval')
+    expect(
+      deriveDecisionPoint(s2, { completion: claim() }, [
+        { kind: 'hazardous', basis: 'command-chain' },
+      ]),
+    ).toBe('approval')
   })
 
   it('状态空间矩阵：3 确认 × 提议组合 × 动作 → 唯一 PendingKind（代表性穷举）', () => {
-    const rows: Array<{ label: string; s: ConversationState; proposals: Parameters<typeof deriveDecisionPoint>[1]; actions: ActionAttribute[]; want: PendingKind | 'none' }> = [
+    const rows: Array<{
+      label: string
+      s: ConversationState
+      proposals: Parameters<typeof deriveDecisionPoint>[1]
+      actions: ActionAttribute[]
+      want: PendingKind | 'none'
+    }> = [
       { label: '全未确认 + 无提议', s: initialState(), proposals: {}, actions: [], want: 'none' },
-      { label: '全未确认 + goal 提议', s: initialState(), proposals: { goal: goal('g') }, actions: [], want: 'goal' },
-      { label: 'goal 已确认 + plan 提议', s: userConfirmed(initialState(), 'goal'), proposals: { plan: plan([]) }, actions: [], want: 'plan' },
-      { label: 'goal+plan 已确认 + 无动作无提议', s: confirmed(), proposals: {}, actions: [], want: 'none' },
-      { label: 'goal+plan 已确认 + 高危动作', s: confirmed(), proposals: {}, actions: [{ kind: 'hazardous', basis: 'command-chain' }], want: 'approval' },
-      { label: 'goal+plan 已确认 + completion', s: confirmed(), proposals: { completion: claim() }, actions: [], want: 'resolution' },
-      { label: '全确认 + completion', s: fullyConfirmed(), proposals: { completion: claim() }, actions: [], want: 'none' },
+      {
+        label: '全未确认 + goal 提议',
+        s: initialState(),
+        proposals: { goal: goal('g') },
+        actions: [],
+        want: 'goal',
+      },
+      {
+        label: 'goal 已确认 + plan 提议',
+        s: userConfirmed(initialState(), 'goal'),
+        proposals: { plan: plan([]) },
+        actions: [],
+        want: 'plan',
+      },
+      {
+        label: 'goal+plan 已确认 + 无动作无提议',
+        s: confirmed(),
+        proposals: {},
+        actions: [],
+        want: 'none',
+      },
+      {
+        label: 'goal+plan 已确认 + 高危动作',
+        s: confirmed(),
+        proposals: {},
+        actions: [{ kind: 'hazardous', basis: 'command-chain' }],
+        want: 'approval',
+      },
+      {
+        label: 'goal+plan 已确认 + completion',
+        s: confirmed(),
+        proposals: { completion: claim() },
+        actions: [],
+        want: 'resolution',
+      },
+      {
+        label: '全确认 + completion',
+        s: fullyConfirmed(),
+        proposals: { completion: claim() },
+        actions: [],
+        want: 'none',
+      },
     ]
     for (const r of rows) {
       expect(deriveDecisionPoint(r.s, r.proposals, r.actions), r.label).toBe(r.want)
@@ -419,11 +606,15 @@ describe('Inv 7 PENDING 单一——deriveDecisionPoint 单值 + 状态空间', 
 describe('Inv 8 拒绝带原因——签名强制 + 运行时校验', () => {
   it('userDecided 拒绝无原因 → throw（不变量 8 强制）', () => {
     expect(() => userDecided(initialState(), 'goal', { confirm: false } as never)).toThrow()
-    expect(() => userDecided(initialState(), 'goal', { confirm: false, reason: undefined } as never)).toThrow()
+    expect(() =>
+      userDecided(initialState(), 'goal', { confirm: false, reason: undefined } as never),
+    ).toThrow()
   })
 
   it('approvalDecided 拒绝无原因 → throw', () => {
-    expect(() => approvalDecided(initialState(), approvalReq(), { confirm: false } as never)).toThrow()
+    expect(() =>
+      approvalDecided(initialState(), approvalReq(), { confirm: false } as never),
+    ).toThrow()
   })
 
   it('拒绝带原因 → 状态回退 + pending 清除（决策点关闭——reason 由事件层回填模型）', () => {
@@ -436,14 +627,20 @@ describe('Inv 8 拒绝带原因——签名强制 + 运行时校验', () => {
 
   it('modify = 拒绝（kind=modify）+ 修正内容（拍板 1：修改方案按钮 → 模型重提议）', () => {
     const s = setPending(confirmed(), 'plan', { proposal: plan([]), since: 't' })
-    const next = userDecided(s, 'plan', { confirm: false, reason: reason('modify', '加上登录页', '第 1 条') })
+    const next = userDecided(s, 'plan', {
+      confirm: false,
+      reason: reason('modify', '加上登录页', '第 1 条'),
+    })
     expect(next.planConfirmed).toBe(false)
     expect(next.pending).toBe('none')
   })
 
   it('approvalDecided 拒绝 → pending 清除 + 拒绝记忆登记（§3.4 C6——同轮同类动作短封）', () => {
     const s = setPending(confirmed(), 'approval', { approval: approvalReq(), since: 't' })
-    const next = approvalDecided(s, approvalReq(), { confirm: false, reason: reason('direction', '不要执行') })
+    const next = approvalDecided(s, approvalReq(), {
+      confirm: false,
+      reason: reason('direction', '不要执行'),
+    })
     expect(next.pending).toBe('none')
     expect(next.deniedApprovals).toEqual([{ toolName: 'bash', subject: 'rm -rf /' }])
   })
@@ -465,19 +662,31 @@ describe('Inv 8 拒绝带原因——签名强制 + 运行时校验', () => {
     const r3 = userDecided(s2, 'plan', { confirm: false, reason: reason('modify', '加登录页') })
     expect(r3.rejectStreak).toBe(2) // 含 kind='modify'（修改=拒绝）
     // 确认 → 重置（§4.1「随决策点确认重置」）
-    const c1 = userDecided(setPending(r3, 'plan', { proposal: plan([]), since: 't3' }), 'plan', { confirm: true })
+    const c1 = userDecided(setPending(r3, 'plan', { proposal: plan([]), since: 't3' }), 'plan', {
+      confirm: true,
+    })
     expect(c1.rejectStreak).toBe(0)
     // 任务边界（goal 确认）→ 重置（新任务）
     expect(userDecided(r3, 'goal', { confirm: true }).rejectStreak).toBe(0)
     // 无内容 setPending（仅置位）→ 保留计数
     expect(setPending(r3, 'plan').rejectStreak).toBe(2)
     // 连续 3 次拒绝 → 计数达上限（S3 消费：回退 AskToAct 澄清 / 人工接管提示）
-    const r4 = userDecided(setPending(r3, 'plan', { proposal: plan([]), since: 't4' }), 'plan', { confirm: false, reason: reason('missing-info') })
+    const r4 = userDecided(setPending(r3, 'plan', { proposal: plan([]), since: 't4' }), 'plan', {
+      confirm: false,
+      reason: reason('missing-info'),
+    })
     expect(r4.rejectStreak).toBe(3)
   })
 
   it('RejectReason kind 全集合法（direction/scope/complexity/missing-info/modify/other——拍板 2）', () => {
-    for (const kind of ['direction', 'scope', 'complexity', 'missing-info', 'modify', 'other'] as const) {
+    for (const kind of [
+      'direction',
+      'scope',
+      'complexity',
+      'missing-info',
+      'modify',
+      'other',
+    ] as const) {
       const s = setPending(initialState(), 'goal', { proposal: goal('g'), since: 't' })
       const next = userDecided(s, 'goal', { confirm: false, reason: { kind } })
       expect(next.goalConfirmed).toBe(false)
@@ -497,14 +706,20 @@ describe('值对象——结构契约与快照', () => {
   })
 
   it('PlanProposal：summary + files（含理由）+ assumptions + verificationPlan（拍板 1 只读呈现的数据基础）', () => {
-    const p = plan([{ path: '/test/a.js', reason: '入口' }], { summary: '用 Vite 搭', assumptions: ['Node 20'], verificationPlan: ['npm run build'] })
+    const p = plan([{ path: '/test/a.js', reason: '入口' }], {
+      summary: '用 Vite 搭',
+      assumptions: ['Node 20'],
+      verificationPlan: ['npm run build'],
+    })
     expect(p.files[0].reason).toBe('入口')
     expect(p.assumptions).toContain('Node 20')
     expect(p.verificationPlan).toContain('npm run build')
   })
 
   it('CompletionClaim：summary + evidence（verification/diffs/pendingQuestions）', () => {
-    const c = claim({ evidence: evidence({ diffs: [{ path: '/test/a.js' }], pendingQuestions: [] }) })
+    const c = claim({
+      evidence: evidence({ diffs: [{ path: '/test/a.js' }], pendingQuestions: [] }),
+    })
     expect(c.evidence.diffs[0].path).toBe('/test/a.js')
   })
 
@@ -515,7 +730,10 @@ describe('值对象——结构契约与快照', () => {
   })
 
   it('决策点内容快照：since 记录出现时间（诊断）', () => {
-    const s = setPending(initialState(), 'goal', { proposal: goal('g'), since: '2026-08-16T10:00:00Z' })
+    const s = setPending(initialState(), 'goal', {
+      proposal: goal('g'),
+      since: '2026-08-16T10:00:00Z',
+    })
     expect(s.decisionContent?.since).toBe('2026-08-16T10:00:00Z')
   })
 })
@@ -632,8 +850,13 @@ describe('继承锁定——isProgressing（缝隙 2）', () => {
 })
 
 describe('继承锁定——pendingCardToShow（缝隙 5——S3 由 deriveDecisionPoint 取代；返回值已切新枚举）', () => {
-  const show = (goal: boolean, plan: boolean, resolution: boolean, content: string, sideEffect = false) =>
-    pendingCardToShow(goal, plan, resolution, content, sideEffect)
+  const show = (
+    goal: boolean,
+    plan: boolean,
+    resolution: boolean,
+    content: string,
+    sideEffect = false,
+  ) => pendingCardToShow(goal, plan, resolution, content, sideEffect)
 
   it('模型标记命中 → 对应确认点（plan/resolution 新枚举）', () => {
     expect(show(false, false, false, '好的。【目标确认：做一个游戏】')).toBe('goal')
@@ -658,16 +881,25 @@ describe('继承锁定——pendingCardToShow（缝隙 5——S3 由 deriveDecis
 describe('继承锁定——shouldStopContinuation（问题 A：maybeContinue 与 canExecute 同源）', () => {
   it('pending 非 none（卡在任意消息——含旧消息授权卡）→ 停续聊', () => {
     for (const kind of ['goal', 'plan', 'resolution', 'approval'] as const) {
-      expect(shouldStopContinuation(setPending(confirmed(), kind), { needsApproval: false, confirmPending: false })).toBe(true)
+      expect(
+        shouldStopContinuation(setPending(confirmed(), kind), {
+          needsApproval: false,
+          confirmPending: false,
+        }),
+      ).toBe(true)
     }
   })
 
   it('pending=none + 最后消息授权卡 → 停（既有语义）', () => {
-    expect(shouldStopContinuation(initialState(), { needsApproval: true, confirmPending: false })).toBe(true)
+    expect(
+      shouldStopContinuation(initialState(), { needsApproval: true, confirmPending: false }),
+    ).toBe(true)
   })
 
   it('pending=none + 无卡信号 → 继续', () => {
-    expect(shouldStopContinuation(initialState(), { needsApproval: false, confirmPending: false })).toBe(false)
+    expect(
+      shouldStopContinuation(initialState(), { needsApproval: false, confirmPending: false }),
+    ).toBe(false)
   })
 })
 
