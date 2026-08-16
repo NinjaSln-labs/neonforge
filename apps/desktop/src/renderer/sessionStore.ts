@@ -1,6 +1,8 @@
 // 断点续做（ticket 06 / 基线 §21）：对话会话持久化——重启恢复上次会话
 // 边界：消息序列存 localStorage；过滤半截 streaming；onNew 清空（台账复开已覆盖「继续昨天那个」）
+// S3（§8.2 E）：decisionContent（决策点内容快照）随消息序列化——断点恢复后决策点内容不丢
 import type { ToolCallMsg } from './ConversationPanel'
+import type { DecisionContent } from '../domain/conversationState'
 
 export const SESSION_KEY = 'nf-session'
 export const SESSION_MAX = 50 // 会话消息上限（防膨胀）
@@ -12,6 +14,7 @@ export interface StoredMsg {
   reasoning?: string
   toolCalls?: ToolCallMsg[]
   id?: string // 2026-08-15 Q5：稳定 id 跨会话保留（断点恢复后 React key 稳定）
+  decisionContent?: DecisionContent // S3：决策点内容快照（恢复后卡内容不丢——§8.2 E）
 }
 
 // messages → 可存子集（assistant 仅 status done/error；toolCalls 仅完整状态）
@@ -23,6 +26,7 @@ export function serializeMessages(
     status?: string
     toolCalls?: ToolCallMsg[]
     id?: string
+    decisionContent?: DecisionContent
   }>,
 ): StoredMsg[] {
   const out: StoredMsg[] = []
@@ -40,6 +44,7 @@ export function serializeMessages(
           (t) => t.status === 'done' || t.status === 'error' || t.status === 'reverted',
         ),
         id: m.id,
+        decisionContent: m.decisionContent, // S3：决策点快照随完整消息持久化
       })
     }
   }

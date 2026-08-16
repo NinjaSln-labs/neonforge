@@ -398,7 +398,8 @@ export function sessionGate(
   return { ok: true, reason: '' }
 }
 
-function inPlannedFiles(s: ConversationState, action: ExecAction): boolean {
+// 清单匹配判定（Q5 单源——S3 统一：renderer 引用本函数，消除双实现；相对/绝对/目录尾斜杠兼容）
+export function inPlannedFiles(s: ConversationState, action: ExecAction): boolean {
   const p = String(action.path ?? '')
   return [...s.plannedFiles].some((f) => f === p || f.endsWith('/' + p) || p.endsWith('/' + f))
 }

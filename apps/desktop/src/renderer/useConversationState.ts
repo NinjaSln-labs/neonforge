@@ -16,7 +16,9 @@ import {
   applyToolResult,
   setPending,
   type ConversationState,
+  type DecisionContent,
   type PendingKind,
+  type RejectReason,
 } from '../domain/conversationState'
 import { deriveStateEvents } from '../domain/timeline'
 
@@ -43,8 +45,10 @@ export function useConversationState(opts?: UseConversationStateOpts) {
   return {
     stateRef,
     // 用户确认/拒绝（确认卡按钮——pending 清除 + 状态推进/回退）
+    // S3：拒绝带原因（不变量 8——userDecided 签名强制；rejectStreak 计数领域层维护）
     confirm: (point: ConfirmPoint) => transition((s) => userConfirmed(s, point)),
-    reject: (point: ConfirmPoint) => transition((s) => userRejected(s, point)),
+    reject: (point: ConfirmPoint, reason?: RejectReason) =>
+      transition((s) => userRejected(s, point, reason ?? { kind: 'other' })),
     // approve-files 批准（追加语义——A0 §5；files 已 trustPath 规范化）
     grantPlan: (files: string[]) => transition((s) => approvalGranted(s, files)),
     // 工具结果汇入（进度/失败标记——坑 93 ② policy 不置失败）
@@ -55,8 +59,9 @@ export function useConversationState(opts?: UseConversationStateOpts) {
       policy?: boolean
       file?: string
     }) => transition((s) => applyToolResult(s, r)),
-    // 确认卡触发 → 会话级 PENDING（D5）
-    setPending: (kind: Exclude<PendingKind, 'none'>) => transition((s) => setPending(s, kind)),
+    // 确认卡触发 → 会话级 PENDING（D5）；S3：decisionContent 快照随置位（卡渲染唯一来源）
+    setPending: (kind: Exclude<PendingKind, 'none'>, content?: Omit<DecisionContent, 'kind'>) =>
+      transition((s) => setPending(s, kind, content)),
     clearPending: () => transition((s) => ({ ...s, pending: 'none' as PendingKind })),
     // 执行方案块解析清单并入（原 Set 直接 add——转换入口规范化）
     addPlannedFiles: (files: string[]) =>

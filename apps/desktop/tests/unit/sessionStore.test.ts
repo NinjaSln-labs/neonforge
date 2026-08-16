@@ -96,3 +96,59 @@ describe('sessionStore（断点续做——会话持久化）', () => {
     expect(out[0].content).toBe('msg 10') // 保留最新
   })
 })
+
+// S3 spec TDD 网格：会话持久化 decisionContent（§8.2 E——断点续做决策点内容不丢）
+describe('sessionStore decisionContent 序列化（S3——§8.2 E）', () => {
+  beforeEach(() => stubLocalStorage())
+
+  const PLAN_CONTENT: Record<string, unknown> = {
+    kind: 'plan',
+    since: '2026-08-16T00:00:00.000Z',
+    proposal: {
+      summary: '重构入口',
+      files: [
+        { path: 'src/main.ts', reason: '核心逻辑' },
+        { path: 'src/utils.ts', reason: '工具函数' },
+      ],
+      assumptions: ['使用 ESM'],
+      verificationPlan: ['npx tsc --noEmit'],
+    },
+  }
+
+  it('serializeMessages：保留 decisionContent 字段（PlanProposal 结构完整）', () => {
+    const msgs = [
+      {
+        role: 'assistant' as const,
+        content: '【执行方案】\n- src/main.ts（核心逻辑）',
+        status: 'done' as const,
+        decisionContent: PLAN_CONTENT,
+      },
+    ]
+    const out = serializeMessages(msgs)
+    expect(out[0].decisionContent).toEqual(PLAN_CONTENT)
+    expect(out[0].decisionContent?.proposal?.files).toHaveLength(2)
+  })
+
+  it('saveSession → loadSession 往返：decisionContent 不丢（goal 决策点）', () => {
+    const goalContent: Record<string, unknown> = {
+      kind: 'goal',
+      since: '2026-08-16T00:00:00.000Z',
+      proposal: { statement: '做一个待办清单应用', assumptions: ['用 React'] },
+    }
+    saveSession([
+      {
+        role: 'assistant',
+        content: '【目标确认：做一个待办清单应用】',
+        decisionContent: goalContent,
+      },
+    ])
+    const loaded = loadSession()
+    expect(loaded?.[0].decisionContent).toEqual(goalContent)
+  })
+
+  it('loadSession：无 decisionContent 的旧存档兼容（undefined 不报错）', () => {
+    saveSession([{ role: 'assistant', content: '旧消息' }])
+    const loaded = loadSession()
+    expect(loaded?.[0].decisionContent).toBeUndefined()
+  })
+})

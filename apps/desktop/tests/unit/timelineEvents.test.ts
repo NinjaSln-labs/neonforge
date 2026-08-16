@@ -4,6 +4,7 @@ import {
   validateTimelineEvent,
   dedupeKey,
   detectProposed,
+  TIMELINE_EVENT_SPECS,
 } from '../../src/domain/timeline'
 import {
   initialState,
@@ -190,5 +191,34 @@ describe('deriveStateEvents（decision.* 领域决策点事件——设计 §3.5
       point: 'approval',
       action: 'reject',
     })
+  })
+})
+
+// S3 spec TDD 网格：proposal.* 事件断言（A-003 关闭——注册表 schema + 载荷语义）
+describe('proposal.* 事件（S3 接线断言——A-003）', () => {
+  it('注册表 schema：proposal.plan/proposal.completion domain=proposal + detailKeys 公共字段', () => {
+    const plan = TIMELINE_EVENT_SPECS['proposal.plan']
+    const completion = TIMELINE_EVENT_SPECS['proposal.completion']
+    expect(plan.domain).toBe('proposal')
+    expect(plan.role).toBe('assistant')
+    expect(plan.detailKeys).toEqual(['ok']) // 两形态公共字段（成功/失败载荷各异——宽松约定）
+    expect(completion.domain).toBe('proposal')
+    expect(completion.detailKeys).toEqual(
+      expect.arrayContaining(['ok', 'summary', 'verification', 'pendingQuestions']),
+    )
+  })
+
+  it('validateTimelineEvent：proposal.plan 载荷通过校验（parse 成功载荷）', () => {
+    const warns = validateTimelineEvent('proposal.plan', {
+      ok: true,
+      summary: '重构',
+      files: ['src/a.ts'],
+    })
+    expect(warns).toEqual([])
+  })
+
+  it('validateTimelineEvent：proposal.plan parse-error 载荷（ok:false + reason: malformed）通过校验', () => {
+    const warns = validateTimelineEvent('proposal.plan', { ok: false, reason: 'malformed' })
+    expect(warns).toEqual([])
   })
 })
