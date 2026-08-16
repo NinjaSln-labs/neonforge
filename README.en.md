@@ -136,8 +136,23 @@ ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ node install.js
 
 ## Roadmap
 
-- **V1 (current)**: DeepSeek-only · single session · local-first · trust-ladder authorization · 0-to-1 delivery
-- **V2 direction**: multi-model gateway (interface already converged for it) · plugin ecosystem (built-in plugin registry ready) · cloud sync / multi-device problem ledger · code signing & notarization
+**V1 (current — stabilizing)**
+- Release assets: macOS `.dmg` packaging (`.zip` already usable) · Blog launch · Landing + waitlist · distribution channels & Product Hunt
+- Real-usage feedback loop: test with real users → fix — this cycle focuses on the **approval-card path** and the new **intent-confirmation interactions** (goal / plan / resolution confirmation cards)
+
+**V1.x (experience & robustness)**
+- Consecutive-task experience: re-confirmation when switching goals (a fresh 【目标确认】 currently doesn't pop a card once a goal is confirmed — evaluating a complement)
+- Interception guidance polish: `tool.blocked` back-fill with clearer next-step prompts (goal proposal / supplementary approval)
+- e2e simulator convergence detection (long-flow automation stability); test-infra cleanup
+
+**V2 (planned directions — dependency-ordered)**
+1. **Full session snapshots**: task state machine survives restarts (confirmation/execution progress serialized — the approved file plan already landed early: D3); tied to compaction-summary baseline consistency
+2. **Trust tiers**: authorization-fatigue relief (low-risk delegation profiles / mode presets — the next step beyond "Allow and remember" and merged approvals)
+3. **Structured clarification tooling** (AskToAct-style: explicit goal-assumption collection, replacing free-text clarification)
+4. **Multi-model gateway** (interface already converged — `toDeepSeekParams`) + **plugin ecosystem deepening** (built-in plugin registry ready)
+5. **Cloud sync / multi-device problem ledger**
+6. **Mechanism-event completion** (e.g. structured `gate.denied` rejection events)
+7. **Code signing & notarization** (macOS/Windows)
 
 ## Known Limitations (V1)
 
