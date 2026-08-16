@@ -70,7 +70,7 @@ npm run dev:electron       # 完整应用（dev 模式，连接 :5173）
 
 ```bash
 cd apps/desktop
-npm run dist               # 产出 release/（macOS: .dmg + .zip；win: .nsis；linux: AppImage）
+npm run dist               # 产出 release/（macOS: .zip（.dmg 后补）；win: .nsis；linux: AppImage）
 ```
 
 > **ExFAT/外置卷已知问题**：electron-builder 在 ExFAT 卷打包会生成损坏的 asar（`chromium-pickle` offset 越界）——输出到本地卷：`npm run build && npx electron-builder -c.directories.output=/tmp/nf-release`
@@ -94,7 +94,7 @@ neonforge/
 
 ## 架构
 
-**技术栈**：Electron 36 + React 19 + TypeScript + Vite + esbuild + Monaco（产物查看）+ Vitest + Playwright。V1 网关仅接 DeepSeek（`toDeepSeekParams` 单点收敛，V2 多模型只动网关）。
+**技术栈**：Electron 43 + React 19 + TypeScript + Vite + esbuild + Monaco（产物查看）+ Vitest + Playwright。V1 网关仅接 DeepSeek（`toDeepSeekParams` 单点收敛，V2 多模型只动网关）。
 
 **领域架构（无阶段 · 目标驱动）**：
 
@@ -119,14 +119,14 @@ Session Timeline BC      — 全步骤统一记录（可观测性——JSONL）
 ## 测试
 
 ```bash
-npx vitest run                            # L1 领域逻辑（344）
+npx vitest run                            # L1 领域逻辑（434）
 npx tsc -p tsconfig.json --noEmit         # L2 契约（renderer + main）
-npx playwright test --project=interaction # L3 组件交互（27）
+npx playwright test --project=interaction # L3 组件交互（49）
 npx playwright test                       # L5 视觉 + L3
 NF_TEST_KEY=<key> node e2e-suite.mjs      # L4 真实 API E2E（前置：mkdir -p /tmp/nf-e2e-test）
 ```
 
-CI（GitHub Actions）：push 自动 L1+L2+L3；L4 需仓库 Secret `NF_TEST_KEY`（手动触发）。
+CI（GitHub Actions）：push 自动 L1+L2+L3+L5；L4 需仓库 Secret `NF_TEST_KEY`（手动触发）。
 
 ### 镜像（Electron 下载失败时）
 
@@ -141,7 +141,7 @@ ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ node install.js
 
 ## 已知限制（V1）
 
-- **断点续做范围**：重启后恢复对话消息 + 问题台账（目标/已授权），**确认状态与执行进度不跨重启**（复开从目标澄清重新走——安全回退；会话快照持久化在 V2）
+- **断点续做范围**：重启后恢复对话消息 + 问题台账（目标/已授权）+ **批准文件清单（D3——批准事实跨重启：重启后写清单内文件不需重新批量授权）；确认状态与执行进度不跨重启**（复开从目标澄清重新走——安全回退；会话快照持久化在 V2）
 - **打包版 LSP 降级**：dev 模式 LSP 完整可用；打包版若系统未装 `typescript-language-server` 则 LSP 工具提示未连接——对话 / 工具 / 交付主链路不受影响
 - macOS 未签名（见上）；Windows / Linux 打包目标已配置未实测
 - 单实例锁按应用作用域；测试环境注意残留实例（见 CI 脚本）
