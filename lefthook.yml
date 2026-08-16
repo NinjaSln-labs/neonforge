@@ -1,0 +1,11 @@
+# NeonForge git hooks（B1——流程重构阶段 1）
+# 门禁策略（process-industry-research-20260816 §四 P1-3）：只拦「快且确定」项——
+# pre-commit = lint-staged 增量 lint/format（秒级）；复杂度（全量 lint/L1-L3/CI）交 GitHub Actions。
+# 安装：npx lefthook install（写入 .git/hooks）
+pre-commit:
+  parallel: true
+  commands:
+    lint-staged:
+      root: apps/desktop
+      glob: '*.{ts,tsx,mjs,js,json,md,yml,yaml}'
+      run: npx lint-staged

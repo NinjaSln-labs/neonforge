@@ -1,0 +1,20 @@
+# macOS AppleDouble 元数据（坑 10——非 UTF-8，prettier 解析会崩）
+._*
+**/._*
+# 构建/依赖产物
+**/dist/
+**/node_modules/
+**/release/
+**/test-results/
+**/snapshots/
+**/coverage/
+# 锁文件/二进制
+**/package-lock.json
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.gif
+**/*.mov
+**/*.icns
+**/*.zip
+**/*.dmg

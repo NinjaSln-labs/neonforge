@@ -11,7 +11,24 @@
     "build": "tsc -p tsconfig.main.json && vite build",
     "start": "env -u ELECTRON_RUN_AS_NODE electron .",
     "test": "vitest run",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"*.mjs\" \"*.config.*\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"*.mjs\" \"*.config.*\"",
     "dist": "npm run build && electron-builder"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{mjs,js}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
