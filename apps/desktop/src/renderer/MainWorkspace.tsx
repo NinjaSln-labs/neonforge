@@ -143,21 +143,21 @@ export default function MainWorkspace({
   // 2026-08-04 P2：目标确认卡确认 → 回写（确定性收敛，不依赖模型标记）
   // 2026-08-07 无阶段重构 S4：不再 handleStageChange（无阶段无推进）——确认目标即结束澄清，进入能力检查/执行方案
   const [goalConfirmed, setGoalConfirmed] = useState(false)
-  const [executionConfirmed, setExecutionConfirmed] = useState(false) // 2026-08-07 无阶段重构 S4：执行方案确认（ExecutionConfirmCard）
+  const [planConfirmed, setPlanConfirmed] = useState(false) // 2026-08-07 无阶段重构 S4：执行方案确认（ExecutionConfirmCard）
   // 2026-08-04 体验修复：需求阶段用户需求文本暂存（无阶段重构 S4：目标文本暂存——「确认目标」兜底回写/注入用——不依赖模型【目标确认：】标记）
   const goalTextRef = useRef('')
   // 2026-08-07 用户决策（行业共识——显式结构化确认，非确认词匹配）：确认全部走对话内嵌确认/拒绝卡片（像授权卡）
-  // 目标确认卡【确认目标】→ handleGoalConfirmed；执行确认卡【确认执行】→ handleExecutionConfirmed；达成确认卡【已解决】→ goalAchieved
-  const handleExecutionConfirmed = () => {
+  // 目标确认卡【确认目标】→ handleGoalConfirmed；执行确认卡【确认执行】→ handlePlanConfirmed；达成确认卡【已解决】→ goalAchieved
+  const handlePlanConfirmed = () => {
     if (!goalConfirmed) handleGoalConfirmed(goalTextRef.current || initialPrompt || '目标已确认')
-    setExecutionConfirmed(true)
+    setPlanConfirmed(true)
   }
   // 2026-08-15 D1：拒绝路径对称回退（渲染镜像与状态机一致——修复「拒绝被 effect 反转」；状态机权威在 ConversationPanel stateRef）
   const handleGoalRejected = () => {
     setGoalConfirmed(false)
   }
   const handleExecutionRejected = () => {
-    setExecutionConfirmed(false)
+    setPlanConfirmed(false)
   }
   const handleUserMessage = (text: string) => {
     lastPromptRef.current = text
@@ -246,7 +246,7 @@ function initProblems(): ProblemInstance[] {
 
   const zeroToOne = zeroToOneMode
   // 2026-08-07 无阶段重构 S4：阶段机（flowStage/flowModel/stageHint/stageAdvance/advanceHint/handleStageChange）全部移除——
-  // 无阶段流程：目标确认 → 能力检查 → 执行确认 → 达成循环（状态由 goalConfirmed/executionConfirmed 表达）
+  // 无阶段流程：目标确认 → 能力检查 → 执行确认 → 达成循环（状态由 goalConfirmed/planConfirmed 表达）
 
   return (
     <div className="nf-app">
@@ -290,7 +290,7 @@ function initProblems(): ProblemInstance[] {
             确认流程全部走对话（模型【目标确认】标记 / 用户打字确认词）——dock 无任何卡片残留 */}
         <div className="nf-panel__body">
           {chatTab === 'chat' ? (
-            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} onApprovalChange={setPendingApproval} onActionPromiseHint={setActionHint} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} onGoalConfirmed={handleGoalConfirmed} onExecutionConfirmed={handleExecutionConfirmed} onGoalRejected={handleGoalRejected} onExecutionRejected={handleExecutionRejected} goalConfirmed={goalConfirmed} executionConfirmed={executionConfirmed} goalSeq={goalSeq} recentFilesExternal={projectFiles} initialPrompt={initialPrompt} onSessionStart={handleSessionStart} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} />
+            <ConversationPanel key={chatKey} rootPath={rootPath} currentFile={activePath} onKeyExpired={onKeyExpired} onWorkingChange={setWorking} onApprovalChange={setPendingApproval} onActionPromiseHint={setActionHint} externalRequest={rerunRequest} onExternalConsumed={() => setRerunRequest(null)} onToolResult={handleToolResult} onUserMessage={handleUserMessage} onGoalConfirmed={handleGoalConfirmed} onPlanConfirmed={handlePlanConfirmed} onGoalRejected={handleGoalRejected} onPlanRejected={handleExecutionRejected} goalConfirmed={goalConfirmed} planConfirmed={planConfirmed} goalSeq={goalSeq} recentFilesExternal={projectFiles} initialPrompt={initialPrompt} onSessionStart={handleSessionStart} activeAuthorizedLogs={problems.find((p) => p.id === activeProblem)?.snapshot?.authorized} />
           ) : (
             <TaskPanel />
           )}
