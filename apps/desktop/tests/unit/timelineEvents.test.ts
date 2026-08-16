@@ -228,3 +228,27 @@ describe('proposal.* 事件（S3 接线断言——A-003/A-007）', () => {
     expect(warns.some((w) => w.includes('ok'))).toBe(true)
   })
 })
+
+// S4 spec TDD 网格：completion.evidence_missing 事件断言（§3.5——完成声明被拒原因 missing 清单）
+describe('completion.evidence_missing 事件（S4 接线断言）', () => {
+  it('注册表 schema：domain=completion + detailKeys 含 ok/missing/unverifiable（A-007 ? 可选标记）', () => {
+    const spec = TIMELINE_EVENT_SPECS['completion.evidence_missing']
+    expect(spec.domain).toBe('completion')
+    expect(spec.role).toBe('system')
+    expect(spec.detailKeys).toEqual(['ok', '?missing', '?unverifiable'])
+  })
+
+  it('validateTimelineEvent：证据不足载荷（ok:false + missing 清单）通过校验', () => {
+    const warns = validateTimelineEvent('completion.evidence_missing', {
+      ok: false,
+      missing: ['verification:ls src'],
+      unverifiable: [],
+    })
+    expect(warns).toEqual([])
+  })
+
+  it('validateTimelineEvent：缺 ok（必选字段）→ warn（schema 有校验价值）', () => {
+    const warns = validateTimelineEvent('completion.evidence_missing', { missing: ['x'] })
+    expect(warns.some((w) => w.includes('ok'))).toBe(true)
+  })
+})

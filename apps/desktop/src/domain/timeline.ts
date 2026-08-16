@@ -75,6 +75,8 @@ export type TimelineEventType =
   // —— Proposal：模型提议解析（S2 登记——§8.2 D；结构化提议事件——决策点产生前的解析层事实）——
   | 'proposal.plan' // 方案提议解析结果（载荷：ok/files/summary——parse-error: reason 打点）
   | 'proposal.completion' // 完成声明解析结果（载荷：ok/summary/evidence 计数）
+  // —— Completion：完成对账（S4 登记——§3.5；证据不足诊断事件）——
+  | 'completion.evidence_missing' // 完成声明被拒原因（载荷：ok/missing/unverifiable 清单——S4 打点）
   // —— 元事件（运行时可观测——诊断/状态）——
   | 'conversation.status_change' // working/ready/approval-pending 变化
   | 'conversation.error' // 错误链路（errorType/message）
@@ -95,6 +97,7 @@ export interface TimelineEventSpec {
     | 'card'
     | 'decision'
     | 'proposal'
+    | 'completion'
   role?: 'user' | 'assistant' | 'system' | 'tool'
   detailKeys?: string[] // 期望载荷字段（宽松约定——不强制全有，用于 dev 校验提示）
   dedupe?: boolean // 同会话同 detail 只记一次（卡 shown 等）
@@ -170,6 +173,12 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
     domain: 'proposal',
     role: 'assistant',
     detailKeys: ['ok', '?summary', '?verification', '?pendingQuestions'],
+  },
+  'completion.evidence_missing': {
+    domain: 'completion',
+    role: 'system',
+    // S4：ok 必选（false——被拒）+ missing/unverifiable 清单（两形态可缺省）
+    detailKeys: ['ok', '?missing', '?unverifiable'],
   },
   'conversation.status_change': { domain: 'conversation', role: 'system', detailKeys: ['status'] },
   'conversation.error': { domain: 'conversation', role: 'system', detailKeys: ['errorType'] },
