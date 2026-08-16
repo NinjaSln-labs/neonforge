@@ -1,7 +1,7 @@
 # 覆盖矩阵（Coverage Matrix）
 
-> 生成：2026-08-16（S2 首版）→ **更新：S3 完成（2026-08-16）**
-> 数据源版本：L1 测试 31 文件 / 377 用例 · 事件注册表 48 事件 · 不变量 Inv 1-8 · S2/S3 DoD · L3 35 场景（interaction）
+> 生成：2026-08-16（S2 首版）→ **更新：D3 完成（2026-08-16）**
+> 数据源版本：L1 测试 35 文件 / 435 用例 · 事件注册表 48 事件 · 不变量 Inv 1-8 · S2/S3 DoD · L3 49 场景（interaction）
 > 维护：阶段末更新（coverage-matrix skill）；缺口入 audit-items
 
 ## 表 1：不变量 ↔ L1 测试
@@ -117,6 +117,19 @@
 | 拍板 3 全链（curl localhost 自动放行/外网 ask 授权卡） | L3 S6-1（localhost done 无授权卡）/S6-2（外网 need-approval 弹卡——executeResults 模拟 main preApproval） | ✅ |
 | actionGate 策略接线（不变量 3 全量——ask 走授权卡闭环既有） | L1 actionGate 既有用例 + L3 授权场景回归（write 需授权/清单内自动/合并授权） | ✅ |
 
+## 表 8：D3 PlannedFiles 下沉 main ↔ 测试（2026-08-16 新增）
+
+| D3 行为（ADR-005） | 场景/用例 | 判定 |
+|--------------------|-----------|------|
+| PlannedFilesStore 持久化仓库（IPlannedFilesRepository——追加幂等/reset/损坏容错/approved 联动/路径注入） | plannedFilesStore.test.ts 12 用例（D3 新建） | ✅ |
+| 批准事实跨重启（new 实例 load 恢复 files+approved——断点续做迁移） | plannedFilesStore.test.ts::持久化往返 + reset 后恢复空 | ✅ |
+| main 门控跨重启一致（registerIpc → syncPlanApprovedFromStore——write 不再被规划引导拦） | tools.test.ts::D3 syncPlanApprovedFromStore 恢复 approved → needApproval 判定（L1 新增 1） | ✅ |
+| IPC 契约三件套（planned-files:load/add/reset——preload 类型化/无悬挂引用） | L2 双 tsc 0 错 + L3 D3-1（load 挂载被调/add 批准链单次） | ✅ |
+| 恢复接线（挂载 load → 本地镜像——StrictMode 双挂载 ≥1） | L3 D3-1（load 计数 + 主流程正常） | ✅ |
+| 批准链走 IPC（approvePlan → planned-files:add——与 grantPlan 同清单 trustPath） | L3 D3-1（done 卡 + add 恰一次 + 无授权卡） | ✅ |
+| 任务边界重置（目标确认 → clearTrust → planned-files:reset 同步 main——批准事实不跨任务） | L3 D3-2（reset 计数 1 + 方案卡流程正常）+ 既有 clearTrust→filesApprovedReset 语义回归 | ✅ |
+| 三基准统一（未修 1——planned/produced/projectFiles 绝对基准一致 + plannedComplete 判定单源） | conversationState.test.ts::plannedComplete 绝对路径既有断言（回归）+ plannedFilesStore.test.ts::相对路径原样保留（变换归调用方） | ✅ |
+
 ## 缺口清单
 
-- **无**（A-003 已关闭——proposal.* 事件断言 c91079e 补齐；A-010 已关闭——S4 V1a integration 7 用例 + L3 4 场景；S3/S4/S5 行为全部有测试承载——S5 新增 progressGuarantee.test.ts 12 用例 + agentLoop 5 + L3 2 场景）
+- **无**（A-003 已关闭——proposal.* 事件断言 c91079e 补齐；A-010 已关闭——S4 V1a integration 7 用例 + L3 4 场景；S3/S4/S5 行为全部有测试承载——S5 新增 progressGuarantee.test.ts 12 用例 + agentLoop 5 + L3 2 场景；D3 全行为有测试承载——plannedFilesStore 12 + tools 1 + L3 D3-1/2）
