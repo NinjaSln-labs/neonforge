@@ -7,17 +7,36 @@
 // 旧测试文件 core.interaction.ts 保持不动（S3 迁移）；本文件证明基建等价后旧基建可弃。
 import { test, expect } from '@playwright/test'
 import { installMockBridge, chunk, toolCall } from './mockBridge'
-import { compose, goalConfirm, planPropose, executeWrite, completeClaim, deliveredPackage, enterWorkspace, startFromScratch, sendChat } from './scenarios'
-import { expectVisible, expectAbsent, expectCount, expectText, expectAssistantMsg, expectToolCallState } from '../helpers/assertions'
+import {
+  compose,
+  goalConfirm,
+  planPropose,
+  executeWrite,
+  completeClaim,
+  deliveredPackage,
+  enterWorkspace,
+  startFromScratch,
+  sendChat,
+} from './scenarios'
+import {
+  expectVisible,
+  expectAbsent,
+  expectCount,
+  expectText,
+  expectAssistantMsg,
+  expectToolCallState,
+} from '../helpers/assertions'
 
-test('T0 自测 1：根因3 重搭——轮次脚本 + forceTool/approved 捕获 + 清单内 write 自动放行', async ({ page }) => {
+test('T0 自测 1：根因3 重搭——轮次脚本 + forceTool/approved 捕获 + 清单内 write 自动放行', async ({
+  page,
+}) => {
   const h = await installMockBridge(page, {
     project: 'none',
     script: compose(
       goalConfirm('做一个能打开的网页射击游戏'),
       planPropose(['game.js（主逻辑）', 'index.html（页面）'], '先做能玩的第一版。'),
       executeWrite('game.js'),
-      completeClaim('完成，第一版能玩了。')
+      completeClaim('完成，第一版能玩了。'),
     ),
     capture: { forceToolCalls: true, approvedFlags: true },
   })
@@ -37,7 +56,9 @@ test('T0 自测 1：根因3 重搭——轮次脚本 + forceTool/approved 捕获
   expect((await h.approvedFlags())[0]).toBe(true)
 })
 
-test('T0 自测 2：合并授权重搭——manualEmit 手动推流 + 同批多 write 合并授权按钮', async ({ page }) => {
+test('T0 自测 2：合并授权重搭——manualEmit 手动推流 + 同批多 write 合并授权按钮', async ({
+  page,
+}) => {
   const h = await installMockBridge(page, {
     project: 'open',
     manualEmit: true,
@@ -60,7 +81,11 @@ test('T0 自测 2：合并授权重搭——manualEmit 手动推流 + 同批多 
   await expectVisible(page.getByRole('button', { name: '确认执行' }))
   await page.getByRole('button', { name: '确认执行' }).click()
   await page.waitForTimeout(300)
-  await h.emit([toolCall.write('/test/a.txt', 'x'), toolCall.edit('/test/b.txt', 'a', 'b'), chunk.done()])
+  await h.emit([
+    toolCall.write('/test/a.txt', 'x'),
+    toolCall.edit('/test/b.txt', 'a', 'b'),
+    chunk.done(),
+  ])
   // 授权卡风险明示 + 疲劳防护：同批 ≥2 低危待授权 → 合并授权按钮
   await expectText(page.locator('.nf-toolcall__hint').first(), '需要授权 · 写入文件')
   await expectText(page.locator('.nf-toolcall__impact').first(), '/test/a.txt')
@@ -92,7 +117,11 @@ test('T0 自测 3：P2 双卡重搭——approval all + defaultRound + 卡按 id
   await expectCount(page.locator('.nf-toolcall__approve'), 1, 10000)
   // 用户「继续」→ chat#4 同 args bash → 被 pending 拦为 done（卡#B——同 args 双卡并存）
   await sendChat(page, '继续')
-  await expectText(page.locator('.nf-toolcall--done').filter({ hasText: '等待你的决策' }), '等待你的决策', 10000)
+  await expectText(
+    page.locator('.nf-toolcall--done').filter({ hasText: '等待你的决策' }),
+    '等待你的决策',
+    10000,
+  )
   await expectCount(page.locator('.nf-toolcall--done').filter({ hasText: '等待你的决策' }), 1)
   // 卡#A 仍在 + 卡#B 已 done——两卡并存
   await expectCount(page.locator('.nf-toolcall__approve'), 1)

@@ -1,14 +1,27 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { createProblem, loadProblems, saveProblems, updateProblemSnapshot, PROBLEMS_KEY, PROBLEMS_MAX } from '../../src/renderer/problemStore'
+import {
+  createProblem,
+  loadProblems,
+  saveProblems,
+  updateProblemSnapshot,
+  PROBLEMS_KEY,
+  PROBLEMS_MAX,
+} from '../../src/renderer/problemStore'
 
 // localStorage 在 node 环境不存在——vitest jsdom/happy-dom 才提供；用 stub 模拟
 function stubLocalStorage(): void {
   const store = new Map<string, string>()
   ;(globalThis as Record<string, unknown>).localStorage = {
     getItem: (k: string) => store.get(k) ?? null,
-    setItem: (k: string, v: string) => { store.set(k, v) },
-    removeItem: (k: string) => { store.delete(k) },
-    clear: () => { store.clear() }
+    setItem: (k: string, v: string) => {
+      store.set(k, v)
+    },
+    removeItem: (k: string) => {
+      store.delete(k)
+    },
+    clear: () => {
+      store.clear()
+    },
   }
 }
 
@@ -35,11 +48,13 @@ describe('problemStore（问题台账——创建/持久化）', () => {
 
   it('loadProblems：空存储 → fallback', () => {
     expect(loadProblems()).toEqual([])
-    expect(loadProblems([{ id: 'x', title: 't', status: 'closed', updatedAt: '10:00' }])).toHaveLength(1)
+    expect(
+      loadProblems([{ id: 'x', title: 't', status: 'closed', updatedAt: '10:00' }]),
+    ).toHaveLength(1)
   })
 
   it('loadProblems：损坏 JSON → fallback（不崩）', () => {
-    (globalThis as Record<string, unknown>).localStorage.setItem(PROBLEMS_KEY, '{broken')
+    ;(globalThis as Record<string, unknown>).localStorage.setItem(PROBLEMS_KEY, '{broken')
     expect(loadProblems()).toEqual([])
   })
 
@@ -64,7 +79,10 @@ describe('问题会话快照（基线 §21 断点续做深度——2026-08-02 �
     p = updateProblemSnapshot(p, { authorized: ['[write] /tmp/a.txt'] })
     expect(p.snapshot?.authorized).toEqual(['[write] /tmp/a.txt'])
     // 调用方追加模式（MainWorkspace：读取 → 展开 → 传新数组）
-    p = updateProblemSnapshot(p, { authorized: [...(p.snapshot?.authorized ?? []), '[write] /tmp/b.txt'], pending: ['确认分类'] })
+    p = updateProblemSnapshot(p, {
+      authorized: [...(p.snapshot?.authorized ?? []), '[write] /tmp/b.txt'],
+      pending: ['确认分类'],
+    })
     expect(p.snapshot?.authorized).toEqual(['[write] /tmp/a.txt', '[write] /tmp/b.txt'])
     expect(p.snapshot?.pending).toEqual(['确认分类'])
     expect(p.snapshot?.goal).toBe('整理发票') // 未改字段保留

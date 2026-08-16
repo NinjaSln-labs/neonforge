@@ -14,7 +14,8 @@ export interface CompactDecision {
 }
 
 export function decideCompact(messageCount: number): CompactDecision {
-  if (messageCount <= COMPACT_THRESHOLD) return { shouldCompact: false, keep: messageCount, drop: 0 }
+  if (messageCount <= COMPACT_THRESHOLD)
+    return { shouldCompact: false, keep: messageCount, drop: 0 }
   return { shouldCompact: true, keep: COMPACT_TARGET, drop: messageCount - COMPACT_TARGET }
 }
 
@@ -31,9 +32,15 @@ export interface CompactionService {
   // 执行压缩：返回 { summary（压缩器产出）, kept（保留最近 20 条原始） }——失败返回错误
   compact(
     apiKey: string,
-    summarize: (k: string, h: Array<{ role: string; content: string | null }>) => Promise<{ ok: true; summary: string } | { ok: false; error: string }>,
-    history: Array<{ role: string; content: string | null }>
-  ): Promise<{ ok: true; summary: string; kept: Array<{ role: string; content: string | null }> } | { ok: false; error: string }>
+    summarize: (
+      k: string,
+      h: Array<{ role: string; content: string | null }>,
+    ) => Promise<{ ok: true; summary: string } | { ok: false; error: string }>,
+    history: Array<{ role: string; content: string | null }>,
+  ): Promise<
+    | { ok: true; summary: string; kept: Array<{ role: string; content: string | null }> }
+    | { ok: false; error: string }
+  >
 }
 
 // 字符估算 tokens（中文为主约 1 token/字——近似触发，非精确计量）
@@ -53,6 +60,5 @@ export const compaction: CompactionService = {
     const res = await summarize(apiKey, toCompact)
     if (!res.ok) return res
     return { ok: true, summary: res.summary, kept }
-  }
+  },
 }
-

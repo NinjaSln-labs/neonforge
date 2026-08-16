@@ -5,10 +5,24 @@ async function mockBridge(page: import('@playwright/test').Page) {
   await page.addInitScript(() => {
     const bridge = {
       version: 'test',
-      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
-      workspace: { openFolder: async () => '/test', listDir: async () => [], readFile: async () => ({ ok: true, content: '// x' }), initProject: async () => ({ ok: true, path: '/test', title: 't' }) },
-      gateway: { validate: async () => ({ ok: true }), streamChat: async () => ({ ok: true }), onStreamChunk: () => () => {} },
-      chatLog: { log: async () => {}, export: async () => ({ ok: true, path: '/tmp/nf-test.md' }) }
+      config: {
+        hasKey: async () => true,
+        getKey: async () => 'test-key',
+        setKey: async () => {},
+        clearKey: async () => {},
+      },
+      workspace: {
+        openFolder: async () => '/test',
+        listDir: async () => [],
+        readFile: async () => ({ ok: true, content: '// x' }),
+        initProject: async () => ({ ok: true, path: '/test', title: 't' }),
+      },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        streamChat: async () => ({ ok: true }),
+        onStreamChunk: () => () => {},
+      },
+      chatLog: { log: async () => {}, export: async () => ({ ok: true, path: '/tmp/nf-test.md' }) },
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = bridge
   })

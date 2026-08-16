@@ -28,13 +28,22 @@ export function goalConfirm(goal: string): StreamChunk[][] {
 
 /** 方案提议：模型输出【执行方案】清单（1 轮；files 为清单内文件行） */
 export function planPropose(files: string[], note = '等你确认。'): StreamChunk[][] {
-  return [[chunk.content(`【执行方案】\n${files.map((f) => `- ${f}`).join('\n')}\n${note}`), chunk.done()]]
+  return [
+    [
+      chunk.content(`【执行方案】\n${files.map((f) => `- ${f}`).join('\n')}\n${note}`),
+      chunk.done(),
+    ],
+  ]
 }
 
 /** 方案提议 + 批量授权请求：执行方案后同轮请求 approve-files（1 轮） */
-export function planProposeWithApproval(files: Array<{ path: string; reason: string }>): StreamChunk[][] {
+export function planProposeWithApproval(
+  files: Array<{ path: string; reason: string }>,
+): StreamChunk[][] {
   const lines = files.map((f) => `- ${f.path}`).join('\n')
-  return [[chunk.content(`【执行方案】\n${lines}`), toolCall.approveFiles('第一批', files), chunk.done()]]
+  return [
+    [chunk.content(`【执行方案】\n${lines}`), toolCall.approveFiles('第一批', files), chunk.done()],
+  ]
 }
 
 /** 执行：write 工具调用（1 轮——同一文件多次写可重复拼） */
@@ -71,7 +80,12 @@ export function deliveredPackage(pkg: Partial<DeliveryFixture> = {}): DeliveryFi
     artifacts: ['a.txt'],
     acceptance: [{ label: '拼写已修正', done: false }],
     nextSteps: ['重新运行验证'],
-    diffs: [{ path: '/test/a.txt', diff: '--- a/a.txt\n+++ b/a.txt\n@@ -1,2 +1,2 @@\n-hello worl\n+hello world' }],
+    diffs: [
+      {
+        path: '/test/a.txt',
+        diff: '--- a/a.txt\n+++ b/a.txt\n@@ -1,2 +1,2 @@\n-hello worl\n+hello world',
+      },
+    ],
     ...pkg,
   }
 }

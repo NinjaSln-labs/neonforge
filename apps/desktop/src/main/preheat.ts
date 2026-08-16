@@ -18,8 +18,8 @@ export function planPreheat(rootPath: string | null): PreheatPlan {
     actions: [
       '构建 StandardPrefix（system 叙述 + 工具定义 + 文件树摘要）',
       'PrefixCache hash 检测（hash 变才重建）',
-      'V1 真实 API 预热（prewarm 请求）待 Key 校验后接入'
-    ]
+      'V1 真实 API 预热（prewarm 请求）待 Key 校验后接入',
+    ],
   }
 }
 
@@ -32,17 +32,22 @@ export interface StandardPrefix {
   builtAt: string
 }
 
-const SYS_NARRATIVE = '你是 NeonForge 搭档——帮用户解决当前的问题（一切能被数字工具解决的）。' +
+const SYS_NARRATIVE =
+  '你是 NeonForge 搭档——帮用户解决当前的问题（一切能被数字工具解决的）。' +
   '流程：理解问题 → 给出方案/执行 → 交付结果。工具调用一次一个，执行完看结果再决定；' +
   '找不到文件就告诉用户；写操作前说明影响。'
 
 // 构建标准前缀：system 叙述 + 工具定义 + 项目文件树摘要
 export function buildStandardPrefix(rootPath: string, files: string[]): StandardPrefix {
   const toolNames = TOOL_DEFS.map((t) => t.function.name).join('、')
-  const toolNotes = TOOL_DEFS.map((t) => `- ${t.function.name}：${t.function.description}`).join('\n')
-  const treeSummary = files.length > 0
-    ? files.slice(0, 30).join('\n') + (files.length > 30 ? `\n…（共 ${files.length} 个文件）` : '')
-    : '（空目录）'
+  const toolNotes = TOOL_DEFS.map((t) => `- ${t.function.name}：${t.function.description}`).join(
+    '\n',
+  )
+  const treeSummary =
+    files.length > 0
+      ? files.slice(0, 30).join('\n') +
+        (files.length > 30 ? `\n…（共 ${files.length} 个文件）` : '')
+      : '（空目录）'
   const text = [
     SYS_NARRATIVE,
     `当前项目：${rootPath}`,
@@ -50,13 +55,13 @@ export function buildStandardPrefix(rootPath: string, files: string[]): Standard
     toolNotes,
     '【项目文件（摘要）】',
     treeSummary,
-    `工具名列表：${toolNames}`
+    `工具名列表：${toolNames}`,
   ].join('\n\n')
   return {
     text,
     hash: sha16(text),
     tokens: estimateTokens(text),
-    builtAt: new Date().toISOString()
+    builtAt: new Date().toISOString(),
   }
 }
 
@@ -82,15 +87,22 @@ const HISTORY_MAX = 20
 export class PrefixCache {
   private state: PrefixCacheState | null = null
 
-  get(): PrefixCacheState | null { return this.state }
+  get(): PrefixCacheState | null {
+    return this.state
+  }
 
   // hash 相同 → 命中（不重建）；不同 → 重建前缀（append-only 记录）
   ensure(prefix: StandardPrefix): { hit: boolean; state: PrefixCacheState } {
     const hit = this.state?.hash === prefix.hash
     const entry = { hash: prefix.hash, at: new Date().toISOString(), hit }
-    this.state = hit && this.state
-      ? { ...this.state, history: [...this.state.history, entry].slice(-HISTORY_MAX) }
-      : { standardPrefix: prefix.text, hash: prefix.hash, history: [...(this.state?.history ?? []), entry].slice(-HISTORY_MAX) }
+    this.state =
+      hit && this.state
+        ? { ...this.state, history: [...this.state.history, entry].slice(-HISTORY_MAX) }
+        : {
+            standardPrefix: prefix.text,
+            hash: prefix.hash,
+            history: [...(this.state?.history ?? []), entry].slice(-HISTORY_MAX),
+          }
     return { hit, state: this.state }
   }
 }
@@ -99,7 +111,11 @@ export const prefixCache = new PrefixCache()
 
 // ---------- PreheatingService（真实 API 预热——ticket 09 / D-C7） ----------
 
-export interface PreheatEvent { type: 'started' | 'completed' | 'failed'; at: string; ms?: number }
+export interface PreheatEvent {
+  type: 'started' | 'completed' | 'failed'
+  at: string
+  ms?: number
+}
 
 export interface PreheatStatus {
   status: 'idle' | 'preheating' | 'ready' | 'failed'
@@ -113,31 +129,45 @@ const EVENTS_MAX = 20
 export class PreheatingService {
   private status: PreheatStatus = { status: 'idle', events: [] }
 
-  getStatus(): PreheatStatus { return this.status }
+  getStatus(): PreheatStatus {
+    return this.status
+  }
 
   // 触发预热（防并发；成功/失败更新状态；失败降级不阻塞——A0 §6）
   async run(
     apiKey: string,
     prefix: StandardPrefix,
-    preheatFn: (key: string, prefixText: string) => Promise<{ ok: boolean; error?: string; ms: number }>
+    preheatFn: (
+      key: string,
+      prefixText: string,
+    ) => Promise<{ ok: boolean; error?: string; ms: number }>,
   ): Promise<PreheatStatus> {
     if (this.status.status === 'preheating') return this.status // 并发防护
     this.status = {
       status: 'preheating',
-      events: [...this.status.events, { type: 'started' as const, at: new Date().toISOString() }].slice(-EVENTS_MAX)
+      events: [
+        ...this.status.events,
+        { type: 'started' as const, at: new Date().toISOString() },
+      ].slice(-EVENTS_MAX),
     }
     const r = await preheatFn(apiKey, prefix.text)
     this.status = r.ok
       ? {
           status: 'ready',
           lastMs: r.ms,
-          events: [...this.status.events, { type: 'completed' as const, at: new Date().toISOString(), ms: r.ms }].slice(-EVENTS_MAX)
+          events: [
+            ...this.status.events,
+            { type: 'completed' as const, at: new Date().toISOString(), ms: r.ms },
+          ].slice(-EVENTS_MAX),
         }
       : {
           status: 'failed',
           lastMs: r.ms,
           lastError: r.error,
-          events: [...this.status.events, { type: 'failed' as const, at: new Date().toISOString(), ms: r.ms }].slice(-EVENTS_MAX)
+          events: [
+            ...this.status.events,
+            { type: 'failed' as const, at: new Date().toISOString(), ms: r.ms },
+          ].slice(-EVENTS_MAX),
         }
     return this.status
   }

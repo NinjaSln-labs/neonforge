@@ -9,7 +9,7 @@ describe('parseDiffLines（目视 diff 行级渲染单元——HANDOFF §3 第�
       { type: 'hunk', content: '@@ -1,2 +1,2 @@' },
       { type: 'del', content: 'hello worl', oldLine: 1 },
       { type: 'add', content: 'hello world', newLine: 1 },
-      { type: 'context', content: 'context', oldLine: 2, newLine: 2 }
+      { type: 'context', content: 'context', oldLine: 2, newLine: 2 },
     ])
   })
 

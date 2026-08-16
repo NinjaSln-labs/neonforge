@@ -18,20 +18,20 @@ export interface ToolCallView {
 export interface TurnProgress {
   artifactProduced: boolean // write/edit 成功 = 真实产出（0-1 流程最可靠 progress 信号——与 artifactsReady 门控同源）
   sideEffectSucceeded: boolean // 2026-08-14 缝隙 2：副作用工具成功执行（bash 安装/验证）也算进展——
-                               // 原只有 artifactProduced——模型装依赖（npm install 成功）被当「无进展」→ escalate 打断合法链
-  readNewFile: boolean      // read 了此前未读过的文件（新信息）——同文件重复 read = activity 非 progress
+  // 原只有 artifactProduced——模型装依赖（npm install 成功）被当「无进展」→ escalate 打断合法链
+  readNewFile: boolean // read 了此前未读过的文件（新信息）——同文件重复 read = activity 非 progress
   // 2026-08-06 补充（deepcode-hkuds 任务完成度借鉴——用户「文件清单很多地方有」）：approve-files 规划文件是否全部产出
   // 有剩余规划文件 = 任务未完成——模型无工具结束 = 停滞（escalate 强理由）；规划全产出 → 无工具结束 = 阶段完成（不 escalate）
-  hasPlannedFiles: boolean      // 是否有 approve-files 规划（开发阶段）
-  hasRemainingPlanned: boolean  // 还有未产出规划文件（任务未完成）
+  hasPlannedFiles: boolean // 是否有 approve-files 规划（开发阶段）
+  hasRemainingPlanned: boolean // 还有未产出规划文件（任务未完成）
   remainingCount: number
-  isQuestion: boolean       // 问句/征求同意——模型在等用户，不算停滞
-  isCommunication: boolean  // 沟通/澄清/确认——模型在对话，不算停滞
-  isDone: boolean           // 完成态汇报——模型已完成，不算停滞
-  needsApproval: boolean    // 2026-08-07 待授权轮（need-approval/plan-approval）——模型停住**等用户批准**
-                            // （设计语义：maybeContinue releaseWorking + return）——不是卡住，不算停滞——
-                            // 根因 2（冒烟 13）：write 授权卡（need-approval）被 StuckDetector 当「无产出」→ escalate
-                            // → silent 打断授权流 → 轮 4 授权处理混乱 + 轮 5 重写（此前缺失此排除）
+  isQuestion: boolean // 问句/征求同意——模型在等用户，不算停滞
+  isCommunication: boolean // 沟通/澄清/确认——模型在对话，不算停滞
+  isDone: boolean // 完成态汇报——模型已完成，不算停滞
+  needsApproval: boolean // 2026-08-07 待授权轮（need-approval/plan-approval）——模型停住**等用户批准**
+  // （设计语义：maybeContinue releaseWorking + return）——不是卡住，不算停滞——
+  // 根因 2（冒烟 13）：write 授权卡（need-approval）被 StuckDetector 当「无产出」→ escalate
+  // → silent 打断授权流 → 轮 4 授权处理混乱 + 轮 5 重写（此前缺失此排除）
 }
 
 // === Domain Service: 文本分类（问句/沟通/完成态——坑 79 结构判定：有限集，不匹配措辞） ===
@@ -40,10 +40,14 @@ export function isQuestionLike(t: string): boolean {
   return /[?？]$/.test(t) || /(吗|呢|吧)[。.!！]?$|可以吗|行不行/.test(t)
 }
 export function isCommunicationLike(t: string): boolean {
-  return /(确认|复述|说明|解释|总结|澄清|商量|理解|明白|知道|收到|确认一下|跟你确认|和你确认|跟您确认|介绍一下|跟你聊|和你聊)/.test(t)
+  return /(确认|复述|说明|解释|总结|澄清|商量|理解|明白|知道|收到|确认一下|跟你确认|和你确认|跟您确认|介绍一下|跟你聊|和你聊)/.test(
+    t,
+  )
 }
 export function isDoneLike(t: string): boolean {
-  return /(完成|做好|搞定|改好|解决|处理完|已写好|已修改|已删除|已添加|已加|可以了|能玩了|没问题|修好了|加好了|实现了|就绪|收工|结束|达标|通过了|在跑|能跑|弄好|好了，|好的，|就是这些|就这样|先说这么多)/.test(t)
+  return /(完成|做好|搞定|改好|解决|处理完|已写好|已修改|已删除|已添加|已加|可以了|能玩了|没问题|修好了|加好了|实现了|就绪|收工|结束|达标|通过了|在跑|能跑|弄好|好了，|好的，|就是这些|就这样|先说这么多)/.test(
+    t,
+  )
 }
 
 // === Domain Service: 执行方案清单解析（2026-08-07 无阶段重构 S5——TurnProgress.plannedFiles 来源调整） ===
@@ -81,27 +85,32 @@ export function evaluateTurnProgress(input: {
   toolCalls: ToolCallView[]
   content: string
   prevReadFiles: Set<string>
-  plannedFiles?: Set<string>      // approve-files 规划文件清单（开发阶段——approvePlan 保存）
-  producedFiles?: Set<string>     // write/edit 成功累积的文件（任务完成度）
-  projectFiles?: Set<string>      // 2026-08-06 补充（用户「清单来源不只 approve-files」——③ projectFiles 项目文件树实时快照）：规划文件出现在文件树 = 已产出（比 write 记录可靠——回滚/删除则不在树中）
+  plannedFiles?: Set<string> // approve-files 规划文件清单（开发阶段——approvePlan 保存）
+  producedFiles?: Set<string> // write/edit 成功累积的文件（任务完成度）
+  projectFiles?: Set<string> // 2026-08-06 补充（用户「清单来源不只 approve-files」——③ projectFiles 项目文件树实时快照）：规划文件出现在文件树 = 已产出（比 write 记录可靠——回滚/删除则不在树中）
 }): TurnProgress {
   const { toolCalls, content, prevReadFiles } = input
   const t = (content ?? '').trim()
-  const artifactProduced = toolCalls.some((c) => (c.name === 'write' || c.name === 'edit') && c.status === 'done')
+  const artifactProduced = toolCalls.some(
+    (c) => (c.name === 'write' || c.name === 'edit') && c.status === 'done',
+  )
   // 2026-08-14 缝隙 2：副作用工具成功（bash 安装/验证/check-server running 等——classifyAction 同源判定）也算进展——
   // 安装/验证阶段不再被 escalate 打断（同工具空转由 maybeContinue 重复检测兜底）
-  const sideEffectSucceeded = toolCalls.some((c) => c.status === 'done' && classifyAction(c.name, c.command) === 'side-effect')
-  const readNewFile = toolCalls.some((c) => c.name === 'read' && c.file && !prevReadFiles.has(c.file))
+  const sideEffectSucceeded = toolCalls.some(
+    (c) => c.status === 'done' && classifyAction(c.name, c.command) === 'side-effect',
+  )
+  const readNewFile = toolCalls.some(
+    (c) => c.name === 'read' && c.file && !prevReadFiles.has(c.file),
+  )
   const plannedFiles = input.plannedFiles
   const producedFiles = input.producedFiles
   const projectFiles = input.projectFiles
   // 任务完成度：规划文件非空时——还有未产出规划文件 = 任务未完成（deepcode unimplemented_files 同思路）
   const hasPlannedFiles = !!plannedFiles && plannedFiles.size > 0
   // 产出判定：write/edit 成功记录 ∪ 出现在项目文件树（projectFiles——回滚/删除后不在树中，更可靠）
-  const isProduced = (f: string): boolean =>
-    !!(producedFiles?.has(f)) || !!(projectFiles?.has(f))
-  const hasRemainingPlanned = hasPlannedFiles
-    && [...(plannedFiles ?? [])].some((f) => !isProduced(f))
+  const isProduced = (f: string): boolean => !!producedFiles?.has(f) || !!projectFiles?.has(f)
+  const hasRemainingPlanned =
+    hasPlannedFiles && [...(plannedFiles ?? [])].some((f) => !isProduced(f))
   const remainingCount = hasRemainingPlanned
     ? [...(plannedFiles ?? [])].filter((f) => !isProduced(f)).length
     : 0
@@ -109,8 +118,21 @@ export function evaluateTurnProgress(input: {
   const isCommunication = isCommunicationLike(t)
   const isDone = isDoneLike(t)
   // 2026-08-07 待授权轮（根因 2）：need-approval/plan-approval 卡 = 模型停住等用户批准（正常状态）——不算停滞
-  const needsApproval = toolCalls.some((c) => c.status === 'need-approval' || c.status === 'file-approval')
-  return { artifactProduced, sideEffectSucceeded, readNewFile, hasPlannedFiles, hasRemainingPlanned, remainingCount, isQuestion, isCommunication, isDone, needsApproval }
+  const needsApproval = toolCalls.some(
+    (c) => c.status === 'need-approval' || c.status === 'file-approval',
+  )
+  return {
+    artifactProduced,
+    sideEffectSucceeded,
+    readNewFile,
+    hasPlannedFiles,
+    hasRemainingPlanned,
+    remainingCount,
+    isQuestion,
+    isCommunication,
+    isDone,
+    needsApproval,
+  }
 }
 
 // === Value Object: 卡住状态（连续无进展轮数 + 已升级次数）——不可变，每次变化生成新实例 ===
@@ -161,20 +183,25 @@ export function detectStuck(input: {
         state: { consecutiveNoProgress: 0, escalations },
         event: {
           type: 'needs-human',
-          message: '搭档连续几轮没产出改动——可能卡住了，你发个具体指令或点「继续」催它动手'
-        }
+          message: '搭档连续几轮没产出改动——可能卡住了，你发个具体指令或点「继续」催它动手',
+        },
       }
     }
-    const remaining = turn.hasRemainingPlanned ? `规划文件还有 ${turn.remainingCount} 个没写（${turn.remainingCount > 1 ? '们' : ''}）——` : ''
+    const remaining = turn.hasRemainingPlanned
+      ? `规划文件还有 ${turn.remainingCount} 个没写（${turn.remainingCount > 1 ? '们' : ''}）——`
+      : ''
     return {
       state: { consecutiveNoProgress: 0, escalations },
       event: {
         type: 'escalate',
-        message: `${remaining}你连续几轮只读文件/停在分析，没有产出改动——现在直接调用 edit/write 修改代码（说「改 X」就同一轮发 edit X，不要停在分析）`
-      }
+        message: `${remaining}你连续几轮只读文件/停在分析，没有产出改动——现在直接调用 edit/write 修改代码（说「改 X」就同一轮发 edit X，不要停在分析）`,
+      },
     }
   }
-  return { state: { consecutiveNoProgress, escalations: prev.escalations }, event: { type: 'no-progress' } }
+  return {
+    state: { consecutiveNoProgress, escalations: prev.escalations },
+    event: { type: 'no-progress' },
+  }
 }
 
 // === 2026-08-08 O2 处理（用户「check-capability 默认不向用户展示，只有检测后需要用户实质确认的时候展示」） ===
@@ -186,7 +213,10 @@ export interface CapabilityView {
   detail?: string
 }
 
-export function summarizeCapability(data?: { capabilities?: CapabilityView[] }): { needsUser: boolean; summary: string } {
+export function summarizeCapability(data?: { capabilities?: CapabilityView[] }): {
+  needsUser: boolean
+  summary: string
+} {
   const caps = data?.capabilities ?? []
   if (caps.length === 0) return { needsUser: false, summary: '能力齐备' }
   const notReady = caps.filter((c) => c.status === 'missing' || c.status === 'failed')
@@ -195,7 +225,10 @@ export function summarizeCapability(data?: { capabilities?: CapabilityView[] }):
     return { needsUser: false, summary: `能力齐备（${readyCount} 项就绪）` }
   }
   const names = notReady.map((c) => `${c.id}${c.detail ? `（${c.detail}）` : ''}`).join('、')
-  return { needsUser: true, summary: `检测到能力缺失/异常：${names}——需要你决策（安装补齐或换方案）` }
+  return {
+    needsUser: true,
+    summary: `检测到能力缺失/异常：${names}——需要你决策（安装补齐或换方案）`,
+  }
 }
 
 // === 2026-08-15 D6：目标确认兜底触发（词表单源——原 ConversationPanel 内联词表上移领域层） ===
@@ -205,7 +238,10 @@ export function summarizeCapability(data?: { capabilities?: CapabilityView[] }):
 export function goalFallbackTrigger(content: string): boolean {
   const t = String(content ?? '').trim()
   if (!t) return false
-  const askingConfirm = /(等你确认|你确认一下|确认一下|确认没问题|行不行|可以吗|对吗|对吧|没问题吧|你看行|这样.*可以|就按这个)/.test(t)
+  const askingConfirm =
+    /(等你确认|你确认一下|确认一下|确认没问题|行不行|可以吗|对吗|对吧|没问题吧|你看行|这样.*可以|就按这个)/.test(
+      t,
+    )
   if (askingConfirm) return true
   const goalStated = /(目标是|要做的是|你的需求是|目标就是|就是做一个|做成|需求.*确认)/.test(t)
   return goalStated && !isQuestionLike(t)

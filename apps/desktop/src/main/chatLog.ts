@@ -23,7 +23,9 @@ function safeName(s: string): string {
 }
 
 export function todayLogFile(base: string, session?: string): string {
-  const name = session ? `chat-${safeName(session)}.jsonl` : `chat-${new Date().toISOString().slice(0, 10)}.jsonl`
+  const name = session
+    ? `chat-${safeName(session)}.jsonl`
+    : `chat-${new Date().toISOString().slice(0, 10)}.jsonl`
   return path.join(logDir(base), name)
 }
 
@@ -32,7 +34,9 @@ export function appendChatLog(base: string, entry: ChatLogEntry): void {
   try {
     mkdirSync(logDir(base), { recursive: true })
     appendFileSync(todayLogFile(base, entry.session), JSON.stringify(entry) + '\n', 'utf-8')
-  } catch { /* 日志失败不影响对话 */ }
+  } catch {
+    /* 日志失败不影响对话 */
+  }
 }
 
 // 导出全部对话 → Downloads/neonforge-chat-YYYY-MM-DD.md（可读格式，方便发给 AI 反馈）
@@ -40,18 +44,27 @@ export function exportChatLog(base: string): { ok: boolean; path?: string; error
   try {
     const dir = logDir(base)
     mkdirSync(dir, { recursive: true })
-    const files = readdirSync(dir).filter((f) => f.startsWith('chat-') && f.endsWith('.jsonl')).sort()
+    const files = readdirSync(dir)
+      .filter((f) => f.startsWith('chat-') && f.endsWith('.jsonl'))
+      .sort()
     const entries: ChatLogEntry[] = []
     for (const f of files) {
       for (const line of readFileSync(path.join(dir, f), 'utf-8').split('\n')) {
         if (!line.trim()) continue
-        try { entries.push(JSON.parse(line) as ChatLogEntry) } catch { /* 忽略损坏行 */ }
+        try {
+          entries.push(JSON.parse(line) as ChatLogEntry)
+        } catch {
+          /* 忽略损坏行 */
+        }
       }
     }
     entries.sort((a, b) => a.ts.localeCompare(b.ts))
     if (entries.length === 0) return { ok: false, error: '还没有对话记录' }
     const md = entries
-      .map((e) => `${e.role === 'user' ? '我' : '搭档'}（${e.ts.slice(11, 19)}）：\`${e.content ?? ''}\`${e.error ? ` [${e.error}]` : ''}${e.toolCalls && e.toolCalls.length > 0 ? `\n\n工具调用：${e.toolCalls.map((t) => `${t.name}${t.status ? `（${t.status}）` : ''}`).join('、')}` : ''}`)
+      .map(
+        (e) =>
+          `${e.role === 'user' ? '我' : '搭档'}（${e.ts.slice(11, 19)}）：\`${e.content ?? ''}\`${e.error ? ` [${e.error}]` : ''}${e.toolCalls && e.toolCalls.length > 0 ? `\n\n工具调用：${e.toolCalls.map((t) => `${t.name}${t.status ? `（${t.status}）` : ''}`).join('、')}` : ''}`,
+      )
       .join('\n\n')
     // 2026-08-04 体验修复：固定文件名每次覆盖（用户「不用保留之前的内容」——原来带日期跨天堆积多个文件）
     const out = path.join(os.homedir(), 'Downloads', 'neonforge-chat.md')

@@ -8,7 +8,8 @@ const EMPTY_DIR = '/tmp/nf-e2e-test'
 // 真实项目目录：默认当前目录（apps/desktop——有 package.json）；可用 NF_E2E_REAL_PROJ 覆盖
 const REAL_PROJ = process.env.NF_E2E_REAL_PROJ ?? process.cwd()
 
-let pass = 0, fail = 0
+let pass = 0,
+  fail = 0
 const results = []
 
 async function launch(proj) {
@@ -17,7 +18,13 @@ async function launch(proj) {
   const userData = '/tmp/nf-e2e-ud-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)
   const app = await _electron.launch({
     args: ['.'],
-    env: { ...process.env, VITE_DEV_SERVER_URL: 'http://localhost:5173', NF_TEST_PROJECT: proj, NF_TEST_USERDATA: userData, ELECTRON_RUN_AS_NODE: '' }
+    env: {
+      ...process.env,
+      VITE_DEV_SERVER_URL: 'http://localhost:5173',
+      NF_TEST_PROJECT: proj,
+      NF_TEST_USERDATA: userData,
+      ELECTRON_RUN_AS_NODE: '',
+    },
   })
   const page = await app.firstWindow()
   await page.waitForSelector('.nf-start', { timeout: 10000 })
@@ -35,7 +42,10 @@ async function waitSettle(page, timeoutMs) {
     const texts = await page.locator('.nf-msg').allInnerTexts()
     lastText = texts[texts.length - 1] ?? ''
     const busy = await page.locator('.nf-working').count()
-    const sb = await page.locator('.nf-statusbar').innerText().catch(() => '')
+    const sb = await page
+      .locator('.nf-statusbar')
+      .innerText()
+      .catch(() => '')
     if (!lastText.includes('处理中') && lastText.trim() && busy === 0 && sb.includes('就绪')) break
   }
   const dur = ((Date.now() - (deadline - timeoutMs)) / 1000).toFixed(1)
@@ -55,11 +65,17 @@ async function case_(name, fn) {
     const info = await fn()
     const ok = info.ok
     const secs = ((Date.now() - t0) / 1000).toFixed(1)
-    if (ok) { pass++; console.log(`✅ ${name} (${secs}s)${info.detail ?? ''}`) }
-    else { fail++; console.log(`❌ ${name} (${secs}s) ${info.detail ?? ''}`) }
+    if (ok) {
+      pass++
+      console.log(`✅ ${name} (${secs}s)${info.detail ?? ''}`)
+    } else {
+      fail++
+      console.log(`❌ ${name} (${secs}s) ${info.detail ?? ''}`)
+    }
     results.push({ name, ok, secs })
   } catch (e) {
-    fail++; console.log(`❌ ${name} 异常: ${String(e).slice(0, 120)}`)
+    fail++
+    console.log(`❌ ${name} 异常: ${String(e).slice(0, 120)}`)
     results.push({ name, ok: false, secs: '-' })
   }
 }
@@ -106,7 +122,8 @@ await case_('多轮对话（连续 3 条）', async () => {
   await send(page, '好的谢谢')
   const r3 = await waitSettle(page, 20000)
   await app.close()
-  const ok = !r1.text.includes('处理中') && !r2.text.includes('处理中') && !r3.text.includes('处理中')
+  const ok =
+    !r1.text.includes('处理中') && !r2.text.includes('处理中') && !r3.text.includes('处理中')
   return { ok, detail: `| 3 条全部结束 | ${r1.dur}s/${r2.dur}s/${r3.dur}s` }
 })
 
@@ -132,7 +149,6 @@ await case_('快速连发（并发保护）', async () => {
   return { ok, detail: `| ${r.dur}s | ${r.text.slice(0, 40)}` }
 })
 
-
 // 场景 13：需求分流 B 类（2026-08-06 3670734）——改文件内容 → 模型判断【任务类型：B】→ edit 直接执行（不弹 plan 卡）——真实 API + 真实文件修改
 await case_('需求分流 B 类（改文件内容→edit 直接执行）', async () => {
   const TEST_DIR = '/tmp/nf-e2e-edit-test'
@@ -146,9 +162,11 @@ await case_('需求分流 B 类（改文件内容→edit 直接执行）', async
   // 需求确认（模型输出【需求确认】/确认需求——需求阶段不动手）
   await waitSettle(page, 30000)
   const msgs = await page.locator('.nf-msg').allInnerTexts()
-  const hasTypeLabel = msgs.some((t) => t.includes('任务类型：B')) || msgs.some((t) => t.includes('需求确认'))
+  const hasTypeLabel =
+    msgs.some((t) => t.includes('任务类型：B')) || msgs.some((t) => t.includes('需求确认'))
   // 用户确认推进（需求确认后 forceTool 强制——模型可能标 A（进设计——设计门控拦 edit 不弹卡）或标 B（直接执行）——循环推进直到文件改，最多 4 段
-  let changed = false, lastText = ''
+  let changed = false,
+    lastText = ''
   for (let i = 0; i < 4; i++) {
     await send(page, '确认推进')
     const r = await waitSettle(page, 40000)
@@ -161,7 +179,11 @@ await case_('需求分流 B 类（改文件内容→edit 直接执行）', async
   fs.writeFileSync(TEST_FILE, ORIG, 'utf-8')
   await app.close()
   const ok = changed && hasTypeLabel && !lastText.includes('处理中')
-  return { ok, detail: ' | 文件真实修改:' + changed + ' | 需求确认:' + hasTypeLabel + ' | ' + (lastText.slice(0, 40)) }
+  return {
+    ok,
+    detail:
+      ' | 文件真实修改:' + changed + ' | 需求确认:' + hasTypeLabel + ' | ' + lastText.slice(0, 40),
+  }
 })
 
 console.log(`\n=== 汇总: ${pass} passed / ${fail} failed ===`)

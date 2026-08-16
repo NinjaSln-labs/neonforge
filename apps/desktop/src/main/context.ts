@@ -37,7 +37,9 @@ export const context = new ContextEngine()
 
 // @引用路径解析：真实绝对路径直接用；相对路径以 rootPath 为基准（无扩展名尝试常见后缀）
 function resolveMentionPath(mention: string, rootPath: string | null): string | null {
-  const p = String(mention ?? '').trim().replace(/^@/, '')
+  const p = String(mention ?? '')
+    .trim()
+    .replace(/^@/, '')
   if (!p) return null
   if (rootPath && (p.startsWith(rootPath) || existsSync(p))) return p
   if (rootPath) {

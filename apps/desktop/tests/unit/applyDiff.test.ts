@@ -27,7 +27,7 @@ describe('applyDiff（L1 领域逻辑——纯函数不变量）', () => {
     expect(changes).toEqual([
       { line: 2, type: 'del', content: '' },
       { line: 2, type: 'add', content: 'LINE2' },
-      { line: 5, type: 'add', content: 'line5' }
+      { line: 5, type: 'add', content: 'line5' },
     ])
   })
 
@@ -47,7 +47,7 @@ describe('applyDiff（L1 领域逻辑——纯函数不变量）', () => {
       { line: 2, type: 'del', content: '' },
       { line: 2, type: 'add', content: 'B' },
       { line: 6, type: 'del', content: '' },
-      { line: 6, type: 'add', content: 'F' }
+      { line: 6, type: 'add', content: 'F' },
     ])
   })
 
@@ -69,7 +69,9 @@ describe('applyDiff（L1 领域逻辑——纯函数不变量）', () => {
   })
 
   it('应用：文件不存在 → 错误（不崩）', () => {
-    const r = applyDiffToFile(path.join(TMP, 'missing.txt'), [{ line: 1, type: 'add', content: 'x' }])
+    const r = applyDiffToFile(path.join(TMP, 'missing.txt'), [
+      { line: 1, type: 'add', content: 'x' },
+    ])
     expect(r.ok).toBe(false)
     expect(r.error).toContain('文件不存在')
   })

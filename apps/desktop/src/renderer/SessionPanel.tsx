@@ -10,7 +10,7 @@ const STATUS_LABEL: Record<ProblemStatus, string> = {
   'awaiting-input': '待你操作',
   delivered: '已交付',
   closed: '已关闭',
-  'failed-recoverable': '失败可恢复'
+  'failed-recoverable': '失败可恢复',
 }
 // 2026-08-03 B2 审计修复：状态圆点字符（●◉✓✕）→ SVG（颜色由 .nf-ledger__dot--<status> 控制，文本标签已双编码）
 const STATUS_DOT: Record<ProblemStatus, () => ReactElement> = {
@@ -20,14 +20,14 @@ const STATUS_DOT: Record<ProblemStatus, () => ReactElement> = {
   'awaiting-input': () => <IconDot size={12} />,
   delivered: () => <IconDot size={12} />,
   closed: () => <IconCheck size={12} />,
-  'failed-recoverable': () => <IconX size={12} />
+  'failed-recoverable': () => <IconX size={12} />,
 }
 
 export default function SessionPanel({
   problems,
   activeId,
   onSelect,
-  onNew
+  onNew,
 }: {
   problems: ProblemInstance[]
   activeId: string | null
@@ -38,19 +38,28 @@ export default function SessionPanel({
     <section className="nf-session">
       <header className="nf-session__header">
         {/* 2026-08-03 v31 A3：面板标题语义化（aria heading——读屏文档结构，视觉零变化） */}
-        <span role="heading" aria-level={2}>问题</span>
-        <button type="button" className="nf-session__new" onClick={onNew}><IconPlus size={12} /> 新问题</button>
+        <span role="heading" aria-level={2}>
+          问题
+        </span>
+        <button type="button" className="nf-session__new" onClick={onNew}>
+          <IconPlus size={12} /> 新问题
+        </button>
       </header>
       <div className="nf-session__list">
         {problems.length === 0 && <p className="nf-placeholder">还没有问题——说出你当前的问题</p>}
         {problems.map((p) => (
-          <div key={p.id} className={`nf-ledger__wrap${activeId === p.id ? ' nf-ledger__wrap--active' : ''}`}>
+          <div
+            key={p.id}
+            className={`nf-ledger__wrap${activeId === p.id ? ' nf-ledger__wrap--active' : ''}`}
+          >
             <button
               type="button"
               className={`nf-ledger__item${activeId === p.id ? ' nf-ledger__item--active' : ''}`}
               onClick={() => onSelect(p.id)}
             >
-              <span className={`nf-ledger__dot nf-ledger__dot--${p.status}`} aria-hidden="true">{STATUS_DOT[p.status]()}</span>
+              <span className={`nf-ledger__dot nf-ledger__dot--${p.status}`} aria-hidden="true">
+                {STATUS_DOT[p.status]()}
+              </span>
               <span className="nf-ledger__title">{p.title}</span>
               <span className="nf-ledger__meta">
                 {STATUS_LABEL[p.status]}
@@ -61,10 +70,22 @@ export default function SessionPanel({
             {activeId === p.id && p.snapshot && (
               <div className="nf-ledger__snapshot">
                 {p.snapshot.authorized.length > 0 && (
-                  <div className="nf-ledger__snap-row">已授权：{(p.snapshot.authorized as Array<{ tool: string; file: string } | string>).slice(-3).map((a) => typeof a === 'string' ? a.replace(/\[[^\]]+\]\s*/, '') : a.file.split('/').pop() ?? a.file).join(' · ')}</div>
+                  <div className="nf-ledger__snap-row">
+                    已授权：
+                    {(p.snapshot.authorized as Array<{ tool: string; file: string } | string>)
+                      .slice(-3)
+                      .map((a) =>
+                        typeof a === 'string'
+                          ? a.replace(/\[[^\]]+\]\s*/, '')
+                          : (a.file.split('/').pop() ?? a.file),
+                      )
+                      .join(' · ')}
+                  </div>
                 )}
                 {p.snapshot.pending.length > 0 && (
-                  <div className="nf-ledger__snap-row">待办：{p.snapshot.pending.slice(-2).join(' · ')}</div>
+                  <div className="nf-ledger__snap-row">
+                    待办：{p.snapshot.pending.slice(-2).join(' · ')}
+                  </div>
                 )}
               </div>
             )}

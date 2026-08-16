@@ -9,12 +9,12 @@ const PLACEHOLDERS = [
   '把 Downloads 里的发票和合同分类整理',
   '帮我做一个每周记账的小工具',
   '我要做一个3D射击小游戏（第一人称，科幻风格）',
-  '我要做一个能发给朋友的旅行手册网页'
+  '我要做一个能发给朋友的旅行手册网页',
 ]
 
 export default function StartPage({
   onOpenProject,
-  onNewProject
+  onNewProject,
 }: {
   onOpenProject: (prefill: string) => void
   onNewProject: (prefill: string) => void
@@ -27,7 +27,9 @@ export default function StartPage({
     return () => clearInterval(t)
   }, [])
 
-  const pick = (q: string) => { setValue(q) }
+  const pick = (q: string) => {
+    setValue(q)
+  }
 
   return (
     <div className="nf-start">
@@ -67,14 +69,24 @@ export default function StartPage({
       </div>
 
       <div className="nf-start__actions">
-        <button type="button" className="nf-start__cta nf-start__cta--primary" onClick={() => onNewProject(value)}>
+        <button
+          type="button"
+          className="nf-start__cta nf-start__cta--primary"
+          onClick={() => onNewProject(value)}
+        >
           从零开始
         </button>
-        <button type="button" className="nf-start__cta nf-start__cta--ghost" onClick={() => onOpenProject(value)}>
+        <button
+          type="button"
+          className="nf-start__cta nf-start__cta--ghost"
+          onClick={() => onOpenProject(value)}
+        >
           打开已有项目
         </button>
       </div>
-      <p className="nf-start__hint">从零开始：搭档带你从需求做到交付 · 打开已有项目：直接改你电脑上的文件</p>
+      <p className="nf-start__hint">
+        从零开始：搭档带你从需求做到交付 · 打开已有项目：直接改你电脑上的文件
+      </p>
     </div>
   )
 }

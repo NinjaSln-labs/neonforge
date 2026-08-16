@@ -25,7 +25,9 @@ export class ConfigStore {
       if (existsSync(configPath())) {
         this.config = JSON.parse(readFileSync(configPath(), 'utf-8')) as NeonForgeConfig
       }
-    } catch { this.config = {} }
+    } catch {
+      this.config = {}
+    }
   }
 
   hasValidKey(): boolean {

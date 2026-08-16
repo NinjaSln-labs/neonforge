@@ -5,11 +5,20 @@ vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>()
   return {
     ...actual,
-    existsSync: (p: string) => typeof p === 'string' && p.includes('node_modules/.bin')
+    existsSync: (p: string) => typeof p === 'string' && p.includes('node_modules/.bin'),
   }
 })
 
-import { normalizeServerCommand, allocatePort, releasePort, buildSpawnEnv, HOST_RESERVED_PORTS, detectCapabilities, recordCapabilityResult, attributeCommandFailure } from '../../src/main/envManager'
+import {
+  normalizeServerCommand,
+  allocatePort,
+  releasePort,
+  buildSpawnEnv,
+  HOST_RESERVED_PORTS,
+  detectCapabilities,
+  recordCapabilityResult,
+  attributeCommandFailure,
+} from '../../src/main/envManager'
 
 // 环境管理领域层（2026-08-06 尽调调研驱动——环境单源：检测→记录→使用；显式端口替换 --port 0；.bin PATH 注入通用机制）
 
@@ -34,7 +43,6 @@ describe('normalizeServerCommand（服务命令端口规范化——显式端口
 })
 
 describe('端口分配器（显式独立端口——避开宿主保留 + 已用）', () => {
-
   it('分配避开保留端口 5173/5175（5190 起）', () => {
     const p = allocatePort('/test/proj1')
     expect(HOST_RESERVED_PORTS.has(p)).toBe(false)
@@ -98,10 +106,19 @@ describe('CapabilityRegistry（能力模型——平台原生 + 外部扩展 Sta
     // 2026-08-08 环境/能力双源修复：check-capability 已调 checkEnvironment（检测一次）→ detectCapabilities 传 env 复用——
     // node-runtime status 应来自传入 env（而非重新 detectEnvironment 的真实系统状态）
     const fakeEnv = {
-      rootPath: '/proj/env-reuse', runtime: 'node', runtimeVersion: 'v99.0.0',
-      hasPackageJson: true, hasNodeModules: true, packageManager: 'npm', toolchain: ['vite'],
-      servicePort: 0, signature: 'x',
-      systemRuntime: { node: { version: 'v99.0.0', status: 'failed' as const }, python: { version: '', status: 'missing' as const } }
+      rootPath: '/proj/env-reuse',
+      runtime: 'node',
+      runtimeVersion: 'v99.0.0',
+      hasPackageJson: true,
+      hasNodeModules: true,
+      packageManager: 'npm',
+      toolchain: ['vite'],
+      servicePort: 0,
+      signature: 'x',
+      systemRuntime: {
+        node: { version: 'v99.0.0', status: 'failed' as const },
+        python: { version: '', status: 'missing' as const },
+      },
     }
     const caps = detectCapabilities('/proj/env-reuse', 'darwin', fakeEnv)
     // node-runtime 用传入 env 的 failed（若重新检测会是本机真实 node 状态——多为 ready）
@@ -125,18 +142,28 @@ describe('CapabilityLedger（执行结果回填——失败降级/成功恢复�
 
   it('成功执行 → 清除失败记录（能力恢复——Ledger 双向：失败降级/成功恢复）', () => {
     recordCapabilityResult('/proj/ledger2', 'node-runtime', false)
-    expect(detectCapabilities('/proj/ledger2', 'darwin').find((c) => c.id === 'node-runtime')?.status).toBe('failed')
+    expect(
+      detectCapabilities('/proj/ledger2', 'darwin').find((c) => c.id === 'node-runtime')?.status,
+    ).toBe('failed')
     recordCapabilityResult('/proj/ledger2', 'node-runtime', true)
-    expect(detectCapabilities('/proj/ledger2', 'darwin').find((c) => c.id === 'node-runtime')?.status).not.toBe('failed')
+    expect(
+      detectCapabilities('/proj/ledger2', 'darwin').find((c) => c.id === 'node-runtime')?.status,
+    ).not.toBe('failed')
   })
 
   it('attributeCommandFailure 归因（bash 失败按命令内容归因——node/npm 命令 → node-runtime）', () => {
     attributeCommandFailure('/proj/ledger3', 'node -v')
-    expect(detectCapabilities('/proj/ledger3', 'darwin').find((c) => c.id === 'node-runtime')?.status).toBe('failed')
+    expect(
+      detectCapabilities('/proj/ledger3', 'darwin').find((c) => c.id === 'node-runtime')?.status,
+    ).toBe('failed')
     attributeCommandFailure('/proj/ledger4', 'npm install')
-    expect(detectCapabilities('/proj/ledger4', 'darwin').find((c) => c.id === 'dev-tools')?.status).toBe('failed')
+    expect(
+      detectCapabilities('/proj/ledger4', 'darwin').find((c) => c.id === 'dev-tools')?.status,
+    ).toBe('failed')
     // 无关命令不归因（ls——shell 原生不降级）
     attributeCommandFailure('/proj/ledger5', 'ls -la')
-    expect(detectCapabilities('/proj/ledger5', 'darwin').find((c) => c.id === 'node-runtime')?.status).not.toBe('failed')
+    expect(
+      detectCapabilities('/proj/ledger5', 'darwin').find((c) => c.id === 'node-runtime')?.status,
+    ).not.toBe('failed')
   })
 })

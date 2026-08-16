@@ -1,11 +1,18 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { slugify, safePkgName, initProjectFiles, updateProjectTitle } from '../../src/main/projectInit'
+import {
+  slugify,
+  safePkgName,
+  initProjectFiles,
+  updateProjectTitle,
+} from '../../src/main/projectInit'
 
 const TMP = '/tmp/nf-unit-project'
 
 describe('projectInit（ticket 07——0-1 项目初始化）', () => {
-  afterEach(() => { rmSync(TMP, { recursive: true, force: true }) })
+  afterEach(() => {
+    rmSync(TMP, { recursive: true, force: true })
+  })
 
   it('slugify：小写/特殊字符转 -/限长/空回退', () => {
     expect(slugify('My Travel Website!')).toBe('my-travel-website')

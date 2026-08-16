@@ -7,8 +7,14 @@ const TMP = '/tmp/nf-unit-rag'
 describe('CodeRAG（Layer2 V1 降级——关键词检索兜底）', () => {
   beforeEach(() => {
     mkdirSync(`${TMP}/src`, { recursive: true })
-    writeFileSync(`${TMP}/src/auth.ts`, 'export function login(user, pass) {\n  // 认证逻辑\n  return true\n}\n')
-    writeFileSync(`${TMP}/src/report.ts`, 'export function buildReport(data) {\n  return data.map((x) => x.name)\n}\n')
+    writeFileSync(
+      `${TMP}/src/auth.ts`,
+      'export function login(user, pass) {\n  // 认证逻辑\n  return true\n}\n',
+    )
+    writeFileSync(
+      `${TMP}/src/report.ts`,
+      'export function buildReport(data) {\n  return data.map((x) => x.name)\n}\n',
+    )
     writeFileSync(`${TMP}/README.md`, '# NeonForge\n认证与报告模块说明\n')
   })
   afterEach(() => {

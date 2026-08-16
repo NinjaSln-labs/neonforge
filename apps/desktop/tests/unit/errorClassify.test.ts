@@ -47,7 +47,7 @@ describe('classifyChatError service', () => {
   })
 })
 
-describe('classifyChatError T1 误伤回归（原 includes(\'5\') 过宽）', () => {
+describe("classifyChatError T1 误伤回归（原 includes('5') 过宽）", () => {
   it('含 5 但不是状态码（token-limit-50 / 5000 / x5x）→ 不再误归 service', () => {
     expect(classifyChatError('token-limit-50')).toBe('unknown')
     expect(classifyChatError('5000')).toBe('unknown')

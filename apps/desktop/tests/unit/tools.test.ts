@@ -1,13 +1,22 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { initTools, toolRegistry, revertToolFile, cancelActiveCommand, markPlanApproved, resetPlanApproved, isValidOpenUrl, isReadOnlyBash } from '../../src/main/tools'
+import {
+  initTools,
+  toolRegistry,
+  revertToolFile,
+  cancelActiveCommand,
+  markPlanApproved,
+  resetPlanApproved,
+  isValidOpenUrl,
+  isReadOnlyBash,
+} from '../../src/main/tools'
 
 // 2026-08-06 open 工具（用户「帮我打开」）：mock electron shell——vitest node 环境无 electron
 const { openExternalMock } = vi.hoisted(() => ({ openExternalMock: vi.fn(async () => {}) }))
 vi.mock('electron', () => ({
   app: { getPath: () => '/tmp/nf-unit-tools' },
-  shell: { openExternal: openExternalMock }
+  shell: { openExternal: openExternalMock },
 }))
 
 const TMP = '/tmp/nf-unit-tools'
@@ -54,7 +63,11 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
   it('write：授权后写文件 + 写前快照 .nf-bak + 回滚恢复原样', async () => {
     const file = path.join(TMP, 'b.txt')
     writeFileSync(file, 'old-content\n', 'utf-8')
-    const r = await toolRegistry.execute('write', { path: file, content: 'new-content\n' }, { approved: true })
+    const r = await toolRegistry.execute(
+      'write',
+      { path: file, content: 'new-content\n' },
+      { approved: true },
+    )
     expect(r.ok).toBe(true)
     expect(readFileSync(file, 'utf-8')).toBe('new-content\n')
     expect(existsSync(file + '.nf-bak')).toBe(true)
@@ -66,7 +79,11 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
   it('edit：替换 + 写前快照 + 回滚', async () => {
     const file = path.join(TMP, 'c.txt')
     writeFileSync(file, 'alpha\nbeta\n', 'utf-8')
-    const r = await toolRegistry.execute('edit', { path: file, old: 'beta', new: 'BETA' }, { approved: true })
+    const r = await toolRegistry.execute(
+      'edit',
+      { path: file, old: 'beta', new: 'BETA' },
+      { approved: true },
+    )
     expect(r.ok).toBe(true)
     expect(readFileSync(file, 'utf-8')).toBe('alpha\nBETA\n')
     expect(existsSync(file + '.nf-bak')).toBe(true)
@@ -113,7 +130,11 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     }
     // 2026-08-04 回归：绝对路径不存在 → 不拼出 rootPath+绝对路径 的荒谬路径（talk.txt 实测 bug）——返回友好提示
     // 2026-08-06 read 增强：不存在时返回目录列表（模型知道目录里有什么，不再盲读）
-    const r4 = await toolRegistry.execute('read', { path: '/Users/nobody/NeonForge/package.json' }, { rootPath: TMP })
+    const r4 = await toolRegistry.execute(
+      'read',
+      { path: '/Users/nobody/NeonForge/package.json' },
+      { rootPath: TMP },
+    )
     expect(r4.ok).toBe(true)
     expect(String(r4.data)).not.toContain(`${TMP}/Users`)
     expect(String(r4.data)).toContain('找不到文件')
@@ -156,7 +177,10 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     for (let i = 0; i < 20; i++) {
       await new Promise((r) => setTimeout(r, 50))
       const c = cancelActiveCommand()
-      if (c.ok) { cancelled = true; break }
+      if (c.ok) {
+        cancelled = true
+        break
+      }
     }
     expect(cancelled).toBe(true)
     const r = await execPromise

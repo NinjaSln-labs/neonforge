@@ -24,13 +24,24 @@ export interface ProjectEnvironment {
   // 2026-08-07 能力对齐（调研定论：环境=事实来源，能力=语义视图——消除双源 exec）：
   // 宿主 runtime 可用性（独立于项目 package.json——node/python 是否在 PATH 可执行）
   // status: ready（可用）/ missing（未装——ENOENT）/ failed（装了但不可用——超时/权限等，坑 83 Status 语义）
-  systemRuntime: { node: { version: string; status: 'ready' | 'missing' | 'failed' }; python: { version: string; status: 'ready' | 'missing' | 'failed' } }
+  systemRuntime: {
+    node: { version: string; status: 'ready' | 'missing' | 'failed' }
+    python: { version: string; status: 'ready' | 'missing' | 'failed' }
+  }
 }
 
 // 宿主 runtime 探测（ENOENT=未装 missing；其他异常=装了不可用 failed——区分 Status 语义，坑 83）
-function tryVersion(cmd: string, args: string[]): { version: string; status: 'ready' | 'missing' | 'failed' } {
+function tryVersion(
+  cmd: string,
+  args: string[],
+): { version: string; status: 'ready' | 'missing' | 'failed' } {
   try {
-    return { version: execFileSync(cmd, args, { stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000 }).toString().trim(), status: 'ready' }
+    return {
+      version: execFileSync(cmd, args, { stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000 })
+        .toString()
+        .trim(),
+      status: 'ready',
+    }
   } catch (e) {
     const code = (e as NodeJS.ErrnoException | null)?.code
     if (code === 'ENOENT') return { version: '', status: 'missing' }
@@ -58,15 +69,23 @@ export function detectEnvironment(rootPath: string): ProjectEnvironment {
   // 项目 runtime 从 systemRuntime 推导（package.json 存在 → node 项目——版本取宿主检测结果，不重复 exec）
   const sysNode = tryVersion('node', ['--version'])
   const sysPython = tryVersion('python3', ['--version'])
-  const sysPythonAlt = sysPython.status === 'missing' ? tryVersion('python', ['--version']) : sysPython
+  const sysPythonAlt =
+    sysPython.status === 'missing' ? tryVersion('python', ['--version']) : sysPython
   let runtime: ProjectEnvironment['runtime'] = 'none'
   let runtimeVersion = ''
   if (hasPackageJson) {
     runtime = 'node'
-    runtimeVersion = sysNode.version || (sysNode.status === 'failed' ? '未知（node 不可用）' : '未知（node 不在 PATH）')
-  } else if (fsExists(path.join(rootPath, 'requirements.txt')) || fsExists(path.join(rootPath, 'pyproject.toml'))) {
+    runtimeVersion =
+      sysNode.version ||
+      (sysNode.status === 'failed' ? '未知（node 不可用）' : '未知（node 不在 PATH）')
+  } else if (
+    fsExists(path.join(rootPath, 'requirements.txt')) ||
+    fsExists(path.join(rootPath, 'pyproject.toml'))
+  ) {
     runtime = 'python'
-    runtimeVersion = sysPythonAlt.version || (sysPythonAlt.status === 'failed' ? '未知（python 不可用）' : '未知（python3 不在 PATH）')
+    runtimeVersion =
+      sysPythonAlt.version ||
+      (sysPythonAlt.status === 'failed' ? '未知（python 不可用）' : '未知（python3 不在 PATH）')
   }
   // 工具链：node_modules/.bin 里的可执行项（vite 等——起服务/跑测试常用）
   let toolchain: string[] = []
@@ -76,13 +95,26 @@ export function detectEnvironment(rootPath: string): ProjectEnvironment {
       toolchain = readdirSync(binDir)
         .filter((n) => !n.startsWith('.'))
         .slice(0, 30) // 只取前 30 个（防超大列表）
-    } catch { toolchain = [] }
+    } catch {
+      toolchain = []
+    }
   }
   // 签名：runtime + version + 关键文件存在性（跨会话校验——变了重新检测）
   const signature = [runtime, runtimeVersion, String(hasNodeModules), packageManager].join('|')
   return {
-    rootPath, runtime, runtimeVersion, hasPackageJson, hasNodeModules, packageManager, toolchain, servicePort: 0, signature,
-    systemRuntime: { node: { version: sysNode.version, status: sysNode.status }, python: { version: sysPythonAlt.version, status: sysPythonAlt.status } }
+    rootPath,
+    runtime,
+    runtimeVersion,
+    hasPackageJson,
+    hasNodeModules,
+    packageManager,
+    toolchain,
+    servicePort: 0,
+    signature,
+    systemRuntime: {
+      node: { version: sysNode.version, status: sysNode.status },
+      python: { version: sysPythonAlt.version, status: sysPythonAlt.status },
+    },
   }
 }
 
@@ -121,7 +153,10 @@ export function allocatePort(rootPath: string): number {
   nextPort = port + 1
   portByRoot.set(rootPath, port)
   const cur = envs.get(rootPath)
-  if (cur) { cur.servicePort = port; envs.set(rootPath, cur) }
+  if (cur) {
+    cur.servicePort = port
+    envs.set(rootPath, cur)
+  }
   return port
 }
 
@@ -131,7 +166,10 @@ export function releasePort(rootPath: string): void {
     usedPorts.delete(p)
     portByRoot.delete(rootPath)
     const cur = envs.get(rootPath)
-    if (cur) { cur.servicePort = 0; envs.set(rootPath, cur) }
+    if (cur) {
+      cur.servicePort = 0
+      envs.set(rootPath, cur)
+    }
   }
 }
 
@@ -174,47 +212,85 @@ export interface Capability {
 
 function tryExec(cmd: string, args: string[]): string | null {
   try {
-    return execFileSync(cmd, args, { stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000 }).toString().trim()
-  } catch { return null }
+    return execFileSync(cmd, args, { stdio: ['ignore', 'pipe', 'ignore'], timeout: 3000 })
+      .toString()
+      .trim()
+  } catch {
+    return null
+  }
 }
 
 // === Domain Service: CapabilityRegistry——平台原生清单（按 OS）+ 外部扩展检测 ===
 // 平台原生能力：系统自带无需安装（mac/windows 实现差异——能力抽象层）
 const SYSTEM_CAPABILITIES: Record<string, Capability[]> = {
   darwin: [
-    { id: 'filesystem', category: 'system', status: 'ready', implementations: ['内置 read/edit/文件操作'] },
+    {
+      id: 'filesystem',
+      category: 'system',
+      status: 'ready',
+      implementations: ['内置 read/edit/文件操作'],
+    },
     { id: 'text-edit', category: 'system', status: 'ready', implementations: ['内置 edit 工具'] },
     { id: 'text-search', category: 'system', status: 'ready', implementations: ['grep', 'rg'] },
     { id: 'file-list', category: 'system', status: 'ready', implementations: ['ls'] },
     { id: 'file-move', category: 'system', status: 'ready', implementations: ['mv'] },
-    { id: 'shell', category: 'system', status: 'ready', implementations: ['zsh/bash'] }
+    { id: 'shell', category: 'system', status: 'ready', implementations: ['zsh/bash'] },
   ],
   win32: [
-    { id: 'filesystem', category: 'system', status: 'ready', implementations: ['内置 read/edit/文件操作'] },
+    {
+      id: 'filesystem',
+      category: 'system',
+      status: 'ready',
+      implementations: ['内置 read/edit/文件操作'],
+    },
     { id: 'text-edit', category: 'system', status: 'ready', implementations: ['内置 edit 工具'] },
-    { id: 'text-search', category: 'system', status: 'ready', implementations: ['Select-String', 'findstr'] },
+    {
+      id: 'text-search',
+      category: 'system',
+      status: 'ready',
+      implementations: ['Select-String', 'findstr'],
+    },
     { id: 'file-list', category: 'system', status: 'ready', implementations: ['dir'] },
     { id: 'file-move', category: 'system', status: 'ready', implementations: ['Move-Item'] },
-    { id: 'shell', category: 'system', status: 'ready', implementations: ['PowerShell'] }
-  ]
+    { id: 'shell', category: 'system', status: 'ready', implementations: ['PowerShell'] },
+  ],
 }
 
 // 外部扩展能力检测（Status——2026-08-07 能力对齐：从 Environment.systemRuntime 推导，不重复 exec——环境=事实来源）
 // status 语义（坑 83 reasonix Entry Status）：ready 可用 / missing 未装（ENOENT）/ failed 装了但不可用（超时/权限/损坏）
-export function detectExternalCapabilities(rootPath: string, env?: ProjectEnvironment): Capability[] {
+export function detectExternalCapabilities(
+  rootPath: string,
+  env?: ProjectEnvironment,
+): Capability[] {
   const e = env ?? detectEnvironment(rootPath)
   const caps: Capability[] = []
   // node runtime（开发/起服务/多数工具依赖）——从宿主检测推导（消除双源 exec——原独立 tryExec node 与 detectEnvironment 重复）
   const node = e.systemRuntime.node
   caps.push({
-    id: 'node-runtime', category: 'external', status: node.status,
-    implementations: ['node'], detail: node.status === 'ready' ? node.version : (node.status === 'failed' ? 'node 在 PATH 但不可用（超时/损坏）' : 'node 未安装（brew install node / 官网安装）')
+    id: 'node-runtime',
+    category: 'external',
+    status: node.status,
+    implementations: ['node'],
+    detail:
+      node.status === 'ready'
+        ? node.version
+        : node.status === 'failed'
+          ? 'node 在 PATH 但不可用（超时/损坏）'
+          : 'node 未安装（brew install node / 官网安装）',
   })
   // python runtime（脚本/Office 操作可能用）
   const py = e.systemRuntime.python
   caps.push({
-    id: 'python-runtime', category: 'external', status: py.status,
-    implementations: ['python3', 'python'], detail: py.status === 'ready' ? py.version : (py.status === 'failed' ? 'python 在 PATH 但不可用' : 'python3 未安装')
+    id: 'python-runtime',
+    category: 'external',
+    status: py.status,
+    implementations: ['python3', 'python'],
+    detail:
+      py.status === 'ready'
+        ? py.version
+        : py.status === 'failed'
+          ? 'python 在 PATH 但不可用'
+          : 'python3 未安装',
   })
   // 电子表格能力（任一实现即可——openpyxl 或 exceljs——不绑定具体工具：坑 74 教训）——实现检测按各自 runtime 门控（openpyxl←python、exceljs←node）
   const spreadsheetImpls: string[] = []
@@ -222,30 +298,52 @@ export function detectExternalCapabilities(rootPath: string, env?: ProjectEnviro
     const hasOpenpyxl = !!tryExec('python3', ['-c', 'import openpyxl'])
     if (hasOpenpyxl) spreadsheetImpls.push('openpyxl')
   }
-  if (node.status === 'ready') { // 2026-08-08 门控修正：exceljs 是 node 库——原被 py 门控（逻辑瑕疵）——按 node 状态检测
-    const hasExceljs = !!(rootPath && fsExists(path.join(rootPath, 'node_modules', 'exceljs'))) || !!tryExec('node', ['-e', 'require("exceljs")'])
+  if (node.status === 'ready') {
+    // 2026-08-08 门控修正：exceljs 是 node 库——原被 py 门控（逻辑瑕疵）——按 node 状态检测
+    const hasExceljs =
+      !!(rootPath && fsExists(path.join(rootPath, 'node_modules', 'exceljs'))) ||
+      !!tryExec('node', ['-e', 'require("exceljs")'])
     if (hasExceljs) spreadsheetImpls.push('exceljs')
   }
   caps.push({
-    id: 'spreadsheet', category: 'external',
+    id: 'spreadsheet',
+    category: 'external',
     status: spreadsheetImpls.length > 0 ? 'ready' : 'missing',
     implementations: spreadsheetImpls,
     requires: ['python-runtime'],
-    detail: spreadsheetImpls.length > 0 ? `可用：${spreadsheetImpls.join('/')}` : (py.status !== 'ready' ? 'python 不可用（装 python 后 pip install openpyxl）' : '未装（openpyxl 或 exceljs 任一即可）')
+    detail:
+      spreadsheetImpls.length > 0
+        ? `可用：${spreadsheetImpls.join('/')}`
+        : py.status !== 'ready'
+          ? 'python 不可用（装 python 后 pip install openpyxl）'
+          : '未装（openpyxl 或 exceljs 任一即可）',
   })
   // PPT 能力（python-pptx）——python 可用才检测
   let hasPptx = false
   if (py.status === 'ready') hasPptx = !!tryExec('python3', ['-c', 'import pptx'])
   caps.push({
-    id: 'ppt', category: 'external', status: hasPptx ? 'ready' : 'missing',
-    implementations: hasPptx ? ['python-pptx'] : [], requires: ['python-runtime'],
-    detail: hasPptx ? '可用：python-pptx' : (py.status !== 'ready' ? 'python 不可用' : '未装（pip install python-pptx）')
+    id: 'ppt',
+    category: 'external',
+    status: hasPptx ? 'ready' : 'missing',
+    implementations: hasPptx ? ['python-pptx'] : [],
+    requires: ['python-runtime'],
+    detail: hasPptx
+      ? '可用：python-pptx'
+      : py.status !== 'ready'
+        ? 'python 不可用'
+        : '未装（pip install python-pptx）',
   })
   // 项目依赖（node_modules/.bin——开发工具 vite 等）——从 env.toolchain 推导（消除重复 readdirSync）
   caps.push({
-    id: 'dev-tools', category: 'external', status: e.toolchain.length > 0 ? 'ready' : 'missing',
-    implementations: e.toolchain, requires: ['node-runtime'],
-    detail: e.toolchain.length > 0 ? `可用工具：${e.toolchain.slice(0, 5).join(', ')}…` : 'node_modules 未装（先 npm install）'
+    id: 'dev-tools',
+    category: 'external',
+    status: e.toolchain.length > 0 ? 'ready' : 'missing',
+    implementations: e.toolchain,
+    requires: ['node-runtime'],
+    detail:
+      e.toolchain.length > 0
+        ? `可用工具：${e.toolchain.slice(0, 5).join(', ')}…`
+        : 'node_modules 未装（先 npm install）',
   })
   return caps
 }
@@ -254,7 +352,11 @@ export function detectExternalCapabilities(rootPath: string, env?: ProjectEnviro
 // 2026-08-07 Ledger 应用（坑 83 ⑥——自学习）：本会话内有执行失败记录的能力 → status 降级 failed（真实可用性从执行结果学习）
 // 2026-08-08 单源修复（HANDOFF §3 环境/能力双源）：接受可选 env——调用方已检测（checkEnvironment/ensureEnvironment）则复用，
 // 不重复 detectEnvironment（原 check-capability 一次调用 exec node/python 各 2 次——入口重复检测）
-export function detectCapabilities(rootPath: string, platform: NodeJS.Platform = process.platform, env?: ProjectEnvironment): Capability[] {
+export function detectCapabilities(
+  rootPath: string,
+  platform: NodeJS.Platform = process.platform,
+  env?: ProjectEnvironment,
+): Capability[] {
   const system = SYSTEM_CAPABILITIES[platform] ?? SYSTEM_CAPABILITIES.darwin
   const e = env ?? detectEnvironment(rootPath) // 环境是事实来源——能力是视图；已检测则复用（单源）
   const caps = [...system, ...detectExternalCapabilities(rootPath, e)]
@@ -263,7 +365,9 @@ export function detectCapabilities(rootPath: string, platform: NodeJS.Platform =
     for (const c of caps) {
       if (failed.has(c.id)) {
         c.status = 'failed'
-        c.detail = c.detail ? `${c.detail}（本会话执行失败记录——状态降级）` : '本会话执行失败记录——状态降级'
+        c.detail = c.detail
+          ? `${c.detail}（本会话执行失败记录——状态降级）`
+          : '本会话执行失败记录——状态降级'
       }
     }
   }
@@ -290,7 +394,8 @@ export function recordCapabilityResult(rootPath: string, capabilityId: string, o
 // 命令失败归因到能力（bash exit≠0 时调用——按命令内容归因，非穷举白名单——常见 runtime/包管理命令）
 export function attributeCommandFailure(rootPath: string, cmd: string): void {
   const c = cmd.trim()
-  if (/(^|\s)(node|npx)(\s|$)/.test(c) || /(^|\s)(npm|pnpm|yarn)(\s|$)/.test(c)) recordCapabilityResult(rootPath, 'node-runtime', false)
+  if (/(^|\s)(node|npx)(\s|$)/.test(c) || /(^|\s)(npm|pnpm|yarn)(\s|$)/.test(c))
+    recordCapabilityResult(rootPath, 'node-runtime', false)
   if (/(^|\s)python3?(\s|$)/.test(c)) recordCapabilityResult(rootPath, 'python-runtime', false)
   if (/(^|\s)(npm|pnpm|yarn)(\s|$)/.test(c)) recordCapabilityResult(rootPath, 'dev-tools', false)
 }

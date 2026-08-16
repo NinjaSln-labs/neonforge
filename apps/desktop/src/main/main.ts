@@ -14,8 +14,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // 兜底记录到文件（Electron 主进程因 console 管道破裂崩溃是「为了日志而崩」——streamChat gateway.js:116 的 console.log 触发）
 process.on('uncaughtException', (err) => {
   try {
-    appendFileSync(path.join(process.env.HOME ?? '/tmp', 'nf-electron-uncaught.log'), `${new Date().toISOString()} ${err?.message ?? String(err)}\n`)
-  } catch { /* 兜底失败也忽略——不能二次崩溃 */ }
+    appendFileSync(
+      path.join(process.env.HOME ?? '/tmp', 'nf-electron-uncaught.log'),
+      `${new Date().toISOString()} ${err?.message ?? String(err)}\n`,
+    )
+  } catch {
+    /* 兜底失败也忽略——不能二次崩溃 */
+  }
 })
 
 // 单实例（2026-08-03 优化）：同时只能运行一个 NeonForge——第二个实例启动即退出，并聚焦已有实例主窗口
@@ -54,8 +59,8 @@ if (!gotTheLock) {
         preload: preloadPath,
         contextIsolation: true,
         nodeIntegration: false,
-        sandbox: false
-      }
+        sandbox: false,
+      },
     })
 
     // 启动默认最大化（2026-08-03 用户优化）——铺满屏幕但保留标题栏/菜单栏
@@ -63,7 +68,9 @@ if (!gotTheLock) {
     // → 先 show 再延迟 maximize——上次非最大化关闭也不残留，启动必铺满（「有时候不是全屏」根治）
     win.once('ready-to-show', () => {
       win.show()
-      setTimeout(() => { if (!win.isDestroyed()) win.maximize() }, 30)
+      setTimeout(() => {
+        if (!win.isDestroyed()) win.maximize()
+      }, 30)
     })
 
     win.webContents.on('preload-error', (_e, pathFailed, err) => {

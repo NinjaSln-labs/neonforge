@@ -9,18 +9,18 @@ async function mockBridge(page: import('@playwright/test').Page) {
         hasKey: async () => true,
         getKey: async () => 'test-key',
         setKey: async () => {},
-        clearKey: async () => {}
+        clearKey: async () => {},
       },
       workspace: {
         openFolder: async () => '/tmp/nf-visual-test',
         listDir: async () => [],
-        readFile: async (p: string) => ({ ok: true, content: '// ' + p })
+        readFile: async (p: string) => ({ ok: true, content: '// ' + p }),
       },
       gateway: {
         validate: async () => ({ ok: true }),
         streamChat: async () => ({ ok: true }),
-        onStreamChunk: () => () => {}
-      }
+        onStreamChunk: () => () => {},
+      },
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = bridge
   })
@@ -48,13 +48,25 @@ test('断点续做：发送 → reload → 会话恢复', async ({ page }) => {
     window.__emit = null
     window.neonforge = {
       version: 'test',
-      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
-      workspace: { openFolder: async () => '/test', listDir: async () => [], readFile: async () => ({ ok: true, content: '// x' }) },
+      config: {
+        hasKey: async () => true,
+        getKey: async () => 'test-key',
+        setKey: async () => {},
+        clearKey: async () => {},
+      },
+      workspace: {
+        openFolder: async () => '/test',
+        listDir: async () => [],
+        readFile: async () => ({ ok: true, content: '// x' }),
+      },
       gateway: {
         validate: async () => ({ ok: true }),
         streamChat: async () => ({ ok: true }),
-        onStreamChunk: (cb: (c: unknown) => void) => { window.__emit = cb; return () => {} }
-      }
+        onStreamChunk: (cb: (c: unknown) => void) => {
+          window.__emit = cb
+          return () => {}
+        },
+      },
     }
   })
   await page.goto('http://localhost:5175/')
@@ -85,18 +97,26 @@ test('搭档须知 .neonforge 注入（项目级指令——08d 消费）', asyn
     window.__lastMsgs = null
     window.neonforge = {
       version: 'test',
-      config: { hasKey: async () => true, getKey: async () => 'test-key', setKey: async () => {}, clearKey: async () => {} },
+      config: {
+        hasKey: async () => true,
+        getKey: async () => 'test-key',
+        setKey: async () => {},
+        clearKey: async () => {},
+      },
       workspace: {
         openFolder: async () => '/test',
         listDir: async () => [],
         readFile: async () => ({ ok: true, content: '// x' }),
-        readNotebook: async () => ({ ok: true, content: '规则：先读需求文档再动手' })
+        readNotebook: async () => ({ ok: true, content: '规则：先读需求文档再动手' }),
       },
       gateway: {
         validate: async () => ({ ok: true }),
-        streamChat: async (opts: { messages: Array<{ role: string; content: string | null }> }) => { window.__lastMsgs = opts.messages; return { ok: true } },
-        onStreamChunk: () => () => {}
-      }
+        streamChat: async (opts: { messages: Array<{ role: string; content: string | null }> }) => {
+          window.__lastMsgs = opts.messages
+          return { ok: true }
+        },
+        onStreamChunk: () => () => {},
+      },
     }
   })
   await page.goto('http://localhost:5175/')
@@ -106,7 +126,11 @@ test('搭档须知 .neonforge 注入（项目级指令——08d 消费）', asyn
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
   await page.waitForTimeout(500)
   // streamChat messages 含 .neonforge 注入 system 消息
-  const msgs = await page.evaluate(() => (window as unknown as { __lastMsgs: Array<{ role: string; content: string | null }> | null }).__lastMsgs)
+  const msgs = await page.evaluate(
+    () =>
+      (window as unknown as { __lastMsgs: Array<{ role: string; content: string | null }> | null })
+        .__lastMsgs,
+  )
   const injected = msgs?.find((m) => m.role === 'system' && String(m.content).includes('搭档须知'))
   expect(injected).toBeTruthy()
   expect(String(injected?.content)).toContain('先读需求文档再动手')

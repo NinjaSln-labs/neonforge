@@ -21,21 +21,36 @@ export class CodeRag {
   // query 关键词（≥2 字符，取前 5 个）→ 匹配片段（每文件最多 1 条——防重复膨胀）
   search(rootPath: string | null, query: string): { hits: RagHit[]; note?: string } {
     if (!rootPath) return { hits: [], note: '无项目' }
-    const keywords = String(query ?? '').split(/\s+/).filter((k) => k.length >= 2).slice(0, 5).map((k) => k.toLowerCase())
+    const keywords = String(query ?? '')
+      .split(/\s+/)
+      .filter((k) => k.length >= 2)
+      .slice(0, 5)
+      .map((k) => k.toLowerCase())
     if (keywords.length === 0) return { hits: [], note: '无有效关键词' }
     const hits: RagHit[] = []
     let scanned = 0
     const walk = (dir: string): void => {
       if (hits.length >= MAX_MATCH || scanned >= MAX_FILES) return
       let entries: string[]
-      try { entries = readdirSync(dir) } catch { return }
+      try {
+        entries = readdirSync(dir)
+      } catch {
+        return
+      }
       for (const name of entries) {
         if (hits.length >= MAX_MATCH || scanned >= MAX_FILES) return
         if (name.startsWith('.') || IGNORE.has(name)) continue
         const full = path.join(dir, name)
         let isDir: boolean
-        try { isDir = statSync(full).isDirectory() } catch { continue }
-        if (isDir) { walk(full); continue }
+        try {
+          isDir = statSync(full).isDirectory()
+        } catch {
+          continue
+        }
+        if (isDir) {
+          walk(full)
+          continue
+        }
         scanned++
         try {
           const st = statSync(full)
@@ -47,12 +62,17 @@ export class CodeRag {
               hits.push({
                 path: full,
                 line: i + 1,
-                snippet: lines.slice(i, i + SNIPPET_LINES).join('\n').slice(0, SNIPPET_MAX_CHARS)
+                snippet: lines
+                  .slice(i, i + SNIPPET_LINES)
+                  .join('\n')
+                  .slice(0, SNIPPET_MAX_CHARS),
               })
               break // 每文件一条
             }
           }
-        } catch { /* 跳过不可读文件 */ }
+        } catch {
+          /* 跳过不可读文件 */
+        }
       }
     }
     walk(rootPath)

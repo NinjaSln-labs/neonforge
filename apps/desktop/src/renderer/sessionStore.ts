@@ -15,7 +15,16 @@ export interface StoredMsg {
 }
 
 // messages → 可存子集（assistant 仅 status done/error；toolCalls 仅完整状态）
-export function serializeMessages(msgs: Array<{ role: 'user' | 'assistant'; content: string; reasoning?: string; status?: string; toolCalls?: ToolCallMsg[]; id?: string }>): StoredMsg[] {
+export function serializeMessages(
+  msgs: Array<{
+    role: 'user' | 'assistant'
+    content: string
+    reasoning?: string
+    status?: string
+    toolCalls?: ToolCallMsg[]
+    id?: string
+  }>,
+): StoredMsg[] {
   const out: StoredMsg[] = []
   for (const m of msgs) {
     if (m.role === 'user') {
@@ -23,7 +32,15 @@ export function serializeMessages(msgs: Array<{ role: 'user' | 'assistant'; cont
       continue
     }
     if (m.role === 'assistant' && (m.status === 'done' || m.status === 'error')) {
-      out.push({ role: 'assistant', content: m.content, reasoning: m.reasoning, toolCalls: m.toolCalls?.filter((t) => t.status === 'done' || t.status === 'error' || t.status === 'reverted'), id: m.id })
+      out.push({
+        role: 'assistant',
+        content: m.content,
+        reasoning: m.reasoning,
+        toolCalls: m.toolCalls?.filter(
+          (t) => t.status === 'done' || t.status === 'error' || t.status === 'reverted',
+        ),
+        id: m.id,
+      })
     }
   }
   return out.slice(-SESSION_MAX)
@@ -33,7 +50,9 @@ export function serializeMessages(msgs: Array<{ role: 'user' | 'assistant'; cont
 export function saveSession(msgs: StoredMsg[]): void {
   try {
     localStorage.setItem(SESSION_KEY, JSON.stringify(msgs))
-  } catch { /* 存储不可用——忽略 */ }
+  } catch {
+    /* 存储不可用——忽略 */
+  }
 }
 
 // 加载（损坏忽略 → null）
@@ -44,11 +63,17 @@ export function loadSession(): StoredMsg[] | null {
       const parsed = JSON.parse(raw)
       if (Array.isArray(parsed)) return parsed
     }
-  } catch { /* 损坏——忽略 */ }
+  } catch {
+    /* 损坏——忽略 */
+  }
   return null
 }
 
 // 清空（新会话开始）
 export function clearSession(): void {
-  try { localStorage.removeItem(SESSION_KEY) } catch { /* 忽略 */ }
+  try {
+    localStorage.removeItem(SESSION_KEY)
+  } catch {
+    /* 忽略 */
+  }
 }

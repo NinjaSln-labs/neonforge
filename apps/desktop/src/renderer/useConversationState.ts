@@ -9,8 +9,14 @@
 // 一处接入覆盖全部状态转换——替代散落打点；事件目录见 domain/timeline.ts（对齐 06 文档）。
 import { useRef } from 'react'
 import {
-  initialState, userConfirmed, userRejected, approvalGranted, applyToolResult, setPending,
-  type ConversationState, type PendingKind,
+  initialState,
+  userConfirmed,
+  userRejected,
+  approvalGranted,
+  applyToolResult,
+  setPending,
+  type ConversationState,
+  type PendingKind,
 } from '../domain/conversationState'
 import { deriveStateEvents } from '../domain/timeline'
 
@@ -42,13 +48,19 @@ export function useConversationState(opts?: UseConversationStateOpts) {
     // approve-files 批准（追加语义——A0 §5；files 已 trustPath 规范化）
     grantPlan: (files: string[]) => transition((s) => approvalGranted(s, files)),
     // 工具结果汇入（进度/失败标记——坑 93 ② policy 不置失败）
-    applyTool: (r: { name: string; ok: boolean; needApproval?: boolean; policy?: boolean; file?: string }) =>
-      transition((s) => applyToolResult(s, r)),
+    applyTool: (r: {
+      name: string
+      ok: boolean
+      needApproval?: boolean
+      policy?: boolean
+      file?: string
+    }) => transition((s) => applyToolResult(s, r)),
     // 确认卡触发 → 会话级 PENDING（D5）
     setPending: (kind: Exclude<PendingKind, 'none'>) => transition((s) => setPending(s, kind)),
     clearPending: () => transition((s) => ({ ...s, pending: 'none' as PendingKind })),
     // 执行方案块解析清单并入（原 Set 直接 add——转换入口规范化）
-    addPlannedFiles: (files: string[]) => transition((s) => ({ ...s, plannedFiles: new Set([...s.plannedFiles, ...files]) })),
+    addPlannedFiles: (files: string[]) =>
+      transition((s) => ({ ...s, plannedFiles: new Set([...s.plannedFiles, ...files]) })),
     // 规划幂等标记（clearTrust 任务边界——D2 同步 main 在组件层）
     setFilesApproved: (v: boolean) => transition((s) => ({ ...s, filesApproved: v })),
   }

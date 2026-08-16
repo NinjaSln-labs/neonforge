@@ -5,12 +5,18 @@ import { existsSync, readFileSync, unlinkSync } from 'fs'
 const KEY = process.env.NF_TEST_KEY
 const EMPTY = '/tmp/nf-e2e-test'
 
-let pass = 0, fail = 0
+let pass = 0,
+  fail = 0
 
 async function launch(proj) {
   const app = await _electron.launch({
     args: ['.'],
-    env: { ...process.env, VITE_DEV_SERVER_URL: 'http://localhost:5173', NF_TEST_PROJECT: proj, ELECTRON_RUN_AS_NODE: '' }
+    env: {
+      ...process.env,
+      VITE_DEV_SERVER_URL: 'http://localhost:5173',
+      NF_TEST_PROJECT: proj,
+      ELECTRON_RUN_AS_NODE: '',
+    },
   })
   const page = await app.firstWindow()
   await page.waitForSelector('.nf-start', { timeout: 10000 })
@@ -28,7 +34,10 @@ async function settle(page, timeoutMs) {
     const ts = await page.locator('.nf-msg').allInnerTexts()
     t = ts[ts.length - 1] ?? ''
     const busy = await page.locator('.nf-working').count()
-    const sb = await page.locator('.nf-statusbar').innerText().catch(() => '')
+    const sb = await page
+      .locator('.nf-statusbar')
+      .innerText()
+      .catch(() => '')
     if (!t.includes('处理中') && t.trim() && busy === 0 && sb.includes('就绪')) break
   }
   const cards = await page.locator('.nf-toolcall').count()
@@ -42,8 +51,13 @@ async function send(page, text) {
 }
 
 async function check(name, cond, detail) {
-  if (cond) { pass++; console.log(`✅ ${name} | ${detail}`) }
-  else { fail++; console.log(`❌ ${name} | ${detail}`) }
+  if (cond) {
+    pass++
+    console.log(`✅ ${name} | ${detail}`)
+  } else {
+    fail++
+    console.log(`❌ ${name} | ${detail}`)
+  }
 }
 
 console.log('=== L4 补充场景（7-12 补 4 个真实可测）===\n')
@@ -54,12 +68,20 @@ console.log('=== L4 补充场景（7-12 补 4 个真实可测）===\n')
   const f = '/tmp/nf-e2e-test/hello.txt'
   if (existsSync(f)) unlinkSync(f)
   const r = await page.evaluate(async (file) => {
-    const res = await window.neonforge.tools.execute('write', { path: file, content: 'hello neonforge' }, { approved: true })
+    const res = await window.neonforge.tools.execute(
+      'write',
+      { path: file, content: 'hello neonforge' },
+      { approved: true },
+    )
     return res
   }, f)
   const written = r.ok && existsSync(f) && readFileSync(f, 'utf-8') === 'hello neonforge'
   await app.close()
-  await check('write 授权写入', written, `执行:${r.ok} 文件内容:${written ? 'hello neonforge' : '未写入'}`)
+  await check(
+    'write 授权写入',
+    written,
+    `执行:${r.ok} 文件内容:${written ? 'hello neonforge' : '未写入'}`,
+  )
 }
 
 // 场景 8：授权后续聊（bash 授权执行 → 结果回填 → 模型续聊回复）
@@ -74,11 +96,19 @@ console.log('=== L4 补充场景（7-12 补 4 个真实可测）===\n')
     await page.locator('.nf-toolcall__approve').first().click()
     await settle(page, 25000)
     const after = await page.locator('.nf-msg').count()
-    const last = await page.locator('.nf-msg').last().innerText().catch(() => '')
+    const last = await page
+      .locator('.nf-msg')
+      .last()
+      .innerText()
+      .catch(() => '')
     ok = after > before && !last.includes('处理中')
   } else {
     // 模型未走授权路径（read 自动执行/直接回复）——验证已正常回复
-    const last = await page.locator('.nf-msg').last().innerText().catch(() => '')
+    const last = await page
+      .locator('.nf-msg')
+      .last()
+      .innerText()
+      .catch(() => '')
     ok = last.length > 10 && !last.includes('处理中')
   }
   await app.close()

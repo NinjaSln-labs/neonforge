@@ -13,13 +13,21 @@ export function createProblem(text: string): ProblemInstance {
     title,
     status: 'executing',
     updatedAt: now,
-    snapshot: { goal: text, decisions: [], authorized: [], pending: [] }
+    snapshot: { goal: text, decisions: [], authorized: [], pending: [] },
   }
 }
 
 // 更新问题快照（合并——保留已有字段，2026-08-02 断点续做深度增强）
-export function updateProblemSnapshot(problem: ProblemInstance, patch: Partial<ProblemSnapshot>): ProblemInstance {
-  const base = problem.snapshot ?? { goal: problem.title, decisions: [], authorized: [], pending: [] }
+export function updateProblemSnapshot(
+  problem: ProblemInstance,
+  patch: Partial<ProblemSnapshot>,
+): ProblemInstance {
+  const base = problem.snapshot ?? {
+    goal: problem.title,
+    decisions: [],
+    authorized: [],
+    pending: [],
+  }
   return { ...problem, snapshot: { ...base, ...patch } }
 }
 
@@ -31,7 +39,9 @@ export function loadProblems(fallback: ProblemInstance[] = []): ProblemInstance[
       const parsed = JSON.parse(raw)
       if (Array.isArray(parsed)) return parsed.map(migrateAuthorized)
     }
-  } catch { /* 损坏/不可用——忽略 */ }
+  } catch {
+    /* 损坏/不可用——忽略 */
+  }
   return fallback
 }
 
@@ -51,5 +61,7 @@ function migrateAuthorized(p: ProblemInstance): ProblemInstance {
 export function saveProblems(problems: ProblemInstance[]): void {
   try {
     localStorage.setItem(PROBLEMS_KEY, JSON.stringify(problems.slice(0, PROBLEMS_MAX)))
-  } catch { /* 存储不可用——忽略（内存态仍工作） */ }
+  } catch {
+    /* 存储不可用——忽略（内存态仍工作） */
+  }
 }

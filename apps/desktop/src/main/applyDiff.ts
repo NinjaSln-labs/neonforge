@@ -44,7 +44,7 @@ export function parseUnifiedDiff(diffText: string): DiffChange[] {
 // 应用变更到文件（从后往前应用——行号不偏移）
 export function applyDiffToFile(
   filePath: string,
-  changes: DiffChange[]
+  changes: DiffChange[],
 ): { ok: true; file: string } | { ok: false; error: string } {
   if (!existsSync(filePath)) return { ok: false, error: `文件不存在: ${filePath}` }
   let contentLines: string[]
