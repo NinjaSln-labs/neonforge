@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+// D3（ADR-005）：PlannedFiles 契约载荷（main plannedFilesStore 最小契约）
+interface PlannedFilesPayload {
+  files: string[]
+  approved: boolean
+}
+
 // bridge：gateway + config + workspace（IPC 收敛，renderer 不直接碰 node/electron）
 contextBridge.exposeInMainWorld('neonforge', {
   version: process.env.npm_package_version ?? '0.1.0',
@@ -162,11 +168,13 @@ contextBridge.exposeInMainWorld('neonforge', {
       }>,
     // ticket 14 可撤销：停止当前活动命令（bash 高危——任何时刻可停）
     cancel: () => ipcRenderer.invoke('tools:cancel') as Promise<{ ok: boolean; error?: string }>,
-    // 2026-08-04 规划级授权强制：approve-files 批准后通知 main（write/edit 放行）
-    filesApproved: () => ipcRenderer.invoke('tools:files-approved') as Promise<{ ok: boolean }>,
-    // 2026-08-15 D2：任务边界（新目标确认）→ 通知 main 重置规划标记（对称双源）
-    filesApprovedReset: () =>
-      ipcRenderer.invoke('tools:files-approved-reset') as Promise<{ ok: boolean }>,
+  },
+  // D3（ADR-005）：PlannedFiles 三件套契约（权威在 main——落盘 userData；取代 files-approved/-reset）
+  plannedFiles: {
+    load: () => ipcRenderer.invoke('planned-files:load') as Promise<PlannedFilesPayload>,
+    add: (files: string[]) =>
+      ipcRenderer.invoke('planned-files:add', files) as Promise<PlannedFilesPayload>,
+    reset: () => ipcRenderer.invoke('planned-files:reset') as Promise<PlannedFilesPayload>,
   },
   context: {
     resolve: (files: string[]) =>

@@ -90,6 +90,7 @@ export interface NeonForgeBridge {
     }) => Promise<void>
   }
   tools: NeonForgeTools
+  plannedFiles: PlannedFilesApi // D3（ADR-005）：PlannedFiles 契约——权威在 main
   context: {
     resolve: (
       files: string[],
@@ -208,8 +209,12 @@ export interface NeonForgeTools {
   revert: (filePath: string) => Promise<{ ok: boolean; error?: string }>
   // ticket 14 可撤销：停止当前活动命令（bash 高危——任何时刻可停，不卡死）
   cancel: () => Promise<{ ok: boolean; error?: string }>
-  // 2026-08-04 规划级授权强制：approve-files 批准后通知 main（write/edit 放行）
-  filesApproved: () => Promise<{ ok: boolean }>
-  // 2026-08-15 D2：任务边界（新目标确认）→ 通知 main 重置规划标记（对称双源）
-  filesApprovedReset: () => Promise<{ ok: boolean }>
+}
+
+// D3（ADR-005）：PlannedFiles 契约——权威在 main（落盘 userData——批准事实跨重启）；
+// renderer 保留镜像（同步渲染/判定），写操作经此同步 main（取代 files-approved/-reset）
+interface PlannedFilesApi {
+  load: () => Promise<{ files: string[]; approved: boolean }>
+  add: (files: string[]) => Promise<{ files: string[]; approved: boolean }>
+  reset: () => Promise<{ files: string[]; approved: boolean }>
 }

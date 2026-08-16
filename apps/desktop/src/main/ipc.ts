@@ -9,9 +9,9 @@ import {
   toolRegistry,
   revertToolFile,
   cancelActiveCommand,
-  markPlanApproved,
-  resetPlanApproved,
+  syncPlanApprovedFromStore,
 } from './tools.js'
+import { getPlannedFilesStore } from './plannedFilesStore.instance.js'
 import { registerLspTools, lsp } from './lsp.js'
 import { context } from './context.js'
 import { codeRag } from './codeRag.js'
@@ -26,6 +26,8 @@ export function registerIpc(): void {
   initTools()
   initPlugins() // 08：注册 5 内置插件（生命周期钩子）
   registerLspTools(toolRegistry)
+  // D3（ADR-005）：启动恢复——write 门控布尔镜像从 store 同步（批准事实跨重启；renderer 挂载时另经 planned-files:load 恢复清单）
+  syncPlanApprovedFromStore()
   ipcMain.handle('config:has-key', () => configStore.hasValidKey())
   ipcMain.handle('config:get-key', () => configStore.getApiKey())
   ipcMain.handle('config:set-key', (_e, key: string) => configStore.setApiKey(key))
@@ -193,16 +195,20 @@ export function registerIpc(): void {
 }
 // ticket 10：ToolRegistry（工具清单 + 执行分发——write/edit/bash 需 approved）
 ipcMain.handle('tools:list', () => toolRegistry.list())
-// 2026-08-04 规划级授权强制：renderer 批准 approve-files 后通知 main（write/edit 放行）
-ipcMain.handle('tools:files-approved', () => {
-  markPlanApproved()
-  return { ok: true }
+// D3（ADR-005）：PlannedFiles 权威 = main plannedFilesStore（落盘 userData——批准事实跨重启）——
+// 三件套契约取代 tools:files-approved/-reset（renderer 写走这里；main write 门控布尔镜像随之同步）
+ipcMain.handle('planned-files:load', () => getPlannedFilesStore().load())
+ipcMain.handle('planned-files:add', (_e, files: string[]) => {
+  const data = getPlannedFilesStore().add(Array.isArray(files) ? files : [])
+  syncPlanApprovedFromStore()
+  return data
 })
 // 2026-08-15 D2：任务边界重置同步 main——新目标确认（clearTrust）时 main filesApprovedRef 必须复位
 // （原只重置 renderer 侧 → main write 规划门控跨任务恒放行——第二道防线失效）
-ipcMain.handle('tools:files-approved-reset', () => {
-  resetPlanApproved()
-  return { ok: true }
+ipcMain.handle('planned-files:reset', () => {
+  const data = getPlannedFilesStore().reset()
+  syncPlanApprovedFromStore()
+  return data
 })
 ipcMain.handle(
   'tools:execute',

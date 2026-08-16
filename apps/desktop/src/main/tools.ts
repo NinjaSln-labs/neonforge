@@ -501,6 +501,10 @@ async function openExecutor(args: Record<string, unknown>): Promise<unknown> {
 export const toolRegistry = new ToolRegistry()
 
 // 2026-08-04 规划级授权强制：会话级「已规划」标记——approve-files 被批准后置 true（write/edit 放行）
+// D3（ADR-005）：布尔镜像由 plannedFilesStore 驱动——启动恢复（registerIpc → syncPlanApprovedFromStore——批准事实跨重启）；
+// 生产写路径经 IPC（planned-files:add/reset → syncPlanApprovedFromStore）；markPlanApproved/resetPlanApproved 保留给测试
+import { getPlannedFilesStore } from './plannedFilesStore.instance.js'
+
 let filesApprovedRef = false
 export function markPlanApproved(): void {
   filesApprovedRef = true
@@ -508,6 +512,10 @@ export function markPlanApproved(): void {
 // 2026-08-08 根因 3 修复②：重置规划标记（测试用——模拟用户未批准过 approve-files；产品运行由 renderer 会话边界 clearTrust 控制）
 export function resetPlanApproved(): void {
   filesApprovedRef = false
+}
+// D3：store 权威 → 内存镜像刷新（write 门控热路径不读盘；registerIpc 启动恢复 + IPC 写后调用）
+export function syncPlanApprovedFromStore(): void {
+  filesApprovedRef = getPlannedFilesStore().load().approved
 }
 
 // 注册 4 核心工具 + search（Layer2 CodeRAG——2026-08-02 接入模型；6 LSP 随 12 ContextEngine 注册）

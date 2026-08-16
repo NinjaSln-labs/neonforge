@@ -439,9 +439,27 @@ export default function ConversationPanel({
     clearPending,
     addPlannedFiles,
     setFilesApproved,
+    restorePlanned,
   } = useConversationState({
     emit: (type, detail) => tlog(type, detail, 'system'),
   })
+  // D3（ADR-005）：启动恢复——main plannedFilesStore 权威（批准事实跨重启）→ 本地镜像
+  // 恢复后模型继续写清单内文件不需重新批量授权（与问题台账 authorized 恢复同构）
+  useEffect(() => {
+    let cancelled = false
+    window.neonforge.plannedFiles
+      ?.load()
+      .then((d) => {
+        if (!cancelled) restorePlanned(d.files, d.approved)
+      })
+      .catch(() => {
+        /* 恢复失败——保持初始空镜像（镜像优先策略） */
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   // 断点续做：完整消息变化 → 持久化（过滤半截 streaming——streaming 时 serialize 为空不覆盖存档）
   // S3（§8.2 E）：决策点内容快照随最近 assistant 消息持久化（恢复后卡内容不丢——pending 冻结语义）
   useEffect(() => {
@@ -1720,8 +1738,9 @@ export default function ConversationPanel({
     // 2026-08-14 S2：状态机字段（完整任务边界重置由 userConfirmed('goal') 承担——此处仅即时清幂等标记）
     setFilesApproved(false)
     // 2026-08-15 D2：任务边界同步 main（filesApprovedRef 复位——否则跨任务 write 规划门控失效）
+    // D3（ADR-005）：PlannedFiles 权威在 main——任务边界经 planned-files:reset 同步落盘
     try {
-      void window.neonforge.tools?.filesApprovedReset?.()
+      void window.neonforge.plannedFiles?.reset()
     } catch {
       /* 重置失败不影响——renderer 门控仍生效 */
     }
