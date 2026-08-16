@@ -16,13 +16,13 @@ describe('deriveStateEvents（转换 diff → 领域事件）', () => {
 
   it('执行/达成确认/拒绝 → task.execution_*/task.achievement_*', () => {
     let s = userConfirmed(initialState(), 'goal')
-    const exec = userConfirmed(s, 'execution')
+    const exec = userConfirmed(s, 'plan')
     const t1 = deriveStateEvents(s, exec).map((e) => e.type)
     expect(t1).toContain('task.execution_confirmed')
     s = exec
-    const ach = userConfirmed(s, 'achievement')
+    const ach = userConfirmed(s, 'resolution')
     expect(deriveStateEvents(s, ach).map((e) => e.type)).toContain('task.achievement_confirmed')
-    expect(deriveStateEvents(ach, userRejected(ach, 'achievement')).map((e) => e.type)).toContain('task.achievement_rejected')
+    expect(deriveStateEvents(ach, userRejected(ach, 'resolution')).map((e) => e.type)).toContain('task.achievement_rejected')
   })
 
   it('pending 置位/清除 → session.pending_set/cleared（含 kind）', () => {
@@ -36,7 +36,7 @@ describe('deriveStateEvents（转换 diff → 领域事件）', () => {
   })
 
   it('计划清单追加 → plan.approved（files 载荷——追加语义）', () => {
-    let s = userConfirmed(userConfirmed(initialState(), 'goal'), 'execution')
+    let s = userConfirmed(userConfirmed(initialState(), 'goal'), 'plan')
     const next = approvalGranted(s, ['/test/a.js', '/test/b.js'])
     const evts = deriveStateEvents(s, next)
     expect(evts).toContainEqual(expect.objectContaining({ type: 'plan.approved', detail: { files: ['/test/a.js', '/test/b.js'] } }))
@@ -48,7 +48,7 @@ describe('deriveStateEvents（转换 diff → 领域事件）', () => {
   })
 
   it('产出新增 → tool.executed（files 载荷）', () => {
-    const s = userConfirmed(userConfirmed(initialState(), 'goal'), 'execution')
+    const s = userConfirmed(userConfirmed(initialState(), 'goal'), 'plan')
     const next = applyToolResult(s, { name: 'write', ok: true, file: '/test/a.js' })
     const evts = deriveStateEvents(s, next)
     expect(evts).toContainEqual(expect.objectContaining({ type: 'tool.executed', detail: { files: ['/test/a.js'] } }))
@@ -78,7 +78,7 @@ describe('validateTimelineEvent（注册表——A2 接入约束）', () => {
 describe('dedupeKey / detectProposed（2026-08-15 补齐）', () => {
   it('dedupeKey：type + detail 签名（同内容同 key，不同内容异 key）', () => {
     expect(dedupeKey('card.shown', { card: 'goal' })).toBe(dedupeKey('card.shown', { card: 'goal' }))
-    expect(dedupeKey('card.shown', { card: 'goal' })).not.toBe(dedupeKey('card.shown', { card: 'execution' }))
+    expect(dedupeKey('card.shown', { card: 'goal' })).not.toBe(dedupeKey('card.shown', { card: 'plan' }))
   })
   it('detectProposed：标记 → 提议事件（载荷）', () => {
     expect(detectProposed('好的。【目标确认：做一个游戏】')).toContainEqual({ type: 'task.goal_proposed', detail: { goalText: '做一个游戏' } })

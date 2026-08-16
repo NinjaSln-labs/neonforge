@@ -140,11 +140,11 @@ export default function ConversationPanel({
   onToolResult,
   onUserMessage,
   onGoalConfirmed,
-  onExecutionConfirmed,
+  onPlanConfirmed,
   onGoalRejected,
-  onExecutionRejected,
+  onPlanRejected,
   goalConfirmed,
-  executionConfirmed,
+  planConfirmed,
   goalSeq,
   recentFilesExternal,
   activeAuthorizedLogs,
@@ -163,14 +163,14 @@ export default function ConversationPanel({
   onToolResult?: (r: { name: string; file?: string; ok: boolean }) => void
   onUserMessage?: (text: string) => void
   // 2026-08-04：目标确认回写——模型输出【目标确认：xxx】→ 上报 MainWorkspace（更新台账标题/快照 + 项目 README）
-  // 2026-08-07 无阶段重构 S4：onRequirementConfirmed → onGoalConfirmed / requirementConfirmed → goalConfirmed + executionConfirmed
+  // 2026-08-07 无阶段重构 S4：onRequirementConfirmed → onGoalConfirmed / requirementConfirmed → goalConfirmed + planConfirmed
   onGoalConfirmed?: (title: string) => void
-  onExecutionConfirmed?: () => void // 2026-08-07 执行确认卡【确认执行】→ MainWorkspace setExecutionConfirmed（结构化确认——替代确认词）
+  onPlanConfirmed?: () => void // 2026-08-07 执行确认卡【确认执行】→ MainWorkspace setExecutionConfirmed（结构化确认——替代确认词）
   // 2026-08-15 D1：拒绝路径对称回调（MainWorkspace 渲染镜像回退——修复「拒绝被 effect 反转」双权威缺陷）
   onGoalRejected?: () => void
-  onExecutionRejected?: () => void
+  onPlanRejected?: () => void
   goalConfirmed?: boolean // 2026-08-06 需求阶段门控（无阶段重构 S4：目标确认）：用户确认（MainWorkspace state）→ 渲染镜像（状态机权威在 stateRef）
-  executionConfirmed?: boolean // 2026-08-07 无阶段重构 S4：执行确认（ExecutionConfirmCard——目标确认后用户确认执行方案）
+  planConfirmed?: boolean // 2026-08-07 无阶段重构 S4：执行确认（ExecutionConfirmCard——目标确认后用户确认执行方案）
   goalSeq?: number // 2026-08-07 无阶段重构 S4：目标确认次数——每次确认 = 任务边界（clearTrust 驱动）
   recentFilesExternal?: string[]
   // 2026-08-04 体验修复：启动页首句 → 进入工作区自动发送（说了就直接开始；输入框不预填）
@@ -283,7 +283,7 @@ export default function ConversationPanel({
   const stuckStateRef = useRef(initialStuckState)
   const prevReadFilesRef = useRef<Set<string>>(new Set())
   // 2026-08-14 会话状态机（Task 聚合——S2 迁移）：原 7 个散 ref（plannedFiles/producedFiles/goalAchieved/
-  // lastToolFailed/filesApproved/goalConfirmed/executionConfirmed）合并为单一 ConversationState——
+  // lastToolFailed/filesApproved/goalConfirmed/planConfirmed）合并为单一 ConversationState——
   // 读 = stateRef.current.x；写 = useConversationState 转换方法（Q1a+Q2——唯一入口）
   // 2026-08-15 DDD 重建：transition 内 diff 派生领域事件 → tlog 落盘（一处接入覆盖全部状态转换——
   // task.*/session.*/plan.* 事件自动发出；事件目录 domain/timeline.ts 对齐 06 文档）
@@ -310,7 +310,7 @@ export default function ConversationPanel({
   // 用户确认/拒绝（MainWorkspace state = 展示镜像——不再从 prop 同步状态机，防拒绝被反转；D1 2026-08-15）
   // 2026-08-14 审计发现：原 useEffect 只同步 true 方向——拒绝（userRejected 只改 stateRef）后 prop 仍 true
   // → effect 立即把回退反转回 true（「重新描述需点两次」根因）。现状态机唯一权威 = stateRef；
-  // MainWorkspace 的 goalConfirmed/executionConfirmed 仅作渲染镜像（由确认/拒绝回调显式设置，双向对称）。
+  // MainWorkspace 的 goalConfirmed/planConfirmed 仅作渲染镜像（由确认/拒绝回调显式设置，双向对称）。
   // 2026-08-07 会话时间线（Session Timeline BC——单会话所有步骤统一日志：用户/搭档/工具/授权/状态——分析一步到位）
   // 2026-08-15 A6：dedupe 事件去重集合（会话级——同 detail 签名只记一次）
   const timelineDedupeRef = useRef<Set<string>>(new Set())
@@ -343,8 +343,8 @@ export default function ConversationPanel({
     }
     if (isLastAssistant) {
       if ((/【目标确认[:：]/.test(content) || !goalConfirmed) && !goalConfirmed) show('goal-confirm', { goalText: content.slice(0, 80) })
-      if ((content.includes('【执行方案') || (goalConfirmed && !executionConfirmed)) && goalConfirmed && !executionConfirmed) show('exec-confirm')
-      if (content.includes('【已达成') && stateRef.current.producedFiles.size > 0 && !stateRef.current.achievementConfirmed) show('achieve-confirm')
+      if ((content.includes('【执行方案') || (goalConfirmed && !planConfirmed)) && goalConfirmed && !planConfirmed) show('exec-confirm')
+      if (content.includes('【已达成') && stateRef.current.producedFiles.size > 0 && !stateRef.current.resolutionConfirmed) show('achieve-confirm')
     }
     // 授权卡 / approve-files 卡（工具卡 need-approval/plan-approval 状态）——每次弹卡独立记录（同工具不同 args 是新的授权决策）
     for (const m of messages) {
@@ -355,7 +355,7 @@ export default function ConversationPanel({
         }
       }
     }
-  }, [messages, goalConfirmed, executionConfirmed])
+  }, [messages, goalConfirmed, planConfirmed])
   // 2026-08-08 状态变化打点（working / approval-pending / ready——统一状态机；变化才记录）
   const lastStatusRef = useRef('')
   useEffect(() => {
@@ -366,7 +366,7 @@ export default function ConversationPanel({
     }
   }, [working, messages])
   // 2026-08-05：renderer 侧「已规划」标记 + 确认门控 ref 已并入状态机（stateRef——见上方 S2 迁移）；保留注释链：
-  // filesApproved → stateRef.filesApproved；goal/execConfirmed → stateRef.goalConfirmed/executionConfirmed；
+  // filesApproved → stateRef.filesApproved；goal/execConfirmed → stateRef.goalConfirmed/planConfirmed；
   // lastToolFailed → stateRef.lastToolFailed（applyToolResult 唯一写入口）
   useEffect(() => {
     if (initialPrompt && initialPrompt.trim()) {
@@ -394,7 +394,7 @@ export default function ConversationPanel({
   }, [goalSeq])
   // 2026-08-07 无阶段重构修复（执行确认卡删除——dock 顶部全清，用户「最上面的那块都不需要了」）：
   // execConfirmedHandledRef 自动 silent 触发删除——执行确认现在靠用户打字确认词（「可以/确认」）作为普通用户消息
-  // 发送（模型看到确认 + executionConfirmed=true → forceTool 强制产出）——旧 effect 与用户消息双重发送冲突
+  // 发送（模型看到确认 + planConfirmed=true → forceTool 强制产出）——旧 effect 与用户消息双重发送冲突
   // （398 实测：「可以」消息 + silent「用户已确认执行」排队/打断——双触发）
   const [mentionOpen, setMentionOpen] = useState(false)
   const [recentFiles, setRecentFiles] = useState<string[]>([])
@@ -479,7 +479,7 @@ export default function ConversationPanel({
       const lastUiMsg = messagesRef.current[messagesRef.current.length - 1]
       const uiCalls = lastUiMsg?.toolCalls ?? []
       const sideEffectPendingUi = uiCalls.some((c) => c.status === 'pending' && classifyAction(c.name, String(c.args?.command ?? '')) === 'side-effect')
-      const cardToShow = pendingCardToShow(stateRef.current.goalConfirmed, stateRef.current.executionConfirmed, stateRef.current.achievementConfirmed, content, sideEffectPendingUi)
+      const cardToShow = pendingCardToShow(stateRef.current.goalConfirmed, stateRef.current.planConfirmed, stateRef.current.resolutionConfirmed, content, sideEffectPendingUi)
       if (cardToShow !== 'none' && stateRef.current.pending === 'none') {
         setPendingState(cardToShow)
       }
@@ -621,7 +621,7 @@ export default function ConversationPanel({
       const confirmPending = (content: string, calls: Array<{ name: string; status?: string; command?: string }>): boolean => {
         // 2026-08-14 S2b（缝隙 4/5）：确认卡触发走状态机派生——执行确认只认**有副作用动作**（探索 bash 不再触发）
         const sideEffectPending = calls.some((c) => c.status === 'pending' && classifyAction(c.name, c.command) === 'side-effect')
-        return pendingCardToShow(stateRef.current.goalConfirmed, stateRef.current.executionConfirmed, stateRef.current.achievementConfirmed, content, sideEffectPending) !== 'none'
+        return pendingCardToShow(stateRef.current.goalConfirmed, stateRef.current.planConfirmed, stateRef.current.resolutionConfirmed, content, sideEffectPending) !== 'none'
       }
       // 2026-08-07 用户纠正（「无害≠有用」）：pending 下**所有工具都不执行**——read/search 虽只读无害但没用
       // （用户决策未到——结果无意义——做了白做）——模型停（maybeContinue releaseWorking）等用户决策
@@ -678,10 +678,10 @@ export default function ConversationPanel({
         })
         return
       }
-      // 2026-08-08 根因 3 修复③：write 门控与【执行方案】块联动——用户确认执行（executionConfirmedRef）后，
+      // 2026-08-08 根因 3 修复③：write 门控与【执行方案】块联动——用户确认执行（planConfirmedRef）后，
       // 【执行方案】块解析的清单内文件（plannedFilesRef）视为已批准（approved=true）→ 绕过 main 规划门控
       // （模型已列清单 + 用户已确认执行 = 认可这批文件——无需再点 approve-files 卡；清单外文件仍被 main 门控拦）
-      const execPlanApproved = tc.name === 'write' && stateRef.current.executionConfirmed && inPlannedFiles(tc.args.path)
+      const execPlanApproved = tc.name === 'write' && stateRef.current.planConfirmed && inPlannedFiles(tc.args.path)
       const autoApproved = execPlanApproved || (delegateLowRisk && toolRisk(tc.name) === 'low') || isTrusted(tc.args)
       void (window.neonforge.tools?.execute?.(tc.name, tc.args, { approved: autoApproved, rootPath: rootPath ?? undefined, sessionId }) ?? Promise.resolve({ ok: false, error: 'tools 通道未就绪' })).then((r) => {
         const data = r.data as { file?: string; snapshot?: boolean } | undefined
@@ -754,7 +754,7 @@ export default function ConversationPanel({
       // 2026-08-14 S2b（缝隙 4/5）：确认卡触发走状态机派生——执行确认只认**有副作用动作**（探索 bash 不再触发）
       const lastContent = lastMsg.content ?? ''
       const sideEffectPending = lastMsg.toolCalls.some((c) => c.status === 'pending' && classifyAction(c.name, String(c.args?.command ?? '')) === 'side-effect')
-      const confirmPending = pendingCardToShow(stateRef.current.goalConfirmed, stateRef.current.executionConfirmed, stateRef.current.achievementConfirmed, lastContent, sideEffectPending) !== 'none'
+      const confirmPending = pendingCardToShow(stateRef.current.goalConfirmed, stateRef.current.planConfirmed, stateRef.current.resolutionConfirmed, lastContent, sideEffectPending) !== 'none'
       // 2026-08-15 问题 A 修复（用户实测 14 轮工具循环根因）：停止条件接入状态机——pending 非 none 即停
       // （与 canExecute 同源——领域层 shouldStopContinuation）。授权卡（need-approval/file-approval）可能挂在
       // **旧消息**（用户未批准未拒绝——卡悬挂）→ 全列表 effect 已置 pending='approval'，但 lastMsg 派生检测不到
@@ -869,7 +869,7 @@ export default function ConversationPanel({
     const sysHint = buildSysHint(envHint, planHint, langRule)
     try {
       // 2026-08-06 调研驱动根治「只说不做」（官方 issue #1376 + 文档 + 实测三源交叉验证——工具模式 thinking disabled 下 required 可用）：
-      // 2026-08-07 无阶段重构 S1/S3/S4：判定改由领域层 TurnExecutionPolicy 三态推导（goalConfirmed/executionConfirmed/produced）——
+      // 2026-08-07 无阶段重构 S1/S3/S4：判定改由领域层 TurnExecutionPolicy 三态推导（goalConfirmed/planConfirmed/produced）——
       // 目标+执行确认但无产出 → required 强制模型必须调工具（不能只输出文本承诺）；其余 auto（澄清/等确认/已有产出）
       // isPureAck 词表随无阶段终结（S3——T4「保持现状」决策被取代：纯确认进入目标/执行确认状态流转，无需独立豁免名单）
       // 2026-08-14 S4（缝隙 3）：forceTool 输入统一走状态机派生 buildForceToolInput——
@@ -885,9 +885,9 @@ export default function ConversationPanel({
         planned: [...stateRef.current.plannedFiles].slice(0, 12),
         produced: [...stateRef.current.producedFiles].slice(0, 12),
         projectFiles: (recentFilesExternal ?? []).slice(0, 12),
-        goalAchieved: stateRef.current.achievementConfirmed
+        goalAchieved: stateRef.current.resolutionConfirmed
       }, 'system')
-      tlog('conversation.assistant_start', { forceTool, goalConfirmed: stateRef.current.goalConfirmed, executionConfirmed: stateRef.current.executionConfirmed }, 'assistant')
+      tlog('conversation.assistant_start', { forceTool, goalConfirmed: stateRef.current.goalConfirmed, planConfirmed: stateRef.current.planConfirmed }, 'assistant')
       const res = await window.neonforge.gateway.streamChat({
         apiKey: key,
         level: 'basic',
@@ -1277,7 +1277,7 @@ export default function ConversationPanel({
               // 2026-08-14 S2b（缝隙 4/5）：触发统一走状态机派生 pendingCardToShow（渲染与 maybeContinue 停模型同源）——
               // 「等确认」语义命中即弹 + 停；探索期（只读 bash/无等确认语义）不弹（冒烟实证：探索期弹卡 → 模型困惑）
               const sideEffectAttempted = (m.toolCalls ?? []).some((c) => classifyAction(c.name, String(c.args?.command ?? '')) === 'side-effect')
-              const execFallback = pendingCardToShow(!!goalConfirmed, !!executionConfirmed, false, m.content, sideEffectAttempted) === 'execution'
+              const execFallback = pendingCardToShow(!!goalConfirmed, !!planConfirmed, false, m.content, sideEffectAttempted) === 'plan'
               // 2026-08-14 用户实测卡死修复（timeline 0219a516）：模型连发消息时确认卡漂移消失——
               // write 被拦（exec-confirm 卡弹出）→ 模型继续输出 approve-files/说明消息 → isLastAssistant 漂移 → 卡消失
               // → 模型等确认、用户找不到卡 → 死锁。**信号消息（方案标记/副作用工具卡）的卡不依赖 isLastAssistant**——
@@ -1297,21 +1297,21 @@ export default function ConversationPanel({
                       </div>
                     </div>
                   ) : null}
-                  {!!goalConfirmed && !executionConfirmed && ((execSignal && i === lastSignalIdx.exec) || (lastSignalIdx.exec === -1 && isLastAssistant && !hasCandidates && execFallback)) && i !== rejectedCardIdx.execution ? (
+                  {!!goalConfirmed && !planConfirmed && ((execSignal && i === lastSignalIdx.exec) || (lastSignalIdx.exec === -1 && isLastAssistant && !hasCandidates && execFallback)) && i !== rejectedCardIdx.execution ? (
                     <div className="nf-confirmcard" role="group" aria-label="确认执行方案">
                       <div className="nf-confirmcard__head">执行方案——需要你确认后动手</div>
                       <div className="nf-confirmcard__actions">
-                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { confirm('execution'); tlog('card.resolved', { card: 'execution', action: 'confirm' }, 'system'); onExecutionConfirmed?.(); inputRef.current = '确认，按方案执行'; void sendRef.current() }}>确认执行</button>
-                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { reject('execution'); tlog('card.rejected', { card: 'execution', action: 'reject' }, 'system'); setRejectedCardIdx((p) => ({ ...p, execution: i })); onExecutionRejected?.(); inputRef.current = '方案需要调整一下'; void sendRef.current() }}>修改方案</button>
+                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { confirm('plan'); tlog('card.resolved', { card: 'execution', action: 'confirm' }, 'system'); onPlanConfirmed?.(); inputRef.current = '确认，按方案执行'; void sendRef.current() }}>确认执行</button>
+                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { reject('plan'); tlog('card.rejected', { card: 'execution', action: 'reject' }, 'system'); setRejectedCardIdx((p) => ({ ...p, execution: i })); onPlanRejected?.(); inputRef.current = '方案需要调整一下'; void sendRef.current() }}>修改方案</button>
                       </div>
                     </div>
                   ) : null}
-                  {achievedMatch && stateRef.current.producedFiles.size > 0 && !stateRef.current.achievementConfirmed && i === lastSignalIdx.achieve && i !== rejectedCardIdx.achievement ? (
+                  {achievedMatch && stateRef.current.producedFiles.size > 0 && !stateRef.current.resolutionConfirmed && i === lastSignalIdx.achieve && i !== rejectedCardIdx.achievement ? (
                     <div className="nf-confirmcard" role="group" aria-label="确认达成">
                       <div className="nf-confirmcard__head">搭档已完成——你确认解决了没有</div>
                       <div className="nf-confirmcard__actions">
-                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { confirm('achievement'); tlog('card.resolved', { card: 'achievement', action: 'confirm' }, 'system'); inputRef.current = '已解决，谢谢'; void sendRef.current() }}>已解决</button>
-                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { reject('achievement'); tlog('card.rejected', { card: 'achievement', action: 'reject' }, 'system'); setRejectedCardIdx((p) => ({ ...p, achievement: i })); inputRef.current = '还要改一些地方：'; void sendRef.current() }}>还要改</button>
+                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--ok" onClick={() => { confirm('resolution'); tlog('card.resolved', { card: 'achievement', action: 'confirm' }, 'system'); inputRef.current = '已解决，谢谢'; void sendRef.current() }}>已解决</button>
+                        <button type="button" className="nf-confirmcard__btn nf-confirmcard__btn--no" onClick={() => { reject('resolution'); tlog('card.rejected', { card: 'achievement', action: 'reject' }, 'system'); setRejectedCardIdx((p) => ({ ...p, achievement: i })); inputRef.current = '还要改一些地方：'; void sendRef.current() }}>还要改</button>
                       </div>
                     </div>
                   ) : null}

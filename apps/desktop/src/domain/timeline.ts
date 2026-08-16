@@ -69,6 +69,9 @@ export type TimelineEventType =
   | 'card.resolved'                  // 卡被确认/批准（载荷：card/action）
   | 'card.rejected'                  // 卡被拒绝（载荷：card/action）
   | 'card.dismissed'                 // 卡消失/任务重置（载荷：card/cause）
+  // —— Decision：领域决策点（意图确认重设计 §3.5——与 card.* 并存：card=UI 卡生命周期，decision=领域决策点）——
+  | 'decision.requested'             // 决策点出现（载荷：kind/since——决策点内容快照随 S3 增强）
+  | 'decision.resolved'              // 决策被确认/拒绝（载荷：point/action——reason 随 S3 回填）
   // —— 元事件（运行时可观测——诊断/状态）——
   | 'conversation.status_change'     // working/ready/approval-pending 变化
   | 'conversation.error'             // 错误链路（errorType/message）
@@ -76,7 +79,7 @@ export type TimelineEventType =
 
 // === 事件注册表（schema——新增事件三步：登记 → emit → 测试；dev 校验防散落） ===
 export interface TimelineEventSpec {
-  domain: 'conversation' | 'task' | 'session' | 'plan' | 'tool' | 'capability' | 'execution' | 'stuck' | 'problem' | 'card'
+  domain: 'conversation' | 'task' | 'session' | 'plan' | 'tool' | 'capability' | 'execution' | 'stuck' | 'problem' | 'card' | 'decision'
   role?: 'user' | 'assistant' | 'system' | 'tool'
   detailKeys?: string[] // 期望载荷字段（宽松约定——不强制全有，用于 dev 校验提示）
   dedupe?: boolean      // 同会话同 detail 只记一次（卡 shown 等）
@@ -124,6 +127,8 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
   'card.resolved': { domain: 'card', role: 'system', detailKeys: ['card', 'action'] },
   'card.rejected': { domain: 'card', role: 'system', detailKeys: ['card', 'action'] },
   'card.dismissed': { domain: 'card', role: 'system', detailKeys: ['card', 'cause'] },
+  'decision.requested': { domain: 'decision', role: 'system', detailKeys: ['kind', 'since'] },
+  'decision.resolved': { domain: 'decision', role: 'system', detailKeys: ['point', 'action'] },
   'conversation.status_change': { domain: 'conversation', role: 'system', detailKeys: ['status'] },
   'conversation.error': { domain: 'conversation', role: 'system', detailKeys: ['errorType'] },
   'execution.force_input': { domain: 'execution', role: 'system', detailKeys: ['planned', 'produced'] },
@@ -153,16 +158,31 @@ export interface DerivedStateEvent {
 
 export function deriveStateEvents(prev: ConversationState, next: ConversationState): DerivedStateEvent[] {
   const events: DerivedStateEvent[] = []
-  // —— 确认点（Task 聚合）——
+  // —— 确认点（Task 聚合——意图确认重设计 S1：execution→plan / achievement→resolution 语义更名）——
   if (!prev.goalConfirmed && next.goalConfirmed) events.push({ type: 'task.goal_confirmed', detail: { point: 'goal' } })
   if (prev.goalConfirmed && !next.goalConfirmed) events.push({ type: 'task.goal_rejected', detail: { point: 'goal' } })
-  if (!prev.executionConfirmed && next.executionConfirmed) events.push({ type: 'task.execution_confirmed', detail: { point: 'execution' } })
-  if (prev.executionConfirmed && !next.executionConfirmed) events.push({ type: 'task.execution_rejected', detail: { point: 'execution' } })
-  if (!prev.achievementConfirmed && next.achievementConfirmed) events.push({ type: 'task.achievement_confirmed', detail: { point: 'achievement' } })
-  if (prev.achievementConfirmed && !next.achievementConfirmed) events.push({ type: 'task.achievement_rejected', detail: { point: 'achievement' } })
-  // —— 会话级 PENDING（Conversation 聚合）——
-  if (prev.pending === 'none' && next.pending !== 'none') events.push({ type: 'session.pending_set', detail: { kind: next.pending } })
-  if (prev.pending !== 'none' && next.pending === 'none') events.push({ type: 'session.pending_cleared', detail: { kind: prev.pending } })
+  if (!prev.planConfirmed && next.planConfirmed) events.push({ type: 'task.execution_confirmed', detail: { point: 'plan' } })
+  if (prev.planConfirmed && !next.planConfirmed) events.push({ type: 'task.execution_rejected', detail: { point: 'plan' } })
+  if (!prev.resolutionConfirmed && next.resolutionConfirmed) events.push({ type: 'task.achievement_confirmed', detail: { point: 'resolution' } })
+  if (prev.resolutionConfirmed && !next.resolutionConfirmed) events.push({ type: 'task.achievement_rejected', detail: { point: 'resolution' } })
+  // —— 决策点（领域视图——设计 §3.5；与 card.* 并存：card=UI 卡生命周期，decision=领域决策点）——
+  if (prev.pending === 'none' && next.pending !== 'none') {
+    events.push({ type: 'session.pending_set', detail: { kind: next.pending } })
+    events.push({ type: 'decision.requested', detail: { kind: next.pending, since: next.decisionContent?.since ?? '' } })
+  }
+  if (prev.pending !== 'none' && next.pending === 'none') {
+    events.push({ type: 'session.pending_cleared', detail: { kind: prev.pending } })
+    // decision.resolved：确认/拒绝由状态 diff 推断（拒绝记忆新增 = approval 拒绝；否则按确认位变化）
+    if (prev.deniedApprovals.length < next.deniedApprovals.length) {
+      events.push({ type: 'decision.resolved', detail: { point: 'approval', action: 'reject' } })
+    } else if (prev.pending === 'approval') {
+      events.push({ type: 'decision.resolved', detail: { point: 'approval', action: 'confirm' } })
+    } else {
+      const point = prev.pending
+      const confirmed = point === 'goal' ? next.goalConfirmed : point === 'plan' ? next.planConfirmed : next.resolutionConfirmed
+      events.push({ type: 'decision.resolved', detail: { point, action: confirmed ? 'confirm' : 'reject' } })
+    }
+  }
   // —— PlannedFiles：批准清单追加（plan.approved）——
   const addedFiles = [...next.plannedFiles].filter((f) => !prev.plannedFiles.has(f))
   if (addedFiles.length > 0) events.push({ type: 'plan.approved', detail: { files: addedFiles } })
