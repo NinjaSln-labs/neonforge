@@ -79,5 +79,15 @@ export function useConversationState(opts?: UseConversationStateOpts) {
       transition((s) => ({ ...s, plannedFiles: new Set([...s.plannedFiles, ...files]) })),
     // 规划幂等标记（clearTrust 任务边界——D2 同步 main 在组件层）
     setFilesApproved: (v: boolean) => transition((s) => ({ ...s, filesApproved: v })),
+    // D3（ADR-005）：启动恢复——main plannedFilesStore 权威状态 → 本地镜像（批准事实跨重启）；
+    // 不走 transition（恢复是系统初始化非用户转换——不 emit 派生事件，防时间线污染）
+    restorePlanned: (files: string[], approved: boolean) => {
+      stateRef.current = {
+        ...stateRef.current,
+        plannedFiles: new Set(files),
+        filesApproved: approved,
+      }
+      setVersion((v) => v + 1)
+    },
   }
 }

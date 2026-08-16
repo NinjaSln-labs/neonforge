@@ -227,7 +227,8 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
     const files = (tc.args.files ?? []) as Array<{ path: string }>
     files.forEach((f) => addTrust({ path: f.path }))
     grantPlan(files.map((f) => trustPath(f.path)))
-    void window.neonforge.tools?.filesApproved?.()
+    // D3（ADR-005）：PlannedFiles 权威在 main——批准清单同步落盘（取代 tools.filesApproved）
+    void window.neonforge.plannedFiles?.add(files.map((f) => trustPath(f.path)))
     patchToolCall(
       idx,
       (c) => ({
