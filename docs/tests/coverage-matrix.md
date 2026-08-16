@@ -1,7 +1,7 @@
 # 覆盖矩阵（Coverage Matrix）
 
-> 生成：2026-08-16（S2 提议解析完成——首版，coverage-matrix skill）
-> 数据源版本：L1 测试 31 文件 / 371 用例 · 事件注册表 48 事件 · 不变量 Inv 1-8 · S2 DoD
+> 生成：2026-08-16（S2 首版）→ **更新：S3 完成（2026-08-16）**
+> 数据源版本：L1 测试 31 文件 / 377 用例 · 事件注册表 48 事件 · 不变量 Inv 1-8 · S2/S3 DoD · L3 35 场景（interaction）
 > 维护：阶段末更新（coverage-matrix skill）；缺口入 audit-items
 
 ## 表 1：不变量 ↔ L1 测试
@@ -49,7 +49,7 @@
 | problem.created / rerun / snapshot_updated / closed | 问题台账生命周期 | timelineEvents.test.ts | ✅ |
 | card.shown / resolved / rejected / dismissed | 卡 UI 生命周期 | timelineEvents.test.ts | ✅ |
 | decision.requested / resolved | 领域决策点 | timelineEvents.test.ts::deriveStateEvents（decision.*） | ✅ |
-| **proposal.plan / proposal.completion** | **S2 提议解析事件（新增）** | **timelineEvents.test.ts::proposal.* 登记（未断言）** | ⚠️ 见缺口 1 |
+| **proposal.plan / proposal.completion** | **提议解析事件（S2 登记 + S3 接线）** | **timelineEvents.test.ts::proposal.*（schema/成功/失败载荷 3 断言）** | ✅（A-003 已关闭） |
 | conversation.status_change / error | 状态/错误 | timelineEvents.test.ts | ✅ |
 
 ## 表 3：DoD ↔ 门禁（S2 spec）
@@ -64,12 +64,22 @@
 | 行为验收：parseCompletionClaim 契约 | completionClaimParser.test.ts（6 用例） | ✅ 可执行 |
 | 行为验收：verifyCompletion V1a/V1b | verifyCompletionSystem.test.ts（8 用例） | ✅ 可执行 |
 | 行为验收：sysPrompt 互锁 | sysPrompt.test.ts::契约互锁（3 用例） | ✅ 可执行 |
-| 行为验收：proposal.* 事件登记 | timeline.ts 注册表 + 06 文档 | ✅ 已登记（测试断言缺口见下） |
+| 行为验收：proposal.* 事件登记 | timeline.ts 注册表 + timelineEvents.test.ts（3 断言）+ S3 emit 接线 | ✅（A-003 fixed——c91079e） |
 | 审计状态：S1.1 遗留核对 | audit-items 索引（本阶段项 fixed） | ✅ 可执行 |
 | 覆盖矩阵首版已产出 | 本文件 | ✅ |
 | 决策日志同步 | docs/decisions/ 有 ADR | ✅ 可执行 |
 | 已 push + CI 绿 | qa.yml run | ✅ 可执行 |
 
+## 表 4：S3 renderer 接线 ↔ L3 场景（2026-08-16 新增）
+
+| S3 行为 | 场景（interaction） | 判定 |
+|---------|---------------------|------|
+| 方案卡渲染 PlanProposal 三要素（文件含原因/假设/验证计划） | cards-from-decision-content::S3-1 | ✅ |
+| 拒绝方案带原因 → 卡隐藏 + 模型收到方向 | cards-from-decision-content::S3-2 | ✅ |
+| 触发权切换——goal 卡内容来自 decisionContent 快照（含关键假设） | cards-from-decision-content::S3-3 | ✅ |
+| 拒绝超限回退——rejectStreak ≥3 澄清提示（不弹卡轰炸） | cards-from-decision-content::S3-4 | ✅ |
+| 决策点持久化往返（decisionContent 序列化） | sessionStore.test.ts::decisionContent 序列化（3 用例） | ✅ |
+
 ## 缺口清单
 
-1. **proposal.plan / proposal.completion 事件无语义断言测试**（注册表已登记、deriveStateEvents 未产生——解析层在 renderer 侧 S3 接线前不 emit）——判定：⚠️ 待 S3 接线时补断言（timelineEvents.test.ts）；或本阶段加注册表存在性断言。
+- **无**（A-003 已关闭——proposal.* 事件断言 c91079e 补齐；S3 四场景全部有 L3 承载）
