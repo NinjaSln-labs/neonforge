@@ -16,7 +16,6 @@ import {
   actionGate,
   canExecute,
   classifyReadonly,
-  classifyAction,
   verifyCompletion,
   buildEvidenceBackfill,
   completionEvidenceComplete,
@@ -24,6 +23,8 @@ import {
   derivePlannedFiles,
   plannedComplete,
   isProgressing,
+  isSideEffectAction,
+  isLocalhostCommand,
   pendingCardToShow,
   shouldStopContinuation,
   actionNeedsApproval,
@@ -785,12 +786,13 @@ describe('继承锁定——classifyReadonly/classifyAction（缝隙 4 单一权
     expect(classifyReadonly('bash', 'ls -la > out.txt')).toBe('hazardous')
   })
 
-  it('classifyAction 兼容壳（S6 由 classifyReadonly 直连取代）', () => {
-    expect(classifyAction('write')).toBe('side-effect')
-    expect(classifyAction('read')).toBe('readonly')
-    expect(classifyAction('bash', 'ls -la')).toBe('readonly')
-    expect(classifyAction('bash', 'npm install')).toBe('side-effect')
-    expect(classifyAction('bash', 'curl -s http://localhost')).toBe('side-effect') // S6 前旧 fail-closed（curl 一律需授权）
+  it('S6：classifyAction 兼容壳已移除——isSideEffectAction 直连（拍板 3：localhost 自动/外网 ask）', () => {
+    // 语义迁移（classifyAction 删除后由 isSideEffectAction 承载「需用户决策的副作用」）
+    expect(isSideEffectAction('write')).toBe(true)
+    expect(isSideEffectAction('read')).toBe(false)
+    expect(isSideEffectAction('bash', 'ls -la')).toBe(false)
+    expect(isSideEffectAction('bash', 'npm install')).toBe(true)
+    expect(isSideEffectAction('bash', 'curl -s http://localhost')).toBe(false) // S6 拍板 3：localhost 自动放行
   })
 })
 
@@ -984,5 +986,39 @@ describe('buildEvidenceBackfill（S4——完成声明被拒的回填引导文�
 
   it('ok=true（无缺失）→ 空引导（不注入）', () => {
     expect(buildEvidenceBackfill({ ok: true, missing: [], unverifiable: [] })).toBe('')
+  })
+})
+
+// S6 spec TDD 网格：门控双维接线（§8.1 A + 拍板 3——isSideEffectAction 领域层同源判定 + localhost 单源）
+describe('isSideEffectAction / isLocalhostCommand（S6——拍板 3 + 坑 97 同源）', () => {
+  it('readonly → 非 side-effect（read/search/check-capability/bash 只读自动放行）', () => {
+    expect(isSideEffectAction('read', undefined)).toBe(false)
+    expect(isSideEffectAction('bash', 'ls -la')).toBe(false)
+    expect(isSideEffectAction('check-capability', undefined)).toBe(false)
+  })
+
+  it('network-read localhost → 非 side-effect（拍板 3：curl localhost 自动放行）', () => {
+    expect(isSideEffectAction('bash', 'curl http://localhost:5173')).toBe(false)
+    expect(isSideEffectAction('bash', 'curl -X GET http://127.0.0.1:8080/api')).toBe(false)
+  })
+
+  it('network-read 外网 → side-effect（拍板 3：外网 GET ask——安全默认）', () => {
+    expect(isSideEffectAction('bash', 'curl https://example.com')).toBe(true)
+    expect(isSideEffectAction('bash', 'curl -X GET https://api.example.com/v1')).toBe(true)
+  })
+
+  it('写类动作 → side-effect（write/edit 恒；bash 写/未知恒——fail-closed）', () => {
+    expect(isSideEffectAction('write', undefined)).toBe(true)
+    expect(isSideEffectAction('edit', undefined)).toBe(true)
+    expect(isSideEffectAction('bash', 'npm install three')).toBe(true)
+    expect(isSideEffectAction('bash', '')).toBe(true) // 空命令 fail-closed
+  })
+
+  it('isLocalhostCommand：localhost/127.0.0.1/::1 命中；外网 URL 不命中（actionGate 与 isSideEffectAction 共享）', () => {
+    expect(isLocalhostCommand('curl http://localhost:5173')).toBe(true)
+    expect(isLocalhostCommand('curl http://127.0.0.1:8080')).toBe(true)
+    expect(isLocalhostCommand('curl http://[::1]:3000')).toBe(true)
+    expect(isLocalhostCommand('curl https://example.com')).toBe(false)
+    expect(isLocalhostCommand('ls -la')).toBe(false)
   })
 })

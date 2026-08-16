@@ -428,3 +428,47 @@ test('S5-2：纯文本承诺不算推进——确认执行后模型连续 2 轮�
     )
     .toBe(1)
 })
+
+// S6 门控双维场景（设计 §6 S6 + 拍板 3——curl localhost 自动放行/外网 ask；main preApproval 同步放行）
+test('S6-1：curl localhost GET 自动放行（拍板 3——main preApproval 同步——无授权卡）', async ({
+  page,
+}) => {
+  await installMockBridge(page, {
+    project: 'none',
+    script: compose(goalConfirm('做一个待办应用'), planPropose(['/test/app.ts（核心）']), [
+      [toolCall.bash('curl -s http://localhost:5188/'), chunk.done()],
+    ]),
+  })
+  await startFromScratch(page, '做个待办应用')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  await page.getByRole('button', { name: '确认执行' }).click()
+  // curl localhost（network-read + localhost）→ 自动放行（done 无授权卡）
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(1, { timeout: 10000 })
+  await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(0)
+})
+
+test('S6-2：外网 curl GET → ask 弹授权卡（拍板 3——安全默认——需用户批准）', async ({ page }) => {
+  await installMockBridge(page, {
+    project: 'none',
+    // main preApproval 模拟（L1 tools.test.ts 已锁 isReadOnlyBash 外网 false——此处 UI 层验证 ask 路径）
+    executeResults: {
+      bash: {
+        ok: false,
+        needApproval: true,
+        error: '「bash」需要授权（L3）——approved=true 后执行',
+      },
+    },
+    script: compose(goalConfirm('做一个待办应用'), planPropose(['/test/app.ts（核心）']), [
+      [toolCall.bash('curl -s https://example.com'), chunk.done()],
+    ]),
+  })
+  await startFromScratch(page, '做个待办应用')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  await page.getByRole('button', { name: '确认执行' }).click()
+  // 外网 curl（network-read 非 localhost）→ ask（need-approval 授权卡——安全默认）
+  await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(1, { timeout: 10000 })
+})

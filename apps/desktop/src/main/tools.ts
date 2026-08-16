@@ -19,7 +19,7 @@ import {
 import { detectCapabilities, attributeCommandFailure } from './envManager.js'
 import { logTimeline } from './timelineLogger.js'
 // 2026-08-14 S3：动作分类单一权威（领域层——renderer/main 同源判定；缝隙 4）
-import { classifyAction } from '../domain/conversationState.js'
+import { classifyReadonly, isLocalhostCommand } from '../domain/conversationState.js'
 
 // ToolRegistry（ticket 10 / A0 §2）：工具注册与执行分发
 // 边界判定：ToolRegistry=目录与分发；ShellAgent=bash 执行；Gateway=工具调用修复（02 已实现）
@@ -467,8 +467,13 @@ export function cancelActiveCommand(): { ok: true } | { ok: false; error: string
 // 2026-08-04 授权架构重构（用户授权疲劳）：bash 只读命令检测——ls/cat/grep 等查看类自动执行（零打断）；
 // 写命令（rm/mv/cp/npm/git/python/node/重定向）保持授权（main 进程裁决，renderer 不判断防绕过）
 // 2026-08-14 S3：判定上移领域层 classifyAction（单一权威——renderer 确认卡/门控与 main preApproval 同源，消除双源）
+// 2026-08-16 S6（§8.1 A + 拍板 3）：改引用 classifyReadonly + isLocalhostCommand——readonly → auto；
+// network-read localhost → auto（curl localhost 自动放行——拍板 3 main 侧同步）；外网 curl → 非 auto（ask 弹卡——安全默认）
 export function isReadOnlyBash(cmd: string): boolean {
-  return classifyAction('bash', cmd) === 'readonly'
+  const kind = classifyReadonly('bash', cmd)
+  if (kind === 'readonly') return true
+  if (kind === 'network-read') return isLocalhostCommand(cmd)
+  return false
 }
 
 // 2026-08-06 用户反馈「帮我打开」（催 4 次都没打开网页）：open 工具——默认浏览器打开 http/https 地址

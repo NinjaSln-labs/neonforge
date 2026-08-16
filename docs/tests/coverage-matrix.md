@@ -106,6 +106,17 @@
 | execution.forced/released 事件语义（mode/reason 可回放） | timeline.ts detailKeys ['reason','?mode'] + 接线处打点 | ✅ |
 | turnPolicy.ts/forceToolInput 移除（无悬挂引用） | L2 双 tsc 0 错（turnPolicy.ts 已删）| ✅ |
 
+## 表 7：S6 门控双维 ↔ 测试（2026-08-16 新增）
+
+| S6 行为 | 场景/用例 | 判定 |
+|---------|-----------|------|
+| isSideEffectAction 领域层同源（拍板 3：readonly/localhost 非副作用；外网/写类副作用） | conversationState.test.ts 4 用例（S6 新增）+ 继承锁定迁移 1 用例 | ✅ |
+| isLocalhostCommand 单源（actionGate 与 isSideEffectAction 共享） | conversationState.test.ts 1 用例 | ✅ |
+| main preApproval 改引用 classifyReadonly（curl localhost 自动/外网 ask——拍板 3 main 侧同步） | tools.test.ts isReadOnlyBash 升级断言（localhost 自动/外网 fail-closed/-o 写副作用 hazardous——S6 暴露缺口修复） | ✅ |
+| classifyAction 兼容壳移除（renderer 6 处 + main + agentLoop 全切换——无悬挂引用） | L2 双 tsc 0 错 + L1 412（isSideEffectAction 直连） | ✅ |
+| 拍板 3 全链（curl localhost 自动放行/外网 ask 授权卡） | L3 S6-1（localhost done 无授权卡）/S6-2（外网 need-approval 弹卡——executeResults 模拟 main preApproval） | ✅ |
+| actionGate 策略接线（不变量 3 全量——ask 走授权卡闭环既有） | L1 actionGate 既有用例 + L3 授权场景回归（write 需授权/清单内自动/合并授权） | ✅ |
+
 ## 缺口清单
 
 - **无**（A-003 已关闭——proposal.* 事件断言 c91079e 补齐；A-010 已关闭——S4 V1a integration 7 用例 + L3 4 场景；S3/S4/S5 行为全部有测试承载——S5 新增 progressGuarantee.test.ts 12 用例 + agentLoop 5 + L3 2 场景）

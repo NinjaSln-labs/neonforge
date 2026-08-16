@@ -6,8 +6,8 @@
 // - 转换唯一入口：userDecided（不变量 1/8）/ approvalDecided（§3.4）；userConfirmed/userRejected 降为兼容壳（S3 移除）
 // - 派生：deriveDecisionPoint（不变量 2/7）/ sessionGate×actionGate（不变量 3）/ verifyCompletion（不变量 4）/
 //         decideProgressGuarantee（不变量 5）/ derivePlannedFiles（不变量 6）
-// - 继承：单一 PENDING、plannedFiles 追加语义、producedFiles、lastToolFailed、shouldStopContinuation、classifyAction（兼容壳）
-// 纯逻辑无 React 依赖——L1 可测。依赖关系：tools.ts preApproval 消费 classifyAction（同源——缝隙 4）。
+// - 继承：单一 PENDING、plannedFiles 追加语义、producedFiles、lastToolFailed、shouldStopContinuation（classifyAction 兼容壳 S6 已移除）
+// 纯逻辑无 React 依赖——L1 可测。依赖关系：tools.ts preApproval 消费 classifyReadonly/isLocalhostCommand（同源——缝隙 4）。
 // S5：turnPolicy.ts 已移除（decideTurnPolicy/TurnPolicyInput 语义并入 decideProgressGuarantee——§6 S5 唯一推进判定器）。
 
 // ============================================================================
@@ -326,7 +326,9 @@ export function classifyReadonly(name: string, command?: string): ActionKind {
   if (netMatch) {
     const method = c.match(/-X\s+(GET|HEAD)\b|--request\s+(GET|HEAD)\b/)
     const hasBodyFlag =
-      /-d\b|--data\b|--data-raw\b|-F\b|--form\b|-X\s+(POST|PUT|PATCH|DELETE)\b/.test(c)
+      /-d\b|--data\b|--data-raw\b|-F\b|--form\b|-o\b|--output\b|-X\s+(POST|PUT|PATCH|DELETE)\b/.test(
+        c,
+      ) // -o/--output 写文件 = 副作用（S6 暴露缺口）
     if (!hasBodyFlag && (!method || method[1] === 'GET' || method[1] === 'HEAD'))
       return 'network-read'
     return 'hazardous'
@@ -346,12 +348,23 @@ export function classifyReadonly(name: string, command?: string): ActionKind {
   return BASH_READONLY_HEADS.has(head) ? 'readonly' : 'hazardous'
 }
 
-// 动作分类兼容壳（缝隙 4 单一权威——main preApproval 消费；S6 由 actionGate 直连取代）
-// 注意：network-read 在壳内仍按 side-effect（旧 fail-closed 语义——curl 一律需授权）——S1 阶段 main 尚未接
-// actionGate（S6），若按 readonly 放行则外网 curl 自动通过 = 安全倒退；S6 切换后 network-read 走
-// actionGate（localhost 自动/外网 ask——拍板 3）。
-export function classifyAction(name: string, command?: string): 'side-effect' | 'readonly' {
-  return classifyReadonly(name, command) === 'readonly' ? 'readonly' : 'side-effect'
+// S6（§8.1 A + 拍板 3）：classifyAction 兼容壳移除——由 classifyReadonly + isSideEffectAction 直连取代。
+// network-read 语义升级：localhost 自动放行（非 side-effect）/ 外网 ask（side-effect——安全默认）。
+// 判定统一领域层（坑 97——renderer 6 处 + main preApproval 全部同源消费）。
+
+/** localhost 判定（拍板 3 单源——actionGate 与 isSideEffectAction 共享：localhost/127.0.0.1/::1） */
+export function isLocalhostCommand(command: string): boolean {
+  return /localhost|127\.0\.0\.1|::1/.test(command)
+}
+
+/** 动作是否构成「需用户决策的副作用」（S6 同源判定——renderer 确认卡/拦截 + main 授权流）：
+ * readonly → 非（自动放行）；network-read localhost → 非（拍板 3 自动放行）；
+ * network-read 外网 → 是（外网 GET ask——安全默认）；write/edit/hazardous → 是（恒——fail-closed） */
+export function isSideEffectAction(name: string, command?: string): boolean {
+  const kind = classifyReadonly(name, command)
+  if (kind === 'readonly') return false
+  if (kind === 'network-read') return !isLocalhostCommand(String(command ?? ''))
+  return true
 }
 
 export interface ExecAction {
@@ -425,9 +438,9 @@ export function actionGate(
     return { verdict: 'allow', attribute: { kind: 'readonly', basis: 'tool-type' }, risk: 'low' }
   }
   if (kind === 'network-read') {
-    // 拍板 3：curl 对 localhost 自动放行，外网 GET ask
+    // 拍板 3：curl 对 localhost 自动放行，外网 GET ask（isLocalhostCommand 单源——isSideEffectAction 共享）
     const cmd = String(action.command ?? '')
-    const localhost = /localhost|127\.0\.0\.1|::1/.test(cmd)
+    const localhost = isLocalhostCommand(cmd)
     const allowLocal = policy?.networkRead?.allowLocalhost ?? true
     if (allowLocal && localhost) {
       return {
@@ -718,7 +731,7 @@ export function isConsumedProposal(
 export function isProgressing(
   toolResults: Array<{ name: string; ok: boolean; command?: string }>,
 ): boolean {
-  return toolResults.some((r) => r.ok && classifyAction(r.name, r.command) === 'side-effect')
+  return toolResults.some((r) => r.ok && isSideEffectAction(r.name, r.command))
 }
 
 // 确认卡触发兼容壳（缝隙 5——S3 由 deriveDecisionPoint 取代；参数/返回值已切新枚举）

@@ -23,7 +23,7 @@ import {
 } from '../domain/agentLoop'
 // 2026-08-14 会话状态机（Task 聚合——A0 §2/§3/§4/§5）：状态单一来源 + 转换唯一入口（session-state-machine.md S2）
 import {
-  classifyAction,
+  isSideEffectAction,
   canExecute,
   decideProgressGuarantee,
   isConsumedProposal,
@@ -466,8 +466,8 @@ export default function ConversationPanel({
       if (
         exec === -1 &&
         (x.content.includes('【执行方案') ||
-          (x.toolCalls ?? []).some(
-            (c) => classifyAction(c.name, String(c.args?.command ?? '')) === 'side-effect',
+          (x.toolCalls ?? []).some((c) =>
+            isSideEffectAction(c.name, String(c.args?.command ?? '')),
           ))
       )
         exec = k
@@ -747,7 +747,7 @@ export default function ConversationPanel({
       const uiCalls = lastUiMsg?.toolCalls ?? []
       const sideEffectPendingUi = uiCalls.some(
         (c) =>
-          classifyAction(c.name, String(c.args?.command ?? '')) === 'side-effect' &&
+          isSideEffectAction(c.name, String(c.args?.command ?? '')) &&
           (c.status === 'pending' ||
             String(c.result ?? '').includes('等待你的决策') ||
             String(c.result ?? '').includes('未确认')),
@@ -989,7 +989,7 @@ export default function ConversationPanel({
       ): boolean => {
         // 2026-08-14 S2b（缝隙 4/5）：确认卡触发走状态机派生——执行确认只认**有副作用动作**（探索 bash 不再触发）
         const sideEffectPending = calls.some(
-          (c) => c.status === 'pending' && classifyAction(c.name, c.command) === 'side-effect',
+          (c) => c.status === 'pending' && isSideEffectAction(c.name, c.command),
         )
         return (
           pendingCardToShow(
@@ -1028,7 +1028,7 @@ export default function ConversationPanel({
       if (
         confirmGate ||
         pendingBlocked ||
-        (!toolGate.ok && classifyAction(tc.name, String(tc.args?.command ?? '')) === 'side-effect')
+        (!toolGate.ok && isSideEffectAction(tc.name, String(tc.args?.command ?? '')))
       ) {
         const gateReason = pendingBlocked
           ? `会话等待你的决策（${stateRef.current.pending}）——此动作未执行`
@@ -1254,9 +1254,7 @@ export default function ConversationPanel({
       // 2026-08-14 S2b（缝隙 4/5）：确认卡触发走状态机派生——执行确认只认**有副作用动作**（探索 bash 不再触发）
       const lastContent = lastMsg.content ?? ''
       const sideEffectPending = lastMsg.toolCalls.some(
-        (c) =>
-          c.status === 'pending' &&
-          classifyAction(c.name, String(c.args?.command ?? '')) === 'side-effect',
+        (c) => c.status === 'pending' && isSideEffectAction(c.name, String(c.args?.command ?? '')),
       )
       const confirmPending =
         pendingCardToShow(
@@ -2107,8 +2105,8 @@ export default function ConversationPanel({
                   goalFallbackTrigger(m.content)
                 // 2026-08-14 S2b（缝隙 4/5）：触发统一走状态机派生 pendingCardToShow（渲染与 maybeContinue 停模型同源）——
                 // 「等确认」语义命中即弹 + 停；探索期（只读 bash/无等确认语义）不弹（冒烟实证：探索期弹卡 → 模型困惑）
-                const sideEffectAttempted = (m.toolCalls ?? []).some(
-                  (c) => classifyAction(c.name, String(c.args?.command ?? '')) === 'side-effect',
+                const sideEffectAttempted = (m.toolCalls ?? []).some((c) =>
+                  isSideEffectAction(c.name, String(c.args?.command ?? '')),
                 )
                 // 2026-08-14 用户实测卡死修复（timeline 0219a516）：模型连发消息时确认卡漂移消失——
                 // write 被拦（exec-confirm 卡弹出）→ 模型继续输出 approve-files/说明消息 → isLastAssistant 漂移 → 卡消失
