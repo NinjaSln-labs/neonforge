@@ -70,7 +70,7 @@ npm run dev:electron       # full app (dev mode, connects to :5173)
 
 ```bash
 cd apps/desktop
-npm run dist               # outputs to release/ (macOS: .zip (.dmg planned); win: .nsis; linux: AppImage)
+npm run dist               # outputs to release/ (macOS: .dmg + .zip; win: .nsis; linux: AppImage — Electron mirror fallback below)
 ```
 
 > **ExFAT/external volumes**: electron-builder produces a corrupted asar on ExFAT volumes (`chromium-pickle` offset error) — output to a local volume instead: `npm run build && npx electron-builder -c.directories.output=/tmp/nf-release`
