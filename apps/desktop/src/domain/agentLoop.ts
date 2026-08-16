@@ -5,6 +5,7 @@
 // 纯逻辑无 React 依赖——L1 可测；ConversationPanel（Application 层）调用
 // 2026-08-14 S4：副作用分类同源（classifyAction——缝隙 2 进展判定）
 import { classifyAction } from './conversationState.js'
+import { isLikelyPath } from './planProposalParser.js'
 
 // === Value Object: 工具调用视图（AgentTurn 的 toolCalls 投影——领域层可见的最小信息） ===
 export interface ToolCallView {
@@ -74,10 +75,7 @@ export function parseExecutionPlan(text: string): string[] {
 }
 
 // 路径形态判定（坑 102：清单必须只含「能产出/能出现在文件树」的条目——自然语言说明行排除）
-function isLikelyPath(p: string): boolean {
-  if (!/\s/.test(p)) return true // 无空白：相对/绝对/目录（src/、assets、game.js、/a/b.html）
-  return /\.[a-zA-Z0-9]{1,5}$/.test(p) // 含空白但带扩展名（中文文件名容错——docs/我的 文件.md）
-}
+// S2 单源：isLikelyPath 迁至 planProposalParser（parsePlanProposal 共享——TDD 网格重构列）
 
 // === Domain Service: ProgressEvaluator——从 AgentTurn（toolCalls + content）评估 TurnProgress ===
 // 排除判定沿用坑 79 结构判定（问句/沟通/完成态——有限集，不匹配措辞）

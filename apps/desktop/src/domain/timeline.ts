@@ -72,6 +72,9 @@ export type TimelineEventType =
   // —— Decision：领域决策点（意图确认重设计 §3.5——与 card.* 并存：card=UI 卡生命周期，decision=领域决策点）——
   | 'decision.requested' // 决策点出现（载荷：kind/since——决策点内容快照随 S3 增强）
   | 'decision.resolved' // 决策被确认/拒绝（载荷：point/action——reason 随 S3 回填）
+  // —— Proposal：模型提议解析（S2 登记——§8.2 D；结构化提议事件——决策点产生前的解析层事实）——
+  | 'proposal.plan' // 方案提议解析结果（载荷：ok/files/summary——parse-error: reason 打点）
+  | 'proposal.completion' // 完成声明解析结果（载荷：ok/summary/evidence 计数）
   // —— 元事件（运行时可观测——诊断/状态）——
   | 'conversation.status_change' // working/ready/approval-pending 变化
   | 'conversation.error' // 错误链路（errorType/message）
@@ -91,6 +94,7 @@ export interface TimelineEventSpec {
     | 'problem'
     | 'card'
     | 'decision'
+    | 'proposal'
   role?: 'user' | 'assistant' | 'system' | 'tool'
   detailKeys?: string[] // 期望载荷字段（宽松约定——不强制全有，用于 dev 校验提示）
   dedupe?: boolean // 同会话同 detail 只记一次（卡 shown 等）
@@ -156,6 +160,16 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
   'card.dismissed': { domain: 'card', role: 'system', detailKeys: ['card', 'cause'] },
   'decision.requested': { domain: 'decision', role: 'system', detailKeys: ['kind', 'since'] },
   'decision.resolved': { domain: 'decision', role: 'system', detailKeys: ['point', 'action'] },
+  'proposal.plan': {
+    domain: 'proposal',
+    role: 'assistant',
+    detailKeys: ['ok', 'reason', 'files', 'summary'],
+  },
+  'proposal.completion': {
+    domain: 'proposal',
+    role: 'assistant',
+    detailKeys: ['ok', 'summary', 'verification', 'pendingQuestions'],
+  },
   'conversation.status_change': { domain: 'conversation', role: 'system', detailKeys: ['status'] },
   'conversation.error': { domain: 'conversation', role: 'system', detailKeys: ['errorType'] },
   'execution.force_input': {

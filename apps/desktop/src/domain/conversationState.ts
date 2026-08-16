@@ -526,7 +526,7 @@ export function deriveDecisionPoint(
   return 'none'
 }
 
-// —— 完成对账（不变量 4：无证据不进入对账——verifyCompletion 纯逻辑部分；V1a 系统代跑核验 S2 扩展） ——
+// —— 完成对账（不变量 4：无证据不进入对账——verifyCompletion 纯逻辑部分 + V1a/V1b 系统核验 S2 扩展） ——
 
 /** 验证命令是否系统可代跑（只读——V1a 核验范围；network-read 同为可代跑核验） */
 function isSystemVerifiable(command: string): boolean {
@@ -547,11 +547,28 @@ export function completionEvidenceComplete(evidence: CompletionEvidence): boolea
   return evidenceVerifiable(evidence)
 }
 
+/** 系统核验数据（S2 V1a/V1b——verifyCompletion 第二参数；由 main 进程在 S4 接线时提供）
+ * 领域层只消费「系统已核验」的同步快照（V1a 代跑执行在 main 侧——领域层保持纯逻辑 L1 可测） */
+export interface SystemVerifier {
+  /** V1a：只读验证命令的系统代跑结果（command → 复核 ok 与否；缺省 = 系统未核验——按模型自报 passed 计） */
+  verificationResults: Record<string, { ok: boolean; output?: string }>
+  /** V1b：diff 对账系统派生——从 plannedFiles/producedFiles 派生比对（非模型自述） */
+  deriveDiffs(planned: Set<string>, produced: Set<string>): Array<{ path: string }>
+  plannedFiles: Set<string>
+  producedFiles: Set<string>
+}
+
 /**
  * 完成声明核验（设计 §3.3）：证据不足（verification 空 / pendingQuestions 非空 / 存在 unverifiable）→ ok=false + 清单
- * V1a 系统代跑只读验证命令核验 + V1b diff 系统派生（systemState 参数）——S2 扩展；S1 覆盖纯逻辑部分
+ * - 纯逻辑部分（S1）：passed=false → missing；非只读命令 → unverifiable（拍板 4——与 evidenceVerifiable 同源）
+ * - V1a/V1b（S2 扩展）：systemState 提供时——系统代跑结果复核（ok:false → missing）；
+ *   diffs 由系统从 plannedFiles/producedFiles 派生比对（planned 有文件未产出 → missing）
+ * - systemState 缺省 = 纯逻辑判定（S1 兼容——不代跑；S4 接线后必传）
  */
-export function verifyCompletion(claim: CompletionClaim): {
+export function verifyCompletion(
+  claim: CompletionClaim,
+  systemState?: SystemVerifier,
+): {
   ok: boolean
   missing: string[]
   unverifiable: string[]
@@ -567,6 +584,22 @@ export function verifyCompletion(claim: CompletionClaim): {
   }
   if (claim.evidence.pendingQuestions.length > 0)
     missing.push(...claim.evidence.pendingQuestions.map((q) => `pending-question:${q}`))
+  // S2 V1a：系统代跑结果复核（只读命令——系统已核验且失败 → missing；「自报」降级为「系统复核」）
+  if (systemState) {
+    for (const item of claim.evidence.verification) {
+      if (item.passed === false) continue // 已计 missing
+      if (!isSystemVerifiable(item.command)) continue // 已计 unverifiable——系统不代跑
+      const result = systemState.verificationResults[item.command]
+      if (result && !result.ok && !missing.includes(`verification:${item.command}`)) {
+        missing.push(`verification:${item.command}`)
+      }
+    }
+    // S2 V1b：diff 对账系统派生——planned 有文件未产出（不在 produced）→ missing（系统核对，非模型自述）
+    const sysDiffs = systemState.deriveDiffs(systemState.plannedFiles, systemState.producedFiles)
+    if (systemState.plannedFiles.size > 0 && sysDiffs.length < systemState.plannedFiles.size) {
+      missing.push('diff:planned-not-produced')
+    }
+  }
   return { ok: missing.length === 0 && unverifiable.length === 0, missing, unverifiable }
 }
 
