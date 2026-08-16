@@ -1,6 +1,13 @@
 // 工具授权 handler 封装（2026-08-15 Q1b——ConversationPanel 瘦身：批准/拒绝/记住/合并/回滚/停止）
 // 依赖注入（组件状态交织——setMessages/续聊链/流式 ref 经参数传入；不可变依赖走 deps）
 import type { ToolCallMsg, Msg } from './ConversationPanel'
+import type { ApprovalRequest, RejectReason } from '../domain/conversationState'
+
+/** 拒绝记忆 risk 分级（S7 P1-2——复用工具卡既有 risk 判定语义：bash 高危/其余 low-medium） */
+function classifyRiskForReject(tc: ToolCallMsg): 'low' | 'medium' | 'high' {
+  if (tc.name === 'bash') return 'high'
+  return tc.name === 'write' || tc.name === 'edit' ? 'medium' : 'low'
+}
 
 export interface UseToolApprovalDeps {
   setMessages: (fn: (prev: Msg[]) => Msg[]) => void
@@ -23,6 +30,8 @@ export interface UseToolApprovalDeps {
     file?: string
   }) => void
   grantPlan: (files: string[]) => void
+  // S7（A0 审校 P1-2）：授权拒绝 → approvalDecided（§3.4 C6——拒绝记忆登记——同轮同类短封）
+  rejectApproval: (request: ApprovalRequest, reason: RejectReason) => void
   // 任务信任（addTrust 定义于组件——依赖 rootPath/沙箱判定）
   addTrust: (args: Record<string, unknown>) => void
   // 续聊链
@@ -50,6 +59,7 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
     onToolResult,
     applyTool,
     grantPlan,
+    rejectApproval,
     addTrust,
     acquireChain,
     maybeContinue,
@@ -154,9 +164,24 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
   }
 
   const rejectToolCall = (calls: ToolCallMsg[], idx: number): void => {
+    const tc = calls[idx]
+    // S7（A0 审校 P1-2 接线）：拒绝记忆登记（§3.4 C6——approvalDecided——同轮同类动作短封——
+    // canExecute 消费 deniedApprovals；pending 清除 + decisionContent 清理由转换承担）
+    if (tc) {
+      const subject = String(tc.args?.command ?? tc.args?.path ?? tc.args?.filePath ?? '')
+      rejectApproval(
+        {
+          toolName: tc.name,
+          subject,
+          reason: '用户拒绝了授权请求',
+          risk: classifyRiskForReject(tc),
+        },
+        { kind: 'direction' },
+      )
+    }
     // 2026-08-15 DDD 重建：授权拒绝事件（G2 缺口——原无打点，卡生命周期不可回放）
-    tlog('tool.rejected', { name: calls[idx]?.name, args: calls[idx]?.args }, 'system')
-    tlog('card.rejected', { card: 'approval', action: 'reject', name: calls[idx]?.name }, 'system')
+    tlog('tool.rejected', { name: tc?.name, args: tc?.args }, 'system')
+    tlog('card.rejected', { card: 'approval', action: 'reject', name: tc?.name }, 'system')
     setMessages((prev) => {
       const last = prev[prev.length - 1]
       if (!last || last.role !== 'assistant') return prev

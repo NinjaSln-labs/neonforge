@@ -26,6 +26,7 @@ import {
   isSideEffectAction,
   canExecute,
   decideProgressGuarantee,
+  deriveDecisionPoint,
   isConsumedProposal,
   pendingCardToShow,
   shouldStopContinuation,
@@ -34,6 +35,8 @@ import {
   buildEvidenceBackfill,
   deriveDiffs,
   type SystemVerifier,
+  type DecisionProposals,
+  type DecisionKind,
   type GoalProposal,
   type PlanProposal,
   type CompletionClaim,
@@ -429,6 +432,7 @@ export default function ConversationPanel({
     confirm,
     reject,
     grantPlan,
+    rejectApproval,
     applyTool,
     setPending: setPendingState,
     clearPending,
@@ -752,30 +756,65 @@ export default function ConversationPanel({
             String(c.result ?? '').includes('等待你的决策') ||
             String(c.result ?? '').includes('未确认')),
       )
-      const cardToShow = pendingCardToShow(
-        stateRef.current.goalConfirmed,
-        stateRef.current.planConfirmed,
-        stateRef.current.resolutionConfirmed,
-        content,
-        sideEffectPendingUi,
+      // S7（A0 审校 P1-1——S3 触发权 DoD 补课）：触发判定 = 领域层 deriveDecisionPoint（不变量 2——
+      // 决策点确定性纯函数——单源）；renderer 只做**信号翻译**（解析 proposals + 兜底 userRequested）——
+      // pendingCardToShow 文本探测兼容壳生产调用移除（降级为仅测试/备用）
+      const goalMark = content.match(/【目标确认[:：]\s*([^】]+)/)
+      const goalProposal =
+        goalMark || /【目标确认/.test(content)
+          ? {
+              statement: goalMark?.[1]?.trim() ?? (initialPrompt || content.trim()),
+              assumptions: extractAssumptionsSection(content),
+            }
+          : undefined
+      const planR = /【执行方案/.test(content) ? parsePlanProposal(content) : undefined
+      const claim = /【已达成/.test(content) ? parseCompletionClaim(content) : undefined
+      const proposals: DecisionProposals = {
+        ...(goalProposal ? { goal: goalProposal } : {}),
+        ...(planR?.ok ? { plan: planR.proposal } : {}), // malformed/no-block → C3 不置决策点（诊断事件）
+        ...(claim ? { completion: claim } : {}),
+      }
+      // C3 诊断：有【执行方案】标记但解析失败（格式漂移——模型被要求重输出；原始文本保留在对话审计）
+      if (planR && !planR.ok) {
+        tlog('proposal.plan', { ok: false, reason: planR.reason }, 'assistant')
+      }
+      // 兜底信号（旧 pendingCardToShow 文本征询语义——判定归领域层 userRequested 参数）：
+      // write 被拦（sideEffectPendingUi 或本轮流副作用工具——write 被拦后模型连发消息场景）或
+      // 方案征询文本（「等你确认」类）→ 执行确认点。S7（P1-1 修正）：本轮流副作用工具（streamingRef——
+      // 流式 toolCalls 未清空前）也构成信号——旧实现靠渲染层 execSignal 兜底（无 pending——卡漂移风险）
+      const sideEffectAttemptedThisRound = streamingRef.current.toolCalls.some((c) =>
+        isSideEffectAction(c.name, String(c.args?.command ?? '')),
       )
+      const textAskPlan =
+        /(等你确认|你确认一下|确认一下|等你点头|你看行吗|你看行不行|可以的话我)/.test(content)
+      const userRequested: DecisionKind | undefined =
+        sideEffectPendingUi ||
+        (sideEffectAttemptedThisRound &&
+          stateRef.current.goalConfirmed &&
+          !stateRef.current.planConfirmed) ||
+        (textAskPlan && stateRef.current.goalConfirmed && !stateRef.current.planConfirmed)
+          ? 'plan'
+          : undefined
+      const cardToShow = deriveDecisionPoint(stateRef.current, proposals, [], userRequested)
       // S3（§6 S3 + §8.2 E）：决策点置位携带 decisionContent 快照（卡渲染唯一来源——呈现内容完整审计；
       // 模型文本不再直接参与卡内容判定——文本标记只用于**探测**，内容取结构化解析结果）
       if (cardToShow !== 'none' && stateRef.current.pending === 'none') {
         if (cardToShow === 'plan') {
-          // 方案提议 → parsePlanProposal 结构化解析 → decisionContent.proposal（文件/假设/验证计划）
-          const r = parsePlanProposal(content)
-          if (r.ok) {
-            setPendingState('plan', { proposal: r.proposal, since: new Date().toISOString() })
+          // 方案提议 → PlanProposal（文件/假设/验证计划）或占位（write 拦截/征询——无结构内容）
+          if (planR?.ok) {
+            setPendingState('plan', {
+              proposal: planR.proposal,
+              since: new Date().toISOString(),
+            })
             tlog(
               'proposal.plan',
-              { ok: true, summary: r.proposal.summary, files: r.proposal.files.map((f) => f.path) },
+              {
+                ok: true,
+                summary: planR.proposal.summary,
+                files: planR.proposal.files.map((f) => f.path),
+              },
               'assistant',
             )
-          } else if (r.reason === 'malformed') {
-            // C3：有【执行方案】标记但块内无合法文件行（格式漂移）→ 不产生决策点 + 诊断事件
-            // （模型被要求重输出；原始文本保留在对话审计）
-            tlog('proposal.plan', { ok: false, reason: r.reason }, 'assistant')
           } else {
             // no-block（无方案标记）+ 决策点存在（write 拦截/方案征询「等你确认」）→ 等确认执行——
             // 无结构化内容 → decisionContent 无 proposal（卡占位——内容区不渲染三要素）
@@ -783,20 +822,27 @@ export default function ConversationPanel({
           }
         } else if (cardToShow === 'goal') {
           // 目标提议 → GoalProposal（statement + assumptions——S2 ⑬ 契约：必要时附「关键假设：」行）
-          // 兜底用 initialPrompt（用户输入——旧测试模型无【目标确认】标记；content.trim() 是整条消息不合适）
-          const goalMatch = content.match(/【目标确认：([^】]+)】/)
-          const assumptions = extractAssumptionsSection(content)
+          // S7（A0 审校 P1-3）：proposal.goal 结构化提议事件（§3.5——statement+assumptions——替代 task.goal_proposed 文本摘要）
+          tlog(
+            'proposal.goal',
+            {
+              statement: goalProposal?.statement ?? '',
+              ...(goalProposal?.assumptions && goalProposal.assumptions.length > 0
+                ? { assumptions: goalProposal.assumptions }
+                : {}),
+            },
+            'assistant',
+          )
           setPendingState('goal', {
-            proposal: {
-              statement: goalMatch?.[1]?.trim() ?? (initialPrompt || content.trim()),
-              assumptions,
+            proposal: goalProposal ?? {
+              statement: initialPrompt || content.trim(),
+              assumptions: [],
             },
             since: new Date().toISOString(),
           })
         } else if (cardToShow === 'resolution') {
           // 完成声明 → parseCompletionClaim 结构化解析 → S4：已解决卡条件 = verifyCompletion 通过
           // （不变量 4 接线——不再直接置决策点；异步系统核验（V1a 代跑 + V1b 派生）后判定）
-          const claim = parseCompletionClaim(content)
           if (claim) {
             tlog(
               'proposal.completion',
@@ -815,6 +861,23 @@ export default function ConversationPanel({
         } else {
           setPendingState(cardToShow, { since: new Date().toISOString() })
         }
+      }
+      // S7（A0 审校 P1-1——S4 语义保留）：完成声明存在但 deriveDecisionPoint 证据门未命中
+      // （证据不足 → none——设计 §3.3「不进入对账（引导由 S4 回填）」）——verifyThenResolve 统一处理：
+      // 证据完整 → 弹已解决卡；证据不足 → evidence_missing 打点 + 回填引导（证据门由 verifyCompletion 承担——
+      // 避免 deriveDecisionPoint 的 completionEvidenceComplete 门绕过 S4 引导路径——双判定器同源）
+      if (claim && cardToShow !== 'resolution' && stateRef.current.pending === 'none') {
+        tlog(
+          'proposal.completion',
+          {
+            ok: true,
+            summary: claim.summary,
+            verification: claim.evidence.verification.length,
+            pendingQuestions: claim.evidence.pendingQuestions.length,
+          },
+          'assistant',
+        )
+        void verifyThenResolve(claim)
       }
       // 2026-08-07 无阶段重构 S5：执行方案清单解析——模型输出【执行方案】块 → 并入 plannedFiles（任务完成度——deepcode unimplemented_files 借鉴）
       // 2026-08-08 根因 3 修复③：trustPath 规范化（模型写相对路径如 game.js）——与 approvePlan 的绝对路径清单（1036 行）统一比较基准
@@ -1731,6 +1794,13 @@ export default function ConversationPanel({
     inputRef.current = ''
     setInput('')
     if (!opts?.silent) {
+      // S7（A0 审校 P1-5 接入——设计 §3.4 C2）：pending 期用户自由文本 = 隐式拒绝当前决策点
+      // （reason.direction + text=新意图——pending 清除 + 卡消失；模型下一轮看到新文本重提议——
+      // 用户打字替代按钮；approval 排除——授权待批时发送=直接处理（现有语义——用户未批准给新指令））
+      const pendingKind = stateRef.current.pending
+      if (pendingKind !== 'none' && pendingKind !== 'approval') {
+        reject(pendingKind, { kind: 'direction', text })
+      }
       // 13 复跑入口：上报用户输入（真实交付包 rerunPrompt 用）
       onUserMessage?.(text)
       // 2026-08-04：对话日志（自动记录用户消息——与 assistant done 互补成完整对话）；2026-08-08 会话归属
@@ -1881,6 +1951,7 @@ export default function ConversationPanel({
     onToolResult,
     applyTool,
     grantPlan,
+    rejectApproval,
     addTrust,
     acquireChain,
     maybeContinue,
@@ -2195,16 +2266,20 @@ export default function ConversationPanel({
                     {(dcKind === 'plan' || execFallback || execSignal) &&
                     !!goalConfirmed &&
                     !planConfirmed &&
+                    stateRef.current.pending !== 'none' &&
                     ((execSignal && i === lastSignalIdx.exec) ||
                       (lastSignalIdx.exec === -1 && isLastAssistant && !hasCandidates)) &&
                     (dcKind === 'plan' || i !== rejectedCardIdx.execution) ? (
                       <div className="nf-confirmcard" role="group" aria-label="确认执行方案">
                         <div className="nf-confirmcard__head">执行方案——需要你确认后动手</div>
-                        {/* S3：方案卡三要素（文件清单含原因/关键假设/验证计划——decisionContent.proposal 渲染） */}
+                        {/* S3：方案卡三要素（文件清单含原因/关键假设/验证计划——decisionContent.proposal 渲染）——
+                        S7 修复（P1-1 接线暴露）：占位卡（无 proposal——write 拦截/征询「等你确认」路径）不渲染三要素——
+                        A-004「卡占位——内容区不渲染三要素」的渲染层防御（dc.proposal undefined 曾致 React 崩溃） */}
                         {(() => {
                           const dc = stateRef.current.decisionContent
                           if (!dc || dc.kind !== 'plan') return null
                           const proposal = dc.proposal as PlanProposal
+                          if (!proposal) return null // 占位卡——无结构化内容
                           return (
                             <div className="nf-confirmcard__plan">
                               {proposal.files.length > 0 && (

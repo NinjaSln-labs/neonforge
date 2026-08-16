@@ -73,6 +73,7 @@ export type TimelineEventType =
   | 'decision.requested' // 决策点出现（载荷：kind/since——决策点内容快照随 S3 增强）
   | 'decision.resolved' // 决策被确认/拒绝（载荷：point/action——reason 随 S3 回填）
   // —— Proposal：模型提议解析（S2 登记——§8.2 D；结构化提议事件——决策点产生前的解析层事实）——
+  | 'proposal.goal' // 目标提议结构化事件（S7 A0 审校 P1-3 补登——§3.5：statement+assumptions）
   | 'proposal.plan' // 方案提议解析结果（载荷：ok/files/summary——parse-error: reason 打点）
   | 'proposal.completion' // 完成声明解析结果（载荷：ok/summary/evidence 计数）
   // —— Completion：完成对账（S4 登记——§3.5；证据不足诊断事件）——
@@ -162,7 +163,19 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
   'card.rejected': { domain: 'card', role: 'system', detailKeys: ['card', 'action'] },
   'card.dismissed': { domain: 'card', role: 'system', detailKeys: ['card', 'cause'] },
   'decision.requested': { domain: 'decision', role: 'system', detailKeys: ['kind', 'since'] },
-  'decision.resolved': { domain: 'decision', role: 'system', detailKeys: ['point', 'action'] },
+  'decision.resolved': {
+    domain: 'decision',
+    role: 'system',
+    // S7（A0 审校 P1-4）：detailKeys 加 ?reason——reject 载荷带 RejectReason（设计 §3.5——reason 随 S7 回填落地）
+    detailKeys: ['point', 'action', '?reason'],
+  },
+  'proposal.goal': {
+    domain: 'proposal',
+    role: 'assistant',
+    // S7（A0 审校 P1-3 补登——设计 §3.5：GoalProposal 完整内容 statement+assumptions——替代 task.goal_proposed 文本摘要；
+    // task.goal_proposed 保留（§8.2 D 兼容审计——解析层事实）；proposal.goal = 结构化提议事件（决策点产生前的解析层事实）
+    detailKeys: ['statement', '?assumptions'],
+  },
   'proposal.plan': {
     domain: 'proposal',
     role: 'assistant',
@@ -243,8 +256,16 @@ export function deriveStateEvents(
   if (prev.pending !== 'none' && next.pending === 'none') {
     events.push({ type: 'session.pending_cleared', detail: { kind: prev.pending } })
     // decision.resolved：确认/拒绝由状态 diff 推断（拒绝记忆新增 = approval 拒绝；否则按确认位变化）
+    // S7（P1-4）：reject 载荷带 next.lastRejectReason（设计 §3.5——拒绝原因审计）
     if (prev.deniedApprovals.length < next.deniedApprovals.length) {
-      events.push({ type: 'decision.resolved', detail: { point: 'approval', action: 'reject' } })
+      events.push({
+        type: 'decision.resolved',
+        detail: {
+          point: 'approval',
+          action: 'reject',
+          ...(next.lastRejectReason ? { reason: next.lastRejectReason } : {}),
+        },
+      })
     } else if (prev.pending === 'approval') {
       events.push({ type: 'decision.resolved', detail: { point: 'approval', action: 'confirm' } })
     } else {
@@ -257,7 +278,11 @@ export function deriveStateEvents(
             : next.resolutionConfirmed
       events.push({
         type: 'decision.resolved',
-        detail: { point, action: confirmed ? 'confirm' : 'reject' },
+        detail: {
+          point,
+          action: confirmed ? 'confirm' : 'reject',
+          ...(!confirmed && next.lastRejectReason ? { reason: next.lastRejectReason } : {}),
+        },
       })
     }
   }

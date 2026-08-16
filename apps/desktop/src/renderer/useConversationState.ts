@@ -13,12 +13,14 @@ import {
   userConfirmed,
   userRejected,
   approvalGranted,
+  approvalDecided,
   applyToolResult,
   setPending,
   type ConversationState,
   type DecisionContent,
   type PendingKind,
   type RejectReason,
+  type ApprovalRequest,
 } from '../domain/conversationState'
 import { deriveStateEvents } from '../domain/timeline'
 
@@ -57,6 +59,9 @@ export function useConversationState(opts?: UseConversationStateOpts) {
       transition((s) => userRejected(s, point, reason)),
     // approve-files 批准（追加语义——A0 §5；files 已 trustPath 规范化）
     grantPlan: (files: string[]) => transition((s) => approvalGranted(s, files)),
+    // S7（A0 审校 P1-2 接线）：授权拒绝——approvalDecided（§3.4 C6——拒绝记忆登记——同轮同类短封）
+    rejectApproval: (request: ApprovalRequest, reason: RejectReason) =>
+      transition((s) => approvalDecided(s, request, { confirm: false, reason })),
     // 工具结果汇入（进度/失败标记——坑 93 ② policy 不置失败）
     applyTool: (r: {
       name: string
