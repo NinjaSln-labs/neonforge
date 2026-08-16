@@ -51,13 +51,17 @@ export default tseslint.config(
   },
   // Node 环境脚本（e2e 驱动 Electron——非浏览器代码）
   {
-    files: ['**/*.mjs', 'apps/desktop/e2e-*.mjs', 'apps/desktop/nf-gif-rec-v3.mjs'],
+    files: ['**/*.mjs'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
+  // Playwright page.evaluate 回调运行在浏览器上下文——仅实际使用 window 的 e2e 文件放行
+  {
+    files: ['e2e-*.mjs'],
     languageOptions: {
       globals: {
-        ...globals.node,
-        // page.evaluate 回调运行在浏览器上下文（Playwright 注入）——非本文件作用域
         window: 'readonly',
-        document: 'readonly',
       },
     },
   },

@@ -39,10 +39,10 @@ jobs:
         working-directory: apps/desktop
         run: npx eslint .
 
-      # B1 格式化一致性（CI 全量校验——pre-commit 已增量修复）
+      # B1 格式化一致性（CI 全量校验——pre-commit 已增量修复；含 repo-root 配置文件自身）
       - name: Format check（Prettier）
         working-directory: apps/desktop
-        run: npx prettier --check "src/**/*.{ts,tsx}" "tests/**/*.{ts,tsx}" "*.mjs" "*.config.*" "eslint.config.js"
+        run: npx prettier --check "src/**/*.{ts,tsx}" "tests/**/*.{ts,tsx}" "*.mjs" "*.config.*" "eslint.config.js" "../../.prettierrc.json" "../../lefthook.yml" "../../.github/workflows/qa.yml"
 
       # L1 领域逻辑（确定性——CI 必跑）
       - name: L1 领域逻辑（Vitest）
