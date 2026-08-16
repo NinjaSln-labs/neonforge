@@ -404,8 +404,20 @@ export function sessionGate(
   const kind = classifyReadonly(action.name, action.command)
   if (kind === 'readonly' || kind === 'network-read') return { ok: true, reason: '' }
   // 副作用（hazardous/write/edit）：确认点前置
-  if (!s.goalConfirmed) return { ok: false, reason: '目标未确认——先澄清目标' }
-  if (!s.planConfirmed) return { ok: false, reason: '方案未确认——先给方案等确认' }
+  // #8（拦截引导优化）：拒绝回填给出**下一步明确动作**（对齐 sysPrompt ⑬⑭ 提议格式契约——
+  // 模型被拦后按引导重提议，而非盲目重试）
+  if (!s.goalConfirmed) {
+    return {
+      ok: false,
+      reason: '目标未确认——先输出【目标确认：一句话目标】提议目标（用户确认后工具才放行）',
+    }
+  }
+  if (!s.planConfirmed) {
+    return {
+      ok: false,
+      reason: '方案未确认——先输出【执行方案】清单（文件+原因）等用户确认（确认后工具才放行）',
+    }
+  }
   // A0 §3.5：方案已确认 → 按计划清单判定（write/edit 新建/清单外 → 拒绝；清单空则无边界）
   if (
     (action.name === 'write' || action.name === 'edit') &&

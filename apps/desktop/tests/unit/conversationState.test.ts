@@ -226,6 +226,23 @@ describe('Inv 3 门控顺序——sessionGate × actionGate 双维正交', () =>
     expect(sessionGate(s, { name: 'write', path: '/test/a.js' }).ok).toBe(false)
   })
 
+  // #8（拦截引导优化）：拒绝回填给出下一步明确动作（对齐 sysPrompt ⑬⑭ 提议格式契约——模型按引导重提议）
+  it('sessionGate：#8 目标未确认拒绝回填引导【目标确认】提议格式', () => {
+    const s = initialState()
+    const r = sessionGate(s, { name: 'write', path: '/test/a.js' })
+    expect(r.ok).toBe(false)
+    expect(r.reason).toContain('【目标确认') // 引导模型输出目标提议标记（触发权在系统——只能提议）
+    expect(r.reason).toContain('确认后工具才放行')
+  })
+
+  it('sessionGate：#8 方案未确认拒绝回填引导【执行方案】清单格式', () => {
+    const s = userConfirmed(initialState(), 'goal')
+    const r = sessionGate(s, { name: 'write', path: '/test/a.js' })
+    expect(r.ok).toBe(false)
+    expect(r.reason).toContain('【执行方案') // 引导模型输出方案清单（文件+原因）等确认
+    expect(r.reason).toContain('确认后工具才放行')
+  })
+
   it('sessionGate：方案已确认 → 清单判定（清单内放行、清单外拒绝带边界——A0 §5）', () => {
     let s = confirmed()
     s = approvalGranted(s, ['/test/a.js'])
