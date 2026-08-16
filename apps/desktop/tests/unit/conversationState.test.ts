@@ -907,13 +907,21 @@ describe('继承锁定——兼容壳（userConfirmed/userRejected/approvalGrant
   it('userConfirmed/userRejected：旧调用形态委托新转换（S3 移除）', () => {
     const s = userConfirmed(initialState(), 'goal')
     expect(s.goalConfirmed).toBe(true)
-    expect(userRejected(s, 'goal').goalConfirmed).toBe(false)
+    // A-006：userRejected reason 必传（不变量 8——缺省不再绕过 userDecided throw）
+    expect(userRejected(s, 'goal', { kind: 'direction' }).goalConfirmed).toBe(false)
     const s2 = userConfirmed(s, 'plan')
     expect(s2.planConfirmed).toBe(true)
-    expect(userRejected(s2, 'plan').planConfirmed).toBe(false)
+    expect(userRejected(s2, 'plan', { kind: 'scope' }).planConfirmed).toBe(false)
     const s3 = userConfirmed(confirmed(), 'resolution')
     expect(s3.resolutionConfirmed).toBe(true)
-    expect(userRejected(s3, 'resolution').resolutionConfirmed).toBe(false)
+    expect(userRejected(s3, 'resolution', { kind: 'scope' }).resolutionConfirmed).toBe(false)
+  })
+
+  it('A-006：userRejected 无 reason → throw（不变量 8 真身——缺省不再掩盖）', () => {
+    const s = userConfirmed(initialState(), 'goal')
+    expect(() => userRejected(s, 'goal', undefined as unknown as { kind: 'direction' })).toThrow(
+      TypeError,
+    )
   })
 
   it('approvalGranted：追加语义 + 幂等标记（坑 95）', () => {
