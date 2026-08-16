@@ -222,9 +222,12 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
   })
   // 2026-08-06 设计层升级（fail-closed——用户「白名单匹配不完」）：curl 一律需授权（验证服务用 check-server 工具）；
   // 白名单冻结（不加新条目）；cat 等只读白名单命令仍自动
-  it('isReadOnlyBash：fail-closed——curl 一律需授权（交 check-server）；只读白名单仍自动', () => {
-    expect(isReadOnlyBash('curl -s http://localhost:5188/')).toBe(false) // curl 不再自动（fail-closed——用 check-server）
-    expect(isReadOnlyBash('curl -s -o /dev/null http://localhost:5173/')).toBe(false)
+  // 2026-08-16 S6（拍板 3 + §8.1 A）：isReadOnlyBash 改引用 classifyReadonly——curl localhost 自动放行；
+  // 外网 curl 仍 fail-closed（ask——安全默认）
+  it('isReadOnlyBash：S6 拍板 3——curl localhost 自动放行、外网 curl 需授权；只读白名单仍自动', () => {
+    expect(isReadOnlyBash('curl -s http://localhost:5188/')).toBe(true) // S6 拍板 3：localhost 自动放行
+    expect(isReadOnlyBash('curl -s -o /dev/null http://localhost:5173/')).toBe(false) // -o 重定向文件 = 写副作用（hazardous）
+    expect(isReadOnlyBash('curl -s https://example.com')).toBe(false) // 外网 curl fail-closed（ask——安全默认）
     expect(isReadOnlyBash('cat package.json')).toBe(true) // cat 白名单（回归）
     expect(isReadOnlyBash('ls -la /x && cat package.json')).toBe(true) // ls/cat 白名单复合
     expect(isReadOnlyBash('npm run dev')).toBe(false) // 高风险命令需授权

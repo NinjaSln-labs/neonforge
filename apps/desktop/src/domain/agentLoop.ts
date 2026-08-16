@@ -3,8 +3,8 @@
 // 行业共识「activity ≠ progress」（dev.to StuckDetector / stackademic）+ 连续无进展升级 + needs-human 转用户 + arXiv 实时失败检测）
 // DDD 落地：Value Object（TurnProgress/StuckState）+ Domain Service（ProgressEvaluator/StuckDetector）+ Domain Event
 // 纯逻辑无 React 依赖——L1 可测；ConversationPanel（Application 层）调用
-// 2026-08-14 S4：副作用分类同源（classifyAction——缝隙 2 进展判定）
-import { classifyAction, isStructuredProposal } from './conversationState.js'
+// 2026-08-14 S4：副作用分类同源（缝隙 2 进展判定）；2026-08-16 S6：classifyAction 兼容壳移除——isSideEffectAction 直连（拍板 3）
+import { isSideEffectAction, isStructuredProposal } from './conversationState.js'
 import { isLikelyPath } from './planProposalParser.js'
 import { parseCompletionClaim } from './completionClaimParser.js'
 
@@ -96,10 +96,10 @@ export function evaluateTurnProgress(input: {
   const artifactProduced = toolCalls.some(
     (c) => (c.name === 'write' || c.name === 'edit') && c.status === 'done',
   )
-  // 2026-08-14 缝隙 2：副作用工具成功（bash 安装/验证/check-server running 等——classifyAction 同源判定）也算进展——
+  // 2026-08-14 缝隙 2：副作用工具成功（bash 安装/验证/check-server running 等——isSideEffectAction 同源判定）也算进展——
   // 安装/验证阶段不再被 escalate 打断（同工具空转由 maybeContinue 重复检测兜底）
   const sideEffectSucceeded = toolCalls.some(
-    (c) => c.status === 'done' && classifyAction(c.name, c.command) === 'side-effect',
+    (c) => c.status === 'done' && isSideEffectAction(c.name, c.command),
   )
   const readNewFile = toolCalls.some(
     (c) => c.name === 'read' && c.file && !prevReadFiles.has(c.file),
