@@ -196,6 +196,14 @@ describe('Inv 3 门控顺序——sessionGate × actionGate 双维正交', () =>
     expect(actionGate({ name: 'bash', command: 'rm -rf /' }, false).attribute.kind).toBe('hazardous')
   })
 
+  it('S1 过渡语义锁定：外网 network-read 双门放行（S6 变更点——actionGate 接入后 ask 必须由执行层消费为授权卡；运行时仍由 classifyAction 壳 fail-closed 兜底）', () => {
+    const s = confirmed()
+    expect(sessionGate(s, { name: 'bash', command: 'curl -s https://example.com' }).ok).toBe(true)
+    expect(canExecute(s, { name: 'bash', command: 'curl -s https://example.com' }, false).ok).toBe(true)
+    // actionGate 本身已按拍板 3 判外网 ask（localhost 自动）——S6 接线消费点
+    expect(actionGate({ name: 'bash', command: 'curl -s https://example.com' }, false).verdict).toBe('ask')
+  })
+
   it('actionGate 策略：hazardous deny（机制拦截——S6 配置化入口）', () => {
     expect(actionGate({ name: 'bash', command: 'rm -rf /' }, false, { hazardous: 'deny' }).verdict).toBe('deny')
   })
@@ -259,11 +267,14 @@ describe('Inv 4 无证据不对账——verifyCompletion/completionEvidenceCompl
     expect(r.missing).toContain('verification:grep x /test/a.js')
   })
 
-  it('非只读验证命令（系统不可代跑）→ unverifiable（拍板 4——标记+用户对账提示）', () => {
+  it('非只读验证命令（系统不可代跑）→ unverifiable + 不进入对账（拍板 4；P0 审计修复——Inv 4 单源）', () => {
     const c = claim({ evidence: evidence({ verification: [{ command: 'npm install', passed: true }] }) })
     const r = verifyCompletion(c)
     expect(r.ok).toBe(false) // 存在 unverifiable → 不通过（需用户对账）
     expect(r.unverifiable).toContain('npm install')
+    // 与 evidenceVerifiable 同源：unverifiable 证据 = 证据不完整 → 不产生 resolution 决策点
+    expect(completionEvidenceComplete(c.evidence)).toBe(false)
+    expect(deriveDecisionPoint(confirmed(), { completion: c })).toBe('none')
   })
 
   it('只读验证命令不标记 unverifiable（系统可代跑核验——V1a 前置）', () => {
@@ -442,6 +453,27 @@ describe('Inv 8 拒绝带原因——签名强制 + 运行时校验', () => {
     const next = approvalDecided(s, approvalReq(), { confirm: true })
     expect(next.pending).toBe('none')
     expect(next.deniedApprovals.length).toBe(0)
+  })
+
+  it('§4.1 C8 协商保护：同一决策点连续拒绝计数递增（含重提议——模型重出方案属延续）；确认/任务边界重置', () => {
+    const s0 = setPending(confirmed(), 'plan', { proposal: plan([]), since: 't' })
+    const r1 = userDecided(s0, 'plan', { confirm: false, reason: reason('scope') })
+    expect(r1.rejectStreak).toBe(1)
+    // 模型重提议（setPending 带新 content）→ 计数延续（否则「3 次上限」永不可达——协商保护失效）
+    const s2 = setPending(r1, 'plan', { proposal: plan([]), since: 't2' })
+    expect(s2.rejectStreak).toBe(1)
+    const r3 = userDecided(s2, 'plan', { confirm: false, reason: reason('modify', '加登录页') })
+    expect(r3.rejectStreak).toBe(2) // 含 kind='modify'（修改=拒绝）
+    // 确认 → 重置（§4.1「随决策点确认重置」）
+    const c1 = userDecided(setPending(r3, 'plan', { proposal: plan([]), since: 't3' }), 'plan', { confirm: true })
+    expect(c1.rejectStreak).toBe(0)
+    // 任务边界（goal 确认）→ 重置（新任务）
+    expect(userDecided(r3, 'goal', { confirm: true }).rejectStreak).toBe(0)
+    // 无内容 setPending（仅置位）→ 保留计数
+    expect(setPending(r3, 'plan').rejectStreak).toBe(2)
+    // 连续 3 次拒绝 → 计数达上限（S3 消费：回退 AskToAct 澄清 / 人工接管提示）
+    const r4 = userDecided(setPending(r3, 'plan', { proposal: plan([]), since: 't4' }), 'plan', { confirm: false, reason: reason('missing-info') })
+    expect(r4.rejectStreak).toBe(3)
   })
 
   it('RejectReason kind 全集合法（direction/scope/complexity/missing-info/modify/other——拍板 2）', () => {
