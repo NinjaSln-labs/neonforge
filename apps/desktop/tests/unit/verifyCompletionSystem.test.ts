@@ -36,10 +36,7 @@ describe('verifyCompletion（V1a 系统复核 + V1b diff 派生——S2 扩展�
         pendingQuestions: [],
       },
     })
-    const r = verifyCompletion(
-      c,
-      mockSystemState({ 'ls src': { ok: true } }),
-    )
+    const r = verifyCompletion(c, mockSystemState({ 'ls src': { ok: true } }))
     expect(r.ok).toBe(true)
     expect(r.missing).toEqual([])
     expect(r.unverifiable).toEqual([])
@@ -53,10 +50,7 @@ describe('verifyCompletion（V1a 系统复核 + V1b diff 派生——S2 扩展�
         pendingQuestions: [],
       },
     })
-    const r = verifyCompletion(
-      c,
-      mockSystemState({ 'ls src': { ok: false } }),
-    )
+    const r = verifyCompletion(c, mockSystemState({ 'ls src': { ok: false } }))
     expect(r.ok).toBe(false)
     expect(r.missing).toContain('verification:ls src')
   })

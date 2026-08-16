@@ -24,7 +24,10 @@ export function parseCompletionClaim(text: string): CompletionClaim | null {
   if (!block) return null
   const region = block[1]
 
-  const lines = region.split('\n').map((l) => l.trim()).filter(Boolean)
+  const lines = region
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
   const summaryParts: string[] = []
   const verification: VerificationItem[] = []
   const pendingQuestions: string[] = []
@@ -57,10 +60,14 @@ export function parseCompletionClaim(text: string): CompletionClaim | null {
 
 /** 验证行解析：「npx vitest run（全部通过）」→ { command, passed: true }；「npm run build 失败」→ passed: false */
 function parseVerificationItem(line: string): VerificationItem {
-  const passed = /通过|成功|通过|ok|OK|0 错误|0 error|all pass|passed/i.test(line) && !/失败|error|报错/.test(line)
+  const passed =
+    /通过|成功|通过|ok|OK|0 错误|0 error|all pass|passed/i.test(line) &&
+    !/失败|error|报错/.test(line)
   const failed = /失败|报错|error/i.test(line)
   // 去结果尾巴：取命令主体（去括号注释）
-  const command = line.replace(/\s*[（(](?:全部通过|通过|成功|失败|报错|0 错误|0 error)[）)]\s*$/i, '').trim()
+  const command = line
+    .replace(/\s*[（(](?:全部通过|通过|成功|失败|报错|0 错误|0 error)[）)]\s*$/i, '')
+    .trim()
   return {
     command: command || line,
     passed: failed ? false : passed ? true : undefined,

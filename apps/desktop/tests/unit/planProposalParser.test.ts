@@ -128,6 +128,11 @@ describe('parsePlanProposal（方案提议解析——S2）', () => {
     const r = parsePlanProposal(text)
     expect(r.ok).toBe(true)
     if (!r.ok) return
-    expect(r.proposal.files.map((f) => f.path)).toEqual(['src/', 'game.js', 'build/', '我的 项目.md'])
+    expect(r.proposal.files.map((f) => f.path)).toEqual([
+      'src/',
+      'game.js',
+      'build/',
+      '我的 项目.md',
+    ])
   })
 })
