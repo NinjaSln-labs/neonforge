@@ -1,5 +1,7 @@
 # NeonForge
 
+> **Where you aim, I go; what you decide, I do.**
+>
 > **AI Problem Workbench for DeepSeek** — say what's blocking you, get it solved. Anything a computer can do: file organization, small tools, websites, system fixes, 0-to-1 deliveries.
 
 NeonForge is **not an IDE and not a chatbot**. You describe a problem in plain language; NeonForge drives the engineering/design/orchestration internally — every step is guarded by **confirmation cards**, **step-by-step approval**, and **verifiable results**; when something is beyond digital reach, it delivers digital artifacts + guided next steps (no overpromising).
