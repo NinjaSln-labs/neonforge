@@ -2237,7 +2237,9 @@ export default function ConversationPanel({
                 if (!dcKind && !goalFallback && !execFallback && !execSignal) return null
                 return (
                   <>
-                    {((dcKind === 'goal' && !goalConfirmed && i === lastSignalIdx.goal) ||
+                    {/* #7（ADR-006）：dcKind==='goal' 渲染去掉 !goalConfirmed——换目标提议（goal 已确认后新【目标确认】）
+                        也渲染目标卡（决策点由领域层派生——setPending 已置 decisionContent；再确认=新任务边界）*/}
+                    {((dcKind === 'goal' && i === lastSignalIdx.goal) ||
                       (lastSignalIdx.goal === -1 && goalFallback && !dcKind)) &&
                     i !== rejectedCardIdx.goal ? (
                       <div className="nf-confirmcard" role="group" aria-label="确认目标">
