@@ -1604,7 +1604,6 @@ test('approve-files 多卡并存：连续 2 次批量授权 → 各自批准都�
       tools: {
         list: async () => [],
         execute: async () => ({ ok: true, data: {} }),
-        filesApproved: async () => {},
         revert: async () => ({ ok: true }),
       },
       context: { resolve: async () => ({ fragments: [] }) },
@@ -1711,7 +1710,6 @@ test('执行确认卡不漂移：write 被拦后模型连发消息 → 卡固定
           needApproval: true,
           error: '「write」需要授权（L3）——approved=true 后执行',
         }),
-        filesApproved: async () => {},
         revert: async () => ({ ok: true }),
       },
       context: { resolve: async () => ({ fragments: [] }) },
@@ -1818,7 +1816,6 @@ test('问题 A：approve-files 卡悬挂 → 模型续轮被拦后停续聊（�
       tools: {
         list: async () => [],
         execute: async () => ({ ok: true, data: {} }),
-        filesApproved: async () => {},
         revert: async () => ({ ok: true }),
       },
       context: { resolve: async () => ({ fragments: [] }) },
@@ -1944,7 +1941,6 @@ test('P2：同 args bash 双卡并存 → 点第一张卡按 id 精确定位（�
                 needApproval: true,
                 error: '「bash」需要授权（L3）——approved=true 后执行',
               },
-        filesApproved: async () => {},
         revert: async () => ({ ok: true }),
       },
       context: { resolve: async () => ({ fragments: [] }) },
