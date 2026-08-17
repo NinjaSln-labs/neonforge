@@ -639,3 +639,49 @@ test('D3-2：任务边界重置——目标确认 → planned-files:reset 同步
   // 方案卡流程正常（重置后任务继续——新任务重新规划）
   await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
 })
+
+// #7（ADR-006）：换目标重新确认——goal 已确认后模型输出新【目标确认】→ 仍弹目标卡
+test('#7-1：goal 已确认后换目标 → 新【目标确认】弹目标卡 → 确认进入新任务', async ({ page }) => {
+  await installMockBridge(page, {
+    project: 'none',
+    // streamDelay 拉长（同 S7-1）：方案卡先稳定完成、pending='plan' 就位后 sendChat——
+    // 否则发消息时方案卡流式未完成 → 排队 → pending 未清 → chat3 到达时 pending 非 none → 不置卡
+    streamDelay: 300,
+    script: compose(
+      goalConfirm('做一个待办应用'),
+      planPropose(['/test/app.ts（核心）']),
+      goalConfirm('换一个，做计算器'),
+    ),
+  })
+  await startFromScratch(page, '做个待办应用')
+  // 任务 1：确认目标 → 方案卡（goalConfirmed=true——然后用户换目标）
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  // 方案卡待确认时用户打字换目标 → 隐式 reject 旧方案（C2——新意图）→ 模型重提议目标
+  await sendChat(page, '换个目标，做计算器')
+  // #7 核心：goal 已确认（goalConfirmed=true）但新【目标确认】提议仍弹目标卡（ADR-006——换目标=新任务提议）
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 15000)
+  // 确认换目标 → 新任务边界（goalSeq 递增 = clearTrust/plannedFiles reset——用户确认 = 新任务开始）
+  await page.getByRole('button', { name: '确认目标' }).click()
+  // 确认后目标卡消失（新任务——不再弹同一卡），对话进入新任务流程（无遗漏卡）
+  await expect(page.getByRole('button', { name: '确认目标' })).toHaveCount(0, { timeout: 10000 })
+  await expect(page.getByRole('button', { name: '确认执行' })).toHaveCount(0) // 旧方案卡已 reject 消失——换目标后新任务重新提议
+  await expectText(page.locator('.nf-statusbar'), '就绪', 8000)
+})
+
+// #7 误弹防御：goal 已确认后模型正常陈述（无【目标确认】标记）→ 不弹目标卡
+test('#7-2：goal 已确认后模型正常推进（无标记）→ 不弹目标卡', async ({ page }) => {
+  await installMockBridge(page, {
+    project: 'none',
+    script: compose(goalConfirm('做一个待办应用'), planPropose(['/test/app.ts（核心）'])),
+    streamDelay: 300, // 拉长窗口——断言「不弹卡」需要足够检测间隔
+  })
+  await startFromScratch(page, '做个待办应用')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  // 正常流程：方案卡出现（goal 已确认——无【目标确认】标记 → 不弹目标卡——只走方案卡）
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  // 方案卡在（pending='plan'）——没有额外的目标卡（确认目标按钮 count=0）
+  await expect(page.getByRole('button', { name: '确认目标' })).toHaveCount(0)
+})

@@ -173,12 +173,39 @@ describe('Inv 2 决策点确定性——deriveDecisionPoint 纯函数', () => {
     expect(deriveDecisionPoint(s, { completion: claim() })).toBe('resolution')
   })
 
-  it('已确认的决策点不再触发（确认点一次性）', () => {
+  it('已确认的决策点不再触发（确认点一次性——除 goal 换目标 #7/ADR-006）', () => {
+    // #7（ADR-006）：goal 已确认后的新目标提议 = 换目标/新任务提议——仍触发 goal（确认=任务边界）
     expect(deriveDecisionPoint(userConfirmed(initialState(), 'goal'), { goal: goal('x') })).toBe(
-      'none',
+      'goal',
     )
+    // plan/completion 已确认后重复提议不触发（确认点一次性——无「换方案/重复完成」语义）
     expect(deriveDecisionPoint(confirmed(), { plan: plan([]) })).toBe('none')
     expect(deriveDecisionPoint(fullyConfirmed(), { completion: claim() })).toBe('none')
+  })
+
+  it('#7 换目标：goal 已确认 + 新目标提议 → goal；确认清任务边界/拒绝回澄清（ADR-006）', () => {
+    const s = userConfirmed(initialState(), 'goal')
+    // 模型输出新【目标确认】→ 触发 goal 决策点
+    expect(deriveDecisionPoint(s, { goal: goal('换个目标') })).toBe('goal')
+    // 用户确认 = 任务边界清理（进度/清单/达成清零——既有 userConfirmed('goal') 语义）
+    const next = userConfirmed(s, 'goal')
+    expect(next.goalConfirmed).toBe(true)
+    expect(next.planConfirmed).toBe(false)
+    expect(next.plannedFiles.size).toBe(0)
+    expect(next.filesApproved).toBe(false)
+    // 用户拒绝 = 回到目标澄清（goalConfirmed 回 false——安全回退；「维持原任务」需 state 记录旧目标——
+    // ADR-006 注明 V2 会话快照范畴——当前拒绝路径安全（不会误推进新任务））
+    const rejected = userRejected(s, 'goal', { kind: 'direction', text: '还是做原来的' })
+    expect(rejected.goalConfirmed).toBe(false)
+  })
+
+  it('#7 误弹防御：goal 已确认后无【目标确认】标记（正常复述/陈述）→ 不弹卡', () => {
+    // 信号翻译层：无标记 → goalProposal undefined → 不触发（renderer 侧由 goalMark 检测保证——
+    // 此处锁定领域层：无 goal 提议 + userRequested 非 goal → none）
+    expect(deriveDecisionPoint(userConfirmed(initialState(), 'goal'), {})).toBe('none')
+    expect(deriveDecisionPoint(userConfirmed(initialState(), 'goal'), { plan: plan([]) })).toBe(
+      'plan',
+    ) // plan 提议正常走 plan 决策点
   })
 
   it('同一输入重复调用 → 同一输出（确定性）', () => {

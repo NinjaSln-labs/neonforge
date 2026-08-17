@@ -552,9 +552,10 @@ export function deriveDecisionPoint(
   pendingActions: ActionAttribute[] = [],
   userRequested?: DecisionKind,
 ): PendingKind | 'none' {
-  // 1. 目标提议存在（或用户主动请求目标确认）&& 目标未确认 → goal
-  if (!state.goalConfirmed && (proposals.goal !== undefined || userRequested === 'goal'))
-    return 'goal'
+  // 1. 目标提议存在（或用户主动请求目标确认）→ goal
+  //    #7（ADR-006）：goal 已确认后的新目标提议 = 换目标/新任务提议——仍触发（确认=任务边界清理，
+  //    拒绝=维持当前任务）；误弹防御：模型同任务内重复【目标确认】标记（sysPrompt ⑬ 契约 + 测试锁定）
+  if (proposals.goal !== undefined || userRequested === 'goal') return 'goal'
   // 2. 目标已确认 && 方案提议存在（或用户主动请求方案确认）&& 方案未确认 → plan
   if (
     state.goalConfirmed &&
