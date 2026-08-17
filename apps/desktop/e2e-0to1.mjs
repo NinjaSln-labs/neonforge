@@ -2,34 +2,35 @@ import { _electron } from 'playwright'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
+// 模拟器域（设计 docs/design/e2e-simulator-domain-design.md——DDD 重构 2026-08-16）：
+// 信号派生/决策策略/旅程/收敛/验证全在领域层（e2e-sim/*.mjs 纯函数——L1 可测）
+import { deriveModelSignal, Signal } from './e2e-sim/signals.mjs'
+import { decide as decideFallback, verifyGoalEcho, Question } from './e2e-sim/decide.mjs'
+import { createJourney, advance, terminated } from './e2e-sim/journey.mjs'
+import { createGuard } from './e2e-sim/convergence.mjs'
+import { verifyArtifacts, verifyPlayable } from './e2e-sim/verify.mjs'
 
 // ============================================================================
-// NeonForge 0-1 完整流程 E2E —— 真实用户模拟（领域模型驱动 · 逐步构建）
+// NeonForge 0-1 完整流程 E2E —— 真实用户模拟（模拟器域 DDD · 决策点驱动 · 无阶段）
 // ============================================================================
 // 设计原则（用户 2026-08-05 指示）：
 // ① 模拟真实用户：每一步 = 【读完整内容 → 理解模型在说什么 → 思考 → 决策（含理由）→ 操作 → 验证模型正常回复】
 //    ——用户会看内容、思考、才决定，不会一通猛点。
-// ② 不追求一次跑通全部：分阶段构建（PHASE=req|design|dev|test|deploy|all），
-//    每个阶段先单独验证交互正确，再扩展下一阶段。
+// ② 不追求一次跑通全部：分阶段构建（PHASE=req|design|dev|all）——PHASE 映射旅程终止点（领域层 journey）
 // ③ 可复现：这套测试用于以后还原用户实际操作、复现 bug（配合日志定位）。
-// ④ 防假阳性：每阶段验证真实产出（设计有方案/开发有文件/测试有验证/部署有交付）。
+// ④ 防假阳性：每决策点确定性验证（领域层 verify）
 //
-// 2026-08-05 双语语义（用户指出「中英双语卡住」）：模型偶发转英文（受英文工具结果/代码带动）——
-// 语义检测必须中英兼容；模型保持中文回复靠产品侧 langRule 强化，这里兜底识别
-const SEM_DONE =
-  /(写完了|都写好了|全部完成|都完成了|搞定|写好了|做完了|搭好了|跑起来了|完成|done|finished|all set|complete|written|ready)/i
-const SEM_PROMISE =
-  /(开始|我来|马上|这就|现在|先|让我|我先|待会|稍后).{0,4}(写|做|创建|生成|搭|部署|读|看|检查|确认|验证|测试|启动|查一下|看看)|I'?ll|let me|going to|start writing|gonna|will (write|start|make|read|check)/i
-const SEM_PLAY =
-  /(能玩|可以玩|地址|localhost|端口|试试|体验|访问|打开.*玩|playable|works|running|visit|open|try|have a look)/i
-const SEM_CONFUSE =
-  /(工具返回异常|读取结果|同一个文件|重新读取|确认一下实际|something wrong|same content|re-?read|verify the actual)/i
-const SEM_ASK =
-  /(要不要|还是说|还是先|你觉得|你看|想不想要|如何|怎么样|可以吗|行吗|先玩几把|感受一下|你定|你来定|看你的)/i
+// 2026-08-16 DDD 重构（用户指示：最早没有好好 DDD 设计——按当前项目设计推翻重构）：
+// - StageMachine（requirement/design/development/test/deploy 五阶段循环——产品已无阶段）→ JourneyRunner 决策点单一循环
+// - 理解三实现（UserAgent 正则/UserSimulator LLM/fallback 正则——缝隙 4 违反）→ deriveModelSignal 单一信号源 + LLM 增强
+// - staleRounds 四份拷贝（#9）→ ConvergenceGuard 域对象（e2e-sim/convergence.mjs）
+// - 决策/验证内联 → 领域层 decide/verify
 //
 // 用法：
-//   PHASE=req  node e2e-0to1.mjs   # 只跑需求阶段（逐步验证）
-//   PHASE=all  node e2e-0to1.mjs   # 完整流程
+//   PHASE=req  node e2e-0to1.mjs   # 只跑需求阶段（目标确认后停）
+//   PHASE=design node e2e-0to1.mjs # 方案确认后停
+//   PHASE=dev   node e2e-0to1.mjs  # 首个产物确认后停
+//   PHASE=all   node e2e-0to1.mjs  # 完整流程
 //   MODE=A/B   node e2e-0to1.mjs   # 场景（起始页填/不填）
 // ============================================================================
 
@@ -61,17 +62,8 @@ const LOCK_DIR = path.join(os.homedir(), 'Library/Application Support/neonforge-
 /** 对话消息（UI → 领域）：完整内容 + 候选按钮 + 工具卡 */
 /** @typedef {{ role: 'user'|'assistant', content: string, candidates: string[], tools: string[] }} Msg */
 
-/** 问题类别（需求阶段领域分类） */
-const Q = {
-  WHAT: '做什么',
-  AUDIENCE: '给谁玩',
-  PLATFORM: '在哪儿玩',
-  DONE: '做成什么样',
-  UNKNOWN: '?',
-}
-
-/** 用户决策（领域 → UI 动作）：每个决策带理解与理由（模拟真人） */
-/** @typedef {{ action: 'click-option'|'type'|'advance'|'approve'|'continue'|'wait', text?: string, understanding: string, reason: string }} Decision */
+/** 用户决策（领域 → UI 动作）：每个决策带理解与理由（模拟真人——action 对齐领域层 decide） */
+/** @typedef {{ action: 'confirm-goal'|'confirm-plan'|'confirm-resolution'|'approve'|'choose'|'answer'|'nudge'|'playtest-feedback'|'wait', text?: string, understanding: string, reason: string }} Decision */
 
 const cleanOpt = (o) =>
   String(o)
@@ -79,185 +71,20 @@ const cleanOpt = (o) =>
     .trim()
 
 // ============================================================================
-// UserAgent —— 模拟真实用户（读 → 理解 → 思考 → 决策）
+// UserAgent —— 模拟用户状态（画像 + 决策轨迹）
+// DDD 重构（2026-08-16）：决策语义（classify/matchOption/typeAnswer/verifyEcho）已下沉领域层
+// （e2e-sim/decide.mjs）——本类只保留用户态（画像/步骤——可复现轨迹）
 // ============================================================================
 
 class UserAgent {
   constructor() {
-    this.profile = {} // 用户画像（我的选择）
+    this.profile = {} // 用户画像（我的选择——键为领域 Question 常量）
     this.steps = [] // 逐步决策记录（可复现）
   }
 
-  // 理解模型消息：这轮模型在说什么？（供打印 + 决策）
-  understand(msg) {
-    const c = msg.content ?? ''
-    if (msg.candidates.length > 0) {
-      return `模型给了 ${msg.candidates.length} 个候选选项让我选（同音/理解确认）`
-    }
-    if (/(【需求确认|需求确认|确认完毕|点.*确认推进)/.test(c))
-      return '模型总结并确认需求，等我点「确认推进」'
-    if (/(说要做但还没动手|回复.*继续)/.test(c))
-      return '模型提示：它说了要做但还没动手，让我回复「继续」'
-    if (/[?？]/.test(c)) return '模型在向我提问'
-    return '模型在陈述/说明'
-  }
-
-  // 思考：模型这个问题/内容，我的意图是什么 → 决策（含理由）
-  decide(msg) {
-    const c = msg.content ?? ''
-    // —— 需求确认完成 → 推进 ——
-    if (/(【需求确认|需求确认|确认完毕|点.*「?确认推进|确认无误|就这样定)/.test(c)) {
-      return {
-        action: 'advance',
-        understanding: '模型已确认需求',
-        reason: '需求确认完成——点「确认推进」进入设计',
-      }
-    }
-    // —— 有候选按钮 → 语义理解后选择 ——
-    if (msg.candidates.length > 0) {
-      const qClass = this.classify(c)
-      const idx = this.matchOption(qClass, msg.candidates)
-      if (idx >= 0) {
-        const text = cleanOpt(msg.candidates[idx])
-        const u = this.understandOption(qClass, text)
-        this.profile[qClass] = text
-        return { action: 'click-option', text, understanding: u.understanding, reason: u.reason }
-      }
-      // 附加问题（非标准 4 问）：核心需求已问全 → 放权让模型收敛（真实用户会不耐烦）；否则兜底选第一个
-      if (this.profileComplete()) {
-        return {
-          action: 'type',
-          text: '都行，你按合适的来',
-          understanding: '附加问题（核心 4 问已确认完）',
-          reason: '放权给模型决定——让它收敛到需求确认',
-        }
-      }
-      const text = cleanOpt(msg.candidates[0])
-      return {
-        action: 'click-option',
-        text,
-        understanding: '附加问题（核心 4 问未问全）',
-        reason: `先选第一个：${text.slice(0, 15)}`,
-      }
-    }
-    // —— 无候选 → 判断是提问（打字回答）还是提示/陈述 ——
-    if (/(说要做但还没动手|回复.*继续)/.test(c)) {
-      return {
-        action: 'continue',
-        understanding: '模型说要做但没动手',
-        reason: '回复「继续」让它接着干',
-      }
-    }
-    // 2026-08-05 模型确认方案方向/操作（「方向没意见吧/按这个来/按常规定/可以吗」）→ 真实用户确认（不答非所问——A7 教训：
-    // 模型问方向 e2e 因 classify 的「设计」误判 WHAT 答「射击游戏」→ 模型被带偏直接出方案 → 阶段错位）
-    if (
-      /(没意见|可以吗|行吗|好不好|按这个|按常规定|方向.*吗|这样.*吗|同意|没问题吧|你看行|你看怎么样|按你说的)/.test(
-        c,
-      ) &&
-      /[?？]|吧|吗/.test(c)
-    ) {
-      return {
-        action: 'type',
-        text: 'OK，按你这个方向来，没问题——还有要确认的吗？没有就确认需求吧',
-        understanding: '模型在确认方案方向',
-        reason: '真实用户确认方向并推动收敛',
-      }
-    }
-    const qClass = this.classify(c)
-    // 无候选但模型在问（疑问语义——问号/哪个/什么/确认/理解/意思/想法）→ 打字回答（模型偶尔不出候选块直接问）
-    if (
-      qClass !== Q.UNKNOWN &&
-      /[?？]|哪个|哪几种|哪一种|什么|吗$|呢$|确认|理解|意思|想法|看看你|你觉得/.test(c)
-    ) {
-      const answer = this.typeAnswer(qClass)
-      return {
-        action: 'type',
-        text: answer,
-        understanding: `模型在问「${qClass}」`,
-        reason: `打字回答：${answer.slice(0, 15)}`,
-      }
-    }
-    return { action: 'wait', understanding: '模型在陈述', reason: '暂不需要我操作——等它下一步' }
-  }
-
-  // 问题分类（领域规则）——DONE 强特征优先（「做成什么样算完成」含「网页上玩」会误判 PLATFORM）
-  classify(content) {
-    const c = content ?? ''
-    if (/(做成什么样|算完成|算完|做到哪|完成标准|做完|什么时候算|做到什么程度)/.test(c))
-      return Q.DONE
-    if (/(给谁玩|谁玩|面向|玩家|对象)/.test(c)) return Q.AUDIENCE
-    if (/(在哪|哪儿玩|平台|网页|电脑|手机|浏览器|运行|设备)/.test(c)) return Q.PLATFORM
-    if (/(设计|意思|理解|指什么|哪个意思|什么游戏|哪种|哪一档)/.test(c)) return Q.WHAT
-    if (/(完成|满意|程度|标准|需求|够)/.test(c)) return Q.DONE
-    return Q.UNKNOWN
-  }
-
-  // 标准 4 问是否都已确认（核心需求完整——附加问题可放权让模型收敛）
-  profileComplete() {
-    return !!(
-      this.profile[Q.WHAT] &&
-      this.profile[Q.AUDIENCE] &&
-      this.profile[Q.PLATFORM] &&
-      this.profile[Q.DONE]
-    )
-  }
-
-  // 候选选项匹配（我的意图：同音泛化选「射击」，其余选贴合画像的）
-  matchOption(qClass, options) {
-    const clean = options.map(cleanOpt)
-    const patterns = {
-      [Q.WHAT]: /射击/,
-      [Q.AUDIENCE]: /大众|普通|随便谁|自己|单人|朋友/,
-      [Q.PLATFORM]: /网页|浏览器/,
-      [Q.DONE]: /简单|能玩|先|基础|够|开局/,
-    }
-    const pat = patterns[qClass]
-    if (!pat) return -1
-    return clean.findIndex((o) => pat.test(o))
-  }
-
-  // 理解所选选项的含义（供打印——真人知道自己为什么选这个）
-  understandOption(qClass, text) {
-    const map = {
-      [Q.WHAT]: {
-        understanding: '这是「做什么」——我本意是射击游戏（设计≈射击，打字谐音）',
-        reason: `选「${text.slice(0, 12)}」——射击符合我的本意`,
-      },
-      [Q.AUDIENCE]: {
-        understanding: '这是「给谁玩」——选择目标玩家',
-        reason: `选「${text.slice(0, 12)}」——贴合我的场景`,
-      },
-      [Q.PLATFORM]: {
-        understanding: '这是「在哪儿玩」——选择运行平台',
-        reason: `选「${text.slice(0, 12)}」——网页最方便`,
-      },
-      [Q.DONE]: {
-        understanding: '这是「做成什么样算完」——选择完成标准',
-        reason: `选「${text.slice(0, 12)}」——先跑起来就行`,
-      },
-    }
-    return map[qClass] ?? { understanding: '选择该项', reason: `选「${text.slice(0, 12)}」` }
-  }
-
-  // 无候选时打字回答
-  typeAnswer(qClass) {
-    if (qClass === Q.WHAT) return '射击游戏'
-    if (qClass === Q.AUDIENCE) return '随便谁都能玩，简单易上手'
-    if (qClass === Q.PLATFORM) return '在网页浏览器里玩，打开就能玩'
-    if (qClass === Q.DONE) return '能玩就行——能开枪打中、有得分，界面简单'
-    return ''
-  }
-
-  // 验证模型是否理解了我们的选择（复述确认——语义核心词命中即可）
-  verifyEcho(lastReply, chosenText) {
-    if (!chosenText) return true
-    const sem =
-      chosenText.match(
-        /(射击|解谜|建造|网页|浏览器|大众|普通|随便|简单|能玩|单机|朋友|得分|自己|电脑|手机|闯关|对战|开枪|分数|打中|练手|学习|键盘|鼠标|调试|关卡|怪)/g,
-      ) ?? []
-    const phrases = chosenText.match(/[^：:、\-—()（）\s]{2,8}/g) ?? []
-    const tests = [...new Set([...sem, ...phrases])]
-    return tests.some((k) => k && lastReply.includes(k))
+  // 验证模型是否理解了我们的选择（复述确认——领域层判定）
+  verifyEcho(reply, chosenText) {
+    return verifyGoalEcho(reply, chosenText)
   }
 }
 
@@ -272,7 +99,7 @@ class UserAgent {
 
 class UserSimulator {
   constructor(agent) {
-    this.agent = agent // UserAgent：画像 + fallback 正则决策
+    this.agent = agent // UserAgent：画像（领域 Question 键）+ 决策轨迹
     this.history = [] // 最近模型消息（供上下文理解）
   }
 
@@ -280,34 +107,35 @@ class UserSimulator {
     const p = this.agent.profile
     const lines = [
       `- 你想做一个「射击游戏」（你打字的同音误输入成了「3D设计」，其实是射击）`,
-      `- 目标玩家：${p[Q.AUDIENCE] || '大众，随便谁都能玩、简单易上手'}`,
-      `- 平台：${p[Q.PLATFORM] || '网页浏览器，打开就能玩'}`,
-      `- 完成标准：${p[Q.DONE] || '能玩就行——能开枪打中、有得分、界面简单'}`,
+      `- 目标玩家：${p[Question.AUDIENCE] || '大众，随便谁都能玩、简单易上手'}`,
+      `- 平台：${p[Question.PLATFORM] || '网页浏览器，打开就能玩'}`,
+      `- 完成标准：${p[Question.DONE] || '能玩就行——能开枪打中、有得分、界面简单'}`,
       `- 你不懂编程，说话口语化，会催进度，但配合度高`,
     ]
     return lines.join('\n')
   }
 
-  systemPrompt(stage) {
+  systemPrompt(journeyLabel) {
     return `你是「小明」，一个完全不懂编程的普通用户，正在用 AI 工作台让 AI 搭档帮你做游戏。
 你的画像：
 ${this.personaText()}
 
-当前对话阶段：${stage}
+当前进度：${journeyLabel}
 
 你的任务：理解 AI 搭档最新对你说的话——它可能在问你问题、在等你操作、在陈述进度、
 在请你打开网址试玩、在请你确认。像真实用户一样根据上下文真正理解它的意图，然后做出真实反应。
 
-行动约束（只输出一个 action，action 与 text 必须匹配）：
-- type: 你需要说话（回答问题/给反馈/提要求）——text 写你口语化的原话
-- click-option: 模型给了候选选项让你选——text 写你选的选项原文（必须来自模型消息里的选项）
-- play-test: 模型给了网址/让你打开试玩——text 写你打开后的真实反馈（能玩/不能玩+现象）
-- confirm: 模型交付了东西/完成了一件事/明确说「确认完成/点确认推进」等你确认——text 写你的确认或指出的问题
-- continue: 模型说了要做但还没做——text 写「继续」
-- wait: 模型只是陈述/说明，没在等你——text 写空字符串
+行动约束（只输出一个 action，action 与 text 必须匹配——决策点语义对齐产品确认卡）：
+- answer: 你需要说话（回答问题/给反馈/提要求/确认方向）——text 写你口语化的原话
+- choose: 模型给了候选选项让你选——text 写你选的选项原文（必须来自模型消息里的选项）
+- playtest-feedback: 模型给了网址/让你打开试玩——text 写你打开后的真实反馈（能玩/不能玩+现象）
+- confirm-goal / confirm-plan / confirm-resolution: 模型提议目标/方案/完成，卡弹出等你确认——text 写你的确认或指出的问题
+- approve: 授权卡/批准文件清单待批——text 写「批准」
+- nudge: 模型说了要做但还没做——text 写「继续」
+- wait: 模型只是陈述/说明/在干活，没在等你——text 写空字符串
 
-阶段特别规则：
-- ${stage === '需求' ? '需求阶段：如果 AI 搭档在问你问题（候选选项或开放问题），你必须直接回答（click-option 选候选 / type 打字回答）——不要只说「确认/同意」；只有它明确说「需求确认完毕/点确认推进」才用 confirm' : `当前阶段（${stage}）：如果模型在问你要选择/反馈，直接回答；如果它在干活或陈述进度，用 wait 等它`}
+规则：如果 AI 搭档在问你问题（候选选项或开放问题），你必须直接回答（choose 选候选 / answer 打字回答）——不要只说「确认/同意」；
+只有它明确提议目标/方案/完成（确认卡）才用 confirm-goal/confirm-plan/confirm-resolution；方向确认类提问用 answer 确认方向并推动收敛。
 
 严格约束：
 - 输出必须是单个 JSON 对象：{"action":"...","text":"...","understanding":"一句话说明你理解它在说什么"}
@@ -315,26 +143,31 @@ ${this.personaText()}
 - text 必须是简体中文口语，要像真实用户的话，不要用「好的没问题」这种敷衍模板`
   }
 
-  // 语义理解：把模型最新消息 + 最近历史 + 阶段 + 画像交给 LLM，返回 { action, text, understanding }
-  async understand(msg, stage) {
+  /** 决策（LLM 增强优先 + 领域层确定性兜底——单一决策语义，无第三套实现）
+   * @param {string} signal 领域信号（deriveModelSignal 派生）
+   * @param {{ content?: string, candidates?: string[] }} msg
+   * @param {string} journeyLabel 旅程进度描述（无阶段——决策点标签）
+   */
+  async decideWithSignal(signal, msg, journeyLabel) {
     const c = msg.content ?? ''
-    const hist = this.history
-      .slice(-2)
-      .map((h) => `AI 搭档之前说：${h.slice(0, 120)}`)
-      .join('\n')
-    const prompt = `AI 搭档最新对你说（${c.length} 字）：\n${c.slice(0, 800)}${c.length > 800 ? '…' : ''}\n${msg.candidates.length > 0 ? `\n候选选项：${msg.candidates.join(' | ')}` : ''}`
-    const body = JSON.stringify({
-      model: 'deepseek-chat',
-      messages: [
-        { role: 'system', content: this.systemPrompt(stage) },
-        ...(hist ? [{ role: 'user', content: hist }] : []),
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.2,
-      max_tokens: 200,
-      response_format: { type: 'json_object' },
-    })
+    // LLM 增强：自由文本意图理解（同产品「确定性派生为主 + 增强」模式）
     try {
+      const hist = this.history
+        .slice(-2)
+        .map((h) => `AI 搭档之前说：${h.slice(0, 120)}`)
+        .join('\n')
+      const prompt = `AI 搭档最新对你说（${c.length} 字）：\n${c.slice(0, 800)}${c.length > 800 ? '…' : ''}\n${msg.candidates.length > 0 ? `\n候选选项：${msg.candidates.join(' | ')}` : ''}`
+      const body = JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [
+          { role: 'system', content: this.systemPrompt(journeyLabel) },
+          ...(hist ? [{ role: 'user', content: hist }] : []),
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0.2,
+        max_tokens: 200,
+        response_format: { type: 'json_object' },
+      })
       const res = await fetch('https://api.deepseek.com/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KEY}` },
@@ -347,42 +180,19 @@ ${this.personaText()}
       const j = JSON.parse(raw.replace(/^```json\s*|```$/g, '').trim())
       if (!j || !j.action) throw new Error('无 action')
       this.history.push(c.slice(0, 300))
-      return j
+      // 应用画像补丁（LLM 的 choose/answer 若命中 4 问——由领域 decide 的 profilePatch 语义兜底——
+      // LLM 路径的选择记录在应用层 steps；画像主要由确定性路径维护（decide 返回 profilePatch）
+      return { ...j, from: 'llm' }
     } catch (e) {
-      console.log(`   ⚠️ LLM 用户模拟失败（${String(e).slice(0, 60)}）——回退正则决策`)
-      return this.fallback(msg)
+      console.log(`   ⚠️ LLM 用户模拟失败（${String(e).slice(0, 60)}）——回退领域层确定性决策`)
     }
-  }
-
-  // 兜底：正则阶段语义 + 现有正则决策（UserAgent.decide）——LLM 不可用时的退化路径
-  fallback(msg) {
-    const c = msg.content ?? ''
-    const urlMatch = c.match(/https?:\/\/localhost:\d+/)
-    if (urlMatch && SEM_PLAY.test(c))
-      return { action: 'play-test', text: '', understanding: '模型给地址让我试玩' }
-    if (SEM_DONE.test(c) && !SEM_ASK.test(c))
-      return { action: 'confirm', text: '', understanding: '模型说完成/交付' }
-    if (SEM_ASK.test(c) && !SEM_DONE.test(c))
-      return {
-        action: 'type',
-        text: '我玩了几把，手感还行——先这样吧，确认完成，我们推进',
-        understanding: '模型征求决策',
-      }
-    if (SEM_CONFUSE.test(c) && !SEM_DONE.test(c))
-      return {
-        action: 'type',
-        text: '好，你确认排查一下，没问题了再告诉我',
-        understanding: '模型对工具结果困惑',
-      }
-    if (SEM_PROMISE.test(c))
-      return { action: 'continue', text: '', understanding: '模型说要做但没动手' }
-    const d = this.agent.decide(msg)
-    if (d.action === 'click-option')
-      return { action: 'click-option', text: d.text, understanding: d.understanding }
-    if (d.action === 'type') return { action: 'type', text: d.text, understanding: d.understanding }
-    if (d.action === 'continue') return { action: 'continue', text: '', understanding: d.reason }
-    if (d.action === 'advance') return { action: 'confirm', text: '', understanding: d.reason }
-    return { action: 'wait', text: '', understanding: d.reason }
+    // 领域层确定性决策（单一兜底——deriveModelSignal 信号 → decide）
+    const d = decideFallback(signal, {
+      content: c,
+      candidates: msg.candidates ?? [],
+      profile: this.agent.profile,
+    })
+    return { ...d, from: 'domain' }
   }
 }
 
@@ -649,52 +459,6 @@ class SessionDriver {
     await this.send(clean)
   }
 
-  async currentStage() {
-    const active = this.page.locator('.nf-flow__stage--active')
-    if ((await active.count()) === 0) return ''
-    return (await active.innerText()).trim()
-  }
-
-  async clickAdvance(expectStage, timeoutMs = 60000) {
-    // 2026-08-05 防双重推进（A7 教训）：模型【需求确认】标记会让 UI 自动推进（MainWorkspace 自动 stage++）——
-    // 若当前阶段已是目标（或已过），不再点按钮（否则需求→设计→开发双跳，设计被跳过）
-    if (expectStage) {
-      const curNow = await this.currentStage().catch(() => '')
-      if (curNow.includes(expectStage)) {
-        console.log(`   ↪ 阶段已是 ${curNow}（UI 自动推进）——跳过点击`)
-        return
-      }
-    }
-    const btn = this.page.locator('.nf-flow__advance button')
-    await btn.waitFor({ state: 'visible', timeout: 10000 })
-    const deadline = Date.now() + timeoutMs
-    while (Date.now() < deadline) {
-      if (await btn.isEnabled().catch(() => false)) break
-      await this.page.waitForTimeout(1000)
-    }
-    if (!(await btn.isEnabled().catch(() => false))) {
-      throw new Error(
-        `推进按钮未解锁（等 ${expectStage}）：${(
-          await this.page
-            .locator('.nf-flow__advance')
-            .innerText()
-            .catch(() => '')
-        ).slice(0, 100)}`,
-      )
-    }
-    await btn.click()
-    if (expectStage) {
-      const d2 = Date.now() + 30000
-      while (Date.now() < d2) {
-        const s = await this.currentStage()
-        if (s.includes(expectStage)) return
-        await this.page.waitForTimeout(1000)
-      }
-      throw new Error(`推进后未到 ${expectStage}（当前 ${await this.currentStage()}）`)
-    }
-  }
-
-  // 批准待授权卡（完整策略）：① 规划卡「批准这批文件」② 批量「全部允许并记住」③ 单卡「允许并记住」④ 单卡「允许执行」
   async approvePending() {
     const p = this.page
     const plan = p.locator('.nf-toolcall__approve', { hasText: '批准这批文件' })
@@ -849,646 +613,185 @@ function printModel(msg, prefix = '🤖') {
 // 阶段机
 // ============================================================================
 
-class StageMachine {
+class JourneyRunner {
   constructor(driver, agent, phase) {
     this.driver = driver
     this.agent = agent
-    this.sim = new UserSimulator(agent) // LLM 语义理解模拟用户（2026-08-05）
-    this.phase = phase
+    this.sim = new UserSimulator(agent) // LLM 增强（失败降级领域层确定性决策——单一兜底）
+    this.journey = createJourney(phase) // 旅程状态机（决策点驱动 · 无阶段——领域层）
+    this.guard = createGuard({ staleLimit: phase === 'req' ? 20 : 15 }) // 收敛守卫（#9 域对象化）
     this.verdicts = []
+    this.lastProcessed = ''
+    this.planned = [] // 批准文件清单（approve-files）
+    this.produced = [] // 产出文件记录（write/edit done）
+  }
+
+  journeyLabel() {
+    const j = this.journey
+    if (!j.confirmed.goal) return '目标未确认——澄清/目标提议中'
+    if (!j.confirmed.plan) return '目标已确认——方案提议/确认中'
+    if (!j.produced) return '方案已确认——执行中'
+    if (!j.confirmed.resolution) return '已产出——完成声明/解决确认中'
+    return '交付验证'
   }
 
   async run() {
-    await this.requirement()
-    if (this.phase === 'req') {
-      console.log('\n   [PHASE=req] 需求阶段验证完成——停止')
-      return
-    }
-    await this.design()
-    if (this.phase === 'design') {
-      console.log('\n   [PHASE=design] 设计阶段验证完成——停止')
-      return
-    }
-    await this.development()
-    if (this.phase === 'dev') {
-      console.log('\n   [PHASE=dev] 开发阶段验证完成——停止')
-      return
-    }
-    await this.test()
-    await this.deploy()
-  }
-
-  // ---- 需求阶段：一轮一轮真实交互（看回复 → 理解 → 决策 → 验证） ----
-  // 循环不变量：每轮处理一条「未处理过」的模型消息（打印 + 决策 + 执行）；
-  // 决策后等模型新回复（内容必须变化），下轮对它决策——像真人一轮一轮对话。
-  // 2026-08-16 #9 收敛判定（探索容忍）：进展轮（消息内容变化）不消耗轮次上限——
-  // 只数「连续停滞轮」（重复内容/无进展——模型循环），20 轮停滞判死；总轮 60 硬上限防无限提问
-  async requirement() {
-    let lastProcessed = '' // 已处理（打印+决策）的消息内容
-    let staleRounds = 0 // 连续停滞轮（内容无变化）
-    for (let i = 0; i < 60; i++) {
-      // 2026-08-05 阶段自动推进检测：模型输出【需求确认】标记 → UI 自动推进到设计——跟住阶段
-      const stNow = await this.driver.currentStage().catch(() => '')
-      if (stNow && stNow.includes('设计')) {
-        console.log('   ↪ 阶段已自动推进到设计——进入设计阶段')
-        return
-      }
-      // 2026-08-08 第 4 个问题修复（卡片优先——移到循环开头）：确认卡/授权卡出现**立即**点，不等模型 idle——
-      // 否则 approve-files 卡弹出后模型继续调工具（write 被拦）→ waitSettled 永不 settle → 卡死（「批准这批文件没点」根因）
-      // 2026-08-15 E1/E2（无阶段语义对齐）：需求阶段**只点「确认目标」卡**——点掉即需求收敛进入设计；
-      // 「确认执行」是设计阶段决策点——需求未收敛点掉会提前触发 forceTool 强制（时间线实证 e070d44c seq 71-99）
-      const card = await this.driver.handleCards(['确认目标'])
+    console.log(
+      '   🚶 模拟用户旅程（决策点驱动 · 无阶段——goal → plan → approval → resolution → deliver）',
+    )
+    while (!terminated(this.journey)) {
+      // 1. 卡片优先（确认卡/授权卡立即处理——按旅程过滤：目标未确认只点「确认目标」——
+      //    防方案未收敛点「确认执行」提前触发 forceTool——时间线实证 e070d44c seq 71-99）
+      const only = this.journey.confirmed.goal ? undefined : ['确认目标']
+      const card = await this.driver.handleCards(only)
       if (card) {
-        console.log(`   🧑 ${card.label}${card.detail ? `（${card.detail}）` : ''}`)
-        if (card.label.includes('确认目标')) {
-          console.log('   📌 目标已确认（点「确认目标」卡 = 需求收敛——无阶段语义）——进入设计阶段')
-          return
-        }
-        continue
-      }
-      const msg = await this.driver.waitSettled()
-      if (!msg) {
-        await this.driver.page.waitForTimeout(3000)
-        continue
-      }
-      if (msg.content === lastProcessed) {
-        // #9：连续停滞轮计数（探索进展轮不消耗——见循环头注释）
-        staleRounds++
-        if (staleRounds >= 20) {
-          throw new Error(
-            `需求阶段连续 ${staleRounds} 轮停滞（模型循环重复同一回复——"${msg.content.slice(0, 40)}"）`,
+        const label = card.label ?? ''
+        console.log(`   🧑 卡：${label}${card.detail ? `（${card.detail}）` : ''}`)
+        if (label.includes('确认目标')) {
+          this.journey = advance(this.journey, {
+            signal: Signal.GOAL_PROPOSED,
+            action: 'confirm-goal',
+          })
+          console.log('   📌 目标已确认（需求收敛——无阶段语义）')
+        } else if (label.includes('确认执行')) {
+          this.journey = advance(this.journey, {
+            signal: Signal.PLAN_PROPOSED,
+            action: 'confirm-plan',
+          })
+          console.log('   📌 方案已确认——进入执行')
+        } else if (label.includes('已解决')) {
+          this.journey = advance(this.journey, {
+            signal: Signal.COMPLETION_CLAIMED,
+            action: 'confirm-resolution',
+          })
+          console.log('   📌 解决已确认（交付≠解决——以确认关闭为准）')
+        } else if (card.planFiles && card.planFiles.length > 0) {
+          this.planned = card.planFiles
+          this.journey = advance(this.journey, {
+            signal: Signal.APPROVAL_REQUESTED,
+            action: 'approve',
+          })
+          console.log(
+            `      📋 已批准文件清单（${this.planned.length} 个）：${this.planned.join(', ')}`,
           )
         }
-        await this.driver.page.waitForTimeout(3000)
         continue
       }
-      staleRounds = 0 // 有新内容 = 进展——重置停滞计数
-      lastProcessed = msg.content
-      // 2026-08-05 需求阶段模型越界（输出技术方案——STAGE_HINT 需求规则禁止给方案）→ 提醒先确认需求（防阶段错位）
-      if (
-        /(技术选型|整体方案|页面结构|模块划分|Three\.js|Vite|代码结构|用.*做.*引擎|渲染库)/.test(
-          msg.content,
-        ) &&
-        !/(【需求确认|需求确认：|确认完毕)/.test(msg.content)
-      ) {
-        printModel(msg)
-        console.log(`   ⚠️ 模型需求阶段输出技术方案（越界）——提醒先完成需求确认`)
-        await this.driver.send(
-          '先别急着设计方案——先把需求确认清楚（做什么/给谁玩/在哪玩/做完什么样），方案到设计阶段再出',
+      // 2. 等模型稳定（waitSettled——tool-only 长链顺延/兜底）
+      const msg = await this.driver.waitSettled()
+      if (!msg) continue
+      // 3. 收敛守卫（指纹 = 消息+工具卡——探索容忍：进展轮不消耗）
+      const t = await this.driver.readTranscript().catch(() => [])
+      const fp = t.map((m) => `${m.role}|${m.content.slice(0, 30)}|${m.tools.length}`).join('~')
+      const g = this.guard.observe(fp)
+      if (g === 'exceeded') {
+        throw new Error(
+          `旅程停滞判死（连续 ${this.guard.staleCount} 轮重复/总轮 ${this.guard.totalRounds} 超限——模型循环——最后消息"${msg.content.slice(0, 40)}"）`,
         )
+      }
+      if (msg.content === this.lastProcessed) {
+        await this.driver.page.waitForTimeout(3000)
         continue
       }
-      // 需求确认 → 推进（2026-08-15 无阶段化适配：产品 S4 已移除阶段 UI/advanceChat——无「确认推进」按钮；
-      // 需求确认完成 = 语义进入设计阶段（外层顺序调用 design()））
-      if (/(【需求确认|需求确认|确认完毕|点.*「?确认推进|确认无误|就这样定)/.test(msg.content)) {
-        printModel(msg)
-        console.log(`   📌 需求确认完成——进入设计阶段`)
-        return
-      }
-      // 真实用户：先看完整回复 → 语义理解（LLM 优先，正则兜底）→ 决策
+      this.lastProcessed = msg.content
+      // 4. 信号派生（单一来源——领域层）
+      const sb = await this.driver.statusbar()
+      const toolCards = (await this.driver.toolsRunning())
+        ? await this.driver.page
+            .locator('.nf-toolcall--running, .nf-toolcall--pending')
+            .allTextContents()
+            .catch(() => [])
+        : []
+      const signal = deriveModelSignal(msg, sb, toolCards)
+      // 5. 决策（LLM 增强 + 领域层确定性兜底——单一语义）
+      const decision = await this.sim.decideWithSignal(signal, msg, this.journeyLabel())
       printModel(msg)
-      const decision = await this.sim.understand(msg, '需求')
-      const und = decision.understanding ?? this.agent.understand(msg)
-      if (decision.action === 'wait') {
-        console.log(`   🧠 我的理解：${und}\n   ⏳ 等模型下一步`)
-        await this.driver.page.waitForTimeout(3000)
+      console.log(`   🧠 信号=${signal} 决策=${decision.action}（${decision.understanding}）`)
+      // 6. 目标未确认时模型直接出方案 → 提醒先确认目标（原「需求阶段越界」语义收编）
+      if (!this.journey.confirmed.goal && signal === Signal.PLAN_PROPOSED) {
+        console.log('   ⚠️ 模型在目标确认前输出方案——提醒先确认目标')
+        await this.driver.send(
+          '先别急着设计方案——先把需求确认清楚（做什么/给谁玩/在哪玩/做完什么样），方案确认目标后再出',
+        )
+        this.journey = advance(this.journey, { signal, action: decision.action })
+        this.agent.steps.push({ msg: msg.content.slice(0, 80), decision: '提醒先确认目标' })
         continue
       }
-      if (decision.action === 'click-option') {
-        console.log(`   🧑 我的理解：${und}\n      → 选「${decision.text}」`)
-        await this.driver.clickCandidate(decision.text)
-      } else if (
-        decision.action === 'type' ||
-        decision.action === 'play-test' ||
-        decision.action === 'confirm'
-      ) {
-        console.log(`   🧑 我的理解：${und}\n      → 说「${(decision.text ?? '').slice(0, 40)}」`)
-        await this.driver.send(decision.text || '好的，继续')
-      } else if (decision.action === 'continue') {
-        console.log(`   🧑 我的理解：${und}\n      → 回复「继续」`)
-        await this.driver.send('继续')
-      } else {
-        // 2026-08-05 兜底安全化：LLM 返回未知/异常 action 时不推进（推进只由【需求确认】确定性检查负责——
-        // 防 LLM 误判「模型在确认」为「需求完成」→ 跳过 4 问直接进设计）
-        console.log(`   🧠 我的理解：${und}\n   ⏳ 暂不操作（LLM 决策类型异常）——等模型下一步`)
-        await this.driver.page.waitForTimeout(3000)
-        continue
-      }
+      // 7. 执行决策（choose/answer/nudge/playtest 有 UI 动作；confirm 类由卡片优先承载；wait 无操作）
+      await this.execute(decision, msg)
+      // 8. 旅程推进 + 决策轨迹（可复现）
+      this.journey = advance(this.journey, { signal, action: decision.action })
       this.agent.steps.push({
         msg: msg.content.slice(0, 80),
         decision: decision.text ?? decision.action,
       })
-      // 等模型对这次操作的回复（必须是新消息——防点击没生效/模型没回复）
+      // 9. 产出记录 + 防假阳性验证（产物齐全——计划 ⊆ 产出）
+      if (msg.tools && msg.tools.length > 0) {
+        const producedNow = msg.tools.filter((tn) => /write|edit/.test(tn))
+        if (producedNow.length > 0) {
+          this.produced.push(...producedNow)
+          const v = verifyArtifacts(this.planned, this.produced)
+          this.verdicts.push({ stage: '产物', hasFiles: v.ok, missing: v.missing })
+        }
+      }
+    }
+    console.log('\n   🏁 旅程到达 PHASE 终止点——收敛')
+  }
+
+  // 决策执行（UI 动作——confirm 类由卡片优先处理，这里只做记录/兜底）
+  async execute(decision, msg) {
+    const d = decision
+    if (d.action === 'choose') {
+      console.log(`      → 选「${d.text}」`)
+      await this.driver.clickCandidate(d.text)
+      if (d.profilePatch) Object.assign(this.agent.profile, d.profilePatch)
       const next = await this.driver.waitNew(msg.content)
-      const echoed = this.agent.verifyEcho(next.content, decision.text ?? '')
       this.verdicts.push({
-        stage: '需求',
-        echoed,
-        chosen: decision.text,
+        stage: '澄清',
+        echoed: this.agent.verifyEcho(next.content, d.text ?? ''),
+        chosen: d.text,
         reply: next.content.slice(0, 60),
       })
       console.log(
-        `   ${echoed ? '✅ 模型正确复述了我的选择' : '⚠️ 模型未复述我的选择关键词——需要关注'}\n`,
+        `      ${this.verdicts[this.verdicts.length - 1].echoed ? '✅ 模型正确复述了我的选择' : '⚠️ 模型未复述我的选择关键词——需要关注'}`,
       )
-      // lastProcessed 保持 msg.content——next 是未处理的新消息，下轮循环会打印并决策
-    }
-    throw new Error('需求阶段 60 轮未收敛（模型持续提问/循环——停滞 20 轮判死已兜底）')
-  }
-
-  // ---- 设计阶段：真实用户——模型输出方案（可能还有设计选择题要问）→ 答选择题 → 模型明确「方案完整/确认推进」→ 才推进 ----
-  // 2026-08-16 #9 收敛判定：连续停滞轮（waitSettled 返回同一内容）15 轮 → 判死（原干等 6 分钟 deadline）
-  async design() {
-    let lastProcessed = ''
-    let staleRounds = 0 // #9：连续停滞轮计数
-    const deadline = Date.now() + 360000
-    while (Date.now() < deadline) {
-      // 2026-08-05 阶段自动推进检测：模型/UI 可能主动推进阶段（用户「推进」消息触发）——e2e 必须跟住，不能在本阶段循环里处理下一阶段消息
-      const stNow = await this.driver.currentStage().catch(() => '')
-      if (stNow && stNow.includes('开发')) {
-        console.log('   ↪ 阶段已自动推进到开发——进入开发阶段')
-        return
-      }
-      // 2026-08-13 卡片优先（同 requirement——tool-only 链期间授权卡出现在空内容消息，waitSettled 只返回旧消息；
-      // 卡放在 dedup 之后 = 永不被点 → 模型等批准 → 死锁。本轮冒烟实测 write×3 + bash 授权卡全被跳过）
-      const ap = await this.driver.handleCards()
-      if (ap) {
-        console.log(`   🔓 授权：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`)
-        continue
-      }
-      const msg = await this.driver.waitSettled(120000)
-      if (!msg) {
-        await this.driver.page.waitForTimeout(3000)
-        continue
-      }
-      if (msg.content === lastProcessed) {
-        // #9：停滞轮计数——模型循环重复（探索轮有新内容不计数）
-        staleRounds++
-        if (staleRounds >= 15) {
-          throw new Error(
-            `设计阶段连续 ${staleRounds} 轮停滞（模型循环重复——"${msg.content.slice(0, 40)}"）`,
-          )
-        }
-        await this.driver.page.waitForTimeout(3000)
-        continue
-      }
-      staleRounds = 0 // 有新内容 = 进展——重置
-      lastProcessed = msg.content
-      if (/说要做但还没动手|回复.*继续/.test(msg.content)) {
-        console.log(`   🧑 模型说要做但没动手——回复「继续」让它干完`)
-        await this.driver.send('继续')
-        continue
-      }
-      printModel(msg)
-      // 模型在问设计选择题/陈述方案 → LLM 语义理解（正则兜底）
-      const decision = await this.sim.understand(msg, '设计')
-      const und = decision.understanding ?? this.agent.understand(msg)
-      if (decision.action === 'click-option') {
-        console.log(`   🧑 设计选择（${und}）：选「${decision.text}」`)
-        await this.driver.clickCandidate(decision.text)
+    } else if (d.action === 'answer' || d.action === 'nudge') {
+      console.log(`      → 说「${(d.text ?? '继续').slice(0, 40)}」`)
+      await this.driver.send(d.text || '继续')
+      if (d.profilePatch) Object.assign(this.agent.profile, d.profilePatch)
+      if (d.action === 'answer' && d.text && d.text !== '继续') {
         const next = await this.driver.waitNew(msg.content)
         this.verdicts.push({
-          stage: '设计',
-          answered: decision.text,
-          reply: next.content.slice(0, 50),
+          stage: '澄清',
+          echoed: this.agent.verifyEcho(next.content, d.text ?? ''),
+          chosen: d.text,
+          reply: next.content.slice(0, 60),
         })
-        console.log(`   ✅ 模型回复：「${next.content.slice(0, 50).replace(/\n/g, ' ')}」\n`)
-        lastProcessed = next.content
-        continue
       }
-      if (decision.action === 'type' || decision.action === 'play-test') {
-        console.log(`   🧑 设计回答（${und}）：说「${(decision.text ?? '').slice(0, 40)}」`)
-        await this.driver.send(decision.text || '好的，继续')
-        const next = await this.driver.waitNew(msg.content)
-        this.verdicts.push({
-          stage: '设计',
-          answered: decision.text,
-          reply: next.content.slice(0, 50),
-        })
-        console.log(`   ✅ 模型回复：「${next.content.slice(0, 50).replace(/\n/g, ' ')}」\n`)
-        lastProcessed = next.content
-        continue
-      }
-      if (decision.action === 'continue') {
-        console.log(`   🧑 模型说要做但没动手（${und}）——回复「继续」`)
-        await this.driver.send('继续')
-        continue
-      }
-      if (decision.action === 'confirm') {
-        // 用户确认方案 → 确定性验证方案完整（长度+要素）→ 推进；否则等模型补充
-        const okLen = msg.content.length >= 60
-        const okKw = /(方案|技术|用|结构|界面|页面|模块|整体)/.test(msg.content)
-        if (okLen && okKw) {
-          this.verdicts.push({ stage: '设计', okLen, okKw, len: msg.content.length })
-          console.log(`   📐 设计验证：${msg.content.length} 字 ✓ 含方案要素 ✓ 我确认方案`)
-          console.log(`   🧑 方案我看过了，没问题——进入开发（无阶段——方案确认即开工）`)
-          return
+    } else if (d.action === 'playtest-feedback') {
+      // 试玩验证（真实 HTTP——判定归领域层 verifyPlayable）
+      const tUrl = (msg.content ?? '').match(/https?:\/\/localhost:\d+/)?.[0]
+      if (tUrl) {
+        try {
+          const res = await fetch(tUrl, { signal: AbortSignal.timeout(6000) })
+          const text = await res.text()
+          const v = verifyPlayable({ status: res.status, bytes: text.length })
+          const fb = v.ok
+            ? `我打开了 ${tUrl}，页面正常（${res.status}，${text.length} 字节）——确认可以`
+            : `我打开 ${tUrl} 是空白的（${res.status}，${text.length} 字节）——页面没加载出来`
+          console.log(`      → 试玩反馈：${fb}`)
+          await this.driver.send(fb)
+          this.verdicts.push({ stage: '试玩', ok: v.ok })
+        } catch (e) {
+          const fb = `我打开 ${tUrl} 打不开（${String(e).slice(0, 60)}）——服务没起来？`
+          await this.driver.send(fb)
+          this.verdicts.push({ stage: '试玩', ok: false })
         }
-        console.log(`   ⏳ 我确认方案了，但还没看到完整方案（${und}）——等模型补充`)
-        await this.driver.page.waitForTimeout(1500)
-        continue
       }
-      // wait：模型在陈述方案 → 确定性检查「方案完整/确认推进」→ 推进
-      const okLen = msg.content.length >= 60
-      const okKw = /(方案|技术|用|结构|界面|页面|模块|整体)/.test(msg.content)
-      const confirmed =
-        /(方案.*(完整|没问题|确认|定了)|确认.*方案|没问题.*确认推进|你确认|确认推进|就这样|可以了|没问题)/.test(
-          msg.content,
-        )
-      if (okLen && okKw && confirmed) {
-        this.verdicts.push({ stage: '设计', okLen, okKw, len: msg.content.length })
-        console.log(`   📐 设计验证：${msg.content.length} 字 ✓ 含方案要素 ✓ 模型确认完整`)
-        console.log(`   🧑 方案我看过了，没问题——进入开发（无阶段——方案确认即开工）`)
-        return
-      }
-      // 模型还在输出方案（没说完整/没问问题）→ 等下一轮
-      if (okLen && okKw) {
-        console.log(`   ⏳ 模型还在补设计方案（${msg.content.length} 字）——等它说完\n`)
-      }
-      await this.driver.page.waitForTimeout(1500)
     }
-    throw new Error('设计阶段超时（模型未明确「方案完整/确认推进」）')
-  }
-
-  // ---- 开发阶段：真实用户——批准清单 → 看着模型逐个写 → 模型说完成 → 检查文件齐全 → 缺则补齐 → 推进 ----
-  // 2026-08-16 #9 收敛判定：连续停滞轮（waitSettled 返回同一内容）15 轮 → 判死（原干等 8 分钟 deadline）
-  async development() {
-    let planned = [] // 批准的文件清单（approve-files）
-    let lastProcessed = '' // 已处理消息（防同一条重复打印/处理）
-    let staleRounds = 0 // #9：连续停滞轮计数
-    const deadline = Date.now() + 480000
-    while (Date.now() < deadline) {
-      // 2026-08-05 阶段自动推进检测：模型/UI 可能主动推进到测试（用户「推进测试」消息触发）——跟住阶段，防本阶段循环超时
-      const stNow = await this.driver.currentStage().catch(() => '')
-      if (stNow && stNow.includes('测试')) {
-        console.log('   ↪ 阶段已自动推进到测试——进入测试阶段')
-        return
-      }
-      // 2026-08-13 卡片优先（同 requirement——tool-only 链期间授权卡出现在空内容消息）
-      const ap = await this.driver.handleCards()
-      if (ap) {
-        console.log(`   🔓 授权：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`)
-        if (ap.planFiles && ap.planFiles.length > 0) {
-          planned = ap.planFiles
-          console.log(`      📋 已批准文件清单（${planned.length} 个）：${planned.join(', ')}`)
-        }
-        continue
-      }
-      const msg = await this.driver.waitSettled(120000)
-      if (!msg) {
-        await this.driver.page.waitForTimeout(3000)
-        continue
-      }
-      if (msg.content === lastProcessed) {
-        // #9：停滞轮计数——模型循环重复（探索轮有新内容不计数）
-        staleRounds++
-        if (staleRounds >= 15) {
-          throw new Error(
-            `开发阶段连续 ${staleRounds} 轮停滞（模型循环重复——"${msg.content.slice(0, 40)}"）`,
-          )
-        }
-        await this.driver.page.waitForTimeout(3000)
-        continue
-      }
-      staleRounds = 0 // 有新内容 = 进展——重置
-      lastProcessed = msg.content
-      // 模型请求批准文件清单（二次 approve-files 被 UI 幂等处理不弹卡——模型以为在等批准）→ 显式放行
-      if (/(请求你批准|请批准|等你批准|需要你批准|请求批准)/.test(msg.content)) {
-        printModel(msg)
-        console.log(`   🧑 模型请求批准（UI 幂等无新卡）——显式放行「批准，继续写」`)
-        await this.driver.send('批准，继续写')
-        continue
-      }
-      // 模型在写文件/说明进度（工具卡在动）→ 展示模型说什么，继续等
-      const have = await this.driver.realFiles()
-      printModel(msg)
-      // 2026-08-05 LLM 语义理解（用户指示：真实用户模拟必须语义理解，非正则穷举）——
-      // LLM 理解模型在说什么/在等什么（试玩/确认/选择/继续/陈述）；确定性验证（URL/清单）保留在阶段机
-      const decision = await this.sim.understand(msg, '开发')
-      const und = decision.understanding ?? this.agent.understand(msg)
-      // 试玩反馈：模型给地址/让你试玩 = 交付体验等你反馈 → 真实用户打开验证（确定性 HTTP 验证）
-      const urlMatch = msg.content.match(/https?:\/\/localhost:\d+/)
-      if (
-        decision.action === 'play-test' ||
-        (urlMatch && /(试|玩|打开|访问|体验|看看|感受)/.test(msg.content))
-      ) {
-        let feedback
-        if (urlMatch) {
-          try {
-            const res = await fetch(urlMatch[0], { signal: AbortSignal.timeout(6000) })
-            const text = await res.text()
-            feedback =
-              res.ok && text.length > 50
-                ? `我打开了 ${urlMatch[0]}，页面加载出来了（${res.status}，${text.length} 字节），能玩`
-                : `我打开 ${urlMatch[0]} 是空白的（${res.status}，${text.length} 字节）——页面没加载出来，看看怎么回事`
-          } catch (e) {
-            feedback = `我打开 ${urlMatch[0]} 打不开（${String(e).slice(0, 60)}）——服务没起来？`
-          }
-        } else {
-          feedback = decision.text || '怎么玩？把地址给我，我打开看看'
-        }
-        // 消息带候选按钮（模型问操作方式/配置）→ 真实用户会一并选
-        if (msg.candidates.length > 0) {
-          const d2 = this.agent.decide(msg)
-          if (d2.action === 'click-option') {
-            feedback += `。操作方式我选：${d2.text}`
-            console.log(`   🧑 试玩验证+选择（${und}）：${feedback.slice(0, 80)}`)
-            await this.driver.send(feedback)
-            continue
-          }
-        }
-        // 无候选 → 明确确认完成（防模型继续加功能没完没了）
-        if (decision.action === 'play-test') feedback += '。就这样吧，确认开发完成，我们推进测试'
-        console.log(`   🧑 试玩验证（${und}）：${feedback.slice(0, 80)}`)
-        await this.driver.send(feedback)
-        continue
-      }
-      // 2026-08-05 兜底：模型明确说「进入测试/测试阶段/推进测试」= 开发完成语义——模型文本推进 ≠ UI 阶段切换
-      // （开发→测试需用户点确认推进按钮）——即使 LLM 用户误判 wait，也走清单确定性检查推进（防卡开发循环超时）
-      if (
-        decision.action === 'wait' &&
-        /(进入测试阶段|测试阶段启动|推进测试|开发完成|测试阶段了|进测试)/.test(msg.content)
-      ) {
-        console.log(`   ⚠️ 模型明确表示进入测试阶段（${und}）——走清单检查推进`)
-        const missing = planned.filter(
-          (pf) => !have.some((h) => h === pf || h.endsWith(pf) || pf.endsWith(h)),
-        )
-        if (missing.length === 0) {
-          this.verdicts.push({ stage: '开发', planned: planned.length, have: have.length })
-          console.log(
-            `   ✅ 开发完成（清单 ${planned.length}/${planned.length} 文件齐全）——点「确认推进」进入测试`,
-          )
-          await this.driver.clickAdvance('测试')
-          return
-        }
-        console.log(`   ⚠️ 模型说进测试但清单还缺：${missing.join(', ')}——提醒补齐`)
-        await this.driver.send(`清单里的 ${missing.slice(0, 3).join('、')} 还没看到，补一下再确认`)
-        continue
-      }
-      // 模型说写完/交付（confirm）→ 清单确定性检查（真实文件系统）——LLM 说完成不直接推进，查证据
-      if (decision.action === 'confirm') {
-        const missing = planned.filter(
-          (pf) => !have.some((h) => h === pf || h.endsWith(pf) || pf.endsWith(h)),
-        )
-        console.log(`   📦 已完成文件：${have.slice(0, 10).join(', ') || '(空)'}`)
-        if (missing.length > 0) {
-          // 真实用户：模型说写完但清单缺文件 → 指出并让补齐
-          console.log(`   ⚠️ 模型说写完了，但清单里还缺：${missing.join(', ')}`)
-          console.log(`   🧑 我检查发现缺文件——提醒模型补齐`)
-          await this.driver.send(
-            `清单里的 ${missing.slice(0, 3).join('、')} 还没看到，补一下再确认`,
-          )
-          continue
-        }
-        // 清单齐全 → 推进（不强制等工具全部 done——dev server 常驻进程工具卡会一直 pending，属正常；只看模型说完成 + 清单齐全）
-        this.verdicts.push({ stage: '开发', planned: planned.length, have: have.length })
-        console.log(
-          `   ✅ 开发完成（清单 ${planned.length}/${planned.length} 文件齐全）——点「确认推进」进入测试`,
-        )
-        await this.driver.clickAdvance('测试')
-        return
-      }
-      if (decision.action === 'click-option') {
-        console.log(`   🧑 选择（${und}）：选「${decision.text}」`)
-        await this.driver.clickCandidate(decision.text)
-        continue
-      }
-      if (decision.action === 'type') {
-        console.log(`   🧑 我说话（${und}）：「${(decision.text ?? '').slice(0, 40)}」`)
-        await this.driver.send(decision.text || '好的，继续')
-        continue
-      }
-      if (decision.action === 'continue') {
-        console.log(`   🧑 模型说要做但没动手（${und}）——回复「继续」`)
-        await this.driver.send('继续')
-        continue
-      }
-      // wait：模型还在做（没说完成/没在等）→ 等下一轮
-      await this.driver.page.waitForTimeout(1500)
-    }
-    throw new Error('开发阶段超时（模型未完成——清单文件未全部产出）')
-  }
-
-  // ---- 测试阶段：真实用户——模型必须实际调工具验证（跑起来/检查）并说通过，才能推进 ----
-  // 2026-08-16 #9 收敛判定：连续停滞轮 15 轮 → 判死（原干等 8 分钟 deadline）
-  async test() {
-    let lastProcessed = '' // 已处理消息（防同一条重复打印/处理）
-    let staleRounds = 0 // #9：连续停滞轮计数
-    const deadline = Date.now() + 480000
-    while (Date.now() < deadline) {
-      // 2026-08-05 阶段自动推进检测：模型/UI 可能主动推进到部署——跟住阶段
-      const stNow = await this.driver.currentStage().catch(() => '')
-      if (stNow && stNow.includes('部署')) {
-        console.log('   ↪ 阶段已自动推进到部署——进入部署阶段')
-        return
-      }
-      // 2026-08-13 卡片优先（同 requirement——tool-only 链期间授权卡出现在空内容消息）
-      const ap = await this.driver.handleCards()
-      if (ap) {
-        console.log(`   🔓 授权：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`)
-        continue
-      }
-      const msg = await this.driver.waitSettled(120000)
-      if (!msg) {
-        await this.driver.page.waitForTimeout(3000)
-        continue
-      }
-      if (msg.content === lastProcessed) {
-        // #9：停滞轮计数——模型循环重复（探索轮有新内容不计数）
-        staleRounds++
-        if (staleRounds >= 15) {
-          throw new Error(
-            `测试阶段连续 ${staleRounds} 轮停滞（模型循环重复——"${msg.content.slice(0, 40)}"）`,
-          )
-        }
-        await this.driver.page.waitForTimeout(3000)
-        continue
-      }
-      staleRounds = 0 // 有新内容 = 进展——重置
-      lastProcessed = msg.content
-      printModel(msg)
-      // 2026-08-05 LLM 语义理解（用户指示：真实用户模拟必须语义理解，非正则穷举）
-      const decision = await this.sim.understand(msg, '测试')
-      const und = decision.understanding ?? this.agent.understand(msg)
-      // 试玩反馈：模型给地址/要我实测 = 等用户打开确认 → 真实用户打开验证（确定性 HTTP）
-      const tUrl = msg.content.match(/https?:\/\/localhost:\d+/)
-      if (
-        decision.action === 'play-test' ||
-        (tUrl && /(试|玩|打开|访问|体验|看看|感受|确认)/.test(msg.content))
-      ) {
-        let fb
-        if (tUrl) {
-          try {
-            const res = await fetch(tUrl[0], { signal: AbortSignal.timeout(6000) })
-            const text = await res.text()
-            fb =
-              res.ok && text.length > 50
-                ? `我打开了 ${tUrl[0]}，页面正常（${res.status}，${text.length} 字节）——确认可以`
-                : `我打开 ${tUrl[0]} 是空白的（${res.status}，${text.length} 字节）——页面没加载出来`
-          } catch (e) {
-            fb = `我打开 ${tUrl[0]} 打不开（${String(e).slice(0, 60)}）——服务没起来？`
-          }
-        } else {
-          fb = decision.text || '怎么试？把地址给我，我打开看看'
-        }
-        console.log(`   🧑 打开确认（${und}）：${fb.slice(0, 80)}`)
-        await this.driver.send(fb)
-        continue
-      }
-      // 真实验证（确定性）：模型实际调了工具（bash 跑/检查/启动）+ 明确说验证通过——LLM confirm 与正则 saidPass 双保险
-      const t = await this.driver.readTranscript()
-      const hasBashRun = t.some((m) =>
-        m.tools.some((x) => /(npm|vite|serve|启动|运行|执行|检查|ls|测试|验证|test)/.test(x)),
-      )
-      const saidPass =
-        SEM_DONE.test(msg.content) ||
-        /(验证通过|测试通过|能跑|正常运行|没问题|启动成功|检查通过)/.test(msg.content)
-      if ((decision.action === 'confirm' || saidPass) && hasBashRun) {
-        this.verdicts.push({ stage: '测试', hasBashRun, saidPass })
-        console.log(`   ✅ 测试验证通过（有实际运行/检查动作 + 模型确认）——点「确认推进」进入部署`)
-        await this.driver.clickAdvance('部署')
-        return
-      }
-      if ((decision.action === 'confirm' || saidPass) && !hasBashRun) {
-        // 模型说通过但没实际跑 → 真实用户会要求实际验证
-        console.log(`   ⚠️ 模型说通过，但没看到实际运行/检查动作`)
-        console.log(`   🧑 要求实际验证：「实际跑起来验证一下，确认能打开」`)
-        await this.driver.send('实际跑起来验证一下，确认能打开再确认完成')
-        continue
-      }
-      if (decision.action === 'click-option') {
-        console.log(`   🧑 选择（${und}）：选「${decision.text}」`)
-        await this.driver.clickCandidate(decision.text)
-        continue
-      }
-      if (decision.action === 'type') {
-        console.log(`   🧑 我说话（${und}）：「${(decision.text ?? '').slice(0, 40)}」`)
-        await this.driver.send(decision.text || '好的，继续')
-        continue
-      }
-      if (decision.action === 'continue') {
-        console.log(`   🧑 模型说要做但没动手（${und}）——回复「继续」`)
-        await this.driver.send('继续')
-        continue
-      }
-      // 模型还在验证/写东西 → 等
-      await this.driver.page.waitForTimeout(1500)
-    }
-    throw new Error('测试阶段无真实验证（模型没实际运行/检查就要求推进）')
-  }
-
-  // ---- 部署阶段：真实用户——先查产物完整（核心文件在），再让模型给出可执行部署/实际部署 ----
-  async deploy() {
-    // ① 检查产物完整性（部署前真实用户会确认「能部署的东西在不在」——真实文件系统）
-    const tree = await this.driver.realFiles()
-    const core = ['index.html', 'package.json']
-    const missingCore = core.filter((c) => !tree.some((t) => t.endsWith(c)))
-    let msg
-    if (missingCore.length > 0) {
-      console.log(`   ⚠️ 部署前检查：核心产物缺失 ${missingCore.join(', ')}——先让模型补齐`)
-      await this.driver.send(`${missingCore.join('、')} 还没写，补齐了再谈部署`)
-      msg = await this.driver.waitSettled(180000)
-      if (!msg) {
-        // isActionPromise 提示（UI 插入非模型回复）——再等一轮真实回复
-        msg = await this.driver.waitSettled(120000)
-      }
-      printModel(msg ?? { content: '', candidates: [], tools: [] }, '✅')
-      // 补齐后再查一次
-      const tree2 = await this.driver.realFiles()
-      const missing2 = core.filter((c) => !tree2.some((t) => t.endsWith(c)))
-      if (missing2.length > 0)
-        throw new Error(`部署阶段产物补齐失败（仍缺 ${missing2.join(', ')}）`)
-      console.log(`   ✅ 产物已补齐（${core.join(', ')} 在）`)
-    } else {
-      console.log(`   📦 产物检查：${core.join(', ')} 都在 ✓`)
-    }
-    // ② 等模型给出可执行部署方案（或实际部署）
-    const deadline = Date.now() + 300000
-    while (Date.now() < deadline) {
-      // 2026-08-13 卡片优先（同 requirement——tool-only 链期间授权卡出现在空内容消息）
-      const ap = await this.driver.handleCards()
-      if (ap) {
-        console.log(`   🔓 授权：${ap.label}${ap.detail ? `（${ap.detail}）` : ''}`)
-        continue
-      }
-      msg = await this.driver.waitSettled(120000)
-      if (!msg) {
-        await this.driver.page.waitForTimeout(2000)
-        continue
-      }
-      if (/说要做但还没动手|回复.*继续/.test(msg.content) || SEM_PROMISE.test(msg.content)) {
-        console.log(`   🧑 模型说要做但没动手——回复「继续」让它干完`)
-        await this.driver.send('继续')
-        continue
-      }
-      printModel(msg)
-      // 2026-08-05 LLM 语义理解（同开发/测试阶段）
-      const decision = await this.sim.understand(msg, '部署')
-      const und = decision.understanding ?? this.agent.understand(msg)
-      // 试玩反馈：模型「部署好了/上线了 + 地址」= 等用户打开确认——真实用户打开验证（确定性 HTTP）
-      const dUrl = msg.content.match(/https?:\/\/localhost:\d+/)
-      if (
-        decision.action === 'play-test' ||
-        (dUrl && /(试|玩|打开|访问|体验|看看|感受|确认)/.test(msg.content))
-      ) {
-        let fb
-        if (dUrl) {
-          try {
-            const res = await fetch(dUrl[0], { signal: AbortSignal.timeout(6000) })
-            const text = await res.text()
-            fb =
-              res.ok && text.length > 50
-                ? `我打开了 ${dUrl[0]}，能正常访问（${res.status}）——确认没问题`
-                : `我打开 ${dUrl[0]} 是空白的（${res.status}，${text.length} 字节）——有问题`
-          } catch (e) {
-            fb = `我打开 ${dUrl[0]} 打不开（${String(e).slice(0, 60)}）`
-          }
-        } else {
-          fb = decision.text || '怎么访问？把地址给我'
-        }
-        console.log(`   🧑 打开确认（${und}）：${fb.slice(0, 80)}`)
-        await this.driver.send(fb)
-        continue
-      }
-      // 可执行部署（确定性）：给了命令/平台/链接/实际部署动作——LLM confirm 与 actionable 双保险
-      const actionable =
-        /(npm run|vercel|部署|上线|链接|地址|端口|localhost|npm i|npm install|访问|打开.*玩|部署好了|可以玩|deployed|live|online)/i.test(
-          msg.content,
-        )
-      if ((decision.action === 'confirm' || decision.action === 'type') && actionable) {
-        this.verdicts.push({ stage: '部署', actionable })
-        console.log(`   ✅ 部署方案可执行（${msg.content.slice(0, 40)}…）`)
-        break
-      }
-      if (decision.action === 'click-option') {
-        console.log(`   🧑 选择（${und}）：选「${decision.text}」`)
-        await this.driver.clickCandidate(decision.text)
-        continue
-      }
-      if (decision.action === 'type') {
-        console.log(`   🧑 我说话（${und}）：「${(decision.text ?? '').slice(0, 40)}」`)
-        await this.driver.send(decision.text || '好的，继续')
-        continue
-      }
-      if (decision.action === 'continue') {
-        console.log(`   🧑 模型说要做但没动手（${und}）——回复「继续」`)
-        await this.driver.send('继续')
-        continue
-      }
-      await this.driver.page.waitForTimeout(1500)
-    }
-    const done = await this.driver.page.locator('.nf-flow__done').count()
-    const sb = await this.driver.statusbar()
-    const rootHint = (sb.match(/│\s*(.+)$/) ?? [])[1]?.trim() ?? ''
-    const treeF = await this.driver.realFiles()
-    const hasFiles = treeF.some((f) => /package|\.(js|ts|html|css|json)$/.test(f))
-    this.verdicts.push({ stage: '产物', rootHint, hasFiles })
-    console.log(
-      `   📦 产物：项目=${rootHint}，${hasFiles ? '✓ 有真实文件' : '✗ 无产物'}，到达阶段=${await this.driver.currentStage()}${done ? '（交付完成）' : ''}`,
-    )
-    return { rootHint, hasFiles, done, stage: await this.driver.currentStage() }
+    // confirm-goal/confirm-plan/confirm-resolution/approve/wait：卡片优先已承载；wait 无操作
   }
 }
-
 // ============================================================================
 // 用例执行
 // ============================================================================
@@ -1550,12 +853,12 @@ async function case_(name, mode) {
     const agent = new UserAgent()
     if (mode === 'empty') await driver.send('我想做一个3D设计游戏')
     console.log(`\n── ${name}（PHASE=${PHASE}）──\n`)
-    const machine = new StageMachine(driver, agent, PHASE)
+    const machine = new JourneyRunner(driver, agent, PHASE)
     await machine.run()
     const secs = ((Date.now() - t0) / 1000).toFixed(1)
     const end = machine.verdicts[machine.verdicts.length - 1]
     const reqEchoed = machine.verdicts
-      .filter((v) => v.stage === '需求' && v.echoed !== undefined)
+      .filter((v) => v.stage === '澄清' && v.echoed !== undefined)
       .some((v) => v.echoed)
     const ok = PHASE !== 'all' || (end?.stage === '产物' && end?.hasFiles && reqEchoed)
     console.log(`\n${ok ? '✅' : '⚠️'} ${name} ${ok ? '通过' : '部分验证'} (${secs}s)`)
