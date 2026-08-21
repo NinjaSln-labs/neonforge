@@ -1,5 +1,5 @@
 // e2e 启动前置：坑 44 流程化——检测 dist/main 是否过期（改 main/preload 后自动 build:main）
-// 2026-08-21：e2e-0to1.mjs / e2e-suite.mjs 共用——根治「e2e 加载旧产物」踩坑
+// 2026-08-21：e2e-0to1.mjs / e2e-suite.mjs / e2e-supplement.mjs 共用——根治「e2e 加载旧产物」踩坑
 import fs from 'node:fs'
 import path from 'node:path'
 import { execSync } from 'node:child_process'

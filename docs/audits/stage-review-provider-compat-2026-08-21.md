@@ -2,9 +2,23 @@
 
 - 日期：2026-08-21
 - 固定点：cd9d708（provider 切换 commit）之后的工作区实现改动
-- 范围：gateway.ts（tool_choice 恒 auto + extractReasoningText 多源）+ ConversationPanel.tsx（注释 + reasoning 回传补缺）+ compact.ts/preload/types（compaction reasoning 保留）+ gatewayReasoning.test.ts（新 8 用例）+ compact.test.ts（+1 用例）
+- 范围：gateway.ts（tool_choice 恒 auto + extractReasoningText 多源）+ ConversationPanel.tsx（注释 + reasoning 回传补缺）+ compact.ts/preload/types（compaction reasoning 保留）+ gatewayReasoning.test.ts（新 8 用例）+ compact.test.ts（+1 用例）+ **e2e-build-check.mjs（坑 44 流程化——`78dfcfe`）**
 - 方式：双轴复审（Spec：对照 07 §1.1 / A0 §1 / 调研文档 §7 语义契约；Standards：仓库规范 + smell 基线）+ **reasoning 回传链路全路径审计（续轮发现）**
-- 结论：**无 open**——3 fixed（文档措辞同步 + buildHistory 回传补缺 + compaction 回传补缺）+ 1 recorded（forceTool 参数保留）
+- 结论：**无 open**——3 fixed（文档措辞同步 + buildHistory 回传补缺 + compaction 回传补缺）+ 1 recorded（forceTool 参数保留）+ **坑 44 流程化复审（1 fixed + 1 recorded）**
+
+---
+
+## 坑 44 流程化复审（`78dfcfe`——2026-08-21）
+
+**Spec 轴**（对照目标：改 main/preload 后 e2e 自动用最新代码）：
+- ✅ ensureMainBuild() 检测 dist/main 是否比任一 src/main/*.ts / preload.ts 旧 → 过期自动 `npm run build:main`
+- ✅ 三 e2e 脚本（0to1/suite/supplement）入口接入；实测 touch 源码 → 自动 build ✓ / dist 最新 → 幂等无操作 ✓
+- ✅ e2e-0to1 PHASE=req 场景 A/B 通过（修复后）
+- ✅ 无 scope creep（只加启动前置，不改 e2e 逻辑）
+
+**Standards 轴**：
+- **[fixed] 注释漏 e2e-supplement**——「e2e-0to1 / e2e-suite 共用」→ 补「/ e2e-supplement」（实际已接入三脚本，注释更新）
+- **[recorded] `execSync` 同步阻塞 + `statSync` 时间戳比较**——e2e 为开发工具，build 仅在过期时触发（`stdio: inherit` 输出可见），时间戳边界（同秒修改漏检）在 e2e 场景可接受（真机失败会重新触发）——裁决不修
 
 ---
 
