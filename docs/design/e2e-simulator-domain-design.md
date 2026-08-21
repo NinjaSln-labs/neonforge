@@ -79,7 +79,7 @@
 e2e-sim/                     # 领域层（纯函数 .mjs——无 Playwright/无网络——L1 可测）
 ├── signals.mjs              # deriveModelSignal（确定性信号派生——单一来源）
 ├── decide.mjs               # decide（决策策略——确定性优先）
-├── journey.mjs              # Journey 状态机（决策点推进 + 已确认集合 + PHASE 终止点映射）
+├── journey.mjs              # Journey 状态机（决策点推进 + 已确认集合 + UNTIL 终止点映射）
 ├── convergence.mjs          # ConvergenceGuard（探索容忍/停滞判死——#9 域对象化）
 └── verify.mjs               # Verifier（目标回显/方案要素/产物/试玩判定）
 e2e-0to1.mjs                 # 应用层：launch + SessionDriver（IO）+ LLM 增强注入 + JourneyRunner 编排
@@ -89,9 +89,11 @@ e2e-0to1.mjs                 # 应用层：launch + SessionDriver（IO）+ LLM �
 - 驱动层（SessionDriver）：Playwright IO 保留——waitSettled 收敛语义改引用 convergence（领域层）
 - 应用层：UserAgent 画像/决策轨迹保留（steps——可复现）；StageMachine 删除 → JourneyRunner（按 Journey 决策点循环）
 
-## 5. PHASE 映射（无阶段——终止点）
+## 5. UNTIL 映射（无阶段——终止点）
 
-| PHASE | 终止点（旅程决策点） |
+> 命名：UNTIL（非 PHASE）——控制「跑到哪个旅程终止点为止」，**不是产品阶段**（产品无阶段，决策点驱动）。
+
+| UNTIL | 终止点（旅程决策点） |
 |-------|---------------------|
 | req | confirm-goal 完成（目标确认后停） |
 | design | confirm-plan 完成（方案确认后停） |
@@ -102,7 +104,7 @@ e2e-0to1.mjs                 # 应用层：launch + SessionDriver（IO）+ LLM �
 
 | 现状问题 | 重构 |
 |----------|------|
-| StageMachine 阶段残留（requirement/design/…+ currentStage 跟随）——产品已无阶段 | Journey 决策点驱动（§3）——PHASE 映射终止点（§5） |
+| StageMachine 阶段残留（requirement/design/…+ currentStage 跟随）——产品已无阶段 | Journey 决策点驱动（§3）——UNTIL 映射终止点（§5） |
 | 理解三实现（UserAgent.understand 正则 / UserSimulator LLM / fallback 正则）——缝隙 4 违反 | deriveModelSignal 单一信号源（§2）——LLM 只做自由文本增强 |
 | 决策逻辑内联各阶段循环（4 问/越界/okLen/okKw/清单/试玩） | decide 决策策略 + Verifier 验证域（§3） |
 | staleRounds 四阶段 4 份拷贝（#9） | ConvergenceGuard 域对象（单一实现） |
@@ -112,14 +114,14 @@ e2e-0to1.mjs                 # 应用层：launch + SessionDriver（IO）+ LLM �
 
 ## 7. 测试与验证
 
-- **L1（新增——无 NF_TEST_KEY 可跑）**：signals.test.ts（信号派生表驱动——每信号正反例）/ decide.test.ts（信号×旅程×画像 → 决策）/ journey.test.ts（决策点推进 + PHASE 终止）/ convergence.test.ts（探索容忍/停滞判死——#9 语义锁定）/ verify.test.ts（回显/方案/产物判定）
+- **L1（新增——无 NF_TEST_KEY 可跑）**：signals.test.ts（信号派生表驱动——每信号正反例）/ decide.test.ts（信号×旅程×画像 → 决策）/ journey.test.ts（决策点推进 + UNTIL 终止）/ convergence.test.ts（探索容忍/停滞判死——#9 语义锁定）/ verify.test.ts（回显/方案/产物判定）
 - **L2**：.mjs 无类型——node --check + vitest 转译 import
-- **真机复验（NF_TEST_KEY）**：PHASE=req/all 跑通——记录于 issue（L4 依赖）
+- **真机复验（NF_TEST_KEY）**：UNTIL=req/all 跑通——记录于 issue（L4 依赖）
 - **e2e-suite.mjs 不回归**（独立脚本——不受影响）
 
 ## 8. 边界（不做）
 
 - SessionDriver 不做大改（IO 壳保留——只接 convergence 引用）
-- launch/case_ 保留（应用层壳——PHASE/MODE 语义保留）
+- launch/case_ 保留（应用层壳——UNTIL/MODE 语义保留）
 - LLM 增强（UserSimulator→enrich）保持现有 API 调用（不重构网关）
 - e2e-suite.mjs（另一套真实 API 场景）不在本次范围

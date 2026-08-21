@@ -1,11 +1,11 @@
-// e2e 模拟器域：旅程状态机（设计 §3/§5——决策点驱动 · 无阶段 · PHASE 终止点映射）
+// e2e 模拟器域：旅程状态机（设计 §3/§5——决策点驱动 · 无阶段 · UNTIL 终止点映射）
 // 产品语义：无阶段目标驱动（goal → plan → approval → resolution → deliver——A0 决策点）
 // 纯状态对象——工厂 + transition——L1 可测
 
 import { Signal } from './signals.mjs'
 
-/** PHASE → 终止点（无阶段——旅程决策点） */
-export const PHASE_END = {
+/** UNTIL → 终止点（无阶段——旅程决策点；UNTIL=「跑到哪个终止点为止」，非产品阶段） */
+export const UNTIL_END = {
   req: 'goal', // 目标确认后停
   design: 'plan', // 方案确认后停
   dev: 'produced', // 首个产物确认后停
@@ -14,16 +14,16 @@ export const PHASE_END = {
 
 /**
  * 创建旅程
- * @param {'req'|'design'|'dev'|'all'} [phase]
+ * @param {'req'|'design'|'dev'|'all'} [until]
  */
-export function createJourney(phase = 'all') {
+export function createJourney(until = 'all') {
   return {
-    phase,
+    until,
     confirmed: { goal: false, plan: false, resolution: false },
     produced: false, // 首个副作用产物（write/edit/bash done）
     delivered: false, // 交付完成（产物验证通过 + 解决确认）
     decisionPoints: [], // 决策点轨迹（可复现）
-    phaseEnd: PHASE_END[phase] ?? 'delivered',
+    untilEnd: UNTIL_END[until] ?? 'delivered',
   }
 }
 
@@ -57,10 +57,10 @@ export function advance(j, { signal, action }) {
   return next
 }
 
-/** 旅程是否到达 PHASE 终止点（收敛——可停） */
+/** 旅程是否到达 UNTIL 终止点（收敛——可停） */
 export function terminated(j) {
-  if (j.phaseEnd === 'goal') return j.confirmed.goal
-  if (j.phaseEnd === 'plan') return j.confirmed.plan
-  if (j.phaseEnd === 'produced') return j.produced
+  if (j.untilEnd === 'goal') return j.confirmed.goal
+  if (j.untilEnd === 'plan') return j.confirmed.plan
+  if (j.untilEnd === 'produced') return j.produced
   return j.delivered
 }
