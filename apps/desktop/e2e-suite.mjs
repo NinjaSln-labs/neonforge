@@ -1,5 +1,6 @@
 import { _electron } from 'playwright'
 import fs from 'node:fs'
+import { ensureMainBuild } from './e2e-build-check.mjs'
 
 // NeonForge 真实环境 E2E 套件：真实 Electron + 真实 DeepSeek API
 // 场景矩阵：主链路 / 工具待授权 / 多轮对话 / 纯文本 / 异常 / 空回复 / 超时
@@ -81,6 +82,9 @@ async function case_(name, fn) {
 }
 
 console.log('=== NeonForge 真实环境 E2E 套件 ===\n')
+
+// 坑 44 流程化：启动前置检测 dist 过期（改 main/preload 后自动 build，根治加载旧产物）
+ensureMainBuild()
 
 // 场景 1：空目录「帮我看看package.json」——主链路（工具→执行→模型回复）
 await case_('空目录主链路（read 找不到→模型回复）', async () => {

@@ -1,5 +1,6 @@
 import { _electron } from 'playwright'
 import { existsSync, readFileSync, unlinkSync } from 'fs'
+import { ensureMainBuild } from './e2e-build-check.mjs'
 
 // L4 补充场景：write 授权写入 / 授权后续聊 / Key 失效 / 上下文保留
 const KEY = process.env.NF_TEST_KEY
@@ -61,6 +62,9 @@ async function check(name, cond, detail) {
 }
 
 console.log('=== L4 补充场景（7-12 补 4 个真实可测）===\n')
+
+// 坑 44 流程化：启动前置检测 dist 过期（改 main/preload 后自动 build，根治加载旧产物）
+ensureMainBuild()
 
 // 场景 7：write 授权写入（确定性——CDP 直接调 write 工具 approved:true → 真实写文件）
 {

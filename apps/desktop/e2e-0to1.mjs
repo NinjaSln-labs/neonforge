@@ -2,6 +2,7 @@ import { _electron } from 'playwright'
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
+import { ensureMainBuild } from './e2e-build-check.mjs'
 // 模拟器域（设计 docs/design/e2e-simulator-domain-design.md——DDD 重构 2026-08-16）：
 // 信号派生/决策策略/旅程/收敛/验证全在领域层（e2e-sim/*.mjs 纯函数——L1 可测）
 import { deriveModelSignal, Signal } from './e2e-sim/signals.mjs'
@@ -894,6 +895,8 @@ async function case_(name, mode) {
 }
 
 console.log('=== NeonForge 0-1 完整流程 E2E（真实用户模拟 · DDD）===\n')
+// 坑 44 流程化：启动前置检测 dist 过期（改 main/preload 后自动 build，根治加载旧产物）
+ensureMainBuild()
 if (!KEY) {
   console.log('❌ 无可用 API Key')
   process.exit(1)
