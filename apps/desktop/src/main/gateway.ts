@@ -48,6 +48,19 @@ export function toDeepSeekParams(level: ThinkingLevel): DeepSeekThinkingParams {
 
 export type ModelID = 'deepseek-v4-flash' | 'deepseek-v4-pro'
 
+// 2026-08-21 ADR-007/provider 兼容：reasoning 字段多源提取（纯函数——SSE 解析 + 单测共用）
+// thinking 内容可能出现在 reasoning_content（DeepSeek 官方/llama.cpp）或 reasoning（Command Code 等 OpenAI 兼容端点）
+// 或 reasoning_text；取第一个非空（对齐 pi/DSH `["reasoning_content","reasoning","reasoning_text"]` 归一——
+// openai-completions.js L349-362「some endpoints return reasoning, others reasoning_content」）
+export const REASONING_FIELDS = ['reasoning_content', 'reasoning', 'reasoning_text'] as const
+export function extractReasoningText(delta: Record<string, unknown>): string | undefined {
+  for (const k of REASONING_FIELDS) {
+    const v = delta[k]
+    if (typeof v === 'string' && v.length > 0) return v
+  }
+  return undefined
+}
+
 // A0 §2 边界判定：ThinkingLevel=定义、ModelRouter=决策（返回完整 API 模型名）
 // 2026-08-15 D7：route 签名去除六阶段残留 stageAgent（无调用方传值——dead parameter）
 export class ModelRouter {
@@ -399,8 +412,10 @@ export class DeepSeekGateway {
         reasoning_content?: string
       }>
       tools?: boolean
-      // 2026-08-06 调研驱动（官方仓库 issue #1376 + 官方文档 + 实测三源交叉验证）：工具模式已是 thinking disabled（toDeepSeekParams('none')），
-      // 此时 tool_choice: 'required' 可用（实测成功强制 tool_calls）——forceTool=true 强制模型必须调工具（不能只输出文本）——「只说不做」从 API 层根治
+      // 2026-08-21 ADR-007/provider 兼容：tool_choice 恒 auto——DeepSeek V4 全系拒绝 'required'（thinking 模式 400，
+      // 官方 issue #1376 + 真机实测——显式 thinking disabled 也 400）；「只说不做」由循环层（StuckDetector/escalate）+
+      // prompt 层（sysPrompt ⑨「说了就做」）兜底（对齐 Codex/pi/DSH 共识——docs/design/provider-toolchoice-compat-research.md §7）。
+      // forceTool 布尔仍传递（timeline 取证 execution.forced + L3 断言 mock 布尔），但不再翻译成 API 参数。
       forceTool?: boolean
       onDelta: (chunk: {
         type: 'reasoning' | 'content' | 'tool-call' | 'done'
@@ -423,9 +438,7 @@ export class DeepSeekGateway {
         ...toDeepSeekParams(opts.tools ? 'none' : (opts.level ?? 'basic')),
         messages: opts.messages,
         stream: true,
-        ...(opts.tools
-          ? { tools: TOOL_DEFS, tool_choice: opts.forceTool ? 'required' : 'auto' }
-          : {}),
+        ...(opts.tools ? { tools: TOOL_DEFS, tool_choice: 'auto' } : {}),
       }),
       signal: AbortSignal.timeout(45000),
     })
@@ -462,8 +475,9 @@ export class DeepSeekGateway {
         try {
           const json = JSON.parse(payload)
           const delta = json.choices?.[0]?.delta ?? {}
-          if (delta.reasoning_content)
-            opts.onDelta({ type: 'reasoning', text: delta.reasoning_content })
+          // 2026-08-21 ADR-007/provider 兼容：reasoning 字段多源兼容——取第一个非空（extractReasoningText 纯函数）
+          const reasoningText = extractReasoningText(delta)
+          if (reasoningText) opts.onDelta({ type: 'reasoning', text: reasoningText })
           if (delta.content) opts.onDelta({ type: 'content', text: delta.content })
           // tool_calls 增量（DeepSeek SSE：按 index 分片，arguments 为字符串增量）
           if (Array.isArray(delta.tool_calls)) {

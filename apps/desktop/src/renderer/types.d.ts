@@ -117,9 +117,13 @@ export interface NeonForgeBridge {
   }
   compaction: {
     compact: (
-      history: Array<{ role: string; content: string | null }>,
+      history: Array<{ role: string; content: string | null; reasoning_content?: string }>,
     ) => Promise<
-      | { ok: true; summary: string; kept: Array<{ role: string; content: string | null }> }
+      | {
+          ok: true
+          summary: string
+          kept: Array<{ role: string; content: string | null; reasoning_content?: string }>
+        }
       | { ok: false; error: string }
     >
   }
