@@ -39,6 +39,7 @@
 ```
 
 **设计原则**：
+
 - **确认点 = 推进门槛**（结构性——领域状态机未到下一态，模型不越级）
 - **宿主强制边界**（写文件受计划清单约束——不依赖模型自律）
 - **环境单源**（能力从环境推导——不重复检测）
@@ -71,10 +72,11 @@ ProgressGuarantee（领域层——纯函数）
     └─ 计划写完/解决确认 → auto（收敛）
     │
     ▼
-Gateway.tool_choice 传递（推进保障输出——require-advance/require-action → 'required'；auto → 'auto'）→ DeepSeek API
+Gateway.tool_choice 传递（恒 'auto'——V4 拒 required（2026-08-21）；require-advance/require-action 输出 forceTool 标记 + 循环层/prompt 兜底——`provider-toolchoice-compat-research.md` §7）→ DeepSeek API
 ```
 
 > 2026-08-16 第 13 轮审计 #3 修正：管线图同步推进保障新语义（原图残留旧 forceTool 语义「required 强制动手」与旧名 goal/execution——与 A0 §4/07 §1.1/04 §3.1 冲突；强制对象=推进≠调工具，pending 恒不强制）。
+> 2026-08-21（provider 兼容）：tool_choice 恒 `auto`——DeepSeek V4 全系拒绝 `required`（官方 issue #1376 + 实测）；强制推进由循环层 StuckDetector/escalate + sysPrompt ⑨ 兜底（对齐 Codex/pi/DSH 共识）。
 
 ## 4. 宿主强制边界管线（模型漂移防护 + 会话级单一 PENDING 状态机）
 
@@ -120,13 +122,13 @@ apps/desktop/src/
 
 ## 6. 关键选型
 
-| 层 | 技术 | 理由 |
-|----|------|------|
-| 桌面 | Electron | 桌面应用（Monaco 可选）|
-| UI | React | 组件化（确认卡/授权卡）|
-| 领域层 | TypeScript 纯函数 | L1 可测（turnPolicy/agentLoop）|
-| 日志 | JSONL 追加 | 时间线（崩溃保留已写行）|
-| 环境检测 | 一次检测 + 推导 | 消除双源（能力=环境视图）|
+| 层       | 技术              | 理由                            |
+| -------- | ----------------- | ------------------------------- |
+| 桌面     | Electron          | 桌面应用（Monaco 可选）         |
+| UI       | React             | 组件化（确认卡/授权卡）         |
+| 领域层   | TypeScript 纯函数 | L1 可测（turnPolicy/agentLoop） |
+| 日志     | JSONL 追加        | 时间线（崩溃保留已写行）        |
+| 环境检测 | 一次检测 + 推导   | 消除双源（能力=环境视图）       |
 
 ---
 

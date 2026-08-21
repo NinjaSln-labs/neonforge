@@ -42,18 +42,18 @@ Say the problem → Clarify the goal (candidate buttons / free input) → [Goal 
 
 ## What the agent can do (tool surface)
 
-| Tool | Purpose |
-|------|---------|
-| read / write / edit / bash | Core four (write/edit gated by step-by-step approval + approved plan; read-only bash auto-approved) |
-| search + LSP (find_definition / find_references / get_type_info / get_diagnostics / get_imports / get_call_chain) | Locate / query / diagnose — zero-token deterministic context |
-| check-capability | Capability detection (runtime / deps / toolchain) — environment snapshot injected into the model |
-| approve-files | Batch authorization (1-N files, append semantics) — approved files auto-approved on write |
-| start-server / check-server / stop-server | Dev server lifecycle (dynamic port allocation; host ports 5173/5175 reserved) |
-| open | Open a web page (default browser, http/https only) |
+| Tool                                                                                                              | Purpose                                                                                             |
+| ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| read / write / edit / bash                                                                                        | Core four (write/edit gated by step-by-step approval + approved plan; read-only bash auto-approved) |
+| search + LSP (find_definition / find_references / get_type_info / get_diagnostics / get_imports / get_call_chain) | Locate / query / diagnose — zero-token deterministic context                                        |
+| check-capability                                                                                                  | Capability detection (runtime / deps / toolchain) — environment snapshot injected into the model    |
+| approve-files                                                                                                     | Batch authorization (1-N files, append semantics) — approved files auto-approved on write           |
+| start-server / check-server / stop-server                                                                         | Dev server lifecycle (dynamic port allocation; host ports 5173/5175 reserved)                       |
+| open                                                                                                              | Open a web page (default browser, http/https only)                                                  |
 
 ## Quick Start
 
-> Requires a DeepSeek API Key (get one at `https://platform.deepseek.com`).
+> Requires a Command Code API Key (get one at `commandcode.ai` — Studio → API Keys → Generate; models are DeepSeek V4 series, accessed via the Command Code aggregator).
 
 - **Download**: [GitHub Releases](https://github.com/NinjaSln-labs/neonforge/releases) (v0.1.0 pre-release — macOS `.dmg` / `.zip`; unsigned, first launch needs right-click → Open)
 
@@ -112,11 +112,11 @@ The domain layer is pure functions (no React dependency); L1 unit tests lock the
 
 ## Docs
 
-| Doc | Description |
-|-----|-------------|
-| `docs/product/00-product-design.md` (D0 v2.2) | Product design authority (positioning / flows / components / metrics) |
+| Doc                                            | Description                                                                                |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `docs/product/00-product-design.md` (D0 v2.2)  | Product design authority (positioning / flows / components / metrics)                      |
 | `docs/domain/00-domain-authority.md` (A0 v4.0) | Domain implementation authority (confirmation points / progress guarantee / host boundary) |
-| `docs/product/`、`docs/domain/` | Full index (D0-D9 / A0-A9) |
+| `docs/product/`、`docs/domain/`                | Full index (D0-D9 / A0-A9)                                                                 |
 
 ## Testing
 
@@ -141,15 +141,18 @@ ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ node install.js
 > Tracked formally on GitHub [Issues](https://github.com/NinjaSln-labs/neonforge/issues?q=label%3Aroadmap) (label `roadmap` · Milestones: V1 stabilizing / V1.x experience & robustness / V2 directions)
 
 **V1 (current — stabilizing)**
+
 - Release assets: macOS `.dmg` packaging (`.zip` already usable) · Blog launch · Landing + waitlist · distribution channels & Product Hunt
 - Real-usage feedback loop: test with real users → fix — this cycle focuses on the **approval-card path** and the new **intent-confirmation interactions** (goal / plan / resolution confirmation cards)
 
 **V1.x (experience & robustness)**
+
 - Consecutive-task experience: re-confirmation when switching goals (a fresh 【目标确认】 currently doesn't pop a card once a goal is confirmed — evaluating a complement)
 - Interception guidance polish: `tool.blocked` back-fill with clearer next-step prompts (goal proposal / supplementary approval)
 - e2e simulator convergence detection (long-flow automation stability); test-infra cleanup
 
 **V2 (planned directions — dependency-ordered)**
+
 1. **Full session snapshots**: task state machine survives restarts (confirmation/execution progress serialized — the approved file plan already landed early: D3); tied to compaction-summary baseline consistency
 2. **Trust tiers**: authorization-fatigue relief (low-risk delegation profiles / mode presets — the next step beyond "Allow and remember" and merged approvals)
 3. **Structured clarification tooling** (AskToAct-style: explicit goal-assumption collection, replacing free-text clarification)

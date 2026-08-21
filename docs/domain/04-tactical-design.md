@@ -48,6 +48,7 @@ clarifying ─[用户确认目标]→ goal-confirmed ─[用户批准方案]→ 
 > 2026-08-16 同步（意图确认领域模型重设计——`intent-confirmation-domain-design.md`）：确认点语义更新——「确认执行」→「批准方案」（PlanProposal：文件+假设+验证计划）；「确认达成」→「确认解决」（CompletionClaim+证据对账——无证据不对账，证据不足不进入 resolved-pending）；决策点触发权在系统（确定性派生——模型只能提议，§A0 3.6）；拒绝带原因（RejectReason 回填）。executing 态内模型受**推进保障**约束（强制对象=推进≠调工具——模型可输出提议/证据/提问）。
 
 **不变式**：
+
 - 未确认目标 → 不进入 executing（模型只澄清）
 - 未批准方案 → 不产生执行动作（write/edit/**有副作用 bash**——探索性只读命令如 ls/cat 放行：与 §3.6 actionGate 只读自动同源——A0 §3.1 澄清，2026-08-16 第 14 轮审计 #1 对齐）
 - 未确认解决 → 不收敛（推进保障保持——模型必须继续推进：产出/提议/证据）
@@ -85,6 +86,7 @@ clarifying ─[用户确认目标]→ goal-confirmed ─[用户批准方案]→ 
 ```
 
 **要点**：
+
 1. **pending 是会话级——只有一个**——任何卡弹出（确认卡/授权卡）→ 会话进入 pending（等用户决策）
 2. **pending 下模型动作全部无效**（做了白做）——用户决策是下一个状态的唯一输入
 3. **Task 只管任务级确认点**——工具级授权等待由会话级 pending 承载（Task 执行内部触发的会话等待）
@@ -142,7 +144,7 @@ clarifying ─[用户确认目标]→ goal-confirmed ─[用户批准方案]→ 
 
 ```typescript
 interface Goal {
-  text: string          // 目标描述（用户确认后锁定）
+  text: string // 目标描述（用户确认后锁定）
   status: 'proposed' | 'confirmed' | 'rejected'
 }
 ```
@@ -162,10 +164,10 @@ interface Confirmation {
 
 ```typescript
 interface PlanProposal {
-  summary: string                 // 一句话方案
-  files: Array<{ path: string; reason: string }>  // 文件清单（含理由——plannedFiles 单一来源，A0 §5）
-  assumptions: string[]           // 方案假设（技术选型/行为细节——用户审阅点——A0 §3.6）
-  verificationPlan: string[]      // 验证计划（怎么证明做成了——「解决确认」的证据承诺，A0 §4.2）
+  summary: string // 一句话方案
+  files: Array<{ path: string; reason: string }> // 文件清单（含理由——plannedFiles 单一来源，A0 §5）
+  assumptions: string[] // 方案假设（技术选型/行为细节——用户审阅点——A0 §3.6）
+  verificationPlan: string[] // 验证计划（怎么证明做成了——「解决确认」的证据承诺，A0 §4.2）
   status: 'proposed' | 'confirmed' | 'rejected'
 }
 ```
@@ -175,41 +177,47 @@ interface PlanProposal {
 ### 2.3b 意图确认值对象（2026-08-16 第 12 轮审计 #1 补——签名权威：设计文档 §3.2；§3.6 引用落地）
 
 ```typescript
-interface GoalProposal {          // 目标提议（模型产出——A0 §3.6）
-  statement: string               // 一句话目标（原【目标确认】文本）
-  assumptions: string[]           // 模型的关键假设（用户从未确认过的细节——必须显式呈现）
+interface GoalProposal {
+  // 目标提议（模型产出——A0 §3.6）
+  statement: string // 一句话目标（原【目标确认】文本）
+  assumptions: string[] // 模型的关键假设（用户从未确认过的细节——必须显式呈现）
 }
 
-interface CompletionClaim {       // 完成声明（模型产出——A0 §4.2）
-  summary: string                 // 做了什么
-  evidence: CompletionEvidence    // 证据（不足 = 声明不完整——无证据不对账）
+interface CompletionClaim {
+  // 完成声明（模型产出——A0 §4.2）
+  summary: string // 做了什么
+  evidence: CompletionEvidence // 证据（不足 = 声明不完整——无证据不对账）
 }
 
-interface CompletionEvidence {    // 完成证据（对账对象——verifyCompletion）
-  verification: Array<{ command: string; output?: string; passed?: boolean }>  // 可核验证据（lint 循环/验证命令方向）
-  diffs: Array<{ path: string }>  // diff 对账（用户原始目标 vs 声称完成）
-  pendingQuestions: string[]      // 模型自己不确定/需要用户判断的事项
+interface CompletionEvidence {
+  // 完成证据（对账对象——verifyCompletion）
+  verification: Array<{ command: string; output?: string; passed?: boolean }> // 可核验证据（lint 循环/验证命令方向）
+  diffs: Array<{ path: string }> // diff 对账（用户原始目标 vs 声称完成）
+  pendingQuestions: string[] // 模型自己不确定/需要用户判断的事项
 }
 
-interface ApprovalRequest {       // 授权请求（ActionGate 产出——DSH ApprovalRequest 同构）
+interface ApprovalRequest {
+  // 授权请求（ActionGate 产出——DSH ApprovalRequest 同构）
   toolName: string
-  subject: string                 // 要执行什么（命令/写哪个文件）
-  reason: string                  // 为什么需要授权（verbatim）
+  subject: string // 要执行什么（命令/写哪个文件）
+  reason: string // 为什么需要授权（verbatim）
   risk: 'low' | 'medium' | 'high' // 动作属性分级（ActionGate 判定）
 }
 
-interface RejectReason {          // 拒绝原因（用户决策的一部分——Cline denial reason / Deep Code 回灌方向）
+interface RejectReason {
+  // 拒绝原因（用户决策的一部分——Cline denial reason / Deep Code 回灌方向）
   kind: 'direction' | 'scope' | 'complexity' | 'missing-info' | 'modify' | 'other'
   // modify = 「修改」决策（§2 Decision 三型之一）：携带修正内容，模型按修正内容重提议——
   //   V1 表达：修改 = 拒绝（kind='modify'）+ 修正内容（text/target）→ 模型重提议；
   //   不单列状态转换分支（状态机保持 confirm/reject 二元——不变量 1/8）
-  text?: string                   // 自由文本 / 修正内容
-  target?: string                 // 针对的具体内容（方案第几条/哪个文件/哪个假设）
+  text?: string // 自由文本 / 修正内容
+  target?: string // 针对的具体内容（方案第几条/哪个文件/哪个假设）
 }
 
-interface ActionAttribute {       // 动作属性（门控判定结果——与模型自评无关）
+interface ActionAttribute {
+  // 动作属性（门控判定结果——与模型自评无关）
   kind: 'readonly' | 'in-plan' | 'out-of-plan' | 'network-read' | 'hazardous'
-  basis: 'tool-type' | 'command-head' | 'command-chain' | 'git-subcommand' | 'plan-list'  // 判定依据（审计追溯）
+  basis: 'tool-type' | 'command-head' | 'command-chain' | 'git-subcommand' | 'plan-list' // 判定依据（审计追溯）
 }
 ```
 
@@ -221,7 +229,7 @@ interface ActionAttribute {       // 动作属性（门控判定结果——与�
 interface Capability {
   id: string
   category: 'system' | 'external'
-  status: 'ready' | 'missing' | 'failed'   // missing=未装 / failed=装了但不可用
+  status: 'ready' | 'missing' | 'failed' // missing=未装 / failed=装了但不可用
   implementations: string[]
   requires?: string[]
   detail?: string
@@ -238,8 +246,9 @@ interface Environment {
   hasPackageJson: boolean
   hasNodeModules: boolean
   packageManager: string
-  toolchain: string[]            // node_modules/.bin 工具
-  systemRuntime: {               // 宿主 runtime（能力推导依据）
+  toolchain: string[] // node_modules/.bin 工具
+  systemRuntime: {
+    // 宿主 runtime（能力推导依据）
     node: { version: string; status: 'ready' | 'missing' | 'failed' }
     python: { version: string; status: 'ready' | 'missing' | 'failed' }
   }
@@ -251,10 +260,10 @@ interface Environment {
 ```typescript
 interface DeliveryPackage {
   id: string
-  files: { path: FilePath; diff: string }[]   // 产物清单 + 变更预览
+  files: { path: FilePath; diff: string }[] // 产物清单 + 变更预览
   acceptance: { item: string; passed: boolean }[] // 验收对照（DoD/AC）
-  status: 'delivered' | 'closed' | 'adjusting'   // 交付 ≠ 解决——closed=用户确认终态
-  snapshot?: string[]                            // 写前快照（.nf-bak——回滚）
+  status: 'delivered' | 'closed' | 'adjusting' // 交付 ≠ 解决——closed=用户确认终态
+  snapshot?: string[] // 写前快照（.nf-bak——回滚）
 }
 ```
 
@@ -264,21 +273,22 @@ interface DeliveryPackage {
 
 ```typescript
 interface DeliveryService {
-  alignDoD(goal: string): Acceptance[]           // 动手前复述问题 + 验收标准（用户认可才动手）
-  buildPackage(files: { path: FilePath; diff: string }[]): DeliveryPackage  // 交付包组装
-  confirmClose(pkg: DeliveryPackage): void       // 用户确认关闭（终态——验收打勾）
-  revert(pkg: DeliveryPackage, file: FilePath): void  // 快照回滚（交付不满意恢复原样）
+  alignDoD(goal: string): Acceptance[] // 动手前复述问题 + 验收标准（用户认可才动手）
+  buildPackage(files: { path: FilePath; diff: string }[]): DeliveryPackage // 交付包组装
+  confirmClose(pkg: DeliveryPackage): void // 用户确认关闭（终态——验收打勾）
+  revert(pkg: DeliveryPackage, file: FilePath): void // 快照回滚（交付不满意恢复原样）
 }
 ```
 
 不变式：交付 ≠ 解决（closed 需用户确认关闭）；写前快照（可回滚）。
+
 ### 2.6 TaskTrust（任务级信任——值对象/集合）
 
 ```typescript
 interface TaskTrust {
-  paths: FilePath[]          // 任务内信任的文件路径（允许并记住）
-  scope: 'sandbox-only'      // 只信任沙箱内（项目根内）——沙箱外永不进入
-  clearedBy: TaskBoundary    // 任务边界（goalSeq 递增——新目标确认）→ 清空
+  paths: FilePath[] // 任务内信任的文件路径（允许并记住）
+  scope: 'sandbox-only' // 只信任沙箱内（项目根内）——沙箱外永不进入
+  clearedBy: TaskBoundary // 任务边界（goalSeq 递增——新目标确认）→ 清空
 }
 ```
 
@@ -286,28 +296,32 @@ interface TaskTrust {
 
 ```typescript
 interface AuthorizationService {
-  preApprove(tool: string, args: Record<string, unknown>, ctx: { rootPath?: string }):
-    { auto: boolean; reason?: string }    // 规则引擎 deny>allow>ask——fail-closed——main 进程裁决
-  addTrust(args: Record<string, unknown>): void   // 允许并记住（仅文件路径类 + 沙箱内）
+  preApprove(
+    tool: string,
+    args: Record<string, unknown>,
+    ctx: { rootPath?: string },
+  ): { auto: boolean; reason?: string } // 规则引擎 deny>allow>ask——fail-closed——main 进程裁决
+  addTrust(args: Record<string, unknown>): void // 允许并记住（仅文件路径类 + 沙箱内）
   isTrusted(args: Record<string, unknown>): boolean // 任务信任集合命中 → write/edit 自动
-  clearTrust(): void                        // 任务边界（新目标确认）→ 清空信任 + 计划批准重置
+  clearTrust(): void // 任务边界（新目标确认）→ 清空信任 + 计划批准重置
 }
 ```
 
 不变式：bash 无 path 永不进入信任（高危永远单独确认）；沙箱外永不进入信任（安全底线）；信任不跨任务（clearTrust）。
 
 > **实现形态（2026-08-15 定论——M5 文档承认）**：Electron 架构必然的**双进程拆分**——规则引擎（`preApprove` deny>allow>ask fail-closed）部署于 **main 进程**（`tools.ts`——renderer 不判断，防绕过）；任务级信任集合（`addTrust`/`isTrusted`/`clearTrust`——renderer taskTrustRef）部署于 **renderer**（渲染需即时感知——信任条/授权卡）；`filesApproved` 幂等标记双进程对称（main `filesApprovedRef` ↔ renderer `filesApproved`——任务边界 `clearTrust` 经 IPC 同步重置，D2 2026-08-15 修复）。语义等价——信任裁决唯一权威在 main（execute 门控），renderer 侧为展示/交互镜像。
+
 ### 2.6b TimelineEvent（时间线事件——2026-08-16 审计 #5 编号修正，原 2.6 与 TaskTrust 重复）
 
 ```typescript
 interface TimelineEvent {
-  ts: string          // ISO 时间戳
-  seq: number         // 会话内序号
-  session: string     // 会话标识
-  type: TimelineEventType  // user-message / assistant-start+done / tool-call / tool-exec /
-                           // tool-result / tool-approval / goal-confirmed / plan-confirmed /
-                           // resolution-confirmed（2026-08-16 更名，原 exec-confirmed/achievement-confirmed）
-                           // status-change / stuck-escalate / error
+  ts: string // ISO 时间戳
+  seq: number // 会话内序号
+  session: string // 会话标识
+  type: TimelineEventType // user-message / assistant-start+done / tool-call / tool-exec /
+  // tool-result / tool-approval / goal-confirmed / plan-confirmed /
+  // resolution-confirmed（2026-08-16 更名，原 exec-confirmed/achievement-confirmed）
+  // status-change / stuck-escalate / error
   role?: 'user' | 'assistant' | 'system' | 'tool'
   detail: Record<string, unknown>
 }
@@ -317,10 +331,10 @@ interface TimelineEvent {
 
 ```typescript
 interface ProblemSnapshot {
-  goal: string          // 目标（用户问题第一句——GoalConfirmed 回写）
-  decisions: string[]   // 已确认决策
-  authorized: string[]  // 已授权操作（按文件去重——TrustLadder 展示）
-  pending: string[]     // 待办/待确认
+  goal: string // 目标（用户问题第一句——GoalConfirmed 回写）
+  decisions: string[] // 已确认决策
+  authorized: string[] // 已授权操作（按文件去重——TrustLadder 展示）
+  pending: string[] // 待办/待确认
 }
 ```
 
@@ -335,25 +349,26 @@ interface ProblemSnapshot {
 ```typescript
 interface ProgressGuarantee {
   decide(input: {
-    goalConfirmed: boolean      // 目标确认（用户）
-    planConfirmed: boolean      // 方案确认（用户——批准 PlanProposal）
+    goalConfirmed: boolean // 目标确认（用户）
+    planConfirmed: boolean // 方案确认（用户——批准 PlanProposal）
     resolutionConfirmed: boolean // 解决确认（用户——证据对账）
-    pending: boolean            // 会话级 PENDING（等用户决策）→ 恒不强制
-    produced: boolean           // 已有产出（write/edit）
-    proposed?: boolean          // 本轮输出结构化提议（算推进）
-    providedEvidence?: boolean  // 完成声明带证据（算推进）
-    lastToolFailed?: boolean    // 上一轮工具失败 → 释放强制（诊断修正）
-    plannedComplete?: boolean   // 计划文件写完 → 释放
+    pending: boolean // 会话级 PENDING（等用户决策）→ 恒不强制
+    produced: boolean // 已有产出（write/edit）
+    proposed?: boolean // 本轮输出结构化提议（算推进）
+    providedEvidence?: boolean // 完成声明带证据（算推进）
+    lastToolFailed?: boolean // 上一轮工具失败 → 释放强制（诊断修正）
+    plannedComplete?: boolean // 计划文件写完 → 释放
   }): { mode: 'require-advance' | 'require-action' | 'auto'; reason: string }
 }
 ```
 
 不变式：
+
 - pending（会话级）→ 恒 auto（模型停住等用户——三判定器同源：canExecute/maybeContinue/ProgressGuarantee）
 - 目标未确认 → auto（澄清）
 - 方案未确认 → auto（等方案批准）
 - 目标+方案确认、无任何推进 → require-advance（防只说不做——允许模型输出提议/证据/提问，不逼调工具）
-- **目标+方案确认、无产出且工具可用 → require-action**（2026-08-16 第 14 轮审计 #6 补——设计 §3.3 档位：原 required 语义保留但 pending 时自动降级——工具可用时直接要求行动；require-advance 与 require-action 均映射 tool_choice='required'——区别在系统提示措辞：行动 vs 推进）
+- **目标+方案确认、无产出且工具可用 → require-action**（2026-08-16 第 14 轮审计 #6 补——设计 §3.3 档位：原 required 语义保留但 pending 时自动降级——工具可用时直接要求行动；require-advance 与 require-action **均映射 tool_choice='auto'**（V4 拒 required——2026-08-21 更新）——区别在系统提示措辞：行动 vs 推进；强制由循环层 StuckDetector/escalate + prompt 层兜底——`provider-toolchoice-compat-research.md` §7）
 - 工具失败 → 释放（模型诊断修正——required 压制诊断是反模式）
 - 计划写完 或 解决确认 → 释放（模型可收敛）
 - **无计划文件**（未走 approve-files）→ produced 后 auto（A0 §4 补行——2026-08-16 审计补）
@@ -381,8 +396,8 @@ interface ProgressionGate {
 ```typescript
 interface CapabilityChecker {
   check(projectRoot: string): Capability[]
-  getMissing(caps: Capability[]): Capability[]   // 缺失清单（征求用户——装依赖/换方案）
-  recordResult(rootPath: string, capabilityId: string, ok: boolean): void  // Ledger 回填
+  getMissing(caps: Capability[]): Capability[] // 缺失清单（征求用户——装依赖/换方案）
+  recordResult(rootPath: string, capabilityId: string, ok: boolean): void // Ledger 回填
 }
 ```
 
@@ -392,10 +407,10 @@ interface CapabilityChecker {
 
 ```typescript
 interface PlannedFilesService {
-  approve(files: FilePath[]): void         // 追加（不覆盖）
+  approve(files: FilePath[]): void // 追加（不覆盖）
   contains(file: FilePath): boolean
-  visibleList(): string[]                  // 注入模型的可见清单
-  rejectMessage(file: FilePath): string    // 拒绝带边界（「X 不在批准清单（批准的是：A/B/C）」）
+  visibleList(): string[] // 注入模型的可见清单
+  rejectMessage(file: FilePath): string // 拒绝带边界（「X 不在批准清单（批准的是：A/B/C）」）
 }
 ```
 
@@ -450,30 +465,30 @@ interface IntentConfirmationServices {
 
 > 事件名实现权威 = `timeline.ts` 注册表（TIMELINE_EVENT_SPECS——44 事件）；本表为语义清单（2026-08-16 第 16 轮审计 #1——事件名以注册表为准）。
 
-| 事件 | 触发 | 发布者 |
-|------|------|--------|
-| GoalProposed / GoalConfirmed / GoalRejected | 目标提议 / 用户确认 / 重新描述 | Task |
-| ExecutionPlanProposed（历史——2026-08-16 起由 proposal.plan 替代）/ PlanConfirmed / PlanRejected | 方案提议（PlanProposal）/ 用户批准 / 修改+原因 | Task |
-| PlanApproved | 用户批准文件清单（追加）| PlannedFiles |
-| ToolApproved / ToolRejected / ToolExecuted / ToolFailed | 工具授权/执行结果 | ToolRegistry / Task |
-| AchievementProposed（历史——2026-08-16 起由 proposal.completion 替代）/ ResolutionConfirmed / ResolutionRejected | 完成声明（CompletionClaim+证据）/ 证据对账确认 / 还要改+原因 | Task |
-| CapabilityChecked / CapabilityLedgerUpdated | 能力检查 / Ledger 回填 | CapabilityRegistry |
-| EnvironmentInjected | 环境快照注入模型 | Conversation |
-| TaskResolved | 用户确认解决——任务收敛 | Task |
-| proposal.goal / proposal.plan / proposal.completion（2026-08-16 新增）| 模型输出结构化提议（完整内容快照）| Task（解析层）|
-| decision.requested / decision.resolved（2026-08-16 新增）| 决策点出现（内容快照）/ 用户决策（confirm/reject+RejectReason）| Conversation |
-| completion.evidence_missing（2026-08-16 新增）| 完成声明证据不足（回填引导）| Conversation（verifyCompletion）|
-| gate.denied（2026-08-16 新增）| ActionGate deny（机制拦截）| ActionGate |
+| 事件                                                                                                            | 触发                                                            | 发布者                           |
+| --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | -------------------------------- |
+| GoalProposed / GoalConfirmed / GoalRejected                                                                     | 目标提议 / 用户确认 / 重新描述                                  | Task                             |
+| ExecutionPlanProposed（历史——2026-08-16 起由 proposal.plan 替代）/ PlanConfirmed / PlanRejected                 | 方案提议（PlanProposal）/ 用户批准 / 修改+原因                  | Task                             |
+| PlanApproved                                                                                                    | 用户批准文件清单（追加）                                        | PlannedFiles                     |
+| ToolApproved / ToolRejected / ToolExecuted / ToolFailed                                                         | 工具授权/执行结果                                               | ToolRegistry / Task              |
+| AchievementProposed（历史——2026-08-16 起由 proposal.completion 替代）/ ResolutionConfirmed / ResolutionRejected | 完成声明（CompletionClaim+证据）/ 证据对账确认 / 还要改+原因    | Task                             |
+| CapabilityChecked / CapabilityLedgerUpdated                                                                     | 能力检查 / Ledger 回填                                          | CapabilityRegistry               |
+| EnvironmentInjected                                                                                             | 环境快照注入模型                                                | Conversation                     |
+| TaskResolved                                                                                                    | 用户确认解决——任务收敛                                          | Task                             |
+| proposal.goal / proposal.plan / proposal.completion（2026-08-16 新增）                                          | 模型输出结构化提议（完整内容快照）                              | Task（解析层）                   |
+| decision.requested / decision.resolved（2026-08-16 新增）                                                       | 决策点出现（内容快照）/ 用户决策（confirm/reject+RejectReason） | Conversation                     |
+| completion.evidence_missing（2026-08-16 新增）                                                                  | 完成声明证据不足（回填引导）                                    | Conversation（verifyCompletion） |
+| gate.denied（2026-08-16 新增）                                                                                  | ActionGate deny（机制拦截）                                     | ActionGate                       |
 
 ## 5. 仓库接口（Repository Ports）
 
-| 端口 | 语义 |
-|------|------|
-| ITaskRepository | 任务加载/保存（断点续做）——**V1 未落地（2026-08-15 裁决降级）**：断点续做 = 消息 + 问题台账恢复，状态机（确认/计划清单/产出集）不跨重启（复开从澄清重新走——安全但体验回退）；**V2 必做**：会话快照（含状态机序列化）持久化——与 compaction 摘要上下文的基准一致性为 V2 实现前置约束 |
-| IConversationRepository | 会话持久化 |
-| IPlannedFilesRepository | 计划清单持久化 |
-| ITimelineRepository | 时间线追加/查询 |
-| **IProblemRepository** | **问题台账加载/保存（V1 已落地——problemStore localStorage、上限 20）** |
+| 端口                    | 语义                                                                                                                                                                                                                                                                               |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ITaskRepository         | 任务加载/保存（断点续做）——**V1 未落地（2026-08-15 裁决降级）**：断点续做 = 消息 + 问题台账恢复，状态机（确认/计划清单/产出集）不跨重启（复开从澄清重新走——安全但体验回退）；**V2 必做**：会话快照（含状态机序列化）持久化——与 compaction 摘要上下文的基准一致性为 V2 实现前置约束 |
+| IConversationRepository | 会话持久化                                                                                                                                                                                                                                                                         |
+| IPlannedFilesRepository | 计划清单持久化                                                                                                                                                                                                                                                                     |
+| ITimelineRepository     | 时间线追加/查询                                                                                                                                                                                                                                                                    |
+| **IProblemRepository**  | **问题台账加载/保存（V1 已落地——problemStore localStorage、上限 20）**                                                                                                                                                                                                             |
 
 ## 6. 类型汇总
 

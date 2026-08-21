@@ -24,6 +24,7 @@
 ```
 
 **关键洞察（三视角）**：
+
 1. **决策点 = 确定性派生的产物，不是模型文本的产物**——卡何时出现、呈现什么，必须是状态×提议×动作的纯函数（竞品：机制触发；学术：介入点按动作属性；我们现状：模型标记触发——反模式）。
 2. **模型只能「提议」，不能「制造决策点」**——提议是值对象（携带结构化内容：假设/证据），决策点由系统对提议+状态求值产生。
 3. **完成 = 声明 + 证据 + 用户对账**——模型自评不可靠（学术共识），完成确认必须对账到可核验证据。
@@ -34,15 +35,15 @@
 
 ## 2. 通用语言（Ubiquitous Language）
 
-| 术语 | 定义 |
-|------|------|
-| **提议 Proposal** | 模型产出的结构化主张：目标提议 / 方案提议 / 完成声明。模型可随时产出，**不产生任何状态变化**，只进入「待决策」或「待对账」 |
-| **决策点 DecisionPoint** | 「需要用户输入才能继续」的确定性状态：`待决策的目标 / 待决策的方案 / 待决策的授权 / 待对账的完成`。由系统对（状态 × 提议 × 动作）求值产生，**模型不能制造** |
-| **决策 Decision** | 用户对决策点的响应：确认 / 拒绝（带原因）/ 修改（带修正内容）。决策是状态推进的唯一输入（不变量 1） |
-| **证据 Evidence** | 完成声明的可核验支撑：验证命令+输出、测试结果、diff 对账、遗留问题清单。证据不足 = 声明不完整 = 不进入对账 |
-| **动作属性 ActionAttribute** | 工具调用的客观性质：只读 / 网络只读 / 清单内写 / 越界写 / 高危命令（kind：readonly / network-read / in-plan / out-of-plan / hazardous——§3.2 同源）。由门控判定（与模型自评无关）|
-| **授权 Approval** | 对「动作属性判定为需询问」的调用，向用户呈现请求（subject+reason+risk），用户允许（一次/会话/永久）或拒绝（带原因）|
-| **推进保障 ProgressGuarantee** | 会话级不变量：确认后的会话必须持续推进（产出/提议/证据），防止「只说不做」；推进 ≠ 必须调工具 |
+| 术语                           | 定义                                                                                                                                                                             |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **提议 Proposal**              | 模型产出的结构化主张：目标提议 / 方案提议 / 完成声明。模型可随时产出，**不产生任何状态变化**，只进入「待决策」或「待对账」                                                       |
+| **决策点 DecisionPoint**       | 「需要用户输入才能继续」的确定性状态：`待决策的目标 / 待决策的方案 / 待决策的授权 / 待对账的完成`。由系统对（状态 × 提议 × 动作）求值产生，**模型不能制造**                      |
+| **决策 Decision**              | 用户对决策点的响应：确认 / 拒绝（带原因）/ 修改（带修正内容）。决策是状态推进的唯一输入（不变量 1）                                                                              |
+| **证据 Evidence**              | 完成声明的可核验支撑：验证命令+输出、测试结果、diff 对账、遗留问题清单。证据不足 = 声明不完整 = 不进入对账                                                                       |
+| **动作属性 ActionAttribute**   | 工具调用的客观性质：只读 / 网络只读 / 清单内写 / 越界写 / 高危命令（kind：readonly / network-read / in-plan / out-of-plan / hazardous——§3.2 同源）。由门控判定（与模型自评无关） |
+| **授权 Approval**              | 对「动作属性判定为需询问」的调用，向用户呈现请求（subject+reason+risk），用户允许（一次/会话/永久）或拒绝（带原因）                                                              |
+| **推进保障 ProgressGuarantee** | 会话级不变量：确认后的会话必须持续推进（产出/提议/证据），防止「只说不做」；推进 ≠ 必须调工具                                                                                    |
 
 ---
 
@@ -74,6 +75,7 @@ ConversationState {
 ```
 
 **推翻/继承清单**：
+
 - ✅ 继承：单一 PENDING、确认点三态、plannedFiles 追加语义、producedFiles、lastToolFailed
 - 🔄 重构：`executionConfirmed` → `planConfirmed`（用户确认的是方案——与 PlanProposal 对应；「执行」是确认后的自动结果）；`achievementConfirmed` → `resolutionConfirmed`（「达成」是模型声明，用户确认的是「问题解决」）
 - ➕ 新增：`decisionContent`（决策点内容快照——决策点呈现与审计的唯一来源；run4「用户确认了含未确认假设的方案」无法追溯的问题由此解决）
@@ -224,21 +226,22 @@ applyToolResult(...)  // 继承（producedFiles/lastToolFailed）
 
 ### 3.5 领域事件（timeline 注册表扩展）
 
-| 事件 | 内容 |
-|------|------|
-| `proposal.goal` | GoalProposal 完整内容（statement+assumptions）——替代现 task.goal_proposed 文本摘要 |
-| `proposal.plan` | PlanProposal 完整内容（files+assumptions+verificationPlan）|
-| `proposal.completion` | CompletionClaim 完整内容（summary+evidence）|
-| `decision.requested` | 决策点出现（kind + decisionContent 快照——含呈现内容的完整审计）|
-| `decision.resolved` | 确认/拒绝（confirm/reject + RejectReason）——现有 card.resolved 增强 |
-| `completion.evidence_missing` | 完成声明被拒原因（missing 清单——新诊断事件）|
-| `gate.denied` | ActionGate deny（高风险动作被机制拦——非 ask）|
+| 事件                          | 内容                                                                               |
+| ----------------------------- | ---------------------------------------------------------------------------------- |
+| `proposal.goal`               | GoalProposal 完整内容（statement+assumptions）——替代现 task.goal_proposed 文本摘要 |
+| `proposal.plan`               | PlanProposal 完整内容（files+assumptions+verificationPlan）                        |
+| `proposal.completion`         | CompletionClaim 完整内容（summary+evidence）                                       |
+| `decision.requested`          | 决策点出现（kind + decisionContent 快照——含呈现内容的完整审计）                    |
+| `decision.resolved`           | 确认/拒绝（confirm/reject + RejectReason）——现有 card.resolved 增强                |
+| `completion.evidence_missing` | 完成声明被拒原因（missing 清单——新诊断事件）                                       |
+| `gate.denied`                 | ActionGate deny（高风险动作被机制拦——非 ask）                                      |
 
 现有事件保持（session.pending_set/cleared、tool.blocked、execution.forced/released 等）。
 
 **事件注册表实现注记**（2026-08-16 第三轮审计 C 修正）：timeline.ts 的 TIMELINE_EVENT_SPECS 的 domain 为受限联合（'conversation'|'task'|'session'|'plan'|'tool'|'capability'|'execution'|'stuck'|'problem'|'card'）——新事件登记时：
-- proposal.*/decision.*/completion.*/gate.* 需**扩展 domain 联合**（新增 'proposal'|'decision'|'completion'|'gate' 四成员——S1 随注册表扩展）
-- **card.* 与 decision.* 两层并存**（不合并）：card.* = UI 卡生命周期视图事件（保留——消费方/dedupe 依赖），decision.* = 领域决策点事件（新）——语义对齐（decision.resolved 与 card.resolved 同时触发，detail 互补）——「并入」措辞澄清为「语义对齐」非事件合并
+
+- proposal._/decision._/completion._/gate._ 需**扩展 domain 联合**（新增 'proposal'|'decision'|'completion'|'gate' 四成员——S1 随注册表扩展）
+- _*card.* 与 decision._ 两层并存**（不合并）：card.* = UI 卡生命周期视图事件（保留——消费方/dedupe 依赖），decision.* = 领域决策点事件（新）——语义对齐（decision.resolved 与 card.resolved 同时触发，detail 互补）——「并入」措辞澄清为「语义对齐」非事件合并
 
 ---
 
@@ -259,35 +262,35 @@ applyToolResult(...)  // 继承（producedFiles/lastToolFailed）
 
 ## 5. 与现状的差距（推翻/继承/新增总表）
 
-| 现状 | 处置 | 原因（三视角证据）|
-|------|------|------------------|
-| pendingCardToShow（模型文本触发卡）| **推翻**——deriveDecisionPoint（状态×提议×动作）| 学术：介入点按动作属性；竞品：机制触发；四轮 e2e：模型标记不可靠 |
-| executionConfirmed | **重构** → planConfirmed | 用户确认的是方案（PlanProposal），「执行」是结果 |
-| achievementConfirmed + 已解决卡 | **重构** → resolutionConfirmed + 证据对账门 | 学术：self-verification 不可靠；Cline verified/SWE reviewer/Devin 断言 |
-| parseExecutionPlan（裸文件集合）| **推翻** → parsePlanProposal（含假设+验证计划）| 竞品计划工件（Gemini .md 可编辑/DSH plan-review）；学术：确认内容含未验证假设 |
-| forceTool=required（逼调工具）| **重设计** → decideProgressGuarantee（逼推进）| 无竞品对应「逼调工具」；「逼验证」（Aider/Cline）是正确方向 |
-| canExecute（单维）| **重构** → sessionGate × actionGate | DSH sandbox×approval 正交；Deep Code 10 类 scope |
-| classifyAction（命令头二元）| **升级** → classifyReadonly（链递归/git 子命令/网络只读）| Codex is_safe_command；run4 curl 弹卡 |
-| userRejected（无原因）| **增强** → RejectReason 回填 | Cline denial reason；Deep Code「不要绕过」|
-| 单一 PENDING / 任务边界信任 / plannedFiles 追加 | **继承** | 三视角确认的独有价值 |
-| shouldStopContinuation / StuckDetector / timeline 事件 | **继承** | 已修复/已重建 |
-| taskTrust / delegateLowRisk | 继承（V2 扩展持久化+档位）| 竞品疲劳对策 |
+| 现状                                                   | 处置                                                      | 原因（三视角证据）                                                            |
+| ------------------------------------------------------ | --------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| pendingCardToShow（模型文本触发卡）                    | **推翻**——deriveDecisionPoint（状态×提议×动作）           | 学术：介入点按动作属性；竞品：机制触发；四轮 e2e：模型标记不可靠              |
+| executionConfirmed                                     | **重构** → planConfirmed                                  | 用户确认的是方案（PlanProposal），「执行」是结果                              |
+| achievementConfirmed + 已解决卡                        | **重构** → resolutionConfirmed + 证据对账门               | 学术：self-verification 不可靠；Cline verified/SWE reviewer/Devin 断言        |
+| parseExecutionPlan（裸文件集合）                       | **推翻** → parsePlanProposal（含假设+验证计划）           | 竞品计划工件（Gemini .md 可编辑/DSH plan-review）；学术：确认内容含未验证假设 |
+| forceTool=required（逼调工具）                         | **重设计** → decideProgressGuarantee（逼推进）            | 无竞品对应「逼调工具」；「逼验证」（Aider/Cline）是正确方向                   |
+| canExecute（单维）                                     | **重构** → sessionGate × actionGate                       | DSH sandbox×approval 正交；Deep Code 10 类 scope                              |
+| classifyAction（命令头二元）                           | **升级** → classifyReadonly（链递归/git 子命令/网络只读） | Codex is_safe_command；run4 curl 弹卡                                         |
+| userRejected（无原因）                                 | **增强** → RejectReason 回填                              | Cline denial reason；Deep Code「不要绕过」                                    |
+| 单一 PENDING / 任务边界信任 / plannedFiles 追加        | **继承**                                                  | 三视角确认的独有价值                                                          |
+| shouldStopContinuation / StuckDetector / timeline 事件 | **继承**                                                  | 已修复/已重建                                                                 |
+| taskTrust / delegateLowRisk                            | 继承（V2 扩展持久化+档位）                                | 竞品疲劳对策                                                                  |
 
 ---
 
 ## 6. 分阶段实施计划（S0/T0/S1-S7，每步全绿再进）
 
-| 阶段 | 内容 | 门禁 |
-|------|------|------|
-| **S0 文档** | 本设计定稿 + A0 §3.6/§3.5b/§4/§4.2/§5 同步 + 02/04/09/D0/01 文档同步（已完成——2026-08-16）| 用户拍板 ✅ |
-| **T0 测试基建**（S1 前置）| MockBridge 工厂 + 场景装配器 + 断言 helper（§9.3——旧测试暂用，S3 迁移）| 基建自测（工厂可装配旧场景）|
-| **S1 领域层重写** | conversationState.ts 按新模型重写（值对象+deriveDecisionPoint+转换+不变量 1-8 全部 L1 测试——红→绿）；L1 按「不变量矩阵」组织（§9.5）| L1 全量 + 双 tsc |
-| **S2 提议解析** | parsePlanProposal / parseCompletionClaim / verifyCompletion（含坑 102 过滤继承）+ L1 | L1 + L2 |
-| **S3 renderer 接线** | 卡渲染从 decisionContent 派生（触发权切换）、确认/拒绝带原因 UI、方案卡渲染（文件+假设+验证计划）| L1 + L2 + L3 相关场景 |
-| **S4 完成证据对账** | 已解决卡条件 = verifyCompletion 通过；证据不足回填引导；completion.evidence_missing 打点 | L1 + L2 + L3 |
-| **S5 推进保障** | decideProgressGuarantee 替换 forceTool（pending 恒 auto 继承）+ execution.forced 事件语义更新 | L1 + L2 + L3 |
-| **S6 门控双维** | actionGate 接入（只读/网络只读自动、清单判定、风险分级）| L1 + L2 + L3 + 冒烟 |
-| **S7 回归与文档** | L1-L5 全链 + e2e-0to1 PHASE=all + A0 全文审校 + HANDOFF 回填 | 全链绿 |
+| 阶段                       | 内容                                                                                                                                 | 门禁                         |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- |
+| **S0 文档**                | 本设计定稿 + A0 §3.6/§3.5b/§4/§4.2/§5 同步 + 02/04/09/D0/01 文档同步（已完成——2026-08-16）                                           | 用户拍板 ✅                  |
+| **T0 测试基建**（S1 前置） | MockBridge 工厂 + 场景装配器 + 断言 helper（§9.3——旧测试暂用，S3 迁移）                                                              | 基建自测（工厂可装配旧场景） |
+| **S1 领域层重写**          | conversationState.ts 按新模型重写（值对象+deriveDecisionPoint+转换+不变量 1-8 全部 L1 测试——红→绿）；L1 按「不变量矩阵」组织（§9.5） | L1 全量 + 双 tsc             |
+| **S2 提议解析**            | parsePlanProposal / parseCompletionClaim / verifyCompletion（含坑 102 过滤继承）+ L1                                                 | L1 + L2                      |
+| **S3 renderer 接线**       | 卡渲染从 decisionContent 派生（触发权切换）、确认/拒绝带原因 UI、方案卡渲染（文件+假设+验证计划）                                    | L1 + L2 + L3 相关场景        |
+| **S4 完成证据对账**        | 已解决卡条件 = verifyCompletion 通过；证据不足回填引导；completion.evidence_missing 打点                                             | L1 + L2 + L3                 |
+| **S5 推进保障**            | decideProgressGuarantee 替换 forceTool（pending 恒 auto 继承）+ execution.forced 事件语义更新                                        | L1 + L2 + L3                 |
+| **S6 门控双维**            | actionGate 接入（只读/网络只读自动、清单判定、风险分级）                                                                             | L1 + L2 + L3 + 冒烟          |
+| **S7 回归与文档**          | L1-L5 全链 + e2e-0to1 PHASE=all + A0 全文审校 + HANDOFF 回填                                                                         | 全链绿                       |
 
 **每阶段 commit**：`refactor(意图确认): S<N> —— <一句话>`；坑号续编（S1 起步 104）。
 
@@ -308,12 +311,12 @@ applyToolResult(...)  // 继承（producedFiles/lastToolFailed）
 
 ### 7.1 拍板结果（2026-08-16 接收会话——4 项全按建议值定稿，S1 实施依据）
 
-| # | 决策 | 结果 |
-|---|------|------|
-| 1 | PlanProposal 可编辑性 | **V1 只读呈现**：确认 / 修改（拒绝 kind='modify' + 用户修正内容 → 模型重提议）/ 重出；可编辑（Gemini 计划文件式）V2 |
-| 2 | RejectReason UI 形态 | **结构化选项 + 可选自由文本**：kind 全集 direction/scope/complexity/missing-info/other；modify 由「修改方案」按钮单独触发 |
-| 3 | 网络只读放行范围 | **curl 对 localhost 自动放行，外网 GET ask**（安全默认；main preApproval 同步放行——S6） |
-| 4 | 非只读验证命令可信度 | **标记 unverifiable + 用户对账时显式提示「该证据未经系统核验」**（不禁止，仅标注） |
+| #   | 决策                  | 结果                                                                                                                      |
+| --- | --------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 1   | PlanProposal 可编辑性 | **V1 只读呈现**：确认 / 修改（拒绝 kind='modify' + 用户修正内容 → 模型重提议）/ 重出；可编辑（Gemini 计划文件式）V2       |
+| 2   | RejectReason UI 形态  | **结构化选项 + 可选自由文本**：kind 全集 direction/scope/complexity/missing-info/other；modify 由「修改方案」按钮单独触发 |
+| 3   | 网络只读放行范围      | **curl 对 localhost 自动放行，外网 GET ask**（安全默认；main preApproval 同步放行——S6）                                   |
+| 4   | 非只读验证命令可信度  | **标记 unverifiable + 用户对账时显式提示「该证据未经系统核验」**（不禁止，仅标注）                                        |
 
 ---
 
@@ -322,16 +325,19 @@ applyToolResult(...)  // 继承（producedFiles/lastToolFailed）
 ### 8.1 同步重构（本次一并做）
 
 **A. 授权执行层（main 进程 `tools.ts` preApproval / filesApprovedRef / ipc）**
+
 - 耦合点：`classifyAction` 是 renderer 与 main **跨进程同源共享**（坑 97 缝隙 4 设计——main preApproval 引用领域层判定）。`classifyReadonly` 粒度升级（git 子命令/bash 链/网络只读）后，**main 必须同步引用新判定**，否则 renderer 与 main 判定分裂重现。
 - 同步内容：① classifyReadonly 上移领域层、main preApproval 改引用（继承现有同源机制）② 方案单一来源不变量（plannedFiles 由 PlanProposal 派生）与 main 的规划门控（filesApprovedRef「先 approve-files 再写」）对齐——main 门控语义不变，判定基准随领域层 ③ 网络只读（curl localhost）在 main preApproval 的放行。
 - 阶段：S6（门控双维）一并落地。
 
 **B. 推进检测（`agentLoop.ts` evaluateTurnProgress / detectStuck / StuckDetector）**
+
 - 耦合点：forceTool 重设计为「推进保障」后，「什么算推进」的判定必须统一——现有 `evaluateTurnProgress` 只认「副作用工具成功 / 新 read」为进展，**无工具调用但有提议/证据输出不算推进** → 与「推进≠调工具」新语义冲突（模型输出结构化提议会被 StuckDetector 判停滞 → escalate 打断合法链——坑 99 教训重现）。
 - 同步内容：TurnProgress 扩展维度——`proposed`（输出结构化提议）、`providedEvidence`（完成声明带证据）视为推进；StuckDetector 的「无进展」判定与新推进语义对齐；「只说不做」判定从「无工具调用」改为「无推进」。
 - 阶段：S5（推进保障）一并落地。
 
 **C. 提示词体系（`sysPrompt.ts`）**
+
 - 耦合点：提议解析（parsePlanProposal/parseCompletionClaim）依赖模型的**格式输出**——现有 sysHint ⑬⑭⑮ 只教模型输出【目标确认】【执行方案】【已达成】标记；新模型要求模型输出**结构化内容**（假设清单/验证计划/证据格式）。提示词不改 → 解析层拿不到结构化输入。
 - 同步内容：⑬ 目标提议格式（含「关键假设」行）；⑭ 方案提议格式（文件清单含理由 + 假设 + 验证计划）；⑮ 完成声明格式（声明 + 验证证据 + 遗留问题）；**拒绝原因应对（模型收到 RejectReason 后的调整规则——2026-08-16 第 15 轮审计 #1：编号不锁定——sysPrompt.ts 现状 ⑱⑲ 已占用（工具失败/重试纪律），新内容以「新增条目」落地，编号以 sysPrompt.ts 现状为准）**。
 - 阶段：S2（提议解析）同步改（解析器与提示词必须同版本——格式契约）。
@@ -339,11 +345,13 @@ applyToolResult(...)  // 继承（producedFiles/lastToolFailed）
 ### 8.2 同步扩展（新增/登记，不重构）
 
 **D. 事件体系（`timeline.ts` 注册表 + `docs/domain/06-domain-events.md`）**
+
 - 新增事件登记：proposal.goal / proposal.plan / proposal.completion / decision.requested / decision.resolved（增强）/ completion.evidence_missing / gate.denied（§3.5）。
 - 现有事件语义更新：task.goal_proposed 等保留（兼容审计），新事件带完整结构化 detail（决策内容快照——run4「确认了什么无法追溯」问题的解法）。
 - 阶段：S1-S4 随各阶段登记（事件与状态转换同 commit）。
 
 **E. 会话持久化（`sessionStore.ts` 断点续做）**
+
 - 耦合点：decisionContent（决策点内容快照）必须随会话序列化——断点续做恢复后决策点内容不丢（否则恢复的会话卡内容空白、确认语义丢失）。
 - 同步内容：serializeMessages/loadSession 支持 decisionContent 字段（含 PlanProposal/CompletionClaim 结构）。
 - 恢复时序规则（2026-08-16 第三轮审计 C5 修正）：恢复后 **pending 冻结立即生效**（模型首轮只能响应用户对已有决策点的决策，不得新产出提议覆盖序列化的 decisionContent——与多提议归约规则 §3.6 性质 5 一致）；goal/plan 决策点恢复后**默认重显旧内容**，用户确认/修改后才更新。
@@ -352,9 +360,11 @@ applyToolResult(...)  // 继承（producedFiles/lastToolFailed）
 ### 8.3 测试与文档同步（每阶段门禁内）
 
 **F. 测试体系**：整体推翻重设计（§9 测试域 DDD——独立重构域）：T0 测试基建 → L1 不变量矩阵（S1）→ L3 旅程场景重写（S3）→ L4 用户模拟对齐（S7）→ L5 基线更新（S3/S4）
+
 - 坑 101（rejectedCardIdx 拒绝时序）**被新设计根治**（拒绝带原因后卡隐藏逻辑重设计——S3 内明确，不再单修）
 
 **G. 文档**（全盘梳理后完整清单——含之前遗漏的 02/04/09/D0/user-flows）：
+
 - `docs/domain/00-domain-authority.md`：§3.6（触发权）/§3.5b（动作属性门控）/§4+§4.2（推进保障+完成证据）/§5（PlanProposal+RejectReason）——已落地（原「新增 §7」计划因 A0 §7 已占用而改为内嵌相关章节，2026-08-16 审计修正）
 - `docs/domain/02-domain-model.md`：**确认点流程描述（目标→能力→方案→执行→达成）随语义变化同步**——之前遗漏
 - `docs/domain/04-tactical-design.md`：**Task 聚合五态状态机（clarifying→goal-confirmed→executing→achieved-reported→resolved）随状态机重设计同步**（该文档已写明「同一状态结构」——结构变则文档变）——之前遗漏
@@ -368,7 +378,7 @@ applyToolResult(...)  // 继承（producedFiles/lastToolFailed）
 
 - **授权疲劳/信任领域**（authModel/taskTrust/delegateLowRisk）：V2（信任分级/模式档位）——V1 继承现状；actionGate 的 risk 分级**复用**现有 toolRisk/canMergeApprove 判定（不重构）
 - **交付/产物领域**（DigitalDeliveryPanel/realChanges）：弱耦合（产物是执行结果），不动
-- **网关/模型路由**（gateway）：不动（推进保障只改 tool_choice 判定逻辑，不改造网关）
+- **网关/模型路由**（gateway）：不动（推进保障只改 tool_choice 判定逻辑，不改造网关）——**2026-08-21 更新**：`tool_choice: 'required'` 因 DeepSeek V4 全系拒绝（400——官方 issue #1376 + 实测）改为**恒 `auto`**，gateway 的 tool_choice 表达需同步（`provider-toolchoice-compat-research.md` §7；领域文档 A0 §1/§4、07 §1.1 已同步）——模型路由（ModelRouter）仍不动
 - **工作区/能力领域**（check-capability）：不动
 - **Compaction/候选块机制**（candidates.ts）：保留为**澄清输入通道**（模型澄清时仍可用候选块）——但「澄清优先」不依赖它（2026-08-16 第三轮审计 B 修正：调研结论「候选块可靠性差」——澄清的结构化落点是 **GoalProposal.assumptions**（假设清单显式呈现+可追溯：每条 assumption 标注来源「候选选择/澄清回答/模型推断」）；结构化澄清工具（AskToAct 式）为 V2）；sysHint ⑬ 格式契约微调衔接
 
@@ -389,14 +399,14 @@ applyToolResult(...)  // 继承（producedFiles/lastToolFailed）
 
 ### 9.1 现状问题（四轮实测暴露）
 
-| 问题 | 实证 |
-|------|------|
-| L3 每个测试重复写完整 mock bridge（27 个测试 27 份 mock 基建，仅小幅差异）| core.interaction.ts 各测试各自 addInitScript 完整 bridge |
-| L3 场景是「剧本堆叠」不是「领域场景」——场景命名/组织与领域术语脱节 | 测试按缺陷/修复命名（「问题 A」「P2」「执行确认卡不漂移」）而非按领域旅程 |
-| L4 e2e 使用无阶段化前的阶段语义（requirement/design/development 方法名+「需求确认完成」文本）| e2e-0to1.mjs 的 StageMachine/requirement() 四轮一直在适配 |
-| 断言词汇不统一（同一语义多种断言写法）| toHaveCount/toContainText/toBeVisible 混用无约定 |
-| 测试与领域不变量/事件**无追溯关系**——无法回答「不变量 2 被哪个测试锁定」| 无覆盖矩阵 |
-| L1 测试按「函数」组织（conversationState.test.ts 按导出函数堆），未按不变量/状态空间系统组织 | 状态空间穷举有雏形（2026-08-14）但未成体系 |
+| 问题                                                                                          | 实证                                                                      |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| L3 每个测试重复写完整 mock bridge（27 个测试 27 份 mock 基建，仅小幅差异）                    | core.interaction.ts 各测试各自 addInitScript 完整 bridge                  |
+| L3 场景是「剧本堆叠」不是「领域场景」——场景命名/组织与领域术语脱节                            | 测试按缺陷/修复命名（「问题 A」「P2」「执行确认卡不漂移」）而非按领域旅程 |
+| L4 e2e 使用无阶段化前的阶段语义（requirement/design/development 方法名+「需求确认完成」文本） | e2e-0to1.mjs 的 StageMachine/requirement() 四轮一直在适配                 |
+| 断言词汇不统一（同一语义多种断言写法）                                                        | toHaveCount/toContainText/toBeVisible 混用无约定                          |
+| 测试与领域不变量/事件**无追溯关系**——无法回答「不变量 2 被哪个测试锁定」                      | 无覆盖矩阵                                                                |
+| L1 测试按「函数」组织（conversationState.test.ts 按导出函数堆），未按不变量/状态空间系统组织  | 状态空间穷举有雏形（2026-08-14）但未成体系                                |
 
 ### 9.2 测试域模型（测试 = 领域不变量与场景的可执行规范）
 
@@ -435,14 +445,13 @@ applyToolResult(...)  // 继承（producedFiles/lastToolFailed）
 
 ### 9.5 测试重构阶段（并入 S 计划）
 
-| 阶段 | 测试工作 |
-|------|---------|
-| T0（S1 前置）| MockBridge 工厂 + 场景装配器 + 断言 helper（基建——旧测试暂用，S3 迁移）|
-| S1 | L1 按「不变量矩阵」重写（领域层新模型测试即按新组织编写）|
-| S2 | 值对象解析测试（parsePlanProposal/parseCompletionClaim/verifyCompletion）|
-| S3 | L3 场景重写（旅程组织 + MockBridge 工厂迁移 + 方案卡/拒绝原因场景）|
-| S4 | 证据对账场景（证据不足→不弹卡→回填引导）|
-| S5 | 推进保障场景（提议/证据算推进——StuckDetector 不打断）|
-| S6 | 门控双维场景（只读/网络只读自动、越界 ask、高危 deny）|
-| S7 | L4 用户模拟对齐重写 + L5 基线更新 + 全链回归 |
-
+| 阶段          | 测试工作                                                                  |
+| ------------- | ------------------------------------------------------------------------- |
+| T0（S1 前置） | MockBridge 工厂 + 场景装配器 + 断言 helper（基建——旧测试暂用，S3 迁移）   |
+| S1            | L1 按「不变量矩阵」重写（领域层新模型测试即按新组织编写）                 |
+| S2            | 值对象解析测试（parsePlanProposal/parseCompletionClaim/verifyCompletion） |
+| S3            | L3 场景重写（旅程组织 + MockBridge 工厂迁移 + 方案卡/拒绝原因场景）       |
+| S4            | 证据对账场景（证据不足→不弹卡→回填引导）                                  |
+| S5            | 推进保障场景（提议/证据算推进——StuckDetector 不打断）                     |
+| S6            | 门控双维场景（只读/网络只读自动、越界 ask、高危 deny）                    |
+| S7            | L4 用户模拟对齐重写 + L5 基线更新 + 全链回归                              |

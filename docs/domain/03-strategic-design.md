@@ -29,7 +29,8 @@
 ```
 
 > 2026-08-16 第 13 轮审计 #10：全景图补 Delivery BC 节点（原图缺——§3.3 有文字描述，图文不一）。
-```
+
+````
 
 ## 2. 核心域声明：Conversation BC（目标驱动）
 
@@ -90,7 +91,7 @@
 
 | BC | 职责 |
 |----|------|
-| Gateway（模型网关）| DeepSeek API 通信、流式解析、tool_choice 传递（推进保障输出——2026-08-16）、工具调用修复 |
+| Gateway（模型网关）| DeepSeek API 通信、流式解析、tool_choice 传递（恒 auto——推进保障输出经 forceTool 标记 + 循环层/prompt 兜底，2026-08-21：V4 拒 required）、工具调用修复 |
 | ToolRegistry（工具注册）| 工具注册、发现、执行分发（read/write/edit/bash/check-capability/approve-files…）|
 | Configuration | 用户与项目配置 |
 | 技术基础设施（六阶段时代保留）| compact（压缩）/ context（上下文）/ codeRag（语义搜索）/ preheat（缓存预热）/ pluginSystem（插件）/ lsp（LSP 工具）——通用技术载体——非领域核心（实现保留——不进入无阶段决策）|
@@ -118,7 +119,7 @@ graph LR
     CONV -->|发布事件| TL
     CONV -->|tool_choice/流式| GW
     CAP -->|读项目文件| WS
-```
+````
 
 ## 6. 核心域演进方向
 

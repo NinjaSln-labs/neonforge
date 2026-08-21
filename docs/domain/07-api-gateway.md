@@ -7,16 +7,16 @@
 
 ## 1. DeepSeek V4 API 参数
 
-| 参数 | 说明 |
-|------|------|
-| `model` | `deepseek-v4-flash` / `deepseek-v4-pro` |
-| `thinking` | `{type: 'enabled' \| 'disabled'}` |
-| `reasoning_effort` ★ | `'high'` / `'max'`（仅 thinking=enabled 时有效） |
-| `messages` | OpenAI 兼容格式 |
-| `tools` | OpenAI 兼容格式 |
-| `tool_choice` ★ 2026-08-07（语义 2026-08-16 更新——推进保障）| `'required'`（确认后**无推进**时强制模型推进——产出/提议/证据，非强制调工具）/ `'auto'`（澄清/等用户决策/失败诊断） |
-| `stream` | SSE 流式输出 |
-| `max_tokens` | 最大输出 token |
+| 参数                                                                                            | 说明                                                                                                                                                                                                                                                              |
+| ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `model`                                                                                         | `deepseek-v4-flash` / `deepseek-v4-pro`                                                                                                                                                                                                                           |
+| `thinking`                                                                                      | `{type: 'enabled' \| 'disabled'}`                                                                                                                                                                                                                                 |
+| `reasoning_effort` ★                                                                            | `'high'` / `'max'`（仅 thinking=enabled 时有效）                                                                                                                                                                                                                  |
+| `messages`                                                                                      | OpenAI 兼容格式                                                                                                                                                                                                                                                   |
+| `tools`                                                                                         | OpenAI 兼容格式                                                                                                                                                                                                                                                   |
+| `tool_choice` ★ 2026-08-07（语义 2026-08-21 更新——V4 不支持 required，恒 auto；ADR-007 + 调研） | `'auto'`（**恒 auto**——DeepSeek V4 全系拒绝 `required`（thinking 模式 400，官方 issue #1376 + 真机实测）；强制「推进」改由循环层 StuckDetector/escalate + sysPrompt ⑨ 兜底——对齐 Codex/pi/DSH 工业共识，见 `docs/design/provider-toolchoice-compat-research.md`） |
+| `stream`                                                                                        | SSE 流式输出                                                                                                                                                                                                                                                      |
+| `max_tokens`                                                                                    | 最大输出 token                                                                                                                                                                                                                                                    |
 
 ### 1.1 推进保障传递（ProgressGuarantee——无阶段目标驱动核心链路；2026-08-16 重设计，原 forceTool/执行保障）
 
@@ -25,33 +25,38 @@ ProgressGuarantee（领域层——确认状态 + 推进 + 失败 + 完成度 + 
     │ 决策 { mode: 'require-advance' | 'require-action' | 'auto'; reason: string }
     ▼
 Gateway.buildRequest(mode)
-    │ require-advance/require-action → tool_choice: 'required'
-    │   ——强制对象是「推进」（产出/结构化提议/证据/提问），不是「必须调工具」
+    │ require-advance/require-action → tool_choice: 'auto'（forceTool 布尔由 renderer 在调用前输出 execution.forced 事件——timeline 取证在 renderer，gateway 仅透传参数）
+    │   ——V4 全系拒绝 tool_choice: 'required'（thinking 模式 400——官方 issue #1376 + 实测）
+    │   ——强制对象「推进」改由循环层（StuckDetector/escalate——agentLoop）与 prompt 层（sysPrompt ⑨）兜底
     │ auto → tool_choice: 'auto'（澄清/等用户决策/失败诊断——模型自由）
     ▼
 DeepSeek API
 ```
 
-| 场景 | mode | tool_choice | 理由 |
-|------|------|-------------|------|
-| pending（等用户决策——授权卡/确认卡悬挂）| auto | auto | 模型停住等用户（pending 恒不强制——三判定器同源）|
-| 目标未确认 | auto | auto | 澄清（模型自由问答）|
-| 方案未确认 | auto | auto | 等方案批准卡（模型只给方案）|
-| 目标+方案确认、无任何推进 | **require-advance** | **required** | 防只说不做——强制推进（产出/提议/证据；模型可输出结构化提议与提问，不逼调工具）|
-| 工具失败 | auto | auto | 释放诊断（模型停下修正——required 压制诊断是反模式）|
-| 计划写完/解决确认 | auto | auto | 收敛（模型可停下汇报/对账）|
+| 场景                                     | mode                | tool_choice | 理由                                                                                            |
+| ---------------------------------------- | ------------------- | ----------- | ----------------------------------------------------------------------------------------------- |
+| pending（等用户决策——授权卡/确认卡悬挂） | auto                | auto        | 模型停住等用户（pending 恒不强制——三判定器同源）                                                |
+| 目标未确认                               | auto                | auto        | 澄清（模型自由问答）                                                                            |
+| 方案未确认                               | auto                | auto        | 等方案批准卡（模型只给方案）                                                                    |
+| 目标+方案确认、无任何推进                | **require-advance** | **auto**    | 防只说不做——forceTool 标记 + 循环层 escalate 兜底（产出/提议/证据；模型可输出结构化提议与提问） |
+| 工具失败                                 | auto                | auto        | 释放诊断（模型停下修正）                                                                        |
+| 计划写完/解决确认                        | auto                | auto        | 收敛（模型可停下汇报/对账）                                                                     |
 
-**不变式**：tool_choice 决策只来自领域层 ProgressGuarantee（网关不自行判定——单一事实来源）；required 语义 = 强制推进 ≠ 强制调工具（2026-08-16 推进保障重设计——A0 §4/`intent-confirmation-domain-design.md` §3.3）。
+**不变式**：tool_choice 决策只来自领域层 ProgressGuarantee（网关不自行判定——单一事实来源）；**API 层恒 `auto`**（V4 拒 required）；强制推进语义由循环层（StuckDetector/escalate）+ prompt 层（sysPrompt ⑨「说了就做」）承载——对齐 Codex「must keep going」/pi/DSH 工业共识（2026-08-21——`provider-toolchoice-compat-research.md` §6/§7）。
 
 ### ThinkingLevel → API 映射 ★
 
 ```typescript
 function toDeepSeekParams(level: ThinkingLevel): DeepSeekThinkingParams {
   switch (level) {
-    case 'none':   return { thinking: { type: 'disabled' } }
-    case 'basic':  return { thinking: { type: 'enabled' } }
-    case 'medium': return { thinking: { type: 'enabled' }, reasoning_effort: 'high' }
-    case 'high':   return { thinking: { type: 'enabled' }, reasoning_effort: 'max' }
+    case 'none':
+      return { thinking: { type: 'disabled' } }
+    case 'basic':
+      return { thinking: { type: 'enabled' } }
+    case 'medium':
+      return { thinking: { type: 'enabled' }, reasoning_effort: 'high' }
+    case 'high':
+      return { thinking: { type: 'enabled' }, reasoning_effort: 'max' }
   }
 }
 ```
@@ -61,6 +66,8 @@ function toDeepSeekParams(level: ThinkingLevel): DeepSeekThinkingParams {
 ## 2. Streaming 解析状态机
 
 同旧版：IDLE → PARSING_REASONING → PARSING_CONTENT / PARSING_TOOL_CALLS → FINISHED。
+
+> 2026-08-21（provider 兼容——`provider-toolchoice-compat-research.md`）：**reasoning 字段多源兼容**——SSE delta 的 thinking 内容可能出现在 `reasoning_content`（DeepSeek 官方/llama.cpp）或 `reasoning`（其他 OpenAI 兼容端点，含 Command Code）或 `reasoning_text`；解析取**第一个非空**（对齐 pi/DSH `["reasoning_content","reasoning","reasoning_text"]` 归一）；**回放**（多轮 assistant 消息）统一用 `reasoning_content`（pi #3636/#4678 实证：DeepSeek V4 多轮 thinking 回放必须带 `reasoning_content` 字段）。
 
 ---
 
@@ -223,11 +230,11 @@ class ModelRouter {
 
 ## 文档索引
 
-| 文档 | 核心变化 |
-|------|---------|
-| [01-竞品分析](./01-reference-analysis.md) | Pi / Reasonix / DeepCode / Cursor 深度对比 |
-| [02-领域模型](./02-domain-model.md) | 四层架构、12 限界上下文、设计原则、统一语言 |
-| [03-战略设计](./03-strategic-design.md) | 限界上下文详细建模、上下文映射 |
-| [04-战术设计](./04-tactical-design.md) | 聚合根、值对象、领域服务、不变性规则 |
-| [05-架构设计](./05-architecture.md) | 分层架构、管线设计、模块目录树、技术选型 |
-| [06-领域事件](./06-domain-events.md) | 完整事件目录、关键时序图 |
+| 文档                                      | 核心变化                                    |
+| ----------------------------------------- | ------------------------------------------- |
+| [01-竞品分析](./01-reference-analysis.md) | Pi / Reasonix / DeepCode / Cursor 深度对比  |
+| [02-领域模型](./02-domain-model.md)       | 四层架构、12 限界上下文、设计原则、统一语言 |
+| [03-战略设计](./03-strategic-design.md)   | 限界上下文详细建模、上下文映射              |
+| [04-战术设计](./04-tactical-design.md)    | 聚合根、值对象、领域服务、不变性规则        |
+| [05-架构设计](./05-architecture.md)       | 分层架构、管线设计、模块目录树、技术选型    |
+| [06-领域事件](./06-domain-events.md)      | 完整事件目录、关键时序图                    |
