@@ -7,6 +7,7 @@ import {
   summarizeCapability,
   goalFallbackTrigger,
   isQuestionLike,
+  isConfirmIntent,
 } from '../../src/domain/agentLoop'
 
 // 领域层：progress-aware 卡住检测（2026-08-06 DDD 落地——行业调研 tavily+serper 双源：activity≠progress + 连续无进展升级 + needs-human）
@@ -421,5 +422,38 @@ describe('goalFallbackTrigger（目标确认兜底——D6）', () => {
   it('与 isQuestionLike 语义一致（问句直接走澄清，不走兜底）', () => {
     expect(isQuestionLike('可以吗？')).toBe(true)
     expect(goalFallbackTrigger('可以吗？')).toBe(true) // 征询确认词命中（设计：问句确认征询=要决策）
+  })
+})
+
+// 2026-08-22 #6 真机体验闭环（问题 2——P1）：isConfirmIntent 词表裸子串误伤
+// 真机取证：用户 pending 期输入「先给我文件清单，我看了再确认执行」→ 含「确认执行」子串 → 误判确认
+// → planConfirmed=true（task.execution_confirmed）→ 方案卡自动消失 + 未确认就放行——确认卡形同虚设
+describe('isConfirmIntent（确认语义判定——条件式/将来时排除）', () => {
+  it('纯确认词 → 确认（保持既有语义）', () => {
+    expect(isConfirmIntent('行')).toBe(true)
+    expect(isConfirmIntent('好')).toBe(true)
+    expect(isConfirmIntent('可以')).toBe(true)
+    expect(isConfirmIntent('确认')).toBe(true)
+    expect(isConfirmIntent('按这个方案')).toBe(true)
+    expect(isConfirmIntent('就这么办')).toBe(true)
+    expect(isConfirmIntent('继续')).toBe(true)
+    expect(isConfirmIntent('动手吧')).toBe(true)
+  })
+  it('含确认子串但带条件/顺序前缀 → 不确认（#6 真机取证：先…再确认执行）', () => {
+    expect(isConfirmIntent('先给我文件清单，我看了再确认执行')).toBe(false)
+    expect(isConfirmIntent('先看看方案，确认后再动手')).toBe(false)
+    expect(isConfirmIntent('等我看完文件清单再确认')).toBe(false)
+    expect(isConfirmIntent('我看一下再确认')).toBe(false)
+    expect(isConfirmIntent('先确认一下方案')).toBe(false)
+  })
+  it('否定语义 → 不确认', () => {
+    expect(isConfirmIntent('先别确认')).toBe(false)
+    expect(isConfirmIntent('不要按这个方案')).toBe(false)
+    expect(isConfirmIntent('暂时不确认')).toBe(false)
+  })
+  it('问句/征询 → 不确认（是决策征询非确认）', () => {
+    expect(isConfirmIntent('可以吗？')).toBe(false)
+    expect(isConfirmIntent('确认执行吗？')).toBe(false)
+    expect(isConfirmIntent('按这个方案可以吗')).toBe(false)
   })
 })

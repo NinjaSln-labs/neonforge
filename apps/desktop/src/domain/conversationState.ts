@@ -306,9 +306,16 @@ export const BASH_READONLY_HEADS: ReadonlySet<string> = new Set([
   'history',
 ])
 
-// 链中危险命令（bash 链递归判定——&&/;/| 任一危险 → hazardous；含写副作用标记（重定向到文件）→ hazardous）
-const BASH_CHAIN_DANGEROUS =
-  /\b(rm|mv|cp|mkdir|touch|npm|pnpm|yarn|git|curl|wget|python|python3|node|install|unlink|ln|chmod|chown)\b/
+// 2026-08-22 #6 真机体验闭环（问题 4——P1 根因链）：危险命令的**只读形态**排除——
+// 真机取证：`node -v 2>&1; echo ---npm---; npm -v 2>&1` 验证环境被 `;` 链递归误判 hazardous
+// （node/npm 是危险词，但 -v/--version 查询只读）→ sessionGate 拦「方案未确认」→ 模型无法验证
+// 环境 → 被迫进方案决策点 → 空方案卡（根因链源头）。段级判定：段首危险命令 + 只读参数形态 → 非危险
+const BASH_DANGEROUS_READONLY_SHAPE =
+  /^(?:sudo\s+)?(node|npm|pnpm|yarn|python|python3)\s+(-v|--version|-V|-h|--help)\b|^which\s+[a-zA-Z0-9._-]+$/
+
+// 段首命令词是否为危险命令（链递归用——**段首**匹配，非任意子串：`echo ---npm---` 的 npm 是参数不判危险）
+const BASH_SEGMENT_DANGEROUS_HEAD =
+  /^(?:sudo\s+)?(rm|mv|cp|mkdir|touch|npm|pnpm|yarn|git|curl|wget|python|python3|node|install|unlink|ln|chmod|chown)\b/
 
 // git 只读子命令（Codex is_safe_git_command 方向）
 const GIT_READONLY_SUBCOMMANDS: ReadonlySet<string> = new Set([
@@ -341,11 +348,21 @@ export function classifyReadonly(name: string, command?: string): ActionKind {
       return 'network-read'
     return 'hazardous'
   }
-  // 重定向到文件 → 写副作用
-  if (/>\s*[^|]*$/m.test(c)) return 'hazardous'
-  // 链递归：& / ; / | 分隔的每一段——任一危险命令 → hazardous（原实现只查链后命令，不递归）
-  const segments = c.split(/[;&|]/).map((seg) => seg.trim())
-  if (segments.length > 1 && segments.some((seg) => BASH_CHAIN_DANGEROUS.test(seg)))
+  // 重定向到文件 → 写副作用（2026-08-22 问题 4：排除 stderr 重定向 `2>&1`/`2>>1`——不写文件）
+  const stripped = c.replace(/2>&1|2>>1/g, '')
+  if (/>\s*[^|]*$/m.test(stripped)) return 'hazardous'
+  // 链递归：& / ; / | 分隔的每一段——段首为危险命令且非只读形态 → hazardous
+  // 2026-08-22 问题 4：段级只读形态排除（node -v / npm --version / which node 查询 → 非危险）；
+  // 段首匹配（echo ---npm--- 的 npm 是参数——不误伤）；
+  // 链分隔：`2>&1` 中的 `&` 是 stderr 重定向不是链分隔——先保护再分割（原 `[;&|]` 把 2>&1 误拆成 2> 和 1）
+  const protectedCmd = c.replace(/2>&1|2>>1/g, '§§§') // 保护 stderr 重定向（§ 非链分隔符）
+  const segments = protectedCmd.split(/[;&|]/).map((seg) => seg.trim().replace(/§§§/g, '2>&1'))
+  if (
+    segments.length > 1 &&
+    segments.some(
+      (seg) => BASH_SEGMENT_DANGEROUS_HEAD.test(seg) && !BASH_DANGEROUS_READONLY_SHAPE.test(seg),
+    )
+  )
     return 'hazardous'
   const head = segments[0].split(/\s+/)[0]?.replace(/^sudo\s+/, '') ?? ''
   // git 子命令级判定（git status/log/diff 只读；git push/commit 写）
@@ -353,6 +370,9 @@ export function classifyReadonly(name: string, command?: string): ActionKind {
     const sub = segments[0].split(/\s+/)[1] ?? ''
     return GIT_READONLY_SUBCOMMANDS.has(sub) ? 'readonly' : 'hazardous'
   }
+  // 2026-08-22 问题 4：危险命令的只读形态（node -v / npm --version / which node）→ readonly
+  // （单段/链段均适用——head 匹配 + 只读参数形态）
+  if (BASH_DANGEROUS_READONLY_SHAPE.test(segments[0])) return 'readonly'
   return BASH_READONLY_HEADS.has(head) ? 'readonly' : 'hazardous'
 }
 
