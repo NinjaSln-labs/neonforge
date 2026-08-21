@@ -1641,6 +1641,8 @@ export default function ConversationPanel({
   }
 
   // 2026-08-04：对话历史构造（send 与阶段推进自动触发共用——工具轮转文本摘要保留上下文，DeepSeek 要求 tool 消息带 reasoning_content）
+  // 2026-08-21 ADR-007/provider 兼容：回放字段名统一 `reasoning_content`（官方与 Command Code 均需——pi #3636/#4678 实证
+  // DeepSeek V4 多轮 thinking 回放必须带 reasoning_content；读取端 gateway 已多源兼容 reasoning/reasoning_content——A-012）
   // 2026-08-06 根因修复（用户「说了做没做老问题——到底需要多少兜底」）：工具轮**不再转「（上一步执行：xxx）」自然语言文本**——
   // 那是模型文本模拟工具的模仿源（09:38 日志模型输出「（上一步执行：[read]）」= 模仿历史里我方塞的文本；9 层兜底全在补救症状，从没修模仿源）；
   // 改为保留**标准结构化 tool_calls + tool 消息**（与工具循环 497-505 行同格式——模型看到的是系统工具消息，不会模仿成正文）
@@ -1664,10 +1666,13 @@ export default function ConversationPanel({
           content: string | null
           tool_calls?: unknown[]
           tool_call_id?: string
+          reasoning_content?: string
         }> => {
           // 2026-08-15 D4：工具轮完整回填——① 有正文+工具的消息也带 tool_calls（原 `!m.content` 条件丢弃工具结果）② tool 消息用
           // rawResult 完整内容（原用 UI 摘要 c.result 且截断 300——模型后续轮看不到 read 内容 → 被迫反复 read——「一直读取操作」嫌疑）
           // 与 maybeContinue（工具循环内）回填语义一致：c.rawResult ?? c.result
+          // 2026-08-21 ADR-007/provider 兼容：回放统一带 reasoning_content（pi #3636/#4678——DeepSeek V4 多轮 thinking 回放必须带；
+          // 与工具循环内 L1428 语义一致——本路径补缺）
           if (m.role === 'assistant' && m.toolCalls && m.toolCalls.length > 0) {
             const calls = m.toolCalls.map((c, i) => ({
               id: `h${callSeq + i}`,
@@ -1680,6 +1685,7 @@ export default function ConversationPanel({
               {
                 role: 'assistant',
                 content: m.content || null,
+                reasoning_content: m.reasoning ?? '',
                 tool_calls: calls.map((c) => ({
                   id: c.id,
                   type: 'function',
@@ -1693,7 +1699,13 @@ export default function ConversationPanel({
               })),
             ]
           }
-          return [{ role: m.role, content: m.content }]
+          return [
+            {
+              role: m.role,
+              content: m.content,
+              ...(m.role === 'assistant' ? { reasoning_content: m.reasoning ?? '' } : {}),
+            },
+          ]
         },
       )
   }
@@ -1932,6 +1944,13 @@ export default function ConversationPanel({
             ...compacted.kept.map((m) => ({
               role: m.role as 'user' | 'assistant',
               content: m.content ?? '',
+              // 2026-08-21 ADR-007/provider 兼容：compaction 后保留 reasoning_content（DeepSeek V4 多轮 thinking 回放必须带——07 §2）
+              ...(m.role === 'assistant'
+                ? {
+                    reasoning_content:
+                      (m as { reasoning_content?: string }).reasoning_content ?? '',
+                  }
+                : {}),
             })),
           ]
           setWorkingStage('已压缩长对话（摘要 + 最近 20 条）…')

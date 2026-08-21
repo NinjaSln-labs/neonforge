@@ -63,6 +63,26 @@ describe('CompactionService（ticket 11 真实摘要接入）', () => {
     }
   })
 
+  it('compact：保留 reasoning_content（2026-08-21 ADR-007——DeepSeek V4 多轮 thinking 回放必须带）', async () => {
+    const withReasoning = Array.from({ length: 50 }, (_, i) => ({
+      role: i % 2 === 0 ? ('user' as const) : ('assistant' as const),
+      content: `消息 ${i}`,
+      ...(i % 2 === 1 ? { reasoning_content: `思考 ${i}` } : {}),
+    }))
+    const r = await compaction.compact(
+      'key',
+      async () => ({ ok: true, summary: 's' }),
+      withReasoning,
+    )
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      // kept 引用保留完整字段——assistant 消息的 reasoning_content 不丢
+      const keptAssistant = r.kept.filter((m) => m.role === 'assistant')
+      expect(keptAssistant.length).toBeGreaterThan(0)
+      expect(keptAssistant[0].reasoning_content).toBeTruthy()
+    }
+  })
+
   it('compact：summarize 失败 → 透传错误（降级不阻塞）', async () => {
     const r = await compaction.compact(
       'key',

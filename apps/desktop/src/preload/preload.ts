@@ -209,9 +209,15 @@ contextBridge.exposeInMainWorld('neonforge', {
       }>,
   },
   compaction: {
-    compact: (history: Array<{ role: string; content: string | null }>) =>
+    compact: (
+      history: Array<{ role: string; content: string | null; reasoning_content?: string }>,
+    ) =>
       ipcRenderer.invoke('compaction:compact', { history }) as Promise<
-        | { ok: true; summary: string; kept: Array<{ role: string; content: string | null }> }
+        | {
+            ok: true
+            summary: string
+            kept: Array<{ role: string; content: string | null; reasoning_content?: string }>
+          }
         | { ok: false; error: string }
       >,
   },

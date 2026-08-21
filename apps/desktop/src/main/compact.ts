@@ -28,23 +28,30 @@ export function compactHint(messageCount: number): string | null {
 
 export interface CompactionService {
   // 触发判定（ticket 11 AC：消息数 >100 或 tokens >200K——字符估算近似；A0 §5 与 03/04/06/07 对齐）
-  shouldCompact(history: Array<{ role: string; content: string | null }>): boolean
+  shouldCompact(history: CompactHistoryItem[]): boolean
   // 执行压缩：返回 { summary（压缩器产出）, kept（保留最近 20 条原始） }——失败返回错误
   compact(
     apiKey: string,
     summarize: (
       k: string,
-      h: Array<{ role: string; content: string | null }>,
+      h: CompactHistoryItem[],
     ) => Promise<{ ok: true; summary: string } | { ok: false; error: string }>,
-    history: Array<{ role: string; content: string | null }>,
+    history: CompactHistoryItem[],
   ): Promise<
-    | { ok: true; summary: string; kept: Array<{ role: string; content: string | null }> }
-    | { ok: false; error: string }
+    { ok: true; summary: string; kept: CompactHistoryItem[] } | { ok: false; error: string }
   >
 }
 
+// 2026-08-21 ADR-007/provider 兼容：history 消息类型带可选 reasoning_content——DeepSeek V4 多轮 thinking
+// 回放必须带（07 §2 / pi #3636）；compact 的 slice 引用保留完整字段，类型层面同步声明
+export interface CompactHistoryItem {
+  role: string
+  content: string | null
+  reasoning_content?: string
+}
+
 // 字符估算 tokens（中文为主约 1 token/字——近似触发，非精确计量）
-export function estimateTokens(history: Array<{ role: string; content: string | null }>): number {
+export function estimateTokens(history: CompactHistoryItem[]): number {
   return history.reduce((sum, m) => sum + (m.content?.length ?? 0), 0)
 }
 
