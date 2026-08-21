@@ -50,12 +50,24 @@ export function isQuestionLike(t: string): boolean {
 export function isConfirmIntent(t: string): boolean {
   const s = String(t ?? '').trim()
   if (!s) return false
+  // 纯确认词精确匹配优先（「没问题」「行」等——不被下方排除词误伤）
   if (
     /^(行|好|可以|确认|同意|对|没错|没问题|就这么办|按这个方案|继续|动手吧|开始吧|写吧|就按你说的)[。！!~～]?$/.test(
       s,
     )
   )
     return true
+  // 2026-08-22 #6 真机体验闭环（问题 2——P1）：词表裸子串误伤——
+  // 真机取证：pending 期用户输入「先给我文件清单，我看了再确认执行」→ 含「确认执行」子串 → 误判确认
+  // → planConfirmed=true → 方案卡自动消失 + 未确认放行（确认卡形同虚设）。
+  // 排除三类语义：条件/顺序前缀（先…再/看了再/等…再）、否定（先别/不要/暂时不）、问句征询（…吗）
+  if (
+    /(先|再|看了|等|看完|确认一下|确认后|确认了|确认好|确认无误|确认没问题|确认没有|别|不要|不|暂|等等|回头|稍后|待会|之后|然后|到时候|确认前|确认完成)/.test(
+      s,
+    )
+  )
+    return false
+  if (/[?？]$/.test(s) || /吗[。！!~～]?$|行不行|可以吗/.test(s)) return false
   return /按这个方案|就这么办|确认执行|确认目标|同意这个方案|可以开始|开始写吧|就按这个来/.test(s)
 }
 export function isCommunicationLike(t: string): boolean {

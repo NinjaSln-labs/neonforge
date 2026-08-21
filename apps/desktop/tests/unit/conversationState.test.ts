@@ -253,6 +253,21 @@ describe('Inv 3 门控顺序——sessionGate × actionGate 双维正交', () =>
     expect(sessionGate(s, { name: 'write', path: '/test/a.js' }).ok).toBe(false)
   })
 
+  // 2026-08-22 #6 真机体验闭环（问题 4 回归锁定）：方案未确认时**只读环境验证**必须放行——
+  // 真机取证：目标确认后模型 `node -v 2>&1; echo ---; npm -v 2>&1` 验证环境被 gate 拦「方案未确认」
+  // → 无法验证 → 被迫进方案决策点 → 空方案卡。修复后此类命令 readonly（不误伤）
+  it('sessionGate：#6 方案未确认 → 只读版本查询放行（node -v / npm -v——不误伤）', () => {
+    const s = userConfirmed(initialState(), 'goal')
+    expect(sessionGate(s, { name: 'bash', command: 'node -v' }).ok).toBe(true)
+    expect(
+      sessionGate(s, { name: 'bash', command: 'node -v 2>&1; echo ---npm---; npm -v 2>&1' }).ok,
+    ).toBe(true)
+    expect(sessionGate(s, { name: 'bash', command: 'ls node_modules/.bin/vite 2>&1' }).ok).toBe(
+      true,
+    )
+    expect(sessionGate(s, { name: 'bash', command: 'which node && node --version' }).ok).toBe(true)
+  })
+
   // #8（拦截引导优化）：拒绝回填给出下一步明确动作（对齐 sysPrompt ⑬⑭ 提议格式契约——模型按引导重提议）
   it('sessionGate：#8 目标未确认拒绝回填引导【目标确认】提议格式', () => {
     const s = initialState()
@@ -808,6 +823,22 @@ describe('继承锁定——classifyReadonly/classifyAction（缝隙 4 单一权
     expect(classifyReadonly('bash', 'cat a.txt; git push')).toBe('hazardous')
     expect(classifyReadonly('bash', 'ls -la && cat a.txt')).toBe('readonly')
     expect(classifyReadonly('bash', 'ls -la | grep x')).toBe('readonly')
+  })
+
+  // 2026-08-22 #6 真机体验闭环（问题 4——P1 根因链）：只读验证命令误伤——
+  // 真机取证：模型目标确认后调 `node -v 2>&1; echo ---npm---; npm -v 2>&1; ...` 验证环境，
+  // `;` 链递归检查把含 `node` 字样的只读命令段判 hazardous → sessionGate 拦「方案未确认」
+  // → 模型无法验证环境 → 被迫进方案决策点 → 空方案卡（根因链源头）
+  it('bash 链：只读版本查询（node -v / npm -v / which node）→ readonly（不误伤——node 是只读命令词）', () => {
+    expect(classifyReadonly('bash', 'node -v')).toBe('readonly')
+    expect(classifyReadonly('bash', 'node -v 2>&1; echo ---npm---; npm -v 2>&1')).toBe('readonly')
+    expect(classifyReadonly('bash', 'which node && node --version')).toBe('readonly')
+    expect(classifyReadonly('bash', 'ls node_modules/.bin/vite 2>&1')).toBe('readonly')
+  })
+  it('bash 链：真正含 node 写操作 → 仍 hazardous（不放开危险面）', () => {
+    expect(classifyReadonly('bash', 'node script.js')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'node -e "require(fs).writeFileSync(...)"')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'npm install three && node main.js')).toBe('hazardous')
   })
 
   it('git 子命令级：status/log/diff 只读；push/commit 写（Codex is_safe_git_command 方向）', () => {
