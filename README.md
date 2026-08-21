@@ -42,18 +42,18 @@ NeonForge **不是 IDE，也不是 Chatbot**。你用自然语言描述问题，
 
 ## 代理能做什么（工具面）
 
-| 工具 | 用途 |
-|------|------|
-| read / write / edit / bash | 核心四件套（write/edit 受分步授权 + 批准清单双重边界；bash 只读命令自动放行） |
-| search + LSP（find_definition / find_references / get_type_info / get_diagnostics / get_imports / get_call_chain） | 定位 / 查询 / 诊断——零 token 确定性上下文 |
-| check-capability | 能力检测（runtime / 依赖 / 工具链）——环境快照注入模型，开箱即知 |
-| approve-files | 批量授权（1-N 文件，追加语义）——批准后清单内写入自动放行 |
-| start-server / check-server / stop-server | 开发服务器生命周期（自动分配动态端口，宿主 5173/5175 保留） |
-| open | 打开网页（默认浏览器，仅 http/https） |
+| 工具                                                                                                               | 用途                                                                          |
+| ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| read / write / edit / bash                                                                                         | 核心四件套（write/edit 受分步授权 + 批准清单双重边界；bash 只读命令自动放行） |
+| search + LSP（find_definition / find_references / get_type_info / get_diagnostics / get_imports / get_call_chain） | 定位 / 查询 / 诊断——零 token 确定性上下文                                     |
+| check-capability                                                                                                   | 能力检测（runtime / 依赖 / 工具链）——环境快照注入模型，开箱即知               |
+| approve-files                                                                                                      | 批量授权（1-N 文件，追加语义）——批准后清单内写入自动放行                      |
+| start-server / check-server / stop-server                                                                          | 开发服务器生命周期（自动分配动态端口，宿主 5173/5175 保留）                   |
+| open                                                                                                               | 打开网页（默认浏览器，仅 http/https）                                         |
 
 ## 快速上手
 
-> 需要 DeepSeek API Key（`https://platform.deepseek.com` 获取）。
+> 需要 Command Code API Key（`commandcode.ai` 获取——Studio → API Keys → Generate；模型为 DeepSeek V4 系列，经 Command Code 聚合接入）。
 
 - **直接下载**：[GitHub Releases](https://github.com/NinjaSln-labs/neonforge/releases)（v0.1.0 pre-release——macOS `.dmg` / `.zip`；未签名首次打开需右键 → 打开）
 
@@ -112,11 +112,11 @@ Session Timeline BC      — 全步骤统一记录（可观测性——JSONL）
 
 ## 文档
 
-| 文档 | 说明 |
-|------|------|
-| `docs/product/00-product-design.md`（D0 v2.2） | 产品设计总纲（定位 / 用户流 / 组件 / 指标） |
+| 文档                                            | 说明                                         |
+| ----------------------------------------------- | -------------------------------------------- |
+| `docs/product/00-product-design.md`（D0 v2.2）  | 产品设计总纲（定位 / 用户流 / 组件 / 指标）  |
 | `docs/domain/00-domain-authority.md`（A0 v4.0） | 领域实现权威（确认点 / 推进保障 / 宿主边界） |
-| `docs/product/`、`docs/domain/` | 完整索引（D0-D9 / A0-A9） |
+| `docs/product/`、`docs/domain/`                 | 完整索引（D0-D9 / A0-A9）                    |
 
 ## 测试
 
@@ -141,15 +141,18 @@ ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ node install.js
 > 正式跟踪：GitHub [Issues](https://github.com/NinjaSln-labs/neonforge/issues?q=label%3Aroadmap)（label `roadmap` · Milestones：V1 稳定收尾 / V1.x 体验与稳健 / V2 方向）
 
 **V1（当前——稳定收尾）**
+
 - 发布资产：macOS `.dmg` 打包（`.zip` 已可用）· Blog 发布 · Landing + waitlist · 渠道与 Product Hunt
 - 真实体验闭环：用户实测反馈 → 修复——本期重点复测**授权卡路径**与**意图确认新交互**（目标/方案/解决确认卡）
 
 **V1.x（体验与稳健）**
+
 - 连续任务体验：换目标时重新确认（当前新【目标确认】在已确认目标后不弹卡——评估补充）
 - 拦截引导优化：`tool.blocked` 回填更明确的引导（目标提议/补充授权）
 - e2e 模拟器收敛判定（长流程自动化稳定性）；测试基建收尾清理
 
 **V2（规划方向——按依赖排序）**
+
 1. **会话快照完整化**：任务状态机跨重启（确认/执行进度序列化——批准文件清单已先行落地：D3）；与 compaction 摘要基准一致性联动
 2. **信任分级**：授权疲劳治理（低危委托自动化档位 / 模式预设——当前「允许并记住」与合并授权之上的下一步）
 3. **结构化澄清工具**（AskToAct 式：目标假设显式采集，替代自由文本框的澄清输入）
