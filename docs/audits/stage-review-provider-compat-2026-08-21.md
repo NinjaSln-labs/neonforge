@@ -21,8 +21,24 @@
 
 | # | 发现 | 判定 |
 |---|------|------|
-| R1 | e2e-0to1.mjs LLM 模拟用 `response_format: {type:'json_object'}`——Command Code V4 兼容性未真机验证；失败有兜底（decideFallback）不崩 | **recorded**——真机验证项（补进验证清单）|
+| R1 | e2e-0to1.mjs LLM 模拟用 `response_format: {type:'json_object'}`——Command Code 拒绝该参数（真机实测 400「Invalid input, param: response_format」）| **fixed**（2026-08-21 真机验证）——e2e-0to1.mjs 移除 response_format + prompt 明确 JSON 输出（LLM 模拟失败仍有 decideFallback 兜底）|
 | R2 | preheat 预热经聚合代理（Command Code）的 KV 缓存命中率未验证——性能优化项，失败有降级（不阻塞）| **recorded**——真机观察项（性能）|
+
+## 真机验证结论（2026-08-21——Command Code key）
+
+| 项 | 结果 | 判定 |
+|----|------|------|
+| `tool_choice: 'auto'` + thinking disabled + 工具 | ✅ 200，正常返回 tool_calls | 改造后核心路径正常 |
+| thinking enabled + reasoning_effort high | ✅ 200，`reasoning` 字段 214 字符正常读取 | extractReasoningText 多源兼容生效 |
+| 多轮回放 `reasoning_content` | ✅ 200（第一轮 reasoning 有值 → 第二轮回传 200）| buildHistory/compaction 回传补缺正确 |
+| `response_format: json_object` | ❌ 400「Invalid input, param: response_format」| R1 证实——e2e 已修 |
+
+## e2e-0to1 真机复验（2026-08-21 PHASE=req——完整链路）
+
+- **场景 A（起始页填需求）通过 78.3s**：需求澄清 → 候选 → 目标确认 → 收敛（决策轨迹 3 步可复现）
+- **场景 B（对话输入）通过 58.6s**：用户纠正（设计→射击游戏）→ 模型重理解 → 目标确认 → 收敛
+- 关键：Command Code key 应用内有效（无 401）；tool_choice 恒 auto 下模型正常对话+工具交互；thinking/reasoning 正常；e2e LLM 模拟（response_format 移除后）多轮正常，偶发 JSON 解析失败回退领域层（有兜底，符合预期）
+- **环境注记**：e2e 首次 401 根因 = `dist/main/main.js` 旧产物（8-17 构建，无 Command Code 代码）——`npm run build:main` 编译最新后解决（**非代码 bug**；HANDOFF §4 坑 44「改 main/preload 必 build:main」）
 
 ---
 

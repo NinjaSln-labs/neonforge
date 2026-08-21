@@ -156,7 +156,7 @@ ${this.personaText()}
         .slice(-2)
         .map((h) => `AI 搭档之前说：${h.slice(0, 120)}`)
         .join('\n')
-      const prompt = `AI 搭档最新对你说（${c.length} 字）：\n${c.slice(0, 800)}${c.length > 800 ? '…' : ''}\n${msg.candidates.length > 0 ? `\n候选选项：${msg.candidates.join(' | ')}` : ''}`
+      const prompt = `AI 搭档最新对你说（${c.length} 字）：\n${c.slice(0, 800)}${c.length > 800 ? '…' : ''}\n${msg.candidates.length > 0 ? `\n候选选项：${msg.candidates.join(' | ')}` : ''}\n\n只输出一个 JSON 对象（无 Markdown 代码块包裹）：{"action":"<choose|answer|clarify|agree|feedback>", "text":"<一句话回复>"}`
       const body = JSON.stringify({
         model: 'deepseek/deepseek-v4-flash',
         messages: [
@@ -166,7 +166,9 @@ ${this.personaText()}
         ],
         temperature: 0.2,
         max_tokens: 200,
-        response_format: { type: 'json_object' },
+        // 2026-08-21 provider 兼容（ADR-007）：Command Code 拒绝 response_format（实测 400「Invalid input, param: response_format」）——
+        // 移除该参数，JSON 输出由 prompt 明确要求（用户模拟仅测试工具；失败有 decideFallback 兜底，不崩）
+        // response_format: { type: 'json_object' },
       })
       const res = await fetch('https://api.commandcode.ai/provider/v1/chat/completions', {
         method: 'POST',
