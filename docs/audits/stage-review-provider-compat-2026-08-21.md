@@ -2,9 +2,27 @@
 
 - 日期：2026-08-21
 - 固定点：cd9d708（provider 切换 commit）之后的工作区实现改动
-- 范围：gateway.ts（tool_choice 恒 auto + extractReasoningText 多源）+ ConversationPanel.tsx（注释 + reasoning 回传补缺）+ compact.ts/preload/types（compaction reasoning 保留）+ gatewayReasoning.test.ts（新 8 用例）+ compact.test.ts（+1 用例）+ **e2e-build-check.mjs（坑 44 流程化——`78dfcfe`）**
+- 范围：gateway.ts（tool_choice 恒 auto + extractReasoningText 多源）+ ConversationPanel.tsx（注释 + reasoning 回传补缺）+ compact.ts/preload/types（compaction reasoning 保留）+ gatewayReasoning.test.ts（新 8 用例）+ compact.test.ts（+1 用例）+ **e2e-build-check.mjs（坑 44 流程化——`78dfcfe`）** + **PHASE→UNTIL 改名（`c7ba337`——e2e 模拟器域）**
 - 方式：双轴复审（Spec：对照 07 §1.1 / A0 §1 / 调研文档 §7 语义契约；Standards：仓库规范 + smell 基线）+ **reasoning 回传链路全路径审计（续轮发现）**
-- 结论：**无 open**——3 fixed（文档措辞同步 + buildHistory 回传补缺 + compaction 回传补缺）+ 1 recorded（forceTool 参数保留）+ **坑 44 流程化复审（1 fixed + 1 recorded）**
+- 结论：**无 open**——3 fixed（文档措辞同步 + buildHistory 回传补缺 + compaction 回传补缺）+ 1 recorded（forceTool 参数保留）+ **坑 44 流程化复审（1 fixed + 1 recorded）** + **PHASE→UNTIL 改名复审（无 open）**
+
+---
+
+## PHASE→UNTIL 改名复审（`c7ba337`——2026-08-21）
+
+**Spec 轴**（对照设计文档 §5 + 用户命名主张）：
+- ✅ `PHASE`/`PHASE_END`/`phaseEnd` → `UNTIL`/`UNTIL_END`/`untilEnd`——命名揭示用途（「跑到哪个终止点为止」），修正 Mysterious Name（PHASE=阶段误导读物）
+- ✅ 枚举值（req/design/dev/all）保持——语义是旅程决策点，无需改
+- ✅ 设计文档 §5 改名 + 注记「非产品阶段——无阶段决策点驱动」；e2e-0to1 注释/日志/环境变量全同步
+- ✅ 无 scope creep（纯改名，无行为变化）
+
+**Standards 轴**：
+- ✅ 代码层 PHASE 残留 0 处（排除改名说明注释）；decide/convergence 不读 phase/until（解耦正确）
+- ✅ `JourneyRunner.run` 只用 `terminated(this.journey)`（内部 untilEnd）+ `journey.confirmed.*`（未改名字段）——引用完整
+- ✅ CI 工作流 / e2e-nostage-smoke / e2e-suite / e2e-supplement 均不用 PHASE——无外部依赖破坏
+- ✅ L1 491（e2eSim 44）+ lint 0 + UNTIL=req 实跑通过 27.3s
+
+**[recorded] 历史记录保留 PHASE 字样**——HANDOFF L123/129/133（历史实况）与 git log（commit message 历史）保留原样：历史描述不追溯修改（防双源/审计链完整），仅当前可用信息（即时操作/引用索引）更新。裁决不修。
 
 ---
 
