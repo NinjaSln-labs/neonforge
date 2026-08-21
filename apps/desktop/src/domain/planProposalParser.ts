@@ -16,10 +16,30 @@
 import type { PlanProposal } from './conversationState.js'
 
 /** 路径形态判定（坑 102 共享——与 agentLoop.parseExecutionPlan 同源；旧函数 S3 移除后此处为唯一实现）：
- * 无空白字符 = 合法路径（相对/绝对/目录）；含空白必须带文件扩展名（中文文件名容错——如「docs/我的 文件.md」） */
+ * 无空白字符 = 合法路径（相对/绝对/目录）；含空白必须带文件扩展名（中文文件名容错——如「docs/我的 文件.md」）
+ * 2026-08-22 #6 真机复验（问题 B）：中文无空格长句非路径——模型【执行方案】块的「关键假设/验证计划」节
+ * 行（「数据用浏览器自带的本地存储（localStorage），关掉网页再开，待办还在」）无空白被误判路径
+ * → 污染 plannedFiles + plan.approved 提前。加排除：含句读（，。；：！？）、超长中文（>16 字）、
+ * 括号内容（非路径注释形态）→ 非路径 */
 export function isLikelyPath(p: string): boolean {
-  if (!/\s/.test(p)) return true // 无空白：相对/绝对/目录（src/、assets、game.js、/a/b.html）
-  return /\.[a-zA-Z0-9]{1,5}$/.test(p) // 含空白但带扩展名（中文文件名容错）
+  const s = String(p ?? '').trim()
+  if (!s) return false
+  // 自然语言句读（中文逗号/句号/分号/冒号/感叹/问号 + 英文逗号）——不是路径
+  if (/[，。；：！？、,]/.test(s)) return false
+  // 无空白：相对/绝对/目录（src/、assets、game.js、/a/b.html）——但中文无空白长串是自然语言句
+  if (!/\s/.test(s)) {
+    // 含中文 + 无 / + 无扩展名 + 超短阈值（>6 字）→ 自然语言句（关键假设/验证计划内容）
+    // 合法中文路径形态：短（≤6 字）或带扩展名（如「数据.md」「我的文件」目录）或含 /（src/数据）
+    if (
+      s.length > 6 &&
+      /[\u4e00-\u9fa5]/.test(s) &&
+      !s.includes('/') &&
+      !/\.[a-zA-Z0-9]{1,5}$/.test(s)
+    )
+      return false
+    return true
+  }
+  return /\.[a-zA-Z0-9]{1,5}$/.test(s) // 含空白但带扩展名（中文文件名容错）
 }
 
 /** 「关键假设：」节提取（A-008 单源——parsePlanProposal 内部与 renderer 目标提议共用；
