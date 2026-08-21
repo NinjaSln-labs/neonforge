@@ -158,7 +158,7 @@ ${this.personaText()}
         .join('\n')
       const prompt = `AI 搭档最新对你说（${c.length} 字）：\n${c.slice(0, 800)}${c.length > 800 ? '…' : ''}\n${msg.candidates.length > 0 ? `\n候选选项：${msg.candidates.join(' | ')}` : ''}`
       const body = JSON.stringify({
-        model: 'deepseek-chat',
+        model: 'deepseek/deepseek-v4-flash',
         messages: [
           { role: 'system', content: this.systemPrompt(journeyLabel) },
           ...(hist ? [{ role: 'user', content: hist }] : []),
@@ -168,7 +168,7 @@ ${this.personaText()}
         max_tokens: 200,
         response_format: { type: 'json_object' },
       })
-      const res = await fetch('https://api.deepseek.com/chat/completions', {
+      const res = await fetch('https://api.commandcode.ai/provider/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KEY}` },
         body,

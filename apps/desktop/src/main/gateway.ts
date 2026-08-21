@@ -331,7 +331,16 @@ export const TOOL_DEFS = [
   },
 ]
 
-const API_BASE = 'https://api.deepseek.com'
+// 2026-08-21 ADR-007 provider 切换（成本优化）：DeepSeek 官方 → Command Code（OpenAI 兼容聚合代理，commandcode.ai）
+// 上游模型名映射：内部档位 → Command Code 上游（deepseek/ 前缀）；切回官方只改 API_BASE + API_MODEL 两处
+const API_BASE = 'https://api.commandcode.ai/provider/v1'
+const API_MODEL: Record<ModelID, string> = {
+  'deepseek-v4-flash': 'deepseek/deepseek-v4-flash',
+  'deepseek-v4-pro': 'deepseek/deepseek-v4-pro',
+}
+function apiModel(id: ModelID): string {
+  return API_MODEL[id]
+}
 
 export class DeepSeekGateway {
   private router = new ModelRouter()
@@ -356,7 +365,7 @@ export class DeepSeekGateway {
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: 'deepseek-v4-flash',
+          model: apiModel('deepseek-v4-flash'),
           ...toDeepSeekParams('none'),
           messages: [{ role: 'user', content: 'hi' }],
           max_tokens: 1,
@@ -409,7 +418,7 @@ export class DeepSeekGateway {
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model,
+        model: apiModel(model),
         // 工具调用模式禁用 thinking（DeepSeek thinking+tools 易陷入思考-工具循环——直接调工具快速收敛）
         ...toDeepSeekParams(opts.tools ? 'none' : (opts.level ?? 'basic')),
         messages: opts.messages,
@@ -523,7 +532,7 @@ export class DeepSeekGateway {
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: 'deepseek-v4-flash',
+          model: apiModel('deepseek-v4-flash'),
           ...toDeepSeekParams('none'),
           messages: [
             { role: 'system', content: prefix },
@@ -558,7 +567,7 @@ export class DeepSeekGateway {
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: 'deepseek-v4-flash',
+          model: apiModel('deepseek-v4-flash'),
           ...toDeepSeekParams('none'),
           messages: [
             {
