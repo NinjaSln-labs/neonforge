@@ -17,7 +17,8 @@ import { verifyArtifacts, verifyPlayable } from './e2e-sim/verify.mjs'
 // 设计原则（用户 2026-08-05 指示）：
 // ① 模拟真实用户：每一步 = 【读完整内容 → 理解模型在说什么 → 思考 → 决策（含理由）→ 操作 → 验证模型正常回复】
 //    ——用户会看内容、思考、才决定，不会一通猛点。
-// ② 不追求一次跑通全部：分阶段构建（PHASE=req|design|dev|all）——PHASE 映射旅程终止点（领域层 journey）
+// ② 不追求一次跑通全部：分段构建（UNTIL=req|design|dev|all）——UNTIL 映射旅程终止点（领域层 journey；
+//    命名 UNTIL 而非 PHASE——控制「跑到哪个终止点为止」，非产品阶段——无阶段决策点驱动）
 // ③ 可复现：这套测试用于以后还原用户实际操作、复现 bug（配合日志定位）。
 // ④ 防假阳性：每决策点确定性验证（领域层 verify）
 //
@@ -28,10 +29,10 @@ import { verifyArtifacts, verifyPlayable } from './e2e-sim/verify.mjs'
 // - 决策/验证内联 → 领域层 decide/verify
 //
 // 用法：
-//   PHASE=req  node e2e-0to1.mjs   # 只跑需求阶段（目标确认后停）
-//   PHASE=design node e2e-0to1.mjs # 方案确认后停
-//   PHASE=dev   node e2e-0to1.mjs  # 首个产物确认后停
-//   PHASE=all   node e2e-0to1.mjs  # 完整流程
+//   UNTIL=req  node e2e-0to1.mjs   # 目标确认后停
+//   UNTIL=design node e2e-0to1.mjs # 方案确认后停
+//   UNTIL=dev   node e2e-0to1.mjs  # 首个产物确认后停
+//   UNTIL=all   node e2e-0to1.mjs  # 完整流程
 //   MODE=A/B   node e2e-0to1.mjs   # 场景（起始页填/不填）
 // ============================================================================
 
@@ -617,12 +618,12 @@ function printModel(msg, prefix = '🤖') {
 // ============================================================================
 
 class JourneyRunner {
-  constructor(driver, agent, phase) {
+  constructor(driver, agent, until) {
     this.driver = driver
     this.agent = agent
     this.sim = new UserSimulator(agent) // LLM 增强（失败降级领域层确定性决策——单一兜底）
-    this.journey = createJourney(phase) // 旅程状态机（决策点驱动 · 无阶段——领域层）
-    this.guard = createGuard({ staleLimit: phase === 'req' ? 20 : 15 }) // 收敛守卫（#9 域对象化）
+    this.journey = createJourney(until) // 旅程状态机（决策点驱动 · 无阶段——领域层）
+    this.guard = createGuard({ staleLimit: until === 'req' ? 20 : 15 }) // 收敛守卫（#9 域对象化）
     this.verdicts = []
     this.lastProcessed = ''
     this.planned = [] // 批准文件清单（approve-files）
@@ -738,7 +739,7 @@ class JourneyRunner {
         }
       }
     }
-    console.log('\n   🏁 旅程到达 PHASE 终止点——收敛')
+    console.log('\n   🏁 旅程到达 UNTIL 终止点——收敛')
   }
 
   // 决策执行（UI 动作——confirm 类由卡片优先处理，这里只做记录/兜底）
@@ -843,7 +844,7 @@ async function launch0to1(mode) {
   return { app, page }
 }
 
-const PHASE = process.env.PHASE ?? 'all'
+const UNTIL = process.env.UNTIL ?? 'all'
 const MODE = process.env.MODE ?? 'both'
 
 async function case_(name, mode) {
@@ -855,15 +856,15 @@ async function case_(name, mode) {
     const driver = new SessionDriver(l.page)
     const agent = new UserAgent()
     if (mode === 'empty') await driver.send('我想做一个3D设计游戏')
-    console.log(`\n── ${name}（PHASE=${PHASE}）──\n`)
-    const machine = new JourneyRunner(driver, agent, PHASE)
+    console.log(`\n── ${name}（UNTIL=${UNTIL}）──\n`)
+    const machine = new JourneyRunner(driver, agent, UNTIL)
     await machine.run()
     const secs = ((Date.now() - t0) / 1000).toFixed(1)
     const end = machine.verdicts[machine.verdicts.length - 1]
     const reqEchoed = machine.verdicts
       .filter((v) => v.stage === '澄清' && v.echoed !== undefined)
       .some((v) => v.echoed)
-    const ok = PHASE !== 'all' || (end?.stage === '产物' && end?.hasFiles && reqEchoed)
+    const ok = UNTIL !== 'all' || (end?.stage === '产物' && end?.hasFiles && reqEchoed)
     console.log(`\n${ok ? '✅' : '⚠️'} ${name} ${ok ? '通过' : '部分验证'} (${secs}s)`)
     console.log(`   决策轨迹（可复现）：`)
     agent.steps.forEach((s, i) =>
@@ -901,7 +902,7 @@ if (!KEY) {
   console.log('❌ 无可用 API Key')
   process.exit(1)
 }
-console.log(`Key: ${KEY.slice(0, 5)}…${KEY.slice(-3)}（已脱敏） | PHASE=${PHASE} | MODE=${MODE}\n`)
+console.log(`Key: ${KEY.slice(0, 5)}…${KEY.slice(-3)}（已脱敏） | UNTIL=${UNTIL} | MODE=${MODE}\n`)
 
 let ok
 if (MODE === 'A') {

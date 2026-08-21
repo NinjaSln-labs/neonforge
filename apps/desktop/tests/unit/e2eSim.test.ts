@@ -1,6 +1,6 @@
 // L1 领域测试：e2e 模拟器域（设计 docs/design/e2e-simulator-domain-design.md）
 // signals（信号派生单一来源）/ convergence（收敛守卫——#9 域对象化）/ decide（决策策略）/
-// journey（决策点驱动 · 无阶段 · PHASE 终止）/ verify（防假阳性验证）
+// journey（决策点驱动 · 无阶段 · UNTIL 终止）/ verify（防假阳性验证）
 import { describe, it, expect } from 'vitest'
 import { deriveModelSignal, Signal, hasPlanMarkWithoutLines } from '../../e2e-sim/signals.mjs'
 import { createGuard } from '../../e2e-sim/convergence.mjs'
@@ -240,7 +240,7 @@ describe('decide（决策策略——信号 × 上下文 → 用户决策）', (
   })
 })
 
-describe('journey（决策点驱动 · 无阶段 · PHASE 终止点）', () => {
+describe('journey（决策点驱动 · 无阶段 · UNTIL 终止点）', () => {
   it('advance：confirm-goal 推进 goal 决策点', () => {
     const j = advance(createJourney('all'), {
       signal: Signal.GOAL_PROPOSED,
@@ -250,14 +250,14 @@ describe('journey（决策点驱动 · 无阶段 · PHASE 终止点）', () => {
     expect(j.decisionPoints).toEqual(['goal'])
   })
 
-  it('PHASE=req：goal 确认后终止', () => {
+  it('UNTIL=req：goal 确认后终止', () => {
     let j = createJourney('req')
     expect(terminated(j)).toBe(false)
     j = advance(j, { signal: Signal.GOAL_PROPOSED, action: 'confirm-goal' })
     expect(terminated(j)).toBe(true)
   })
 
-  it('PHASE=design：plan 确认后终止（goal 确认不终止）', () => {
+  it('UNTIL=design：plan 确认后终止（goal 确认不终止）', () => {
     let j = createJourney('design')
     j = advance(j, { signal: Signal.GOAL_PROPOSED, action: 'confirm-goal' })
     expect(terminated(j)).toBe(false)
@@ -265,7 +265,7 @@ describe('journey（决策点驱动 · 无阶段 · PHASE 终止点）', () => {
     expect(terminated(j)).toBe(true)
   })
 
-  it('PHASE=dev：produced 后终止', () => {
+  it('UNTIL=dev：produced 后终止', () => {
     let j = createJourney('dev')
     j = advance(j, { signal: Signal.GOAL_PROPOSED, action: 'confirm-goal' })
     j = advance(j, { signal: Signal.PLAN_PROPOSED, action: 'confirm-plan' })
@@ -274,7 +274,7 @@ describe('journey（决策点驱动 · 无阶段 · PHASE 终止点）', () => {
     expect(terminated(j)).toBe(true)
   })
 
-  it('PHASE=all：解决确认 + 产物后 delivered', () => {
+  it('UNTIL=all：解决确认 + 产物后 delivered', () => {
     let j = createJourney('all')
     j = advance(j, { signal: Signal.GOAL_PROPOSED, action: 'confirm-goal' })
     j = advance(j, { signal: Signal.PLAN_PROPOSED, action: 'confirm-plan' })
