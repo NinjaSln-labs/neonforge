@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parsePlanProposal } from '../../src/domain/planProposalParser'
+import { parsePlanProposal, isLikelyPath } from '../../src/domain/planProposalParser'
 
 // S2 spec TDD 网格：parsePlanProposal（设计 §3.3 + §8.1 C ⑭）
 // 契约（oracle 对照设计原文）：
@@ -134,5 +134,47 @@ describe('parsePlanProposal（方案提议解析——S2）', () => {
       'build/',
       '我的 项目.md',
     ])
+  })
+
+  // 2026-08-22 #6 真机复验（问题 B）：中文无空格长句非路径——关键假设/验证计划节行不污染清单
+  it('坑 102 延伸：中文无空格长句（假设/验证节内容）→ 非路径（真机取证——plan.approved 污染）', () => {
+    expect(isLikelyPath('数据用浏览器自带的本地存储（localStorage），关掉网页再开，待办还在')).toBe(
+      false,
+    )
+    expect(isLikelyPath('数据用浏览器自带的本地存储')).toBe(false)
+    expect(isLikelyPath('写完用编辑器检查一遍文件内容')).toBe(false)
+    expect(isLikelyPath('导入的文件格式：纯文本，每行一条待办，空行自动跳过')).toBe(false)
+    expect(isLikelyPath('界面用中文，简洁')).toBe(false)
+    // 合法路径不误伤
+    expect(isLikelyPath('index.html')).toBe(true)
+    expect(isLikelyPath('src/main.ts')).toBe(true)
+    expect(isLikelyPath('docs/我的 文件.md')).toBe(true)
+    expect(isLikelyPath('game.js')).toBe(true)
+  })
+
+  it('坑 102 延伸：模型输出【执行方案】+ 假设/验证节 → 只抓文件路径', () => {
+    const text = `好，方案定了。下面是我的计划：
+
+【目标确认：做一个待办小工具】
+
+【执行方案】
+要写的文件：
+- index.html（唯一一个文件——页面样式、待办列表界面、添加/删除功能、本地保存逻辑全在里面）
+
+做法：打开这个文件就是完整小工具。
+
+关键假设：
+- 数据用浏览器自带的本地存储（localStorage），关掉网页再开，待办还在
+- 界面用中文，简洁
+
+验证计划：
+- 写完用编辑器检查一遍文件内容
+`
+    const r = parsePlanProposal(text)
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.proposal.files.map((f) => f.path)).toEqual(['index.html'])
+    expect(r.proposal.assumptions.length).toBe(2) // 假设节仍正确提取
+    expect(r.proposal.verificationPlan.length).toBe(1)
   })
 })
