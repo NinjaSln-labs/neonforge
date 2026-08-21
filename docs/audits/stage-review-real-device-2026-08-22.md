@@ -1,13 +1,13 @@
 # Stage Review（#6 真机体验闭环——2026-08-22 修复复审）
 
-> 复审日期：2026-08-22
+> 复审日期：2026-08-22（第一轮修复）+ 2026-08-22 补录（第二轮——真机复验新发现）
 > 来源：#6 真机体验闭环（`.scratch/neonforge-v1/real-device-acceptance-20260822.md`）——用户真机实测发现
-> 复审范围：isConfirmIntent 误判确认（P1）+ classifyReadonly 只读误伤（P1）+ 空方案卡（P2 根因链）+ rootPath 漂移（P2 recorded）
+> 复审范围：isConfirmIntent 误判确认（P1）+ classifyReadonly 只读误伤（P1）+ 空方案卡（P2 根因链）+ rootPath 漂移（P2 recorded）+ **isLikelyPath 中文长句污染（P1——复验新发现）**
 > 复审方式：双轴（Spec 轴对照契约/设计；Standards 轴单源/纯函数/回归）
 
 ## 结论
 
-**2 fixed（P1）+ 1 fixed-根因（P2 随根因）+ 1 recorded（P2 设计——A-014）——无 open**
+**3 fixed（P1×2 + P1 复验新发现）+ 1 fixed-根因（P2 随根因）+ 1 recorded（P2 设计——A-014）——无 open**
 
 ## Spec 轴
 
@@ -16,7 +16,13 @@
 | ⑬⑭ 契约：用户确认只能点确认按钮（结构化确认）——用户消息「先给我清单」不得触发方案确认 | isConfirmIntent 修复（排除条件/顺序前缀）+ L1 +4 用例 | ✅ fixed |
 | ⑭ 契约：方案卡应在模型给出【执行方案】清单后出现 | 问题 4 修复（node -v 只读放行）→ 模型可先验证再给方案 → 空卡路径消除 | ✅ fixed |
 | 只读 bash 应放行（A0 §3.1 活动边界）——node -v 是只读验证 | classifyReadonly 段首匹配 + 只读形态排除 + 2>&1 保护 + L1 +2 + sessionGate 锁定 | ✅ fixed |
+| ⑭ 契约：plannedFiles 只含真实文件路径（坑 102）——关键假设/验证计划节不污染 | isLikelyPath 中文长句排除（句读/超长/无路径形态）+ L1 +2（d427ca3） | ✅ fixed |
 | 任务边界（ADR-006）——多任务目录切换 | A-014 recorded——设计问题待 ADR | ⏸ recorded |
+
+## 复验补充（2026-08-22 第二会话真机）
+
+- **P1 修复生效确认**：`ls -la && find` 只读 bash 放行（问题 4 ✓）；目标确认 → approve-files → 批准 → 写文件全链走通（approve-files 批准后 plan.approved 只有 index.html——正确）
+- **新发现 P1**：模型【执行方案】块含【关键假设】/【验证计划】节 → 节内 - 行被 isLikelyPath 误判路径（中文无空格长句）→ plannedFiles 污染 + plan.approved 在目标确认前提前触发——**已修 d427ca3**
 
 ## Standards 轴
 
