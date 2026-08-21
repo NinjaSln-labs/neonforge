@@ -18,7 +18,7 @@ export default function ConfigPage({ onDone }: { onDone: () => void }) {
       setStatus('network')
       setErrorText(
         res.error === 'service-error'
-          ? 'DeepSeek 服务暂时不可用，稍后重试。'
+          ? 'Command Code 服务暂时不可用，稍后重试。'
           : '无法连接，请检查网络。',
       )
     } else {
@@ -36,13 +36,13 @@ export default function ConfigPage({ onDone }: { onDone: () => void }) {
   return (
     <div className="nf-config">
       <h1 className="nf-config__title">NeonForge</h1>
-      <p className="nf-config__sub">需要 DeepSeek API Key</p>
+      <p className="nf-config__sub">需要 Command Code API Key</p>
 
       <input
         className={`nf-config__input${status === 'fail' ? ' nf-config__input--error' : ''}`}
         type="password"
-        placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
-        aria-label="DeepSeek API Key"
+        placeholder="粘贴你的 Command Code API Key"
+        aria-label="Command Code API Key"
         autoComplete="current-password"
         value={key}
         onChange={(e) => {
@@ -75,17 +75,17 @@ export default function ConfigPage({ onDone }: { onDone: () => void }) {
 
       {/* 2026-08-03 v31 B3 审计修复：非技术用户首个障碍——「怎么获取 Key」操作引导（原只有「为什么需要」） */}
       <details className="nf-config__why">
-        <summary>怎么获取 DeepSeek API Key？</summary>
+        <summary>怎么获取 Command Code API Key？</summary>
         <p className="nf-config__why-text">
-          ① 打开 platform.deepseek.com 注册/登录 → ② 左侧「API Keys」→ 新建 → ③ 复制 <em>sk-</em>{' '}
-          开头的 Key 粘贴到上方输入框。
+          ① 打开 commandcode.ai 注册/登录 → ② 进入 Studio 的「API Keys」页 → ③ 点击「Generate API
+          key」生成并复制 Key 粘贴到上方输入框。
         </p>
       </details>
       <details className="nf-config__why">
         <summary>为什么需要？</summary>
         <p className="nf-config__why-text">
-          NeonForge 通过 DeepSeek API 提供 AI 能力，Key 存储在你本地（系统加密），仅用于请求
-          DeepSeek API。
+          NeonForge 通过 Command Code 聚合 API 提供 AI 能力（当前使用 DeepSeek V4 系列模型），Key
+          存储在你本地（系统加密），仅用于请求 Command Code API。
         </p>
       </details>
     </div>
