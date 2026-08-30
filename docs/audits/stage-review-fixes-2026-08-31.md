@@ -26,7 +26,7 @@
 | P-2 | reject('plan') 不复位 main 镜像——方案拒后硬序门仍开 | 硬伤 | **fixed**（reject 同步 setPlanConfirmed(false)） |
 | P-3 | P2-4 只做词表半边：对账失败时对用户的提示侧未做（吊死循环提示缺失） | 半做 | **open**（入 audit-items——随 V1.5 S2 对账 UI 一并做） |
 | P-4 | P2-3 半做：前缀标记非原修向（system 角色/专用 UI） | 半做 | **recorded**（代码已自注归 V2 会话快照） |
-| P-5 | syncPlanConfirmed/policy 分支无 L1/L3 测试 | 缺口 | **open**（随 V1.5 S1 乱序矩阵测试一并覆盖——该门即将被协议工具化重构吸收） |
+| P-5 | syncPlanConfirmed/policy 分支无 L1/L3 测试 | 缺口 | **open**（随 V1.5 S1 乱序矩阵测试一并覆盖——该门即将被协议工具化重构吸收）→ closed 6e4f5f3 后续 V1.5 Task 1.4（commit 1529e99：L1 hardOrderGate——main policy 分支镜像放行/拦截/双向复位 + 管辖边界；L3 core.interaction「A-016 硬序门时序」——早调拒卡/正调弹卡/write done + setPlanConfirmed 镜像序列 [false,true]；mockBridge 补 session stub） |
 | P-6 | sysPrompt ⑬「子步骤不重开目标确认」超出 findings 声明范围 | scope creep | **recorded**（复验轮真实需要——映射表已更新挂 P2-6 引导项） |
 | P-7 | HANDOFF「P2×5 已全修」与实际不符（实修 7 项含半做、P2-1 暂缓） | 文档过称 | **fixed**（HANDOFF 本次更正） |
 | P-8 | P1-1/P1-2/P1-4/P1-5/P1-6/2fcb641 与声明相符（含 addTrust/addTrust 边界/正则/回搜复用/候选制逐项核实） | — | ✅ 通过 |
