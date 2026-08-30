@@ -548,8 +548,15 @@ export default function ConversationPanel({
       tlog('card.shown', { card, ...extra }, 'system')
     }
     if (isLastAssistant) {
-      if ((/【目标确认[:：]/.test(content) || !goalConfirmed) && !goalConfirmed)
-        show('goal-confirm', { goalText: content.slice(0, 80) })
+      // #6 真机 2026-08-30（P1-3 修正）：原条件 `|| !goalConfirmed` 使目标未确认时**任何** assistant
+      // 回合都打 card.shown goal-confirm（goalText=随手截断的正文）——遥测假象三例（空文本/旁白/恢复快照）
+      // 全部源于此，排查时严重误导（真实弹卡唯一依据 = pending + decisionContent——2203 行）。
+      // 修正：只在目标决策点真实存在时打点，goalText 取提议 statement
+      const dc = stateRef.current.decisionContent
+      const goalStatement =
+        dc?.kind === 'goal' ? ((dc.proposal as { statement?: string })?.statement ?? '') : ''
+      if (stateRef.current.pending === 'goal' && goalStatement)
+        show('goal-confirm', { goalText: goalStatement.slice(0, 120) })
       if (
         (content.includes('【执行方案') || (goalConfirmed && !planConfirmed)) &&
         goalConfirmed &&
@@ -837,8 +844,23 @@ export default function ConversationPanel({
             )
           } else {
             // no-block（无方案标记）+ 决策点存在（write 拦截/方案征询「等你确认」）→ 等确认执行——
-            // 无结构化内容 → decisionContent 无 proposal（卡占位——内容区不渲染三要素）
-            setPendingState('plan', { since: new Date().toISOString() })
+            // #6 真机 2026-08-30（P1-4）：原实现直接置空 proposal（卡占位空内容——用户确认一张空卡）。
+            // 修正：回搜消息历史最近一次已登记的【执行方案】并复用其结构化内容（孤儿提议回收）；
+            // 确实无历史提议才置占位
+            let reused: PlanProposal | undefined
+            for (let k = messages.length - 1; k >= 0; k--) {
+              const mm = messages[k]
+              if (mm.role !== 'assistant' || !/【执行方案/.test(mm.content)) continue
+              const r = parsePlanProposal(mm.content)
+              if (r.ok) {
+                reused = r.proposal
+                break
+              }
+            }
+            setPendingState('plan', {
+              ...(reused ? { proposal: reused } : {}),
+              since: new Date().toISOString(),
+            })
           }
         } else if (cardToShow === 'goal') {
           // 目标提议 → GoalProposal（statement + assumptions——S2 ⑬ 契约：必要时附「关键假设：」行）
