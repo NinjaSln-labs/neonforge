@@ -42,6 +42,12 @@ describe('ServiceManager 服务管理（2026-08-06 设计层升级）', () => {
     expect(isServerLikeCommand('react-scripts start')).toBe(true)
     expect(isServerLikeCommand('node server.js')).toBe(true)
     expect(isServerLikeCommand('node src/listen.js')).toBe(true)
+    // #6 真机 2026-08-30（P1-2）：python/php 静态服务此前漏判 → 30s 超时杀进程组（服务死）
+    expect(isServerLikeCommand('nohup python3 -m http.server 5190 --bind 127.0.0.1')).toBe(true)
+    expect(isServerLikeCommand('cd app && python -m http.server 8000')).toBe(true)
+    expect(isServerLikeCommand('npx http-server -p 8080')).toBe(true)
+    expect(isServerLikeCommand('php -S 127.0.0.1:8080')).toBe(true)
+    expect(isServerLikeCommand('python3 exploit.py')).toBe(false) // 非服务 python 不误判
     expect(isServerLikeCommand('npm install')).toBe(false) // 安装不是服务
     expect(isServerLikeCommand('ls')).toBe(false)
     expect(isServerLikeCommand('')).toBe(false)

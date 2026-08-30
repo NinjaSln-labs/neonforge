@@ -108,8 +108,10 @@ export function isServerCommand(cmd: string): boolean {
 // 2026-08-07 T3（regex-todo）：DEV_SERVER_RE/INSTALL_RE 从 tools.ts 移入——命令类型识别单源（服务命令判定一处）
 // 分工：isServerCommand = 严格白名单（start-server 工具命令选择——锚定开头）；isServerLikeCommand = 宽松检测
 // （bash 超时/端口保护/ServiceState——命令可能在 shell 复合串中，非锚定——行为与原 DEV_SERVER_RE 完全一致）
+// #6 真机 2026-08-30（P1-2）：补 python/php/http-server——真机 `nohup python3 -m http.server 5190`
+// 未被识别为服务命令 → 30s 普通超时杀进程组 → 服务死（用户浏览器无法访问——取证 P1-2）
 const SERVER_CMD_LOOSE_RE =
-  /(npm|pnpm|yarn) run (dev|start|serve|preview)|vite( |$)|next dev|react-scripts start|node .*(server|listen)/
+  /(npm|pnpm|yarn) run (dev|start|serve|preview)|vite( |$)|next dev|react-scripts start|node .*(server|listen)|python[0-9.]* -m http\.server|\bhttp-server( |$)|php -S |ruby -run -e httpd/
 export function isServerLikeCommand(cmd: string): boolean {
   return SERVER_CMD_LOOSE_RE.test(cmd)
 }
