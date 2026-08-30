@@ -109,9 +109,29 @@ export function parsePlanProposal(
   }
 }
 
-/** 路径 + 原因拆分（「a.js（改入口）」→ path=a.js, reason=改入口；「a.js」→ reason=''） */
+/** 路径 + 原因拆分：「a.js（改入口）」→ path=a.js, reason=改入口；「a.js」→ reason=''
+ * #6 真机 2026-08-30（复验轮新发现）：模型两种新形态此前解析失败（整行当路径 → 含句读判非路径 → malformed → 空卡）：
+ * ① 原因写在冒号后：「新建 index.html（单文件）：顶部输入框+添加按钮」
+ * ② 行首动词前缀：「新建 index.html」
+ * 处理序：冒号分节（保 http:// ）→ 剥尾随括号注释 → 剥行首动词 */
 export function splitPathReason(line: string): { path: string; reason: string } {
-  const m = line.match(/^(.+?)(?:\s*[（(](.*?)[）)])?\s*$/)
-  if (!m) return { path: line, reason: '' }
-  return { path: m[1].trim(), reason: (m[2] ?? '').trim() }
+  let s = line.trim()
+  let reason = ''
+  // ① 冒号右侧为说明（跳过 http:// 的协议冒号——左侧含 :// 不分节）
+  const ci = s.search(/[：:]/)
+  if (ci > 0 && !/:\/\//.test(s.slice(0, ci + 1))) {
+    const right = s.slice(ci + 1).trim()
+    s = s.slice(0, ci).trim()
+    if (right) reason = right
+  }
+  // ② 尾随括号注释 → 原因（前置）
+  const pm = s.match(/\s*[（(]([^（）]*)[）)]\s*$/)
+  if (pm) {
+    const inner = pm[1].trim()
+    if (inner) reason = inner + (reason ? '：' + reason : '')
+    s = s.slice(0, pm.index).trim()
+  }
+  // ③ 行首动词前缀（「新建 index.html」→「index.html」）
+  s = s.replace(/^(新建|创建|修改|更新|删除|新增|添加|改|加)\s+/, '')
+  return { path: s, reason }
 }
