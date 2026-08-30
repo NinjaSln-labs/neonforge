@@ -76,6 +76,7 @@ export type TimelineEventType =
   | 'proposal.goal' // 目标提议结构化事件（S7 A0 审校 P1-3 补登——§3.5：statement+assumptions）
   | 'proposal.plan' // 方案提议解析结果（载荷：ok/files/summary——parse-error: reason 打点）
   | 'proposal.completion' // 完成声明解析结果（载荷：ok/summary/evidence 计数）
+  | 'proposal.clarify' // ask_user 会话级澄清（V1.5 S1 Task 1.3——载荷：question/type/options）
   // —— Completion：完成对账（S4 登记——§3.5；证据不足诊断事件）——
   | 'completion.evidence_missing' // 完成声明被拒原因（载荷：ok/missing/unverifiable 清单——S4 打点）
   // —— 元事件（运行时可观测——诊断/状态）——
@@ -186,6 +187,13 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
     domain: 'proposal',
     role: 'assistant',
     detailKeys: ['ok', '?summary', '?verification', '?pendingQuestions'],
+  },
+  // V1.5 S1 Task 1.3：ask_user 会话级澄清（Task 1.2b 裁定——等价旧 <candidates> 文本块：
+  // 不置 DecisionPoint，模型停轮等用户正文回复；options 可选）
+  'proposal.clarify': {
+    domain: 'proposal',
+    role: 'assistant',
+    detailKeys: ['question', 'type', '?options'],
   },
   'completion.evidence_missing': {
     domain: 'completion',

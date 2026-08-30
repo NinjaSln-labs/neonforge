@@ -84,6 +84,9 @@ import {
   dedupeKey,
   detectProposed,
 } from '../domain/timeline'
+// V1.5 S1 Task 1.3：协议工具接线（ADR-009 拦截点——模型主动产出决策内容的通道；
+// 判定器纯函数 domain 单源——renderer 只做信号翻译 + setPendingState 承载）
+import { PROTOCOL_TOOL_NAMES, decideProtocolToolCall } from '../domain/protocolTools'
 
 // ticket 04：对话最小闭环（D0 §2/§3.4）——输入发送 → Gateway 流式 → 消息/呼吸光条/推理展示
 // 消费 02：streamChat（四档 basic）+ ModelRouter（默认 Flash）；错误分支：Key 失效内嵌更新 / 服务故障提示
@@ -733,6 +736,9 @@ export default function ConversationPanel({
     console.log('[conv] chunk', chunk.type)
     // 2026-08-15 P2：当前 tool-call chunk 的卡稳定 id（函数级——updater 闭包引用；tool-call chunk 时赋值）
     let tcId: string | undefined
+    // V1.5 S1 Task 1.3：协议工具（propose_goal/propose_plan/report_completion/ask_user）结果文本
+    // （函数级——updater 闭包引用；判定/副作用全在事件层，updater 只落卡状态——双调安全）
+    let protocolResult: string | undefined
     // 2026-08-05 用户反馈 2：模型有新动作（chunk）→ 清除 isActionPromise 状态栏提示（模型在动——之前只是陈述/即将调工具）
     if (chunk.type === 'content' || chunk.type === 'tool-call') onActionPromiseHint?.(null)
     // 事件层累积（每事件一次——双调安全）
@@ -759,6 +765,76 @@ export default function ConversationPanel({
         status: 'pending',
         id: tcId,
       })
+      // V1.5 S1 Task 1.3：协议工具分支（ADR-009 拦截点——虚拟工具不真实执行，结果由本处合成）。
+      // 判定（decideProtocolToolCall 纯函数）+ 副作用（setPendingState/tlog）全在事件层——
+      // 每事件恰好一次（updater 双调安全——对齐「副作用移出 updater」惯例）。
+      // 状态机只经 setPendingState 进入（不变量 2）；resolution 走 S4 现有 verifyThenResolve 路径
+      // （不变量 4：已解决卡条件 = verifyCompletion 通过——不直接置决策点）。
+      if (PROTOCOL_TOOL_NAMES.has(chunk.toolCall.name)) {
+        const d = decideProtocolToolCall(stateRef.current, chunk.toolCall.name, chunk.toolCall.args)
+        if (d.action === 'pending') {
+          const { kind, content } = d
+          if (kind === 'goal') {
+            const p = content.proposal as GoalProposal
+            tlog(
+              'proposal.goal',
+              {
+                statement: p.statement,
+                ...(p.assumptions.length > 0 ? { assumptions: p.assumptions } : {}),
+              },
+              'assistant',
+            )
+            setPendingState('goal', { proposal: content.proposal, since: content.since })
+            protocolResult = '目标提议已提交——等待用户确认'
+          } else if (kind === 'plan') {
+            const p = content.proposal as PlanProposal
+            tlog(
+              'proposal.plan',
+              { ok: true, summary: p.summary, files: p.files.map((f) => f.path) },
+              'assistant',
+            )
+            setPendingState('plan', { proposal: content.proposal, since: content.since })
+            protocolResult = '执行方案提议已提交——等待用户确认执行'
+          } else {
+            const p = content.proposal as CompletionClaim
+            tlog(
+              'proposal.completion',
+              {
+                ok: true,
+                summary: p.summary,
+                verification: p.evidence.verification.length,
+                pendingQuestions: p.evidence.pendingQuestions.length,
+              },
+              'assistant',
+            )
+            // S4 证据门（不变量 4）：核验通过才置 resolution 决策点（verifyThenResolve 内部
+            // setPendingState）——证据不足 → evidence_missing 打点 + 回填引导（不弹卡）
+            void verifyThenResolve(p)
+            protocolResult = '完成声明已提交——系统核验中，等待用户确认'
+          }
+        } else if (d.action === 'clarify') {
+          // 会话级澄清（Task 1.2b 裁定）：不置 DecisionPoint——模型停轮等用户正文回复
+          const { question, options, type } = d.content
+          tlog(
+            'proposal.clarify',
+            { question, type, ...(options.length > 0 ? { options } : {}) },
+            'assistant',
+          )
+          protocolResult =
+            question +
+            (options.length > 0
+              ? options
+                  .map(
+                    (o, i) => `\n${i + 1}. ${o.label}${o.description ? `：${o.description}` : ''}`,
+                  )
+                  .join('')
+              : '') +
+            '\n（问题已提交用户——本轮到此为止，等用户回复后再继续）'
+        } else {
+          // reject（硬序拒绝）/ invalid（参数校验失败）——路径化引导文本回灌模型修参/重走顺序
+          protocolResult = d.resultText
+        }
+      }
     }
     if (chunk.type === 'done') {
       // 副作用移出 updater：目标确认回写 + 对话日志（updater 双调会重复记录）
@@ -1040,7 +1116,13 @@ export default function ConversationPanel({
         // 2026-08-07 无阶段重构 S3：删除阶段门控（原 flowStage<2 设计阶段不弹卡——无阶段无阶段概念；approve-files 语义更新见 S5）
         // 2026-08-08 改名 + 语义澄清（坑 95）：approve-files = 批量授权（确认执行后的粒度优化），非「规划批准」
         let status: 'pending' | 'done' | 'file-approval' = 'pending'
-        if (chunk.toolCall.name === 'approve-files') {
+        let result: string | undefined
+        // V1.5 S1 Task 1.3：协议工具分支（须在 approve-files 特例之前——虚拟工具不真实执行，
+        // 判定在事件层已完成，此处只落卡状态/结果文本——updater 纯函数，StrictMode 双调安全）
+        if (PROTOCOL_TOOL_NAMES.has(chunk.toolCall.name)) {
+          status = 'done'
+          result = protocolResult
+        } else if (chunk.toolCall.name === 'approve-files') {
           // #6 真机 2026-08-31（复验轮用户指出）：approve-files 硬序门——方案未确认不弹卡
           // 审计修正（stage-review-2026-08-31 Spec-1）：合成结果必须是引导拒绝文本——
           // 原假成功「文件已批量授权」比静默忽略更误导（模型以为已获授权）；main policy 分支
@@ -1049,6 +1131,11 @@ export default function ConversationPanel({
             !stateRef.current.planConfirmed || stateRef.current.filesApproved
               ? 'done'
               : 'file-approval'
+          if (status === 'done') {
+            result = stateRef.current.planConfirmed
+              ? '文件已批量授权（本任务不重复授权）'
+              : '方案未确认——先输出【执行方案】（文件清单 + 一句话方案）等待用户「确认执行」，之后再调 approve-files 请求批量放行（批准文件清单 ≠ 确认执行）'
+          }
         }
         next.toolCalls = [
           ...(next.toolCalls ?? []),
@@ -1058,12 +1145,7 @@ export default function ConversationPanel({
             name: chunk.toolCall.name,
             args: chunk.toolCall.args,
             status,
-            result:
-              status === 'done' && chunk.toolCall.name === 'approve-files'
-                ? stateRef.current.planConfirmed
-                  ? '文件已批量授权（本任务不重复授权）'
-                  : '方案未确认——先输出【执行方案】（文件清单 + 一句话方案）等待用户「确认执行」，之后再调 approve-files 请求批量放行（批准文件清单 ≠ 确认执行）'
-                : undefined,
+            result,
           },
         ]
       }
@@ -1071,7 +1153,14 @@ export default function ConversationPanel({
     })
     // 工具执行副作用（移出 updater——StrictMode 双调会执行两次；真实工具写文件等不可重复）
     // 2026-08-04 规划级授权：approve-files 跳过执行（虚拟工具——批准由 renderer approvePlan 处理）
-    if (chunk.type === 'tool-call' && chunk.toolCall && chunk.toolCall.name !== 'approve-files') {
+    // V1.5 S1 Task 1.3：协议工具同为虚拟工具——不真实执行（决策内容由 renderer 协议分支经
+    // setPendingState 承载；结果文本由事件层合成回灌模型）
+    if (
+      chunk.type === 'tool-call' &&
+      chunk.toolCall &&
+      !PROTOCOL_TOOL_NAMES.has(chunk.toolCall.name) &&
+      chunk.toolCall.name !== 'approve-files'
+    ) {
       const tc = chunk.toolCall
       // 2026-08-06 用户反馈「第一句话就有一个工具执行」：目标确认前工具门控——目标没澄清前不执行任何工具
       // （目标都没澄清，看目录/写文件都没意义）；工具直接 done + 提示（maybeContinue 回填给模型 → 模型停止调工具继续澄清目标）

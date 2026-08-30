@@ -4,6 +4,8 @@
 
 export type ThinkingLevel = 'none' | 'basic' | 'medium' | 'high'
 import { TEST_HOOKS } from './testHooks.js'
+// V1.5 S1 Task 1.3：协议工具接入模型工具面（schema 单源——domain/protocolTools.ts）
+import { PROTOCOL_TOOL_DEFS } from '../domain/protocolTools.js'
 
 // 2026-08-07 T1 根因补强（regex-todo）：网关错误结构化透传——原 streamChat throw 文本
 // `gateway: http-${status}` → ipc 文本 → renderer 正则抠状态码（文本重建=打地鼠）；
@@ -342,6 +344,13 @@ export const TOOL_DEFS = [
       },
     },
   },
+  // V1.5 S1 Task 1.3：协议工具（propose_goal/propose_plan/report_completion/ask_user——ADR-009
+  // 模型主动产出决策内容的通道）。形状适配：domain ProtocolToolDef {name,description,parameters}
+  // → OpenAI function tool {type:'function',function:{…}}（适配留在本文件——domain 层保持纯净）
+  ...PROTOCOL_TOOL_DEFS.map((d) => ({
+    type: 'function' as const,
+    function: { name: d.name, description: d.description, parameters: d.parameters },
+  })),
 ]
 
 // 2026-08-21 ADR-007 provider 切换（成本优化）：DeepSeek 官方 → Command Code（OpenAI 兼容聚合代理，commandcode.ai）
