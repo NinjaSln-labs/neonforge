@@ -3,7 +3,9 @@ import {
   PROTOCOL_TOOL_DEFS,
   PROTOCOL_TOOL_NAMES,
   validateProtocolArgs,
+  decideProtocolToolCall,
 } from '../../src/domain/protocolTools'
+import { initialState, type ConversationState } from '../../src/domain/conversationState'
 
 // V1.5 Task 1.1 spec TDD：协议工具 schema 单源 + 参数校验器
 // 契约：
@@ -158,5 +160,165 @@ describe('validateProtocolArgs（协议参数校验器——V1.5 Task 1.1）', (
   it('未知工具 → { ok: false, errors }（防御）', () => {
     const r = validateProtocolArgs('nonexistent', {})
     expect(r.ok).toBe(false)
+  })
+})
+
+// ============================================================================
+// decideProtocolToolCall 乱序矩阵（V1.5 Task 1.2——顺序严格单向，stage-spec r2）
+// 契约：
+// - 硬序门：goal 未确认 → propose_plan/report_completion/ask_user 一律 reject（引导先 propose_goal）；
+//   goal 已确认 plan 未确认 → report_completion reject（引导先 propose_plan）
+// - 提议分支：propose_goal 恒 pending:goal（ADR-006 换目标语义）；propose_plan goal 确认后恒
+//   pending:plan（重复提议幂等覆盖）；report_completion goal+plan 确认后 pending:resolution
+// - 载荷映射：args → GoalProposal/PlanProposal/CompletionClaim（字段名一致）；
+//   evidence.diffs 恒 []（V1b 系统派生——工具无法自证对账）
+// - invalid：参数校验失败/未知工具名 → 路径化错误模板（回灌模型修参）
+// - post-goal ask_user：不产生状态机决策点（DecisionKind 无澄清值）→ reject + 引导直接提问
+// ============================================================================
+
+/** 会话状态构造（乱序矩阵前置态——字面量覆盖基态字段） */
+function state(over: Partial<ConversationState> = {}): ConversationState {
+  return { ...initialState(), ...over }
+}
+
+describe('decideProtocolToolCall（协议工具调用乱序矩阵——V1.5 Task 1.2）', () => {
+  it('goal 未确认：propose_plan → reject，resultText 引导先 propose_goal', () => {
+    const r = decideProtocolToolCall(state(), 'propose_plan', {
+      summary: '单文件落地',
+      files: [{ path: 'index.html', reason: '新建首页' }],
+    })
+    expect(r.action).toBe('reject')
+    if (r.action !== 'reject') return
+    expect(r.resultText).toContain('propose_goal')
+  })
+
+  it('goal 未确认：report_completion → reject，resultText 引导先 propose_goal', () => {
+    const r = decideProtocolToolCall(state(), 'report_completion', {
+      summary: '完成',
+      verification: [{ command: 'node a.js', passed: true }],
+    })
+    expect(r.action).toBe('reject')
+    if (r.action !== 'reject') return
+    expect(r.resultText).toContain('propose_goal')
+  })
+
+  it('goal 未确认：ask_user → reject，resultText 引导先 propose_goal', () => {
+    const r = decideProtocolToolCall(state(), 'ask_user', {
+      question: '用哪种方案？',
+      type: 'approach_choice',
+    })
+    expect(r.action).toBe('reject')
+    if (r.action !== 'reject') return
+    expect(r.resultText).toContain('propose_goal')
+  })
+
+  it('goal 未确认：propose_goal 合法 args → pending:goal，proposal.statement/assumptions 映射', () => {
+    const r = decideProtocolToolCall(state(), 'propose_goal', {
+      statement: '做一个待办应用',
+      assumptions: ['数据存内存即可', '单用户本地使用'],
+    })
+    expect(r).toMatchObject({ action: 'pending', kind: 'goal' })
+    if (r.action !== 'pending') return
+    expect(r.content.kind).toBe('goal')
+    expect(r.content.proposal).toEqual({
+      statement: '做一个待办应用',
+      assumptions: ['数据存内存即可', '单用户本地使用'],
+    })
+    expect(typeof r.content.since).toBe('string')
+    expect(r.content.since.length).toBeGreaterThan(0)
+  })
+
+  it('goal 已确认 plan 未确认：propose_plan 合法 → pending:plan，files/summary/verificationPlan 映射', () => {
+    const r = decideProtocolToolCall(state({ goalConfirmed: true }), 'propose_plan', {
+      summary: '单文件落地首页',
+      files: [{ path: 'index.html', reason: '新建首页' }],
+      assumptions: ['纯静态页即可'],
+      verification_plan: ['npx vitest run'],
+    })
+    expect(r).toMatchObject({ action: 'pending', kind: 'plan' })
+    if (r.action !== 'pending') return
+    expect(r.content.kind).toBe('plan')
+    expect(r.content.proposal).toEqual({
+      summary: '单文件落地首页',
+      files: [{ path: 'index.html', reason: '新建首页' }],
+      assumptions: ['纯静态页即可'],
+      verificationPlan: ['npx vitest run'],
+    })
+  })
+
+  it('goal 已确认：propose_goal（新目标）→ pending:goal（ADR-006 换目标语义）', () => {
+    const r = decideProtocolToolCall(
+      state({ goalConfirmed: true, planConfirmed: true }),
+      'propose_goal',
+      { statement: '换一个新目标' },
+    )
+    expect(r).toMatchObject({ action: 'pending', kind: 'goal' })
+    if (r.action !== 'pending') return
+    expect(r.content.proposal).toEqual({ statement: '换一个新目标', assumptions: [] })
+  })
+
+  it('goal+plan 已确认：report_completion 合法 → pending:resolution，evidence 映射（verification 对齐 output、diffs=[]、pendingQuestions 映射）', () => {
+    const r = decideProtocolToolCall(
+      state({ goalConfirmed: true, planConfirmed: true }),
+      'report_completion',
+      {
+        summary: '待办应用完成',
+        verification: [
+          { command: 'node a.js', output: 'all ok', passed: true },
+          { command: 'npx vitest run', passed: false },
+        ],
+        pending_questions: ['移动端样式未验证'],
+      },
+    )
+    expect(r).toMatchObject({ action: 'pending', kind: 'resolution' })
+    if (r.action !== 'pending') return
+    expect(r.content.kind).toBe('resolution')
+    expect(r.content.proposal).toEqual({
+      summary: '待办应用完成',
+      evidence: {
+        verification: [
+          { command: 'node a.js', output: 'all ok', passed: true },
+          { command: 'npx vitest run', passed: false },
+        ],
+        diffs: [],
+        pendingQuestions: ['移动端样式未验证'],
+      },
+    })
+  })
+
+  it('plan 已确认：重复 propose_plan → pending:plan（幂等覆盖）', () => {
+    const r = decideProtocolToolCall(
+      state({ goalConfirmed: true, planConfirmed: true }),
+      'propose_plan',
+      {
+        summary: '修订后的方案',
+        files: [{ path: 'src/App.jsx', reason: '调整组件结构' }],
+      },
+    )
+    expect(r).toMatchObject({ action: 'pending', kind: 'plan' })
+    if (r.action !== 'pending') return
+    expect(r.content.proposal).toEqual({
+      summary: '修订后的方案',
+      files: [{ path: 'src/App.jsx', reason: '调整组件结构' }],
+      assumptions: [],
+      verificationPlan: [],
+    })
+  })
+
+  it('args 校验失败（propose_plan files 空）→ invalid，resultText 含「files」路径化错误', () => {
+    const r = decideProtocolToolCall(state({ goalConfirmed: true }), 'propose_plan', {
+      summary: '空方案',
+      files: [],
+    })
+    expect(r.action).toBe('invalid')
+    if (r.action !== 'invalid') return
+    expect(r.resultText).toContain('files')
+  })
+
+  it('未知协议工具名 → invalid（防御）', () => {
+    const r = decideProtocolToolCall(state({ goalConfirmed: true }), 'nonexistent', {})
+    expect(r.action).toBe('invalid')
+    if (r.action !== 'invalid') return
+    expect(r.resultText).toContain('nonexistent')
   })
 })

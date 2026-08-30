@@ -1,4 +1,4 @@
-// 协议工具 schema 单源 + 参数校验器（V1.5 S1 Task 1.1）
+// 协议工具 schema 单源 + 参数校验器 + 调用判定器（V1.5 S1 Task 1.1/1.2）
 // 四个协议工具（模型主动产出决策内容的通道——§3.2 值对象对齐）：
 //   propose_goal    → GoalProposal（statement + assumptions）
 //   propose_plan    → PlanProposal（summary + files[{path,reason}] + assumptions + verificationPlan）
@@ -13,6 +13,15 @@
 // 注意：JSON 解析失败的重试语义（「JSON 解析失败——重试 1 次后仍失败」）由调用方处理，本模块只做参数级校验。
 
 import { isLikelyPath, splitPathReason } from './planProposalParser.js'
+import type {
+  ConversationState,
+  DecisionContent,
+  DecisionKind,
+  CompletionClaim,
+  GoalProposal,
+  PlanProposal,
+  VerificationItem,
+} from './conversationState.js'
 
 // ============================================================================
 // JSON Schema 类型（轻量手写——不引入 ajv/zod 依赖）
@@ -307,4 +316,125 @@ export function validateProtocolArgs(tool: string, args: unknown): ProtocolArgsV
   }
 
   return errors.length === 0 ? { ok: true } : { ok: false, errors }
+}
+
+// ============================================================================
+// decideProtocolToolCall（协议工具调用判定器——V1.5 S1 Task 1.2）
+// 乱序矩阵硬序门（顺序严格单向——stage-spec r2）+ 提议分支 + invalid 分支。
+// 纯函数 L1 可测：不依赖 window/DOM/node；不产生副作用——置 pending/decisionContent 由
+// 调用方（Task 1.3 renderer chunk 分支）按返回的 kind/content 调 setPending 承载。
+// ============================================================================
+
+export type ProtocolToolCallDecision =
+  | { action: 'pending'; kind: DecisionKind; content: DecisionContent }
+  | { action: 'reject'; resultText: string }
+  | { action: 'invalid'; resultText: string }
+
+/** 提议分支构造：pending 决策点 + 规范化载荷（DecisionContent 构造对齐 setPending 调用形态） */
+function pendingProposal(
+  kind: DecisionKind,
+  proposal: GoalProposal | PlanProposal | CompletionClaim,
+): ProtocolToolCallDecision {
+  return {
+    action: 'pending',
+    kind,
+    content: { kind, proposal, since: new Date().toISOString() },
+  }
+}
+
+/** 硬序拒绝分支构造（合成引导文本——approve-files 模式推广，回灌模型重走顺序） */
+function rejectWith(resultText: string): ProtocolToolCallDecision {
+  return { action: 'reject', resultText }
+}
+
+/** args 可选字符串数组 → 规范化 string[]（校验器已保证存在时为 string[]，缺省置空） */
+function stringArrayOf(v: unknown): string[] {
+  return Array.isArray(v) ? (v as string[]) : []
+}
+
+/**
+ * 协议工具调用判定（三分支——ADR-009 拦截点）：
+ * - invalid（最优先）：参数校验失败/未知工具名 → 路径化错误模板回模型修参（坏参数即使顺序对也不进决策点）
+ * - reject（硬序门）：goal 未确认 → propose_plan/report_completion/ask_user 一律拒绝（先 propose_goal）；
+ *   goal 已确认 plan 未确认 → report_completion 拒绝（先 propose_plan）；
+ *   ask_user 不产生状态机决策点（DecisionKind 无澄清类值）——goal 已确认后引导直接在回复正文提问/给选项
+ * - pending（提议分支）：propose_goal 恒置（ADR-006：goal 已确认后再提议 = 换目标/新任务——确认即任务边界）；
+ *   propose_plan goal 确认后恒置（重复提议幂等覆盖）；report_completion goal+plan 确认后置 resolution
+ *   （evidence.diffs 恒 []——V1b 系统派生（deriveDiffs），工具无法自证对账）
+ */
+export function decideProtocolToolCall(
+  state: ConversationState,
+  tool: string,
+  args: unknown,
+): ProtocolToolCallDecision {
+  const v = validateProtocolArgs(tool, args)
+  if (!v.ok) {
+    return {
+      action: 'invalid',
+      resultText: `参数校验失败——请修正后重新调用 ${tool}：\n${v.errors.join('\n')}`,
+    }
+  }
+  const a = args as Record<string, unknown>
+
+  if (tool === 'propose_goal') {
+    return pendingProposal('goal', {
+      statement: a.statement as string,
+      assumptions: stringArrayOf(a.assumptions),
+    })
+  }
+
+  if (tool === 'propose_plan') {
+    if (!state.goalConfirmed) {
+      return rejectWith(
+        '目标未确认——先调用 propose_goal 提议目标（statement 一句话准确目标），用户确认后才能提出执行方案',
+      )
+    }
+    return pendingProposal('plan', {
+      summary: a.summary as string,
+      files: (a.files as Array<{ path: string; reason: string }>).map((f) => ({
+        path: f.path,
+        reason: f.reason,
+      })),
+      assumptions: stringArrayOf(a.assumptions),
+      verificationPlan: stringArrayOf(a.verification_plan),
+    })
+  }
+
+  if (tool === 'report_completion') {
+    if (!state.goalConfirmed) {
+      return rejectWith('目标未确认——先调用 propose_goal 提议目标，用户确认后才能声明完成')
+    }
+    if (!state.planConfirmed) {
+      return rejectWith(
+        '方案未确认——先调用 propose_plan 提出文件清单与验证计划（files+summary），用户确认后才能声明完成',
+      )
+    }
+    return pendingProposal('resolution', {
+      summary: a.summary as string,
+      evidence: {
+        verification: (a.verification as VerificationItem[]).map((item) => ({
+          command: item.command,
+          output: item.output,
+          passed: item.passed,
+        })),
+        diffs: [], // V1b 系统派生（deriveDiffs）——diffs 不进工具 args（ADR-009）
+        pendingQuestions: stringArrayOf(a.pending_questions),
+      },
+    })
+  }
+
+  if (tool === 'ask_user') {
+    if (!state.goalConfirmed) {
+      return rejectWith(
+        '目标未确认——先调用 propose_goal 提议目标（statement 一句话准确目标，关键假设写进 assumptions），用户确认后再继续',
+      )
+    }
+    // 澄清不占用确认决策点（S3 candidates 迁移 ask_user 卡前此分支仅引导——不置 pending）
+    return rejectWith(
+      '澄清提问不占用确认决策点——直接在回复正文输出问题，候选项用 <candidates> 块给出（点选与打字等价）',
+    )
+  }
+
+  // 防御（validateProtocolArgs 已拦未知名——理论不可达，保持 fail-closed）
+  return { action: 'invalid', resultText: `unknown tool: ${tool}（非协议工具）` }
 }
