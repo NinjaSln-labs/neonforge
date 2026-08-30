@@ -115,6 +115,11 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
   const approveToolCall = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg): void => {
     tlog('tool.approved', { name: tc.name }, 'system')
     tlog('card.resolved', { card: 'approval', action: 'approve', name: tc.name }, 'system')
+    // #6 真机 2026-08-30（P1-5——用户点名设计违背）：write/edit 批准即文件级绑定（任务边界内同文件免重复授权）——
+    // 原实现仅「允许并记住」按钮绑文件，普通批准只绑单次调用 → 同文件每次修改都弹卡（真机连弹 3 张）。
+    // 沙箱内有界（addTrust 内建检查）+ 任务边界清空（clearTrust）——安全底线不变。
+    // 附带修复 P2-9：获批调用失败（路径错）后修正重试不再重复弹卡
+    if (tc.name === 'write' || tc.name === 'edit') addTrust(tc.args)
     patchToolCall(idx, (c) => ({ ...c, status: 'pending' as const }), tc)
     void window.neonforge.tools
       ?.execute?.(tc.name, tc.args, { approved: true, rootPath: rootPath ?? undefined, sessionId })
