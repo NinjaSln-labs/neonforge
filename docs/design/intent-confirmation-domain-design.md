@@ -172,9 +172,9 @@ classifyReadonly(name, command?): ActionAttribute['kind']
 //   V1a 系统代跑核验：对 claim.evidence.verification[].command 中声明 passed 的命令，系统重新执行一次只读验证
 //       命令核对输出（模型可发起命令，系统核验结果——「自报」降级为「系统复核」）
 //   V1b diff 对账系统派生：claim.evidence.diffs 由系统从 plannedFiles/producedFiles 派生比对（非模型自述）
-//   verification 命令非只读（系统不可代跑）→ 该条证据标记 'unverifiable'，计入 pendingQuestions 等价
+//   verification 命令非只读（系统不可代跑）→ 该条证据标记 'unverifiable'（ADR-008：计入 unverifiable 清单而非 pendingQuestions）
 verifyCompletion(claim: CompletionClaim, systemState): { ok: boolean; missing: string[]; unverifiable: string[] }
-//   证据不足（verification 空 / pendingQuestions 非空 / 存在 unverifiable）→ ok=false + missing/unverifiable 清单
+//   证据不足（verification 空 / passed=false / 存在 unverifiable）→ ok=false；pendingQuestions 不阻塞（ADR-008——解决卡知情呈现）
 //   已知限制（§7 已知限制登记）：V1 系统核验覆盖只读命令；非只读验证命令的最终可信度依赖用户对账——残余风险显式声明
 
 // —— 方案解析（替代 parseExecutionPlan——含假设与验证计划提取）——

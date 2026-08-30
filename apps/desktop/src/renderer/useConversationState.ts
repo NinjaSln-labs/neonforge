@@ -61,8 +61,12 @@ export function useConversationState(opts?: UseConversationStateOpts) {
       else if (point === 'goal') void window.neonforge?.session?.setPlanConfirmed?.(false)
       return r
     },
-    reject: (point: ConfirmPoint, reason: RejectReason) =>
-      transition((s) => userRejected(s, point, reason)),
+    reject: (point: ConfirmPoint, reason: RejectReason) => {
+      const r = transition((s) => userRejected(s, point, reason))
+      // 审计修正（stage-review-2026-08-31 Spec-3）：plan 拒绝 → main 镜像复位（否则硬序门仍开）
+      if (point === 'plan') void window.neonforge?.session?.setPlanConfirmed?.(false)
+      return r
+    },
     // approve-files 批准（追加语义——A0 §5；files 已 trustPath 规范化）
     grantPlan: (files: string[]) => transition((s) => approvalGranted(s, files)),
     // S7（A0 审校 P1-2 接线）：授权拒绝——approvalDecided（§3.4 C6——拒绝记忆登记——同轮同类短封）

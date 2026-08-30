@@ -591,8 +591,7 @@ export default function ConversationPanel({
     messages,
     goalConfirmed,
     planConfirmed,
-    stateRef.current.pending,
-    stateRef.current.decisionContent,
+    stateVersion, // 审计修正 2026-08-31：stateRef 字段变化不触发 effect——决策点异步置位（verifyThenResolve）后靠 version 重渲染补打（原写 ref 字段进依赖形同虚设）
   ])
   // 2026-08-08 状态变化打点（working / approval-pending / ready——统一状态机；变化才记录）
   const lastStatusRef = useRef('')
@@ -1043,7 +1042,9 @@ export default function ConversationPanel({
         let status: 'pending' | 'done' | 'file-approval' = 'pending'
         if (chunk.toolCall.name === 'approve-files') {
           // #6 真机 2026-08-31（复验轮用户指出）：approve-files 硬序门——方案未确认不弹卡
-          // （main 执行器返回 policy 引导拒绝——模型重走【执行方案】；坑 95：批量授权 ≠ 规划批准）
+          // 审计修正（stage-review-2026-08-31 Spec-1）：合成结果必须是引导拒绝文本——
+          // 原假成功「文件已批量授权」比静默忽略更误导（模型以为已获授权）；main policy 分支
+          // 为流式路径不可达的防御纵深（renderer 跳过执行——虚拟工具结果由本处合成）
           status =
             !stateRef.current.planConfirmed || stateRef.current.filesApproved
               ? 'done'
@@ -1059,7 +1060,9 @@ export default function ConversationPanel({
             status,
             result:
               status === 'done' && chunk.toolCall.name === 'approve-files'
-                ? '文件已批量授权（本任务不重复授权）'
+                ? stateRef.current.planConfirmed
+                  ? '文件已批量授权（本任务不重复授权）'
+                  : '方案未确认——先输出【执行方案】（文件清单 + 一句话方案）等待用户「确认执行」，之后再调 approve-files 请求批量放行（批准文件清单 ≠ 确认执行）'
                 : undefined,
           },
         ]
