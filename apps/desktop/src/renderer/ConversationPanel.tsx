@@ -45,6 +45,7 @@ import {
 // S2 提议解析（S3 接线：done 分支结构化解析 → decisionContent 快照——卡渲染唯一来源）
 import { parsePlanProposal, extractAssumptionsSection } from '../domain/planProposalParser'
 import { parseCompletionClaim } from '../domain/completionClaimParser'
+import { resolveSandboxPath } from '../domain/sandboxPath'
 // 2026-08-15 Q1a+Q2：状态机转换单点封装（写路径唯一入口）
 import { useConversationState } from './useConversationState'
 // 2026-08-15 Q1b：工具授权 handler 封装（组件瘦身）
@@ -1727,8 +1728,9 @@ export default function ConversationPanel({
   const taskTrustRef = useRef<string[]>([])
   const trustPath = (p: unknown): string => {
     const s = String(p ?? '')
-    if (s.startsWith('/')) return s
-    return rootPath ? `${rootPath}/${s.replace(/^\/+/, '')}` : s
+    if (!s) return rootPath ? `${rootPath}/` : ''
+    // #6 真机 2026-08-30（P1-6）：剥模型误带的任务目录前缀（双重嵌套——批准注册与门控匹配统一基准）
+    return resolveSandboxPath(rootPath ?? '', s)
   }
   const isTrusted = (args: Record<string, unknown>): boolean =>
     taskTrustRef.current.includes(trustPath(args.path ?? args.filePath ?? ''))

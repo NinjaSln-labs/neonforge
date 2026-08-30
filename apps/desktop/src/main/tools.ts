@@ -5,6 +5,7 @@ import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
 import { app } from 'electron' // main 进程内置——vitest 下为 undefined（subprocFile 防御走 fallback）
 import { snapshot as takeSnapshot, revert as revertFile } from './applyDiff.js'
 import { codeRag } from './codeRag.js'
+import { resolveSandboxPath } from '../domain/sandboxPath.js'
 // 2026-08-06 设计层升级（服务生命周期独立——用户「白名单匹配不完」）：模型用 start/check/stop-server 管服务，不用 bash 起服务/curl 验证
 // 2026-08-07 T3（regex-todo）：命令类型识别单源化——isServerLikeCommand/isInstallCommand 从 serviceManager 导入（原 DEV_SERVER_RE/INSTALL_RE 散落 tools.ts 已删）
 import {
@@ -194,8 +195,10 @@ function resolvePath(p: unknown, ctx: { rootPath?: string }): string {
   // ① 真绝对路径（多段，如 /Users/… 或 /tmp/…）→ 永远不 join——直接用（存在则读，不存在则报不存在；2026-08-04 修复：原实现绝对路径不存在时走 join 分支，拼出 rootPath+绝对路径 的荒谬路径——talk.txt 实测）
   const segments = pStr.split('/').filter(Boolean)
   if (path.isAbsolute(pStr) && segments.length > 1) return pStr
-  // ② 相对/类绝对（如 package.json 或 /package.json——单段根下文件名，模型相对语义）→ 以 rootPath 为基准，项目根下
-  if (ctx.rootPath) return path.join(ctx.rootPath, pStr.replace(/^\/+/, ''))
+  // ② 相对/类绝对（如 package.json 或 /package.json——单段根下文件名，模型相对语义）→ 以 rootPath 为基准
+  // #6 真机 2026-08-30（P1-6）：统一走领域层 resolveSandboxPath——剥模型误带的任务目录前缀
+  //（原无脑 join → 「任务目录/文件」双重嵌套 ENOENT——真机 edit 实测）；类绝对单段先剥根斜杠（join 语义保持）
+  if (ctx.rootPath) return resolveSandboxPath(ctx.rootPath, pStr.replace(/^\/+/, ''))
   throw new Error('路径需为绝对路径或提供 rootPath')
 }
 
