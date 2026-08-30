@@ -164,16 +164,17 @@ describe('validateProtocolArgs（协议参数校验器——V1.5 Task 1.1）', (
 })
 
 // ============================================================================
-// decideProtocolToolCall 乱序矩阵（V1.5 Task 1.2——顺序严格单向，stage-spec r2）
+// decideProtocolToolCall 乱序矩阵（V1.5 Task 1.2/1.2b——顺序严格单向，stage-spec r2）
 // 契约：
-// - 硬序门：goal 未确认 → propose_plan/report_completion/ask_user 一律 reject（引导先 propose_goal）；
-//   goal 已确认 plan 未确认 → report_completion reject（引导先 propose_plan）
+// - 硬序门只约束「推进提议」：goal 未确认 → propose_plan/report_completion 一律 reject（引导先
+//   propose_goal）；goal 已确认 plan 未确认 → report_completion reject（引导先 propose_plan）
+// - ask_user 为会话级澄清（Task 1.2b 裁定）：任何时点合法 → clarify 分支——不进硬序矩阵、
+//   不置 DecisionPoint（pre-goal 澄清→收敛→propose_goal 是设计主流程）
 // - 提议分支：propose_goal 恒 pending:goal（ADR-006 换目标语义）；propose_plan goal 确认后恒
 //   pending:plan（重复提议幂等覆盖）；report_completion goal+plan 确认后 pending:resolution
 // - 载荷映射：args → GoalProposal/PlanProposal/CompletionClaim（字段名一致）；
 //   evidence.diffs 恒 []（V1b 系统派生——工具无法自证对账）
-// - invalid：参数校验失败/未知工具名 → 路径化错误模板（回灌模型修参）
-// - post-goal ask_user：不产生状态机决策点（DecisionKind 无澄清值）→ reject + 引导直接提问
+// - invalid：参数校验失败/未知工具名 → 路径化错误模板（回灌模型修参）——ask_user 同样先过校验
 // ============================================================================
 
 /** 会话状态构造（乱序矩阵前置态——字面量覆盖基态字段） */
@@ -202,14 +203,57 @@ describe('decideProtocolToolCall（协议工具调用乱序矩阵——V1.5 Task
     expect(r.resultText).toContain('propose_goal')
   })
 
-  it('goal 未确认：ask_user → reject，resultText 引导先 propose_goal', () => {
+  it('goal 未确认：ask_user 合法 args → clarify（澄清不设序——pre-goal 澄清是设计主流程），question/options/type 映射', () => {
     const r = decideProtocolToolCall(state(), 'ask_user', {
       question: '用哪种方案？',
       type: 'approach_choice',
+      options: [{ label: 'A', description: '方案 A' }, { label: 'B' }],
     })
-    expect(r.action).toBe('reject')
-    if (r.action !== 'reject') return
-    expect(r.resultText).toContain('propose_goal')
+    expect(r.action).toBe('clarify')
+    if (r.action !== 'clarify') return
+    expect(r.content).toEqual({
+      question: '用哪种方案？',
+      type: 'approach_choice',
+      options: [
+        { label: 'A', description: '方案 A' },
+        { label: 'B', description: '' },
+      ],
+    })
+  })
+
+  it('plan 已确认后 ask_user → 仍 clarify（澄清不设序——不进硬序矩阵）', () => {
+    const r = decideProtocolToolCall(
+      state({ goalConfirmed: true, planConfirmed: true }),
+      'ask_user',
+      { question: '验证命令跑哪个？', type: 'suggestion' },
+    )
+    expect(r.action).toBe('clarify')
+    if (r.action !== 'clarify') return
+    expect(r.content).toEqual({
+      question: '验证命令跑哪个？',
+      type: 'suggestion',
+      options: [],
+    })
+  })
+
+  it('ask_user options 缺失 → 仍 clarify（options 可选，映射为空数组）', () => {
+    const r = decideProtocolToolCall(state(), 'ask_user', {
+      question: '数据要持久化吗？',
+      type: 'missing_info',
+    })
+    expect(r.action).toBe('clarify')
+    if (r.action !== 'clarify') return
+    expect(r.content.options).toEqual([])
+  })
+
+  it('ask_user type 非法枚举 → invalid（路径化错误——校验先行于 clarify 分支）', () => {
+    const r = decideProtocolToolCall(state(), 'ask_user', {
+      question: '？',
+      type: 'whatever',
+    })
+    expect(r.action).toBe('invalid')
+    if (r.action !== 'invalid') return
+    expect(r.resultText).toContain('type')
   })
 
   it('goal 未确认：propose_goal 合法 args → pending:goal，proposal.statement/assumptions 映射', () => {

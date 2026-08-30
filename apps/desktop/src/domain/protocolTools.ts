@@ -319,14 +319,26 @@ export function validateProtocolArgs(tool: string, args: unknown): ProtocolArgsV
 }
 
 // ============================================================================
-// decideProtocolToolCall（协议工具调用判定器——V1.5 S1 Task 1.2）
-// 乱序矩阵硬序门（顺序严格单向——stage-spec r2）+ 提议分支 + invalid 分支。
-// 纯函数 L1 可测：不依赖 window/DOM/node；不产生副作用——置 pending/decisionContent 由
+// decideProtocolToolCall（协议工具调用判定器——V1.5 S1 Task 1.2/1.2b）
+// 硬序门（顺序严格单向——stage-spec r2）只约束「推进提议」（goal/plan/completion）；
+// ask_user 是会话级澄清交互（Task 1.2b 裁定——等价旧 <candidates> 文本块）：
+// 不进硬序矩阵、任何时点合法（pre-goal 澄清→收敛→propose_goal 是设计主流程）、
+// 不置 DecisionPoint（goal/plan/approval/resolution 四点不变）——模型发起后自然停轮等回复。
+// 四分支：clarify 分支 + 提议分支 + 硬序拒绝 + invalid 分支。
+// 纯函数 L1 可测：不依赖 window/DOM/node；不产生副作用——置 pending/决策内容由
 // 调用方（Task 1.3 renderer chunk 分支）按返回的 kind/content 调 setPending 承载。
 // ============================================================================
 
 export type ProtocolToolCallDecision =
   | { action: 'pending'; kind: DecisionKind; content: DecisionContent }
+  | {
+      action: 'clarify'
+      content: {
+        question: string
+        options: Array<{ label: string; description: string }>
+        type: string
+      }
+    }
   | { action: 'reject'; resultText: string }
   | { action: 'invalid'; resultText: string }
 
@@ -353,11 +365,13 @@ function stringArrayOf(v: unknown): string[] {
 }
 
 /**
- * 协议工具调用判定（三分支——ADR-009 拦截点）：
+ * 协议工具调用判定（四分支——ADR-009 拦截点）：
  * - invalid（最优先）：参数校验失败/未知工具名 → 路径化错误模板回模型修参（坏参数即使顺序对也不进决策点）
- * - reject（硬序门）：goal 未确认 → propose_plan/report_completion/ask_user 一律拒绝（先 propose_goal）；
- *   goal 已确认 plan 未确认 → report_completion 拒绝（先 propose_plan）；
- *   ask_user 不产生状态机决策点（DecisionKind 无澄清类值）——goal 已确认后引导直接在回复正文提问/给选项
+ * - clarify（会话级澄清——Task 1.2b 裁定）：ask_user 任何 state 下 args 合法即 clarify，
+ *   不进硬序矩阵、不置 DecisionPoint（澄清先于目标是设计主流程——⑬ 澄清→收敛→propose_goal）；
+ *   不产生状态机决策点，模型发起后自然停轮等用户回复（等价旧 <candidates> 文本块）
+ * - reject（硬序门——只约束「推进提议」）：goal 未确认 → propose_plan/report_completion 一律拒绝
+ *   （先 propose_goal）；goal 已确认 plan 未确认 → report_completion 拒绝（先 propose_plan）
  * - pending（提议分支）：propose_goal 恒置（ADR-006：goal 已确认后再提议 = 换目标/新任务——确认即任务边界）；
  *   propose_plan goal 确认后恒置（重复提议幂等覆盖）；report_completion goal+plan 确认后置 resolution
  *   （evidence.diffs 恒 []——V1b 系统派生（deriveDiffs），工具无法自证对账）
@@ -424,15 +438,22 @@ export function decideProtocolToolCall(
   }
 
   if (tool === 'ask_user') {
-    if (!state.goalConfirmed) {
-      return rejectWith(
-        '目标未确认——先调用 propose_goal 提议目标（statement 一句话准确目标，关键假设写进 assumptions），用户确认后再继续',
-      )
+    // 会话级澄清（Task 1.2b 裁定）：任何 state 下合法——不进硬序矩阵、不置 DecisionPoint；
+    // args 校验已先行（非法 → invalid 路径化错误），此处恒 clarify（options 可选——缺省映射空数组）
+    return {
+      action: 'clarify',
+      content: {
+        question: a.question as string,
+        type: a.type as string,
+        options: (Array.isArray(a.options)
+          ? (a.options as Array<{ label: string; description?: string }>)
+          : []
+        ).map((o) => ({
+          label: o.label,
+          description: typeof o.description === 'string' ? o.description : '',
+        })),
+      },
     }
-    // 澄清不占用确认决策点（S3 candidates 迁移 ask_user 卡前此分支仅引导——不置 pending）
-    return rejectWith(
-      '澄清提问不占用确认决策点——直接在回复正文输出问题，候选项用 <candidates> 块给出（点选与打字等价）',
-    )
   }
 
   // 防御（validateProtocolArgs 已拦未知名——理论不可达，保持 fail-closed）
