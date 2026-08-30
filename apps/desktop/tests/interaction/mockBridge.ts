@@ -72,6 +72,7 @@ export interface MockBridgeOptions {
     forceToolCalls?: boolean // window.__nfForceToolCalls（每次 streamChat 的 forceTool）
     approvedFlags?: boolean // window.__nfApprovedFlags（write/edit 的 approved 标记）
     titleCalls?: boolean // window.__nfTitleCalls（updateProjectTitle 调用记录）
+    planConfirmedCalls?: boolean // window.__nfPlanConfirmedCalls（session.setPlanConfirmed 镜像记录——A-016 硬序门）
   }
   /** 逃生舱：与 bridge 同作用域的附加源（可声明闭包状态、定义捕获 getter、改 bridge 字段） */
   extraInit?: string
@@ -89,6 +90,8 @@ export interface MockBridgeHandle {
   forceToolCalls(): Promise<boolean[]>
   approvedFlags(): Promise<boolean[]>
   titleCalls(): Promise<Array<{ p: string; title: string }>>
+  /** A-016：session.setPlanConfirmed 镜像调用记录（需 capture.planConfirmedCalls） */
+  planConfirmedCalls(): Promise<boolean[]>
   /** 读任意捕获值（含 escape hatch 自定义的 window.__*） */
   readCapture<T>(name: string): Promise<T | undefined>
 }
@@ -114,6 +117,7 @@ interface Spec {
     forceToolCalls: boolean
     approvedFlags: boolean
     titleCalls: boolean
+    planConfirmedCalls: boolean
   }
 }
 
@@ -139,6 +143,7 @@ export async function installMockBridge(
       forceToolCalls: opts.capture?.forceToolCalls ?? false,
       approvedFlags: opts.capture?.approvedFlags ?? false,
       titleCalls: opts.capture?.titleCalls ?? false,
+      planConfirmedCalls: opts.capture?.planConfirmedCalls ?? false,
     },
   }
 
@@ -157,6 +162,7 @@ export async function installMockBridge(
     forceToolCalls: () => read<boolean[]>('__nfForceToolCalls', page),
     approvedFlags: () => read<boolean[]>('__nfApprovedFlags', page),
     titleCalls: () => read<Array<{ p: string; title: string }>>('__nfTitleCalls', page),
+    planConfirmedCalls: () => read<boolean[]>('__nfPlanConfirmedCalls', page),
     readCapture: <T>(name: string) => read<T>(name, page),
   }
 }
@@ -185,6 +191,7 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
   const forceToolCalls = []
   const approvedFlags = []
   const titleCalls = []
+  const planConfirmedCalls = []
   const cbRef = { cb: null }
 
   const executeImpl = ${
@@ -254,6 +261,14 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
       revert: async () => ({ ok: true }),
       cancel: async () => ({ ok: false, error: '无活动命令' }),
     },
+    // A-016（V1.5 Task 1.4）：session 通道补齐——renderer confirm('plan'/'goal') 镜像 setPlanConfirmed
+    // 此前 mock 缺该通道（hook 可选链静默吞调）→ 镜像同步在 L3 从未被执行过；补 stub 即修复
+    session: {
+      setPlanConfirmed: async (v) => {
+        planConfirmedCalls.push(v)
+        return { ok: true }
+      },
+    },
     // D3（ADR-005）：PlannedFiles 三件套契约（main 权威 mock——内存态；恢复场景经 plannedFiles 选项预置）
     plannedFiles: (() => {
       const state = { files: ${json(spec.plannedFiles.files)}, approved: ${json(spec.plannedFiles.approved)} }
@@ -290,6 +305,7 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
   if (${json(spec.capture.forceToolCalls)}) window.__nfForceToolCalls = forceToolCalls
   if (${json(spec.capture.approvedFlags)}) window.__nfApprovedFlags = approvedFlags
   if (${json(spec.capture.titleCalls)}) window.__nfTitleCalls = titleCalls
+  if (${json(spec.capture.planConfirmedCalls)}) window.__nfPlanConfirmedCalls = planConfirmedCalls
 })()
 `
 }

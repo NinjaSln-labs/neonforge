@@ -1992,3 +1992,168 @@ test('P2：同 args bash 双卡并存 → 点第一张卡按 id 精确定位（�
   // 两张卡都 done（卡#A 批准 + 卡#B 被拦）
   await expect(page.locator('.nf-toolcall--done')).toHaveCount(2)
 })
+
+// ============================================================================
+// A-016（stage-review-fixes-2026-08-31 Spec P-5）硬序门时序断言——V1.5 Task 1.4：
+// goal 确认后（方案未确认）模型早调 approve-files → 不弹「批准这批文件」卡 + toolcall
+// result 含「方案未确认」引导文本（P-1 修复语义——非假成功）；随后【执行方案】→ 方案卡 →
+// 确认执行 → 再调 approve-files → 卡正常弹出批准 → 清单内 write done。
+// 同用例锁镜像同步（syncPlanConfirmed——L1 不可行的 React hook 行为转 L3 断言）：
+// mockBridge 补 session.setPlanConfirmed stub 后记录调用序列——confirm('goal')→[false]、
+// confirm('plan')→[true]，序列 [false, true] 即镜像同步证据（含 P-2 reject 复位的正向对照）。
+// ============================================================================
+test('A-016 硬序门时序：方案未确认早调 approve-files 被拒（不弹卡）→ 确认执行后再调正常批准', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    let streamCb:
+      | ((c: {
+          type: string
+          text?: string
+          toolCall?: { name: string; args: Record<string, unknown> }
+        }) => void)
+      | null = null
+    let chatCount = 0
+    const planCalls: boolean[] = []
+    window.neonforge = {
+      version: 'test',
+      config: {
+        hasKey: async () => true,
+        getKey: async () => 'test-key',
+        setKey: async () => {},
+        clearKey: async () => {},
+      },
+      workspace: {
+        openFolder: async () => '/test',
+        listDir: async () => [],
+        readFile: async () => ({ ok: true, content: 'x' }),
+        readNotebook: async () => null,
+        initProject: async () => ({ ok: true, path: '/test', title: 't' }),
+        updateProjectTitle: async () => ({ ok: true }),
+      },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        streamChat: async () => {
+          chatCount++
+          setTimeout(() => {
+            // chatCount：1=目标标记、2=approve-files（**早调**——方案未确认）、3=【执行方案】文本、
+            // 4=approve-files（**正调**——确认执行后）、5=write（清单内——自动放行）；之后收尾
+            if (chatCount === 1) {
+              streamCb?.({ type: 'content', text: '好的。【目标确认：做一个网页游戏】' })
+            } else if (chatCount === 2) {
+              // 硬序门违规：goal 确认后不经【执行方案】+确认执行直接请求批量授权
+              streamCb?.({
+                type: 'tool-call',
+                toolCall: {
+                  name: 'approve-files',
+                  args: { summary: '抢先授权', files: [{ path: '/test/game.js', reason: 'x' }] },
+                },
+              })
+            } else if (chatCount === 3) {
+              streamCb?.({
+                type: 'content',
+                text: '【执行方案】\n- /test/game.js（游戏主逻辑）\n等你确认。',
+              })
+            } else if (chatCount === 4) {
+              streamCb?.({
+                type: 'tool-call',
+                toolCall: {
+                  name: 'approve-files',
+                  args: {
+                    summary: '第一批',
+                    files: [{ path: '/test/game.js', reason: '游戏入口' }],
+                  },
+                },
+              })
+            } else if (chatCount === 5) {
+              streamCb?.({
+                type: 'tool-call',
+                toolCall: { name: 'write', args: { path: '/test/game.js', content: 'x' } },
+              })
+            } else {
+              streamCb?.({ type: 'content', text: '游戏已写好，第一版完成。' })
+            }
+            streamCb?.({ type: 'done' })
+          }, 30)
+          return { ok: true }
+        },
+        onStreamChunk: (
+          cb: (c: {
+            type: string
+            text?: string
+            toolCall?: { name: string; args: Record<string, unknown> }
+          }) => void,
+        ) => {
+          streamCb = cb
+          return () => {}
+        },
+      },
+      // A-016：session 通道（renderer confirm → setPlanConfirmed 镜像——hook 可选链需 stub 承接）
+      session: {
+        setPlanConfirmed: async (v: boolean) => {
+          planCalls.push(v)
+          return { ok: true }
+        },
+      },
+      tools: {
+        list: async () => [],
+        execute: async (
+          name: string,
+          args: Record<string, unknown>,
+          opts?: { approved?: boolean },
+        ) => {
+          if (name === 'write' || name === 'edit') {
+            if (!opts?.approved)
+              return {
+                ok: false,
+                needApproval: true,
+                error: `「${name}」需要授权（L3）——approved=true 后执行`,
+              }
+            return {
+              ok: true,
+              data: { file: '/test/' + String(args.path).split('/').pop(), snapshot: true },
+            }
+          }
+          return { ok: true, data: {} }
+        },
+        revert: async () => ({ ok: true }),
+      },
+      context: { resolve: async () => ({ fragments: [] }) },
+      compaction: { compact: async () => ({ ok: false }) },
+      plugins: { list: async () => [], toggle: async () => true },
+      chatLog: { log: async () => {}, export: async () => ({ ok: true, path: '/tmp/x.md' }) },
+    }
+    ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
+    Object.defineProperty(window, '__nfPlanCalls', { get: () => planCalls })
+  })
+  await page.goto('http://localhost:5175/')
+  await expect(page.locator('.nf-start')).toBeVisible()
+  await page.getByRole('button', { name: '从零开始' }).click()
+  await page.locator('.nf-chat__input textarea').fill('帮我做一个网页游戏')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  // chat#1：目标确认卡 → 点确认目标（confirm('goal') → setPlanConfirmed(false)——任务边界复位）
+  await expect(page.getByRole('button', { name: '确认目标' })).toBeVisible({ timeout: 10000 })
+  await page.getByRole('button', { name: '确认目标' }).click()
+  // chat#2：模型早调 approve-files → 硬序门拒绝——toolcall done + 「方案未确认」引导文本（P-1：非假成功）
+  await expect(page.locator('.nf-toolcall__result').filter({ hasText: '方案未确认' })).toBeVisible({
+    timeout: 10000,
+  })
+  // 不弹「批准这批文件」卡（硬序门核心断言——方案未确认不进入批量授权）
+  await expect(page.getByRole('button', { name: '批准这批文件' })).toHaveCount(0)
+  // 方案卡弹（chat#2 拦截信号/chat#3 方案文本——先到先弹）→ 点确认执行（confirm('plan') → setPlanConfirmed(true)）
+  await expect(page.getByRole('button', { name: '确认执行' })).toBeVisible({ timeout: 10000 })
+  await page.getByRole('button', { name: '确认执行' }).click()
+  // chat#4：确认执行后正调 approve-files → 批准卡**正常**弹出（门开）
+  await expect(page.getByRole('button', { name: '批准这批文件' })).toBeVisible({
+    timeout: 15000,
+  })
+  await page.getByRole('button', { name: '批准这批文件' }).click()
+  // 批准生效：chat#5 清单内 write 自动放行 done（无残留授权卡）——三张 done：早调拒绝卡 + 授权卡（已批准）+ write
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(3, { timeout: 15000 })
+  await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(0)
+  // 镜像同步证据（syncPlanConfirmed 调用序列）：goal 确认→false、plan 确认→true（L1 不可行——hook 行为在本用例锁定）
+  const planCalls = await page.evaluate(
+    () => (window as unknown as { __nfPlanCalls?: boolean[] }).__nfPlanCalls ?? [],
+  )
+  expect(planCalls).toEqual([false, true])
+})
