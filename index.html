@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeonForge — 为 DeepSeek 打造的 AI 问题工作台</title>
+<meta name="description" content="说出你的问题，拿到结果。NeonForge：目标/方案/解决三重确认卡，分步授权执行，结果可验证。你之所向，我之所往；你之所定，我之所行。">
+<meta property="og:title" content="NeonForge — AI 问题工作台 for DeepSeek">
+<meta property="og:description" content="说问题 → 澄清目标 → 确认方案 → 分步授权执行 → 解决确认（证据对账）→ 交付产物 + 指导。">
+<style>
+  :root {
+    --bg: #0a0e14; --bg2: #0e1420; --card: #121a28; --line: #1e2a3d;
+    --text: #dbe4f0; --dim: #8b9bb0; --cyan: #22d3ee; --violet: #a78bfa;
+    --green: #34d399; --amber: #fbbf24;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    line-height: 1.7; -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--cyan); text-decoration: none; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+  nav {
+    position: sticky; top: 0; z-index: 10; backdrop-filter: blur(12px);
+    background: rgba(10,14,20,.82); border-bottom: 1px solid var(--line);
+  }
+  nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+  .logo { font-weight: 700; font-size: 18px; letter-spacing: .5px; }
+  .logo em { font-style: normal; color: var(--cyan); }
+  nav .links { display: flex; gap: 24px; font-size: 14px; }
+  nav .links a { color: var(--dim); }
+  nav .links a:hover { color: var(--text); }
+  .hero { padding: 96px 0 72px; text-align: center; position: relative; overflow: hidden; }
+  .hero::before {
+    content: ""; position: absolute; inset: -40% -20% auto; height: 80%;
+    background: radial-gradient(ellipse at 50% 0%, rgba(34,211,238,.10), transparent 65%);
+    pointer-events: none;
+  }
+  .hero h1 {
+    font-size: clamp(30px, 5.4vw, 52px); font-weight: 800; line-height: 1.35;
+    background: linear-gradient(92deg, var(--cyan) 0%, var(--violet) 55%, var(--cyan) 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero .sub { font-size: clamp(16px, 2.2vw, 20px); color: var(--dim); margin-top: 18px; }
+  .hero .sub strong { color: var(--text); font-weight: 600; }
+  .cta-row { margin-top: 36px; display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; padding: 13px 28px; border-radius: 10px; font-size: 16px; font-weight: 600;
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn-primary { background: linear-gradient(92deg, var(--cyan), var(--violet)); color: #06121a; box-shadow: 0 4px 24px rgba(34,211,238,.25); }
+  .btn-ghost { border: 1px solid var(--line); color: var(--text); background: var(--card); }
+  .flowline { margin-top: 34px; font-size: 14px; color: var(--dim); }
+  .flowline b { color: var(--cyan); font-weight: 600; }
+  section { padding: 72px 0; border-top: 1px solid var(--line); }
+  .kicker { color: var(--cyan); font-size: 13px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; }
+  h2 { font-size: clamp(24px, 3.4vw, 32px); margin: 10px 0 12px; }
+  .lead { color: var(--dim); max-width: 720px; }
+  .steps { display: flex; flex-wrap: wrap; gap: 10px; margin: 30px 0 40px; align-items: center; }
+  .step {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 16px; font-size: 14px; color: var(--text); white-space: nowrap;
+  }
+  .step.hot { border-color: rgba(34,211,238,.45); box-shadow: 0 0 14px rgba(34,211,238,.12); }
+  .arr { color: var(--dim); }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 24px; }
+  .card h3 { font-size: 17px; margin-bottom: 8px; }
+  .card p { color: var(--dim); font-size: 14.5px; }
+  .card .tag { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 99px; margin-bottom: 12px; }
+  .tag-cyan { background: rgba(34,211,238,.12); color: var(--cyan); }
+  .tag-violet { background: rgba(167,139,250,.12); color: var(--violet); }
+  .tag-green { background: rgba(52,211,153,.12); color: var(--green); }
+  .tag-amber { background: rgba(251,191,36,.12); color: var(--amber); }
+  .nots { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; margin-top: 28px; }
+  .not { background: var(--bg2); border: 1px dashed var(--line); border-radius: 14px; padding: 22px; }
+  .not h3 { font-size: 16px; color: var(--dim); text-decoration: line-through; text-decoration-color: rgba(139,155,176,.5); }
+  .not p { color: var(--dim); font-size: 14px; margin-top: 6px; }
+  .not.yes { border: 1px solid rgba(52,211,153,.4); background: rgba(52,211,153,.05); }
+  .not.yes h3 { color: var(--green); text-decoration: none; font-size: 18px; }
+  .hl { font-size: 44px; font-weight: 800; background: linear-gradient(92deg, var(--cyan), var(--violet)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .dl { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 30px; }
+  .note { margin-top: 20px; font-size: 13.5px; color: var(--dim); background: var(--bg2); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; }
+  .note b { color: var(--amber); font-weight: 600; }
+  .wl { text-align: center; }
+  .wl p { color: var(--dim); max-width: 640px; margin: 0 auto 28px; }
+  footer { border-top: 1px solid var(--line); padding: 36px 0 48px; color: var(--dim); font-size: 14px; }
+  footer .wrap { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+  footer a { color: var(--dim); } footer a:hover { color: var(--cyan); }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <div class="logo">Neon<em>Forge</em></div>
+    <div class="links">
+      <a href="#how">如何工作</a>
+      <a href="#why">为什么不同</a>
+      <a href="#download">下载</a>
+      <a href="https://github.com/NinjaSln-labs/neonforge" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>你之所向，我之所往；<br>你之所定，我之所行。</h1>
+    <p class="sub">为 <strong>DeepSeek</strong> 打造的 AI 问题工作台——<strong>说出你的问题，拿到结果</strong>。</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/NinjaSln-labs/neonforge/releases/download/v0.1.0/NeonForge-0.1.0.dmg">下载 macOS 版 v0.1.0</a>
+      <a class="btn btn-ghost" href="#waitlist">加入候补名单</a>
+    </div>
+    <p class="flowline">说问题 → 澄清目标 → 确认方案 → <b>分步授权执行</b> → 解决确认（证据对账）→ 交付产物 + 指导</p>
+  </div>
+</header>
+
+<section id="how">
+  <div class="wrap">
+    <span class="kicker">How it works</span>
+    <h2>每一步都有门槛，模型不越级、不白做</h2>
+    <p class="lead">目标、方案、解决三处结构化确认卡——未确认时模型停在确认点等你拍板；执行全程分步授权，写前快照可回滚。</p>
+    <div class="steps" aria-label="流程">
+      <span class="step">说出问题</span><span class="arr">→</span>
+      <span class="step hot">目标确认卡</span><span class="arr">→</span>
+      <span class="step hot">方案确认卡</span><span class="arr">→</span>
+      <span class="step">分步授权执行</span><span class="arr">→</span>
+      <span class="step hot">解决确认卡</span><span class="arr">→</span>
+      <span class="step">交付 + 指导</span>
+    </div>
+    <div class="cards">
+      <div class="card"><span class="tag tag-cyan">确认卡 = 推进门槛</span><h3>三重结构化确认</h3><p>目标 / 方案 / 解决三处确认卡。未确认时模型停在确认点——不越级、不白做，你的意图说了算。</p></div>
+      <div class="card"><span class="tag tag-violet">分步授权</span><h3>风险明示，写前快照可回滚</h3><p>写文件、执行命令逐项授权；高危命令永远单独确认。每一步你都知道模型要做什么。</p></div>
+      <div class="card"><span class="tag tag-green">宿主强制边界</span><h3>清单外写入被拒</h3><p>模型只能写批准清单内的文件（approve-files 批量授权）；清单外写入被宿主直接拒绝并提示边界。</p></div>
+      <div class="card"><span class="tag tag-amber">问题 = 一等公民</span><h3>断点续做，跨重启恢复</h3><p>问题台账 + 会话快照 + 复跑。批准清单跨重启保留——关掉应用再打开，接着上次的边界继续。</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="why">
+  <div class="wrap">
+    <span class="kicker">What it is</span>
+    <h2>它不是 IDE，也不是 Chatbot</h2>
+    <div class="nots">
+      <div class="not"><h3>不是 IDE</h3><p>不替你写代码项目，不需要你会编程——它围绕「你的问题」组织工作。</p></div>
+      <div class="not"><h3>不是 Chatbot</h3><p>不靠一段段对话碰运气——确认卡、授权、证据对账把过程变成可验收的交付。</p></div>
+      <div class="not yes"><h3>是问题工作台</h3><p>说出问题，拿到结果：产物 + 每步确认记录 + 可验证的证据。非技术者能拿到东西，开发者能得到紧凑的审批回路。</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="why2">
+  <div class="wrap">
+    <span class="kicker">Highlights</span>
+    <h2>快 · 省 · 深</h2>
+    <div class="cards">
+      <div class="card"><div class="hl">118ms</div><h3>快——KV 缓存预热</h3><p>首字延迟 275ms → 118ms。打开项目，模型上下文已经是「热着」的。</p></div>
+      <div class="card"><div class="hl">1M</div><h3>省——LSP 精准上下文</h3><p>不向模型倾倒垃圾 token：LSP 精准注入，1M 上下文预算花在该用的地方。</p></div>
+      <div class="card"><div class="hl">1</div><h3>深——单模型深度集成</h3><p>只做 DeepSeek：前缀确定性、成本算得清、工具链路一致，把一个模型吃透。</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="download">
+  <div class="wrap">
+    <span class="kicker">Download</span>
+    <h2>macOS v0.1.0（Public Beta）</h2>
+    <p class="lead">需要自备 DeepSeek API Key（应用内配置一次即可）。</p>
+    <div class="dl">
+      <a class="btn btn-primary" href="https://github.com/NinjaSln-labs/neonforge/releases/download/v0.1.0/NeonForge-0.1.0.dmg">下载 .dmg</a>
+      <a class="btn btn-ghost" href="https://github.com/NinjaSln-labs/neonforge/releases/download/v0.1.0/NeonForge-0.1.0-mac.zip">下载 .zip</a>
+      <a class="btn btn-ghost" href="https://github.com/NinjaSln-labs/neonforge/releases" target="_blank" rel="noopener">全部 Release</a>
+    </div>
+    <div class="note"><b>未签名应用首次打开：</b>应用暂未做代码签名公证。首次打开若被 Gatekeeper 拦截，请在本应用上<b>右键 → 打开</b>（或在「系统设置 → 隐私与安全性」中允许）。Apple Silicon 需 macOS 12+。</div>
+  </div>
+</section>
+
+<section id="waitlist">
+  <div class="wrap wl">
+    <span class="kicker">Waitlist</span>
+    <h2>Windows / Linux 版在路上</h2>
+    <p>留下邮箱，跨平台开放和新功能（信任分级、多模型网关）发布时第一时间通知你。仅用于发布通知，不营销轰炸。</p>
+    <div class="cta-row">
+      <!-- WAITLIST_URL：第三方表单（Tally 等）建好后替换此链接 -->
+      <a class="btn btn-primary" href="https://github.com/NinjaSln-labs/neonforge/releases" target="_blank" rel="noopener">先 Watch Releases 获取通知</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>NeonForge — 你之所向，我之所往；你之所定，我之所行。</div>
+    <div>
+      <a href="https://github.com/NinjaSln-labs/neonforge" target="_blank" rel="noopener">GitHub</a> ·
+      <a href="https://github.com/NinjaSln-labs/neonforge/issues?q=label%3Aroadmap" target="_blank" rel="noopener">路线图</a> ·
+      <a href="https://github.com/NinjaSln-labs/neonforge/blob/main/LICENSE" target="_blank" rel="noopener">MIT</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
