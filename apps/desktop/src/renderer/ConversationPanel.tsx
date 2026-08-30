@@ -1042,7 +1042,12 @@ export default function ConversationPanel({
         // 2026-08-08 改名 + 语义澄清（坑 95）：approve-files = 批量授权（确认执行后的粒度优化），非「规划批准」
         let status: 'pending' | 'done' | 'file-approval' = 'pending'
         if (chunk.toolCall.name === 'approve-files') {
-          status = stateRef.current.filesApproved ? 'done' : 'file-approval'
+          // #6 真机 2026-08-31（复验轮用户指出）：approve-files 硬序门——方案未确认不弹卡
+          // （main 执行器返回 policy 引导拒绝——模型重走【执行方案】；坑 95：批量授权 ≠ 规划批准）
+          status =
+            !stateRef.current.planConfirmed || stateRef.current.filesApproved
+              ? 'done'
+              : 'file-approval'
         }
         next.toolCalls = [
           ...(next.toolCalls ?? []),

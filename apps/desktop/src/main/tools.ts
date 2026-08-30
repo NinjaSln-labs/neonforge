@@ -509,6 +509,11 @@ export const toolRegistry = new ToolRegistry()
 import { getPlannedFilesStore } from './plannedFilesStore.instance.js'
 
 let filesApprovedRef = false
+// #6 真机 2026-08-31（复验轮）：方案确认布尔镜像（renderer confirm('plan') 同步——approve-files 硬序门）
+let planConfirmedRef = false
+export function syncPlanConfirmed(v: boolean): void {
+  planConfirmedRef = v
+}
 export function markPlanApproved(): void {
   filesApprovedRef = true
 }
@@ -571,11 +576,25 @@ export function initTools(): void {
     source: 'core',
     requiresApproval: false,
     risk: 'none',
-    execute: async () => ({
-      ok: true,
-      data: { virtual: true, pendingApproval: true },
-      error: '已提交文件批准请求——等待用户点击「批准这批文件」后继续写文件（批准前不要写）',
-    }),
+    execute: async () => {
+      // #6 真机 2026-08-31（复验轮用户指出）：硬序门——approve-files 只在确认执行**之后**可调
+      // （sysPrompt ⑭「确认执行后如需批量放行再调」；坑 95：approve-files=批量授权非规划批准）。
+      // 原先无门：方案未确认也放行弹卡 → 批准≠确认倒挂（复验轮提前弹卡实证）。
+      // policy=true——策略引导非执行失败（renderer 不置 lastToolFailed，模型重输出【执行方案】）
+      if (!planConfirmedRef) {
+        return {
+          ok: false,
+          policy: true,
+          error:
+            '方案未确认——先输出【执行方案】（文件清单 + 一句话方案）等待用户「确认执行」，之后再调 approve-files 请求批量放行（批准文件清单 ≠ 确认执行）',
+        }
+      }
+      return {
+        ok: true,
+        data: { virtual: true, pendingApproval: true },
+        error: '已提交文件批准请求——等待用户点击「批准这批文件」后继续写文件（批准前不要写）',
+      }
+    },
   })
   // Layer2 CodeRAG：关键词检索兜底（Claude Code grep 模式——2026-08-02 调研：agentic 工具检索为行业共识，见 .scratch/neonforge-v1/layer2-retrieval-research.md）
   toolRegistry.register({

@@ -10,6 +10,7 @@ import {
   revertToolFile,
   cancelActiveCommand,
   syncPlanApprovedFromStore,
+  syncPlanConfirmed,
 } from './tools.js'
 import { getPlannedFilesStore } from './plannedFilesStore.instance.js'
 import { registerLspTools, lsp } from './lsp.js'
@@ -205,6 +206,10 @@ ipcMain.handle('planned-files:add', (_e, files: string[]) => {
 })
 // 2026-08-15 D2：任务边界重置同步 main——新目标确认（clearTrust）时 main filesApprovedRef 必须复位
 // （原只重置 renderer 侧 → main write 规划门控跨任务恒放行——第二道防线失效）
+// #6 真机 2026-08-31（复验轮）：方案确认镜像——renderer confirm('plan') 同步（approve-files 硬序门）
+ipcMain.handle('session:plan-confirmed', (_e, v: boolean) => {
+  syncPlanConfirmed(Boolean(v))
+})
 ipcMain.handle('planned-files:reset', () => {
   const data = getPlannedFilesStore().reset()
   syncPlanApprovedFromStore()

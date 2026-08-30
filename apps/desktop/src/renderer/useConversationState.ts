@@ -54,7 +54,13 @@ export function useConversationState(opts?: UseConversationStateOpts) {
     version,
     // 用户确认/拒绝（确认卡按钮——pending 清除 + 状态推进/回退）
     // S3：拒绝带原因（不变量 8——userDecided 签名强制；A-006：reason 必传——缺省会静默掩盖调用方漏传）
-    confirm: (point: ConfirmPoint) => transition((s) => userConfirmed(s, point)),
+    // #6 真机 2026-08-31（复验轮）：plan 确认镜像到 main（approve-files 硬序门）；goal 确认=任务边界 → 复位
+    confirm: (point: ConfirmPoint) => {
+      const r = transition((s) => userConfirmed(s, point))
+      if (point === 'plan') void window.neonforge?.session?.setPlanConfirmed?.(true)
+      else if (point === 'goal') void window.neonforge?.session?.setPlanConfirmed?.(false)
+      return r
+    },
     reject: (point: ConfirmPoint, reason: RejectReason) =>
       transition((s) => userRejected(s, point, reason)),
     // approve-files 批准（追加语义——A0 §5；files 已 trustPath 规范化）

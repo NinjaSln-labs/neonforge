@@ -1566,7 +1566,13 @@ test('approve-files 多卡并存：连续 2 次批量授权 → 各自批准都�
             if (chatCount === 1) {
               streamCb?.({ type: 'content', text: '好的。【目标确认：做一个网页游戏】' })
             } else if (chatCount === 2) {
-              // 目标确认后：第一批 approve-files（清单 A）
+              // #6 真机 2026-08-31（approve-files 硬序门）：方案提议先行——确认执行后才可批量授权
+              streamCb?.({
+                type: 'content',
+                text: '【执行方案】\n- /test/a.js\n- /test/b.js\n等你确认。',
+              })
+            } else if (chatCount === 3) {
+              // 方案确认后：第一批 approve-files（清单 A）
               streamCb?.({
                 type: 'tool-call',
                 toolCall: {
@@ -1574,7 +1580,7 @@ test('approve-files 多卡并存：连续 2 次批量授权 → 各自批准都�
                   args: { summary: '第一批', files: [{ path: '/test/a.js', reason: 'x' }] },
                 },
               })
-            } else if (chatCount === 3) {
+            } else if (chatCount === 4) {
               // 模型补充第二批（清单 B——args 不同）
               streamCb?.({
                 type: 'tool-call',
@@ -1618,9 +1624,12 @@ test('approve-files 多卡并存：连续 2 次批量授权 → 各自批准都�
   await page.getByRole('button', { name: '从零开始' }).click()
   await page.locator('.nf-chat__input textarea').fill('帮我做一个网页游戏')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
-  // 目标确认卡 → 点确认目标（send「确认，目标清楚了」→ chat#2 模型请求第一批授权）
+  // 目标确认卡 → 点确认目标（send → chat#2 方案提议）
   await expect(page.getByRole('button', { name: '确认目标' })).toBeVisible({ timeout: 10000 })
   await page.getByRole('button', { name: '确认目标' }).click()
+  // 执行确认卡 → 点确认执行（send → chat#3 第一批授权——硬序：approve-files 在确认执行后）
+  await expect(page.getByRole('button', { name: '确认执行' })).toBeVisible({ timeout: 10000 })
+  await page.getByRole('button', { name: '确认执行' }).click()
   // 卡1（第一批）出现——此时不批准（真实场景：模型第一次请求后没等批准，用户动作触发新轮次）
   await expect(page.getByRole('button', { name: '批准这批文件' })).toBeVisible({ timeout: 10000 })
   // 用户发送触发模型新轮 → 模型补充第二批 approve-files（filesApprovedRef 仍 false——卡1 未批准 → 卡2 弹卡）→ 两张卡并存
@@ -1773,13 +1782,14 @@ test('问题 A：approve-files 卡悬挂 → 模型续轮被拦后停续聊（�
         streamChat: async () => {
           chatCount++
           setTimeout(() => {
-            // chat#1：目标确认标记（目标卡）；chat#2：执行方案 + approve-files（执行卡 + 文件卡并存——卡悬挂）；
-            // chat#3：模型被 forceTool 逼着调 write（修复前每轮都被 pending 拦 → 无限循环）；
-            // chat#4（批准后恢复）：write 真正执行（approved）→ chat#5：模型纯文本收尾（自然停止）
+            // #6 真机 2026-08-31（approve-files 硬序门）：chat#2 方案文本（等确认执行）→ chat#3 授权卡
+            // （悬挂不批）→ chat#4 模型 write 被 pending 拦（修复前每轮都被拦 → 无限循环）；
+            // chat#5（批准后恢复）：write 真正执行（approved）→ chat#6：模型纯文本收尾（自然停止）
             if (chatCount === 1) {
               streamCb?.({ type: 'content', text: '好的。【目标确认：做一个网页游戏】' })
             } else if (chatCount === 2) {
               streamCb?.({ type: 'content', text: '【执行方案】\n- /test/game.js（游戏入口）' })
+            } else if (chatCount === 3) {
               streamCb?.({
                 type: 'tool-call',
                 toolCall: {
@@ -1790,7 +1800,7 @@ test('问题 A：approve-files 卡悬挂 → 模型续轮被拦后停续聊（�
                   },
                 },
               })
-            } else if (chatCount === 5) {
+            } else if (chatCount === 6) {
               streamCb?.({ type: 'content', text: '游戏已写好，打开就能玩。' })
             } else {
               streamCb?.({
@@ -1834,22 +1844,25 @@ test('问题 A：approve-files 卡悬挂 → 模型续轮被拦后停续聊（�
   // chat#1：目标确认卡 → 点确认目标
   await expect(page.getByRole('button', { name: '确认目标' })).toBeVisible({ timeout: 10000 })
   await page.getByRole('button', { name: '确认目标' }).click()
-  // chat#2：执行确认卡 + approve-files 文件卡并存（真实 bug 场景：用户确认执行但**不批准文件卡**——卡悬挂）
+  // chat#2：执行确认卡 → 确认执行（硬序：approve-files 在确认执行后的 chat#3）
   await expect(page.getByRole('button', { name: '确认执行' })).toBeVisible({ timeout: 10000 })
-  await expect(page.getByRole('button', { name: '批准这批文件' })).toBeVisible({ timeout: 10000 })
   await page.getByRole('button', { name: '确认执行' }).click()
-  // chat#3：模型 write 被拦（pending='approval'——状态机冻结正确——D5）→ 卡片回填「等待你的决策」
+  // chat#3：approve-files 文件卡悬挂（用户**不批准**——真实卡悬挂场景）
+  await expect(page.getByRole('button', { name: '批准这批文件' })).toBeVisible({ timeout: 10000 })
+  // 用户发消息触发 chat#4：模型 write 被拦（pending='approval'——状态机冻结正确——D5）→「等待你的决策」
+  await page.locator('.nf-chat__input textarea').fill('继续')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
   await expect(
     page.locator('.nf-toolcall__result').filter({ hasText: '等待你的决策' }),
   ).toBeVisible({ timeout: 10000 })
   // **修复断言**：拦截后模型停——不再喂下一轮（修复前：maybeContinue 检测不到旧消息授权卡 → 续聊 →
-  // forceTool 逼模型再调工具 → 再被拦 → chatCount 4、5、6… 循环）。给足 2 个轮询周期（500ms/次）余量
+  // forceTool 逼模型再调工具 → 再被拦 → chatCount 循环）。给足 2 个轮询周期（500ms/次）余量
   await page.waitForTimeout(2500)
   expect(
     await page.evaluate(() => (window as unknown as { __chatCount: number }).__chatCount),
-  ).toBe(3)
-  // 文件卡仍在（悬挂等待用户决策）→ 用户批准 → 恢复续聊：chat#4 write 真正执行（approved 放行）→
-  // chat#5 模型纯文本收尾 → 自然停止（chatCount 定格 5——批准路径不被误伤，也无新一轮循环）
+  ).toBe(4)
+  // 文件卡仍在（悬挂等待用户决策）→ 用户批准 → 恢复续聊：chat#5 write 真正执行（approved 放行）→
+  // chat#6 模型纯文本收尾 → 自然停止（chatCount 定格 6——批准路径不被误伤，也无新一轮循环）
   await expect(page.getByRole('button', { name: '批准这批文件' })).toBeVisible()
   await page.getByRole('button', { name: '批准这批文件' }).click()
   await expect(page.locator('.nf-toolcall--done').filter({ hasText: '已批准' })).toBeVisible({
@@ -1858,11 +1871,11 @@ test('问题 A：approve-files 卡悬挂 → 模型续轮被拦后停续聊（�
   await page.waitForTimeout(3000)
   expect(
     await page.evaluate(() => (window as unknown as { __chatCount: number }).__chatCount),
-  ).toBe(5)
+  ).toBe(6)
   await page.waitForTimeout(1500)
   expect(
     await page.evaluate(() => (window as unknown as { __chatCount: number }).__chatCount),
-  ).toBe(5)
+  ).toBe(6)
 })
 
 // 2026-08-15 P2（时间线实证 a08d1775：同 args bash 双卡 → name+args 匹配从后往前错位到新卡 →

@@ -176,6 +176,11 @@ contextBridge.exposeInMainWorld('neonforge', {
       ipcRenderer.invoke('planned-files:add', files) as Promise<PlannedFilesPayload>,
     reset: () => ipcRenderer.invoke('planned-files:reset') as Promise<PlannedFilesPayload>,
   },
+  // #6 真机 2026-08-31（复验轮）：方案确认布尔镜像——approve-files 硬序门（main 侧 planConfirmedRef）
+  session: {
+    setPlanConfirmed: (v: boolean) =>
+      ipcRenderer.invoke('session:plan-confirmed', v) as Promise<void>,
+  },
   context: {
     resolve: (files: string[]) =>
       ipcRenderer.invoke('context:resolve', { files }) as Promise<{

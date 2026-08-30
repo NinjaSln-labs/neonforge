@@ -91,6 +91,10 @@ export interface NeonForgeBridge {
   }
   tools: NeonForgeTools
   plannedFiles: PlannedFilesApi // D3（ADR-005）：PlannedFiles 契约——权威在 main
+  // #6 真机 2026-08-31（复验轮）：方案确认镜像——approve-files 硬序门
+  session: {
+    setPlanConfirmed: (v: boolean) => Promise<void>
+  }
   context: {
     resolve: (
       files: string[],

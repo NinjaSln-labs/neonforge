@@ -36,13 +36,16 @@ export function planPropose(files: string[], note = '等你确认。'): StreamCh
   ]
 }
 
-/** 方案提议 + 批量授权请求：执行方案后同轮请求 approve-files（1 轮） */
+/** 方案提议 + 批量授权请求：方案回合（等确认执行）→ 授权回合（2 轮）
+ * #6 真机 2026-08-31（复验轮硬序门）：approve-files 只在确认执行后可调（sysPrompt ⑭——
+ * 同轮请求属违规形态，main 侧 policy 拒绝）——场景助手同步改为两回合 */
 export function planProposeWithApproval(
   files: Array<{ path: string; reason: string }>,
 ): StreamChunk[][] {
   const lines = files.map((f) => `- ${f.path}`).join('\n')
   return [
-    [chunk.content(`【执行方案】\n${lines}`), toolCall.approveFiles('第一批', files), chunk.done()],
+    [chunk.content(`【执行方案】\n${lines}\n等你确认。`), chunk.done()],
+    [toolCall.approveFiles('第一批', files), chunk.done()],
   ]
 }
 
