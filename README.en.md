@@ -55,7 +55,7 @@ Say the problem → Clarify the goal (candidate buttons / free input) → [Goal 
 
 > Requires a Command Code API Key (get one at `commandcode.ai` — Studio → API Keys → Generate; models are DeepSeek V4 series, accessed via the Command Code aggregator).
 
-- **Download**: [GitHub Releases](https://github.com/NinjaSln-labs/neonforge/releases) (v0.1.0 pre-release — macOS `.dmg` / `.zip`; unsigned, first launch needs right-click → Open)
+- **Download**: not yet available — the current build is going through real-device acceptance. The open will be announced via [GitHub Releases](https://github.com/NinjaSln-labs/neonforge/releases) and the official landing page (Watch Releases to get notified)
 
 ```bash
 cd apps/desktop

@@ -55,7 +55,7 @@ NeonForge **不是 IDE，也不是 Chatbot**。你用自然语言描述问题，
 
 > 需要 Command Code API Key（`commandcode.ai` 获取——Studio → API Keys → Generate；模型为 DeepSeek V4 系列，经 Command Code 聚合接入）。
 
-- **直接下载**：[GitHub Releases](https://github.com/NinjaSln-labs/neonforge/releases)（v0.1.0 pre-release——macOS `.dmg` / `.zip`；未签名首次打开需右键 → 打开）
+- **直接下载**：暂未开放——当前版本正在真机验收打磨，下载开放时会通过 [GitHub Releases](https://github.com/NinjaSln-labs/neonforge/releases) 与官网公告（可 Watch Releases 获取通知）
 
 ```bash
 cd apps/desktop
