@@ -605,10 +605,11 @@ function isSystemVerifiable(command: string): boolean {
 }
 
 /** 证据可核验性（不变量 4 单源——Q2 审计：completionEvidenceComplete 与 verifyCompletion 共用，消除分歧）：
- * verification 非空 + 全部系统可代跑（只读）+ 无 pendingQuestions */
+ * verification 非空 + 全部系统可代跑（只读）。
+ * #6 真机 2026-08-30（ADR-008）：pendingQuestions 不再计入——遗留问题是「呈给用户的知情项」非「证据缺失」，
+ * 阻塞语义使诚实列遗留的声明永不通过对账（死锁实测），见 docs/decisions/008 */
 export function evidenceVerifiable(evidence: CompletionEvidence): boolean {
   if (evidence.verification.length === 0) return false
-  if (evidence.pendingQuestions.length > 0) return false
   return evidence.verification.every((item) => isSystemVerifiable(item.command))
 }
 
@@ -629,11 +630,14 @@ export interface SystemVerifier {
 }
 
 /**
- * 完成声明核验（设计 §3.3）：证据不足（verification 空 / pendingQuestions 非空 / 存在 unverifiable）→ ok=false + 清单
+ * 完成声明核验（设计 §3.3）：证据不足（verification 空 / passed=false / 存在 unverifiable）→ ok=false + 清单
  * - 纯逻辑部分（S1）：passed=false → missing；非只读命令 → unverifiable（拍板 4——与 evidenceVerifiable 同源）
  * - V1a/V1b（S2 扩展）：systemState 提供时——系统代跑结果复核（ok:false → missing）；
  *   diffs 由系统从 plannedFiles/producedFiles 派生比对（planned 有文件未产出 → missing）
  * - systemState 缺省 = 纯逻辑判定（S1 兼容——不代跑；S4 接线后必传）
+ * - #6 真机 2026-08-30（ADR-008）：pendingQuestions 不再阻塞 ok——遗留问题由解决卡呈现、
+ *   用户知情决策（「- 无」空标记已由解析层剔除）；原「pendingQuestions 非空 → 不进入对账」
+ *   与 sysPrompt ⑮「必须列遗留问题」构成死锁（诚实模型永不可达已解决——真机实测）
  */
 export function verifyCompletion(
   claim: CompletionClaim,
@@ -652,8 +656,6 @@ export function verifyCompletion(
     // 与 evidenceVerifiable 同源——isSystemVerifiable）
     if (!isSystemVerifiable(item.command)) unverifiable.push(item.command)
   }
-  if (claim.evidence.pendingQuestions.length > 0)
-    missing.push(...claim.evidence.pendingQuestions.map((q) => `pending-question:${q}`))
   // S2 V1a：系统代跑结果复核（只读命令——系统已核验且失败 → missing；「自报」降级为「系统复核」）
   if (systemState) {
     for (const item of claim.evidence.verification) {
@@ -692,7 +694,9 @@ export function buildEvidenceBackfill(v: {
   const lines: string[] = []
   if (v.missing.length > 0) lines.push(`证据不足：${v.missing.join('；')}`)
   if (v.unverifiable.length > 0) lines.push(`以下证据未经系统核验：${v.unverifiable.join('；')}`)
-  lines.push('请补充可核验的验证证据（只读验证命令结果）后重新输出【已达成】声明。')
+  lines.push(
+    '请补充可核验的验证证据（只读验证命令 + 括号内写真实结果）后重新输出【已达成】声明；不确定事项写入「遗留问题：」节（不影响对账）。',
+  )
   return lines.join('\n')
 }
 

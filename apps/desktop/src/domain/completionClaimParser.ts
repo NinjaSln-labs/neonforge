@@ -48,7 +48,12 @@ export function parseCompletionClaim(text: string): CompletionClaim | null {
     } else if (section === 'verification') {
       if (item) verification.push(parseVerificationItem(item[1].trim()))
     } else if (section === 'questions') {
-      if (item) pendingQuestions.push(item[1].trim())
+      if (item) {
+        // #6 真机 2026-08-30（P1-1b）：「- 无」（sysPrompt ⑮ 规定的空遗留格式）被当成名为「无」的 pending question
+        // → 对账永久拒绝。空遗留标记不入清单
+        const q = item[1].trim()
+        if (!/^(无|暂无|没有|none)[。.！!]?$/.test(q)) pendingQuestions.push(q)
+      }
     }
   }
 
@@ -58,18 +63,23 @@ export function parseCompletionClaim(text: string): CompletionClaim | null {
   }
 }
 
-/** 验证行解析：「npx vitest run（全部通过）」→ { command, passed: true }；「npm run build 失败」→ passed: false */
+/**
+ * 验证行解析：「- 命令（结果）」→ { command, passed }
+ * #6 真机 2026-08-30（P1-1c）：结果尾巴只剥固定词表（通过/失败等），任意中文结果
+ * （「（index.html 存在，5931 字节…）」）留在 command 里 → 系统代跑整串非法 shell → 恒失败。
+ * 改为：剥任意尾随括号注释（全角/半角）作为结果文本；passed 从结果文本判定
+ */
 function parseVerificationItem(line: string): VerificationItem {
+  // 尾随括号注释（结果文本）——命令主体与其分离（shell 命令极少以括号结尾；误剥面可控）
+  const m = line.match(/^(.*?)\s*[（(]([^（）()]*)[）)]\s*$/)
+  const command = (m ? m[1] : line).trim() || line
+  // 有括号注释 → 结果文本只看注释内（避免命令/路径含「失败」等词误判）；无括号 → 扫整行（「npm run build 失败」形态）
+  const resultText = m ? m[2] : line
+  const failed = /失败|报错|error|exit-[1-9]/i.test(resultText)
   const passed =
-    /通过|成功|通过|ok|OK|0 错误|0 error|all pass|passed/i.test(line) &&
-    !/失败|error|报错/.test(line)
-  const failed = /失败|报错|error/i.test(line)
-  // 去结果尾巴：取命令主体（去括号注释）
-  const command = line
-    .replace(/\s*[（(](?:全部通过|通过|成功|失败|报错|0 错误|0 error)[）)]\s*$/i, '')
-    .trim()
+    !failed && /通过|成功|ok\b|OK\b|0 错误|0 error|all pass|passed|200/i.test(resultText)
   return {
-    command: command || line,
+    command,
     passed: failed ? false : passed ? true : undefined,
   }
 }

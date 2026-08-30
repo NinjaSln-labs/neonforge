@@ -375,7 +375,7 @@ describe('Inv 3 门控顺序——sessionGate × actionGate 双维正交', () =>
 })
 
 // ============================================================================
-// Inv 4 无证据不对账：CompletionEvidence.verification 空或 pendingQuestions 非空 → 不进入 resolution
+// Inv 4 无证据不对账（ADR-008 修订）：verification 空 / passed=false / unverifiable → 不进入 resolution；遗留问题不阻塞
 // ============================================================================
 describe('Inv 4 无证据不对账——verifyCompletion/completionEvidenceComplete/deriveDecisionPoint', () => {
   it('证据完整 → verifyCompletion ok + 进入 resolution 决策点', () => {
@@ -392,12 +392,12 @@ describe('Inv 4 无证据不对账——verifyCompletion/completionEvidenceCompl
     expect(deriveDecisionPoint(confirmed(), { completion: c })).toBe('none')
   })
 
-  it('pendingQuestions 非空 → 不完整（模型自留问题必须用户判断）', () => {
+  it('pendingQuestions 非空 → 不阻塞对账（ADR-008：遗留问题=解决卡知情项——真机死锁修正 2026-08-30）', () => {
     const c = claim({ evidence: evidence({ pendingQuestions: ['部署方式未定'] }) })
     const r = verifyCompletion(c)
-    expect(r.ok).toBe(false)
-    expect(r.missing.some((m) => m.startsWith('pending-question'))).toBe(true)
-    expect(deriveDecisionPoint(confirmed(), { completion: c })).toBe('none')
+    expect(r.ok).toBe(true)
+    expect(r.missing.some((m) => m.startsWith('pending-question'))).toBe(false)
+    expect(deriveDecisionPoint(confirmed(), { completion: c })).toBe('resolution')
   })
 
   it('验证命令 passed=false → 证据不通过', () => {

@@ -6,7 +6,7 @@ import { verifyCompletion, type CompletionClaim } from '../../src/domain/convers
 // - V1a：对 claim.evidence.verification[].command 中声明 passed 的命令，系统复核（代跑结果 ok:false → missing）
 // - V1b：claim.evidence.diffs 由系统从 plannedFiles/producedFiles 派生比对（非模型自述）
 // - verification 命令非只读（系统不可代跑）→ 该条证据标记 'unverifiable'
-// - 证据不足（verification 空 / pendingQuestions 非空 / 存在 unverifiable）→ ok=false + missing/unverifiable 清单
+// - 证据不足（verification 空 / passed=false / 存在 unverifiable）→ ok=false；pendingQuestions 不阻塞（ADR-008——真机死锁修正）
 // - unverifiable 语义保持 S1.1 单源（evidenceVerifiable/isSystemVerifiable 复用）
 // - 领域层消费同步快照（verificationResults）——代跑执行在 main 侧（S4 接线）
 
@@ -75,7 +75,7 @@ describe('verifyCompletion（V1a 系统复核 + V1b diff 派生——S2 扩展�
     expect(r.missing).toContain('verification')
   })
 
-  it('pendingQuestions 非空 → missing 计入（声明不完整）', () => {
+  it('pendingQuestions 非空 → 不阻塞 ok（ADR-008：遗留问题=解决卡知情项，非证据缺失——真机死锁修正）', () => {
     const c = claim({
       evidence: {
         verification: [{ command: 'ls src', passed: true }],
@@ -84,8 +84,8 @@ describe('verifyCompletion（V1a 系统复核 + V1b diff 派生——S2 扩展�
       },
     })
     const r = verifyCompletion(c, mockSystemState())
-    expect(r.ok).toBe(false)
-    expect(r.missing.some((m) => m.startsWith('pending-question:'))).toBe(true)
+    expect(r.ok).toBe(true)
+    expect(r.missing.some((m) => m.startsWith('pending-question:'))).toBe(false)
   })
 
   it('V1b：diffs 由系统从 plannedFiles/producedFiles 派生比对（非模型自述）——全产出 ok', () => {

@@ -2414,6 +2414,25 @@ export default function ConversationPanel({
                     i !== rejectedCardIdx.achievement ? (
                       <div className="nf-confirmcard" role="group" aria-label="确认达成">
                         <div className="nf-confirmcard__head">搭档已完成——你确认解决了没有</div>
+                        {/* ADR-008：遗留问题不阻塞对账——呈现在解决卡上供用户知情决策（真实机取证：
+                            阻塞语义使诚实列遗留的模型永不可达已解决） */}
+                        {(() => {
+                          const dc = stateRef.current.decisionContent
+                          const claim = dc?.proposal as CompletionClaim | undefined
+                          const qs = claim?.evidence?.pendingQuestions ?? []
+                          return qs.length > 0 ? (
+                            <div className="nf-confirmcard__questions" style={{ margin: '6px 0' }}>
+                              {qs.map((q, qi) => (
+                                <div
+                                  key={qi}
+                                  style={{ fontSize: 12, color: 'var(--dim, #8b9bb0)' }}
+                                >
+                                  遗留：{q}
+                                </div>
+                              ))}
+                            </div>
+                          ) : null
+                        })()}
                         <div className="nf-confirmcard__actions">
                           <button
                             type="button"

@@ -85,3 +85,59 @@ describe('parseCompletionClaim（完成声明解析——S2）', () => {
     expect(claim.evidence.verification.some((v) => v.passed === false)).toBe(true)
   })
 })
+
+// ============================================================================
+// #6 真机回归（2026-08-30——ADR-008 + P1-1 三分支，证据串取自真机 chat log 原文）
+// ============================================================================
+describe('#6 真机回归：S4 对账三分支修复', () => {
+  it('「- 无」空遗留标记 → 不产生 pendingQuestion（真机：被解析成名为「无」的问题）', () => {
+    const text = `【已达成】
+页面完成。
+验证证据：
+- ls -la（index.html 存在，5931 字节）
+遗留问题：
+- 无
+`
+    const claim = parseCompletionClaim(text)
+    expect(claim?.evidence.pendingQuestions).toEqual([])
+  })
+
+  it('中文结果括号尾巴 → command 剥离为纯命令、passed 判 undefined（系统代跑可执行）', () => {
+    const text = `【已达成】
+完成。
+验证证据：
+- ls -la（index.html 存在，5931 字节，Aug 30 21:30 创建）
+- wc -c（index.html 共 5931 字节）
+`
+    const claim = parseCompletionClaim(text)
+    const cmds = claim?.evidence.verification.map((v) => v.command) ?? []
+    expect(cmds).toContain('ls -la')
+    expect(cmds).toContain('wc -c')
+    // 中文结果无通过/失败关键词 → passed undefined（交给系统代跑复核——不臆判）
+    for (const v of claim?.evidence.verification ?? []) expect(v.passed).toBeUndefined()
+  })
+
+  it('真实失败证据（curl exit-7 连接失败）→ passed=false（对账仍拒——失败验证=达成未证明）', () => {
+    const text = `【已达成】
+完成。
+验证证据：
+- curl http://127.0.0.1:5190/index.html（exit-7 连接失败——当前服务已不在运行）
+`
+    const claim = parseCompletionClaim(text)
+    expect(claim?.evidence.verification[0]?.command).toBe('curl http://127.0.0.1:5190/index.html')
+    expect(claim?.evidence.verification[0]?.passed).toBe(false)
+  })
+
+  it('成功关键词结果 → passed=true（原行为保持）', () => {
+    const text = `【已达成】
+完成。
+验证证据：
+- npx vitest run（全部通过）
+`
+    const claim = parseCompletionClaim(text)
+    expect(claim?.evidence.verification[0]).toMatchObject({
+      command: 'npx vitest run',
+      passed: true,
+    })
+  })
+})
