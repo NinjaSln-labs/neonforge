@@ -280,6 +280,7 @@ export function applyToolResult(
 // —— 动作属性判定（设计 §3.3 classifyReadonly——粒度升级：bash 链递归/git 子命令/网络只读） ——
 
 // 只读命令头白名单（继承 main isReadOnlyBash fail-closed 判定——列表唯一）
+// #6 真机 2026-08-30（P2-5 授权疲劳）：补 ps/lsof 等诊断只读头——真机 `ps aux | grep …` 授权卡连弹
 export const BASH_READONLY_HEADS: ReadonlySet<string> = new Set([
   'ls',
   'cat',
@@ -304,6 +305,13 @@ export const BASH_READONLY_HEADS: ReadonlySet<string> = new Set([
   'tree',
   'diff',
   'history',
+  'ps',
+  'lsof',
+  'uname',
+  'whoami',
+  'hostname',
+  'id',
+  'date',
 ])
 
 // 2026-08-22 #6 真机体验闭环（问题 4——P1 根因链）：危险命令的**只读形态**排除——
@@ -340,8 +348,9 @@ export function classifyReadonly(name: string, command?: string): ActionKind {
     const method = c.match(/-X\s+(GET|HEAD)\b|--request\s+(GET|HEAD)\b/)
     // 写副作用标志（S6 复审补全——curl -o/-O/-T/-a/-C/-J 与 wget -O 大小写敏感漏网→localhost 自动放行下成洞）：
     // -o/--output 输出文件；-O/--remote-name/-J 落盘 CWD；-T/--upload-file 上传（写远端）；-a/--append 追加；-C/--continue-at 续传
+    // #6 真机 2026-08-30（P2-5）：`-o /dev/null` 例外——健康检查惯用法（不落盘），不计写副作用
     const hasBodyFlag =
-      /-d\b|--data\b|--data-raw\b|-F\b|--form\b|-X\s+(POST|PUT|PATCH|DELETE)\b|-o\b|--output\b|--remote-name\b|-J\b|-T\b|--upload-file\b|-a\b|--append\b|-C\b|--continue-at\b|-O\b/.test(
+      /-d\b|--data\b|--data-raw\b|-F\b|--form\b|-X\s+(POST|PUT|PATCH|DELETE)\b|-o(?!\s*\/dev\/null\b)|--output(?!\s*\/dev\/null\b)|--remote-name\b|-J\b|-T\b|--upload-file\b|-a\b|--append\b|-C\b|--continue-at\b|-O\b/.test(
         c,
       ) // -O 大写（wget -O file——大小写敏感补全）
     if (!hasBodyFlag && (!method || method[1] === 'GET' || method[1] === 'HEAD'))

@@ -563,17 +563,21 @@ export default function ConversationPanel({
         !planConfirmed
       )
         show('exec-confirm')
-      if (
-        content.includes('【已达成') &&
-        stateRef.current.producedFiles.size > 0 &&
-        !stateRef.current.resolutionConfirmed
-      )
-        show('achieve-confirm')
+      // #6 真机 2026-08-30（P2-2）：对齐真实决策点——原条件【已达成】+产物即打点，
+      // S4 门控（verifyCompletion 不通过不弹卡）下产生假「已弹卡」遥测（真机排查误导）
+      if (stateRef.current.pending === 'resolution') show('achieve-confirm')
     }
     // 授权卡 / approve-files 卡（工具卡 need-approval/plan-approval 状态）——每次弹卡独立记录（同工具不同 args 是新的授权决策）
+    // #6 真机 2026-08-30（坑 107 双卡同弹复现）：goal/plan/resolution 决策点 pending 时延迟显示授权卡
+    //（本 effect 依赖含 pending——决策点清掉后下一 tick 补显）；同一时刻只呈现一个决策——A0 §3.5b 门控顺序的 UI 面
+    const decisionPending =
+      stateRef.current.pending === 'goal' ||
+      stateRef.current.pending === 'plan' ||
+      stateRef.current.pending === 'resolution'
     for (const m of messages) {
       for (const c of m.toolCalls ?? []) {
         if (c.status === 'need-approval' || c.status === 'file-approval') {
+          if (decisionPending) continue
           const key = `approval:${c.name}:${JSON.stringify(c.args ?? {}).slice(0, 60)}`
           show(key, {
             card: c.status === 'file-approval' ? 'file-approval' : 'approval',
@@ -583,7 +587,13 @@ export default function ConversationPanel({
         }
       }
     }
-  }, [messages, goalConfirmed, planConfirmed])
+  }, [
+    messages,
+    goalConfirmed,
+    planConfirmed,
+    stateRef.current.pending,
+    stateRef.current.decisionContent,
+  ])
   // 2026-08-08 状态变化打点（working / approval-pending / ready——统一状态机；变化才记录）
   const lastStatusRef = useRef('')
   useEffect(() => {
@@ -707,7 +717,10 @@ export default function ConversationPanel({
       const guide = buildEvidenceBackfill(v)
       evidenceGuideCountRef.current++
       if (guide && evidenceGuideCountRef.current < 2) {
-        inputRef.current = guide
+        // #6 真机 2026-08-30（P2-3）：注入消息加系统来源标记——原样注入被当成用户发言
+        // （模型口气被带偏 + 台账标题混淆）；gateway 用户角色承载是 chat 协议约束，
+        // 完整 system 角色渲染归 V2 会话快照
+        inputRef.current = `【系统对账·非用户发言】${guide}`
         void sendRef.current()
       }
       // ≥2 次：停止自动引导（防死循环——引导消息已注入过一次，用户可见；等用户输入或手动处理）
@@ -2626,15 +2639,21 @@ export default function ConversationPanel({
                           {/* 2026-08-04 授权架构重构（用户授权疲劳→机械批准）：授权卡展示改动内容——用户看清再批（恢复授权意义） */}
                           {tc.name === 'write' && typeof tc.args.content === 'string' && (
                             <pre className="nf-toolcall__preview" dir="ltr">
-                              将写入：{String(tc.args.path ?? '')}\n{tc.args.content.slice(0, 300)}
+                              {'将写入：' + String(tc.args.path ?? '') + '\n'}
+                              {tc.args.content.slice(0, 300)}
                               {tc.args.content.length > 300 ? '…' : ''}
                             </pre>
                           )}
+                          {/* #6 真机 2026-08-30（P2-7）：原读 filePath/oldText/newText——edit 实际参数是
+                              path/old/new → diff 渲染全空（用户闭眼批——审批卡意义失效） */}
                           {tc.name === 'edit' && (
                             <pre className="nf-toolcall__preview" dir="ltr">
-                              将修改 {String(tc.args.filePath ?? '')}：\n-{' '}
-                              {String(tc.args.oldText ?? '').slice(0, 120)}\n+{' '}
-                              {String(tc.args.newText ?? '').slice(0, 120)}
+                              {'将修改 ' +
+                                String(tc.args.path ?? tc.args.filePath ?? '') +
+                                '\n- ' +
+                                String(tc.args.old ?? tc.args.oldText ?? '').slice(0, 200) +
+                                '\n+ ' +
+                                String(tc.args.new ?? tc.args.newText ?? '').slice(0, 200)}
                             </pre>
                           )}
                           <div className="nf-toolcall__actions">

@@ -244,7 +244,8 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
   // 外网 curl 仍 fail-closed（ask——安全默认）
   it('isReadOnlyBash：S6 拍板 3——curl localhost 自动放行、外网 curl 需授权；只读白名单仍自动', () => {
     expect(isReadOnlyBash('curl -s http://localhost:5188/')).toBe(true) // S6 拍板 3：localhost 自动放行
-    expect(isReadOnlyBash('curl -s -o /dev/null http://localhost:5173/')).toBe(false) // -o 重定向文件 = 写副作用（hazardous）
+    // #6 真机 2026-08-30（P2-5）：-o /dev/null 健康检查惯用法不落盘——不再计写副作用（真机授权卡误弹证据）
+    expect(isReadOnlyBash('curl -s -o /dev/null http://localhost:5173/')).toBe(true)
     expect(isReadOnlyBash('curl -s https://example.com')).toBe(false) // 外网 curl fail-closed（ask——安全默认）
     expect(isReadOnlyBash('cat package.json')).toBe(true) // cat 白名单（回归）
     expect(isReadOnlyBash('ls -la /x && cat package.json')).toBe(true) // ls/cat 白名单复合

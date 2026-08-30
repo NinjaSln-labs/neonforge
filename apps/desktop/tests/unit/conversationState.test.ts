@@ -1169,3 +1169,26 @@ describe('拒绝记忆（S7 P1-2——C6 同轮同类短封接线）', () => {
     expect(s.deniedApprovals).toHaveLength(0)
   })
 })
+
+// ============================================================================
+// #6 真机回归（2026-08-30 P2-5 授权疲劳）：复合只读命令诊断链不再弹卡
+// ============================================================================
+describe('#6 真机回归：P2-5 复合只读命令', () => {
+  it('ps|grep 链 + echo; cat 复合 → readonly（真机：ps 不在只读头白名单连弹授权卡）', () => {
+    expect(
+      classifyReadonly(
+        'bash',
+        'ps aux | grep -i "http.server" | grep -v grep; echo "---"; cat /tmp/pomodoro_server.log',
+      ),
+    ).toBe('readonly')
+    expect(classifyReadonly('bash', 'lsof -i :5190')).toBe('readonly')
+  })
+  it('curl -o /dev/null（健康检查惯用法）→ network-read 非 hazardous', () => {
+    expect(
+      classifyReadonly('bash', 'curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:5190/'),
+    ).toBe('network-read')
+  })
+  it('curl -o 真实文件 → 仍 hazardous（写副作用语义保留）', () => {
+    expect(classifyReadonly('bash', 'curl -s -o out.json http://example.com/api')).toBe('hazardous')
+  })
+})
