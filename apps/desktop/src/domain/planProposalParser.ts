@@ -109,29 +109,51 @@ export function parsePlanProposal(
   }
 }
 
-/** 路径 + 原因拆分：「a.js（改入口）」→ path=a.js, reason=改入口；「a.js」→ reason=''
- * #6 真机 2026-08-30（复验轮新发现）：模型两种新形态此前解析失败（整行当路径 → 含句读判非路径 → malformed → 空卡）：
- * ① 原因写在冒号后：「新建 index.html（单文件）：顶部输入框+添加按钮」
- * ② 行首动词前缀：「新建 index.html」
- * 处理序：冒号分节（保 http:// ）→ 剥尾随括号注释 → 剥行首动词 */
+/** 路径 + 原因拆分（候选制——#6 真机 2026-08-31 复验轮两连):
+ * 旧实现单一拆分策略，模型两种新形态即失败（整行当路径 → 含句读判非路径 → malformed → 空卡）：
+ * 「新建 index.html（单文件…）：顶部输入框…」（原因在冒号后+行首动词）
+ * 「index.html（新建：完整的…）」（冒号在括号内——腰斩出 index.html（NewItem 假路径）
+ * 现生成候选序列（尾括号注释 / 冒号分节 / 首括号前段——各带动词剥离），取第一个通过 isLikelyPath 者；全败 → 原行 */
 export function splitPathReason(line: string): { path: string; reason: string } {
-  let s = line.trim()
-  let reason = ''
-  // ① 冒号右侧为说明（跳过 http:// 的协议冒号——左侧含 :// 不分节）
-  const ci = s.search(/[：:]/)
-  if (ci > 0 && !/:\/\//.test(s.slice(0, ci + 1))) {
-    const right = s.slice(ci + 1).trim()
-    s = s.slice(0, ci).trim()
-    if (right) reason = right
+  const original = line.trim()
+  const stripVerb = (p: string) =>
+    p.replace(/^(新建|创建|修改|更新|删除|新增|添加|改|加)\s+/, '').trim()
+  const candidates: Array<{ path: string; reason: string }> = []
+  const push = (raw: string, reason: string) => {
+    const p = stripVerb(raw)
+    if (p) candidates.push({ path: p, reason: reason.trim() })
   }
-  // ② 尾随括号注释 → 原因（前置）
-  const pm = s.match(/\s*[（(]([^（）]*)[）)]\s*$/)
-  if (pm) {
-    const inner = pm[1].trim()
-    if (inner) reason = inner + (reason ? '：' + reason : '')
-    s = s.slice(0, pm.index).trim()
+  // 候选 A：整行——剥尾随括号注释为原因（「a.js（改入口）」/「index.html（新建：…）」）
+  {
+    let s = original
+    let reason = ''
+    const pm = s.match(/\s*[（(]([^（）]*)[）)]\s*$/)
+    if (pm) {
+      reason = pm[1].trim()
+      s = s.slice(0, pm.index).trim()
+    }
+    push(s, reason)
   }
-  // ③ 行首动词前缀（「新建 index.html」→「index.html」）
-  s = s.replace(/^(新建|创建|修改|更新|删除|新增|添加|改|加)\s+/, '')
-  return { path: s, reason }
+  // 候选 B：冒号分节（右侧为说明；保 http:// 协议冒号）——左侧再剥尾括号（「新建 index.html（单文件…）：顶部…」）
+  {
+    const ci = original.search(/[：:]/)
+    if (ci > 0 && !/:\/\//.test(original.slice(0, ci + 1))) {
+      let s = original.slice(0, ci).trim()
+      let reason = original.slice(ci + 1).trim()
+      const pm = s.match(/\s*[（(]([^（）]*)[）)]\s*$/)
+      if (pm) {
+        const inner = pm[1].trim()
+        if (inner) reason = `${inner}：${reason}`
+        s = s.slice(0, pm.index).trim()
+      }
+      push(s, reason)
+    }
+  }
+  // 候选 C：首个括号前段（兜底——「path（任意说明）任意尾巴」形态）
+  {
+    const pi = original.search(/[（(]/)
+    if (pi > 0) push(original.slice(0, pi).trim(), '')
+  }
+  for (const c of candidates) if (isLikelyPath(c.path)) return c
+  return { path: original, reason: '' }
 }

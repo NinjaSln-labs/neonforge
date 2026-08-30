@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { parsePlanProposal, isLikelyPath } from '../../src/domain/planProposalParser'
+import {
+  parsePlanProposal,
+  isLikelyPath,
+  splitPathReason,
+} from '../../src/domain/planProposalParser'
 
 // S2 spec TDD 网格：parsePlanProposal（设计 §3.3 + §8.1 C ⑭）
 // 契约（oracle 对照设计原文）：
@@ -176,5 +180,40 @@ describe('parsePlanProposal（方案提议解析——S2）', () => {
     expect(r.proposal.files.map((f) => f.path)).toEqual(['index.html'])
     expect(r.proposal.assumptions.length).toBe(2) // 假设节仍正确提取
     expect(r.proposal.verificationPlan.length).toBe(1)
+  })
+})
+
+// ============================================================================
+// #6 真机复验轮回归（2026-08-31）：文件行两种新形态（此前 malformed → 空方案卡）
+// ============================================================================
+describe('splitPathReason 候选制——复验轮真机形态', () => {
+  it('冒号在括号内：「index.html（新建：完整的便签页面…）」→ path=index.html', () => {
+    const r = splitPathReason(
+      'index.html（新建：完整的便签页面，HTML + CSS + JS 全部内联，零依赖）',
+    )
+    expect(r.path).toBe('index.html')
+    expect(r.reason).toContain('完整的便签页面')
+  })
+  it('原因在冒号后 + 行首动词：「新建 index.html（单文件）：顶部输入框」→ path=index.html', () => {
+    const r = splitPathReason('新建 index.html（单文件，样式和逻辑都写里面）：顶部输入框+添加按钮')
+    expect(r.path).toBe('index.html')
+  })
+  it('传统形态保持：尾括号注释', () => {
+    expect(splitPathReason('a.js（改入口）')).toEqual({ path: 'a.js', reason: '改入口' })
+    expect(splitPathReason('src/b.ts')).toEqual({ path: 'src/b.ts', reason: '' })
+  })
+  it('真机整块：parsePlanProposal 解析成功（复验轮原始消息形状）', () => {
+    const text = `【目标确认：做一个便签页面】
+
+【执行方案】
+
+- index.html（新建：完整的便签页面，HTML + CSS + JS 全部内联，零依赖）
+
+关键假设：
+- 便签只存文本内容
+`
+    const r = parsePlanProposal(text)
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.proposal.files[0]?.path).toBe('index.html')
   })
 })
