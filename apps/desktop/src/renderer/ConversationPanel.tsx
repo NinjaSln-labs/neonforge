@@ -768,7 +768,7 @@ export default function ConversationPanel({
       // V1.5 S1 Task 1.3：协议工具分支（ADR-009 拦截点——虚拟工具不真实执行，结果由本处合成）。
       // 判定（decideProtocolToolCall 纯函数）+ 副作用（setPendingState/tlog）全在事件层——
       // 每事件恰好一次（updater 双调安全——对齐「副作用移出 updater」惯例）。
-      // 状态机只经 setPendingState 进入（不变量 2）；resolution 走 S4 现有 verifyThenResolve 路径
+      // 状态机只经 setPendingState 进入（不变量 1——决策是状态推进唯一输入）；resolution 走 S4 现有 verifyThenResolve 路径
       // （不变量 4：已解决卡条件 = verifyCompletion 通过——不直接置决策点）。
       if (PROTOCOL_TOOL_NAMES.has(chunk.toolCall.name)) {
         const d = decideProtocolToolCall(stateRef.current, chunk.toolCall.name, chunk.toolCall.args)

@@ -1,3 +1,5 @@
+// 来源：A-016（stage-review-fixes-2026-08-31 Spec P-5）——硬序门/镜像同步断言
+
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { initTools, toolRegistry, syncPlanConfirmed, type ToolResult } from '../../src/main/tools'
 import { PROTOCOL_TOOL_NAMES } from '../../src/domain/protocolTools'
@@ -18,13 +20,13 @@ vi.mock('electron', () => ({
   shell: { openExternal: vi.fn(async () => {}) },
 }))
 
-describe('A-016 L1：协议工具管辖边界（approve-files 是既有特例——不经 decideProtocolToolCall）', () => {
+describe('硬序门时序——协议工具管辖边界（approve-files 是既有特例——不经 decideProtocolToolCall）', () => {
   it('approve-files 不在 PROTOCOL_TOOL_NAMES（硬序门语义由 planConfirmed 镜像承载——非协议分支）', () => {
     expect(PROTOCOL_TOOL_NAMES.has('approve-files')).toBe(false)
   })
 })
 
-describe('A-016 L1：main policy 分支硬序门（syncPlanConfirmed 镜像 → approve-files 放行/拦截）', () => {
+describe('硬序门时序——main policy 分支硬序门（syncPlanConfirmed 镜像 → approve-files 放行/拦截）', () => {
   // ToolRegistry.execute 把 tool.execute 返回值整体包进 data（外层 ok 恒 true——虚拟工具
   // 的真实语义在外层 data 的内层 ToolResult 里——这正是 IPC 回 renderer 的完整载荷）
   const inner = (r: ToolResult): ToolResult => r.data as ToolResult
