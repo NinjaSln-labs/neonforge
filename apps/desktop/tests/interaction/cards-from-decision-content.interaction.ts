@@ -792,3 +792,237 @@ test('A-017-3：reject（乱序）协议工具与普通工具并存 → 普通�
   await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(0)
   await expectText(page.locator('.nf-chat__list'), 'read 挂起', 5000)
 })
+
+// V1.5 S2 Task 2.1：派生路径枚举断言（stage-spec r2 S2 DoD——工具路径 ↔ 文本路径字段级相等）
+// 可执行判定（取代「行为一致」模糊表述）：goal 卡 statement/assumptions、plan 卡三要素
+// （files/summary/assumptions）、resolution 卡 evidence+pendingQuestions——每条断言
+// 「工具路径产出的 decisionContent 与文本路径字段级相等」（卡渲染组件零改动——同 decisionContent 派生）。
+// 双通道并存断言：同一会话文本标记与工具调用先后出现 → 状态机无冲突（deriveDecisionPoint 现有优先级语义）。
+test('V1.5-S2-1：goal 卡字段级相等——文本【目标确认】 vs 工具 propose_goal（statement/assumptions）', async ({
+  page,
+}) => {
+  // 文本路径：消息含【目标确认：X】+ 关键假设 → goal 卡渲染 statement + assumptions
+  await installMockBridge(page, {
+    project: 'none',
+    script: compose([
+      [
+        chunk.content(
+          '好的。【目标确认：做一个待办清单应用】\n关键假设：\n- 用 React 实现\n- 数据存 localStorage',
+        ),
+        chunk.done(),
+      ],
+    ]),
+  })
+  await startFromScratch(page, '做个待办应用')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await expectText(page.locator('.nf-confirmcard'), '做一个待办清单应用', 5000)
+  await expectText(page.locator('.nf-confirmcard'), '用 React 实现', 5000)
+  await expectText(page.locator('.nf-confirmcard'), '数据存 localStorage', 5000)
+})
+
+test('V1.5-S2-1b：goal 卡字段级相等——工具 propose_goal 路径渲染 statement/assumptions 与文本路径一致', async ({
+  page,
+}) => {
+  // 工具路径：propose_goal 调用（statement + assumptions）→ goal 卡渲染同字段
+  await installMockBridge(page, {
+    project: 'none',
+    script: compose([
+      [
+        toolCall.proposeGoal('做一个待办清单应用', ['用 React 实现', '数据存 localStorage']),
+        chunk.done(),
+      ],
+    ]),
+  })
+  await startFromScratch(page, '做个待办应用')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  // 字段级相等：与文本路径（V1.5-S2-1）渲染完全一致（statement + assumptions 同内容）
+  await expectText(page.locator('.nf-confirmcard'), '做一个待办清单应用', 5000)
+  await expectText(page.locator('.nf-confirmcard'), '用 React 实现', 5000)
+  await expectText(page.locator('.nf-confirmcard'), '数据存 localStorage', 5000)
+})
+
+test('V1.5-S2-2：plan 卡字段级相等——文本【执行方案】 vs 工具 propose_plan（files/summary/assumptions/verificationPlan）', async ({
+  page,
+}) => {
+  // 文本路径：消息含【执行方案】块（文件清单/关键假设/验证计划）→ plan 卡三要素
+  await installMockBridge(page, {
+    project: 'none',
+    script: compose(goalConfirm('做一个待办清单应用'), [
+      [
+        chunk.content(
+          '【执行方案】\n- src/App.tsx（核心组件）\n- src/store.ts（状态管理）\n关键假设：\n- 使用 React 19\n- 不引入新依赖\n验证计划：\n- npx tsc --noEmit\n- npx vitest run',
+        ),
+        chunk.done(),
+      ],
+    ]),
+  })
+  await startFromScratch(page, '做个待办应用')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  await expectText(page.locator('.nf-confirmcard'), 'src/App.tsx（核心组件）', 5000)
+  await expectText(page.locator('.nf-confirmcard'), 'src/store.ts（状态管理）', 5000)
+  await expectText(page.locator('.nf-confirmcard'), '使用 React 19', 5000)
+  await expectText(page.locator('.nf-confirmcard'), '不引入新依赖', 5000)
+  await expectText(page.locator('.nf-confirmcard'), 'npx tsc --noEmit', 5000)
+  await expectText(page.locator('.nf-confirmcard'), 'npx vitest run', 5000)
+})
+
+test('V1.5-S2-2b：plan 卡字段级相等——工具 propose_plan 路径渲染三要素与文本路径一致', async ({
+  page,
+}) => {
+  // 工具路径：propose_plan 调用（summary + files[{path,reason}] + assumptions + verification_plan）
+  await installMockBridge(page, {
+    project: 'none',
+    script: compose(goalConfirm('做一个待办清单应用'), [
+      [
+        toolCall.proposePlan(
+          '做一个待办清单应用',
+          [
+            { path: 'src/App.tsx', reason: '核心组件' },
+            { path: 'src/store.ts', reason: '状态管理' },
+          ],
+          {
+            assumptions: ['使用 React 19', '不引入新依赖'],
+            verification_plan: ['npx tsc --noEmit', 'npx vitest run'],
+          },
+        ),
+        chunk.done(),
+      ],
+    ]),
+  })
+  await startFromScratch(page, '做个待办应用')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  // 字段级相等：与文本路径（V1.5-S2-2）渲染完全一致（files/summary/assumptions/verificationPlan）
+  await expectText(page.locator('.nf-confirmcard'), 'src/App.tsx（核心组件）', 5000)
+  await expectText(page.locator('.nf-confirmcard'), 'src/store.ts（状态管理）', 5000)
+  await expectText(page.locator('.nf-confirmcard'), '使用 React 19', 5000)
+  await expectText(page.locator('.nf-confirmcard'), '不引入新依赖', 5000)
+  await expectText(page.locator('.nf-confirmcard'), 'npx tsc --noEmit', 5000)
+  await expectText(page.locator('.nf-confirmcard'), 'npx vitest run', 5000)
+})
+
+test('V1.5-S2-3：resolution 卡字段级相等——文本【已达成】 vs 工具 report_completion（verification/pendingQuestions）', async ({
+  page,
+}) => {
+  // 文本路径：消息含【已达成】块（验证证据/遗留问题）→ 已解决卡 evidence+pendingQuestions
+  await installMockBridge(page, {
+    project: 'none',
+    script: compose(
+      goalConfirm('完成待办应用'),
+      planPropose(['/test/app.ts（核心）']),
+      [[toolCall.write('/test/app.ts', 'x'), chunk.done()]],
+      [
+        [
+          chunk.content(
+            '【已达成】\n完成。\n验证证据：\n- ls dist（通过）\n遗留问题：\n- 移动端样式未验证',
+          ),
+          chunk.done(),
+        ],
+      ],
+    ),
+  })
+  await startFromScratch(page, '做个待办应用')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  await page.getByRole('button', { name: '确认执行' }).click()
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(1, { timeout: 10000 })
+  // 已解决卡出现（文本路径——验证证据可核验 → verifyThenResolve 通过）
+  await expectVisible(page.getByRole('button', { name: '已解决' }), 15000)
+  // 字段级相等（文本路径）：pendingQuestions 直接渲染断言（遗留问题——解决卡知情项）；
+  // evidence.verification 经 verifyThenResolve 同一消费路径（字段映射 command/output/passed → 对账）——
+  // 「已解决卡出现」即证据门通过（文本路径与工具路径消费同一 CompletionClaim 结构）
+  await expectText(page.locator('.nf-confirmcard'), '移动端样式未验证', 5000)
+})
+
+test('V1.5-S2-3b：resolution 卡字段级相等——工具 report_completion 路径渲染与文本路径一致', async ({
+  page,
+}) => {
+  // 工具路径：report_completion 调用（summary + verification[{command,output,passed}] + pending_questions）
+  // 注意：verifyThenResolve 系统核验——mock V1a 复核通过（只读 ls 可代跑——默认 mock 核验 ok）
+  await installMockBridge(page, {
+    project: 'none',
+    script: compose(
+      goalConfirm('完成待办应用'),
+      planPropose(['/test/app.ts（核心）']),
+      [[toolCall.write('/test/app.ts', 'x'), chunk.done()]],
+      [
+        [
+          toolCall.reportCompletion(
+            '完成待办应用',
+            [{ command: 'ls dist', output: 'app.js index.html', passed: true }],
+            ['移动端样式未验证'],
+          ),
+          chunk.done(),
+        ],
+      ],
+    ),
+  })
+  await startFromScratch(page, '做个待办应用')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  await page.getByRole('button', { name: '确认执行' }).click()
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(1, { timeout: 10000 })
+  // 已解决卡出现（工具路径——verification 映射 evidence.verification → verifyThenResolve 通过）
+  await expectVisible(page.getByRole('button', { name: '已解决' }), 15000)
+  // 字段级相等：与文本路径（V1.5-S2-3）渲染完全一致（pendingQuestions 渲染；verification 经同一
+  // verifyThenResolve 消费路径——工具映射 verification → evidence.verification 与文本解析结构对齐）
+  await expectText(page.locator('.nf-confirmcard'), '移动端样式未验证', 5000)
+})
+
+test('V1.5-S2-4：双通道并存——同会话先文本标记后工具调用 → 状态机无冲突（deriveDecisionPoint 优先级）', async ({
+  page,
+}) => {
+  // 同会话两通道先后出现：第一轮文本【目标确认】置 goal 卡（pending:goal）；
+  // 用户确认后第二轮工具 propose_plan 置 plan 卡——决策点依次推进，无冲突
+  await installMockBridge(page, {
+    project: 'none',
+    script: compose(
+      // 文本通道：goal 提议
+      [[chunk.content('好的。【目标确认：做一个待办应用】'), chunk.done()]],
+      // 工具通道：plan 提议（goal 已确认——propose_plan 合法）
+      [
+        [
+          toolCall.proposePlan('单文件落地', [{ path: '/test/app.ts', reason: '核心' }]),
+          chunk.done(),
+        ],
+      ],
+    ),
+  })
+  await startFromScratch(page, '做个待办应用')
+  // 文本通道 goal 卡 → 确认
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  // 工具通道 plan 卡（双通道并存——状态机无冲突，deriveDecisionPoint 优先级语义）
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  await expectText(page.locator('.nf-confirmcard'), '/test/app.ts（核心）', 5000)
+  // 无残留冲突卡（目标卡已走完——不重复弹）
+  await expect(page.getByRole('button', { name: '确认目标' })).toHaveCount(0)
+  await page.getByRole('button', { name: '确认执行' }).click()
+  await expect(page.getByRole('button', { name: '确认执行' })).toHaveCount(0, { timeout: 10000 })
+})
+
+test('V1.5-S2-4b：双通道并存（反序）——先工具后文本 → 状态机无冲突', async ({ page }) => {
+  // 反序：第一轮工具 propose_goal 置 goal 卡；确认后第二轮文本【执行方案】置 plan 卡
+  await installMockBridge(page, {
+    project: 'none',
+    script: compose(
+      // 工具通道：goal 提议
+      [[toolCall.proposeGoal('做一个待办应用'), chunk.done()]],
+      // 文本通道：plan 提议（【执行方案】标记——goal 已确认）
+      [[chunk.content('【执行方案】\n- /test/app.ts（核心）\n等你确认。'), chunk.done()]],
+    ),
+  })
+  await startFromScratch(page, '做个待办应用')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  // 文本通道 plan 卡（反序并存——状态机无冲突）
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  await expectText(page.locator('.nf-confirmcard'), '/test/app.ts（核心）', 5000)
+  await page.getByRole('button', { name: '确认执行' }).click()
+  await expect(page.getByRole('button', { name: '确认执行' })).toHaveCount(0, { timeout: 10000 })
+})

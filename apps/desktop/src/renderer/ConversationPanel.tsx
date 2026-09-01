@@ -2385,8 +2385,14 @@ export default function ConversationPanel({
                 // 文本探测仅保留为**信号消息定位**（卡挂哪条消息——lastSignalIdx 防连发漂移），不参与触发判定
                 const dc = stateRef.current.decisionContent
                 const dcKind = dc?.kind ?? null
-                const hasPlan = m.content.includes('【执行方案')
-                const achievedMatch = m.content.includes('【已达成')
+                // V1.5 S2：信号判定识别协议工具调用（协议工具消息 content 为空——决策经 decisionContent
+                // 承载；文本探测只认标记——协议路径消息无标记 → 卡信号缺失）。hasPlan/achievedMatch/
+                // execSignal 三处统一「文本标记 或 协议工具调用」
+                const protoCalls = (m.toolCalls ?? []).map((c) => c.name)
+                const hasPlan =
+                  m.content.includes('【执行方案') || protoCalls.includes('propose_plan')
+                const achievedMatch =
+                  m.content.includes('【已达成') || protoCalls.includes('report_completion')
                 // 2026-08-07 目标确认兜底（死锁修复延续——模型无【目标确认】标记时用户仍可确认）：
                 // 卡不依赖标记——目标未确认时「最后一条 assistant done」消息下也显示（显示 initialPrompt 暂存目标——
                 // 结构化按钮替代原确认词兜底；对齐行业：确认=显式动作，不依赖模型标记）
