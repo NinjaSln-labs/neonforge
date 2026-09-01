@@ -195,6 +195,12 @@ function fmtToolArgs(tc: { name: string; args: Record<string, unknown> }): strin
   }
 }
 
+// V1.5 S2（A-017 渲染信号单源）：消息是否含指定协议工具调用——lastSignalIdx 与卡渲染共用
+// （协议工具消息 content 为空——信号判定不能只靠文本标记）
+function hasProtoCall(msg: { toolCalls?: Array<{ name: string }> }, ...names: string[]): boolean {
+  return (msg.toolCalls ?? []).some((c) => names.includes(c.name))
+}
+
 // 2026-08-05 体验反馈（用户「最后一条像卡住」——模型承诺行动但没调工具，如「我先打开服务端看看再动手」后停住）：
 // 检测开发阶段模型回复「承诺要做事但没实际调工具」→ 对话区提示用户可回复「继续」（非卡死——working 已释放，只是模型停住等指令）
 // 2026-08-05 第五轮修复：排除「确认/沟通」类（「我先和你确认一下…建造游戏」——模型在引导候选/确认需求，不是行动承诺；
@@ -496,21 +502,20 @@ export default function ConversationPanel({
       if (x.role !== 'assistant') continue
       // V1.5 S2 A-017：信号消息定位识别协议工具（propose_goal/propose_plan/report_completion）——
       // 协议工具置 pending 后卡挂在该消息下（文本探测只认标记——协议路径消息无标记 → 卡不弹缺口）
-      const protoCalls = (x.toolCalls ?? []).map((c) => c.name)
       if (
         exec === -1 &&
         (x.content.includes('【执行方案') ||
-          protoCalls.includes('propose_plan') ||
+          hasProtoCall(x, 'propose_plan') ||
           (x.toolCalls ?? []).some((c) =>
             isSideEffectAction(c.name, String(c.args?.command ?? '')),
           ))
       )
         exec = k
-      if (goal === -1 && (/【目标确认[:：]/.test(x.content) || protoCalls.includes('propose_goal')))
+      if (goal === -1 && (/【目标确认[:：]/.test(x.content) || hasProtoCall(x, 'propose_goal')))
         goal = k
       if (
         achieve === -1 &&
-        (x.content.includes('【已达成') || protoCalls.includes('report_completion'))
+        (x.content.includes('【已达成') || hasProtoCall(x, 'report_completion'))
       )
         achieve = k
       if (exec !== -1 && goal !== -1 && achieve !== -1) break
@@ -783,15 +788,20 @@ export default function ConversationPanel({
       // 每事件恰好一次（updater 双调安全——对齐「副作用移出 updater」惯例）。
       // 状态机只经 setPendingState 进入（不变量 1——决策是状态推进唯一输入）；resolution 走 S4 现有 verifyThenResolve 路径
       // （不变量 4：已解决卡条件 = verifyCompletion 通过——不直接置决策点）。
-      // V1.5 S2 A-017：协议工具出现即置挂起标记——同轮后续普通工具不再执行
-      // （suspendedRound 只对本轮生效——done 分支复位；与 setPendingState 后 pendingBlocked 语义不同：
-      // 协议工具置 pending 是**未来轮**的冻结，同轮兄弟调用需本标记显式挂起——deer-flow 丢弃语义）
+      // V1.5 S2 A-017：协议工具**置 pending 时**置挂起标记（deer-flow 兄弟调用丢弃语义——同轮
+      // 后续普通工具不再执行）。注意：只在 pending 分支置位——reject（乱序拒绝）/invalid（参数
+      // 校验失败）分支不挂起（无决策点待确认——兄弟工具无「等确认」语义；A-017-3 测试覆盖 reject
+      // 并存——read 照常执行）。suspendRoundRef 只对本轮生效（runChat 起点复位）。
       if (PROTOCOL_TOOL_NAMES.has(chunk.toolCall.name)) {
-        suspendRoundRef.current = true
-      }
-      if (PROTOCOL_TOOL_NAMES.has(chunk.toolCall.name)) {
-        const d = decideProtocolToolCall(stateRef.current, chunk.toolCall.name, chunk.toolCall.args)
+        // S1-St-1：since 由调用方传入（事件层取时钟——纯函数不取时钟）
+        const d = decideProtocolToolCall(
+          stateRef.current,
+          chunk.toolCall.name,
+          chunk.toolCall.args,
+          new Date().toISOString(),
+        )
         if (d.action === 'pending') {
+          suspendRoundRef.current = true
           const { kind, content } = d
           if (kind === 'goal') {
             const p = content.proposal as GoalProposal
@@ -1638,6 +1648,9 @@ export default function ConversationPanel({
   ) => {
     // 2026-08-04：当前活跃流 = 本 sid（停止后旧流 chunk 不再更新 UI）
     streamingSidRef.current = sid
+    // V1.5 S2 A-017：每轮流开始复位挂起标记（防 stopGeneration/错误路径残留——stop 不触发 done 分支，
+    // 若只在 done 复位，中断的轮会把挂起误带到下一轮 → 兄弟工具被错误挂起）。挂起只约束同轮兄弟调用。
+    suspendRoundRef.current = false
     // 2026-08-04 重构（用户：「定多少才不卡」根因——原 `depth > 4` 硬上限，开发工具链 5+ 轮必断）：40 轮总兜底（防死循环由 maybeContinue 重复检测承担）
     if (depth > 40) {
       // 2026-08-05：提前 return 释放 working（不经过 maybeContinue/finishError——防卡「搭档处理中」）
@@ -2376,7 +2389,7 @@ export default function ConversationPanel({
               // V1.5 S2 A-017：协议工具轮消息 content 为空（只调工具无文本——propose_goal/propose_plan/
               // report_completion 决策内容经 decisionContent 承载）→ 放宽 content 条件：含协议工具调用
               // 的消息同样进入卡渲染（否则 pending 置位后卡永不弹——文本路径消息有标记故不受影响）
-              (m.content || (m.toolCalls ?? []).some((c) => PROTOCOL_TOOL_NAMES.has(c.name))) &&
+              (m.content || hasProtoCall(m, ...PROTOCOL_TOOL_NAMES)) &&
               (() => {
                 // A-005：转换计数引用——stateVersion 变化触发重渲染（ref 非响应式——reject/confirm 后卡即时消失）
                 void stateVersion
@@ -2388,11 +2401,9 @@ export default function ConversationPanel({
                 // V1.5 S2：信号判定识别协议工具调用（协议工具消息 content 为空——决策经 decisionContent
                 // 承载；文本探测只认标记——协议路径消息无标记 → 卡信号缺失）。hasPlan/achievedMatch/
                 // execSignal 三处统一「文本标记 或 协议工具调用」
-                const protoCalls = (m.toolCalls ?? []).map((c) => c.name)
-                const hasPlan =
-                  m.content.includes('【执行方案') || protoCalls.includes('propose_plan')
+                const hasPlan = m.content.includes('【执行方案') || hasProtoCall(m, 'propose_plan')
                 const achievedMatch =
-                  m.content.includes('【已达成') || protoCalls.includes('report_completion')
+                  m.content.includes('【已达成') || hasProtoCall(m, 'report_completion')
                 // 2026-08-07 目标确认兜底（死锁修复延续——模型无【目标确认】标记时用户仍可确认）：
                 // 卡不依赖标记——目标未确认时「最后一条 assistant done」消息下也显示（显示 initialPrompt 暂存目标——
                 // 结构化按钮替代原确认词兜底；对齐行业：确认=显式动作，不依赖模型标记）

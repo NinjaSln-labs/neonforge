@@ -342,15 +342,17 @@ export type ProtocolToolCallDecision =
   | { action: 'reject'; resultText: string }
   | { action: 'invalid'; resultText: string }
 
-/** 提议分支构造：pending 决策点 + 规范化载荷（DecisionContent 构造对齐 setPending 调用形态） */
+/** 提议分支构造：pending 决策点 + 规范化载荷（DecisionContent 构造对齐 setPending 调用形态）
+ * S1-St-1（recorded）：since 由调用方传入——纯函数不取时钟（可测性/无副作用） */
 function pendingProposal(
   kind: DecisionKind,
   proposal: GoalProposal | PlanProposal | CompletionClaim,
+  since: string,
 ): ProtocolToolCallDecision {
   return {
     action: 'pending',
     kind,
-    content: { kind, proposal, since: new Date().toISOString() },
+    content: { kind, proposal, since },
   }
 }
 
@@ -380,6 +382,7 @@ export function decideProtocolToolCall(
   state: ConversationState,
   tool: string,
   args: unknown,
+  since?: string,
 ): ProtocolToolCallDecision {
   const v = validateProtocolArgs(tool, args)
   if (!v.ok) {
@@ -389,12 +392,18 @@ export function decideProtocolToolCall(
     }
   }
   const a = args as Record<string, unknown>
+  // S1-St-1：since 由调用方传入（renderer 事件层取时钟）；缺省兜底（L1 纯函数测试）
+  const ts = since ?? new Date().toISOString()
 
   if (tool === 'propose_goal') {
-    return pendingProposal('goal', {
-      statement: a.statement as string,
-      assumptions: stringArrayOf(a.assumptions),
-    })
+    return pendingProposal(
+      'goal',
+      {
+        statement: a.statement as string,
+        assumptions: stringArrayOf(a.assumptions),
+      },
+      ts,
+    )
   }
 
   if (tool === 'propose_plan') {
@@ -403,15 +412,19 @@ export function decideProtocolToolCall(
         '目标未确认——先调用 propose_goal 提议目标（statement 一句话准确目标），用户确认后才能提出执行方案',
       )
     }
-    return pendingProposal('plan', {
-      summary: a.summary as string,
-      files: (a.files as Array<{ path: string; reason: string }>).map((f) => ({
-        path: f.path,
-        reason: f.reason,
-      })),
-      assumptions: stringArrayOf(a.assumptions),
-      verificationPlan: stringArrayOf(a.verification_plan),
-    })
+    return pendingProposal(
+      'plan',
+      {
+        summary: a.summary as string,
+        files: (a.files as Array<{ path: string; reason: string }>).map((f) => ({
+          path: f.path,
+          reason: f.reason,
+        })),
+        assumptions: stringArrayOf(a.assumptions),
+        verificationPlan: stringArrayOf(a.verification_plan),
+      },
+      ts,
+    )
   }
 
   if (tool === 'report_completion') {
@@ -423,18 +436,22 @@ export function decideProtocolToolCall(
         '方案未确认——先调用 propose_plan 提出文件清单与验证计划（files+summary），用户确认后才能声明完成',
       )
     }
-    return pendingProposal('resolution', {
-      summary: a.summary as string,
-      evidence: {
-        verification: (a.verification as VerificationItem[]).map((item) => ({
-          command: item.command,
-          output: item.output,
-          passed: item.passed,
-        })),
-        diffs: [], // V1b 系统派生（deriveDiffs）——diffs 不进工具 args（ADR-009）
-        pendingQuestions: stringArrayOf(a.pending_questions),
+    return pendingProposal(
+      'resolution',
+      {
+        summary: a.summary as string,
+        evidence: {
+          verification: (a.verification as VerificationItem[]).map((item) => ({
+            command: item.command,
+            output: item.output,
+            passed: item.passed,
+          })),
+          diffs: [], // V1b 系统派生（deriveDiffs）——diffs 不进工具 args（ADR-009）
+          pendingQuestions: stringArrayOf(a.pending_questions),
+        },
       },
-    })
+      ts,
+    )
   }
 
   if (tool === 'ask_user') {

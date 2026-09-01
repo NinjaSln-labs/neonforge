@@ -769,11 +769,20 @@ test('A-017-2：plan 协议工具与 write 同轮并存 → write 挂起（副�
   await expect(page.getByRole('button', { name: '确认执行' })).toHaveCount(0, { timeout: 10000 })
 })
 
-test('A-017-3：reject（乱序）协议工具与普通工具并存 → 普通工具挂起（协议分支结果=引导重走顺序）', async ({
+test('A-017-3：reject（乱序）协议工具与普通工具并存 → 普通工具不挂起（无决策点待确认——照常执行）', async ({
   page,
 }) => {
   await installMockBridge(page, {
     project: 'none',
+    extraInit: `
+      let readExec = 0
+      window.__readExec = () => readExec
+      const origExec = bridge.tools.execute
+      bridge.tools.execute = async (name, args, opts) => {
+        if (name === 'read') readExec++
+        return origExec(name, args, opts)
+      }
+    `,
     script: compose([
       // goal 未确认：propose_plan（reject——引导先 propose_goal）+ read（兄弟普通工具）
       [
@@ -788,9 +797,12 @@ test('A-017-3：reject（乱序）协议工具与普通工具并存 → 普通�
   await expect(page.getByRole('button', { name: '确认目标' })).toHaveCount(0, { timeout: 10000 })
   // 协议工具 reject 文本回灌（引导先 propose_goal）
   await expectText(page.locator('.nf-chat__list'), 'propose_goal', 5000)
-  // 兄弟 read 挂起（不执行——无授权卡）
+  // 兄弟 read 不挂起（reject 分支无决策点待确认——挂起标记只在 pending 分支置位）：
+  // 照常执行（read 调用计数 1——只读在 goal 未确认时也放行；无授权卡）
+  await expect(
+    await page.evaluate(() => (window as unknown as { __readExec: () => number }).__readExec()),
+  ).toBe(1)
   await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(0)
-  await expectText(page.locator('.nf-chat__list'), 'read 挂起', 5000)
 })
 
 // V1.5 S2 Task 2.1：派生路径枚举断言（stage-spec r2 S2 DoD——工具路径 ↔ 文本路径字段级相等）
@@ -1025,4 +1037,31 @@ test('V1.5-S2-4b：双通道并存（反序）——先工具后文本 → 状�
   await expectText(page.locator('.nf-confirmcard'), '/test/app.ts（核心）', 5000)
   await page.getByRole('button', { name: '确认执行' }).click()
   await expect(page.getByRole('button', { name: '确认执行' })).toHaveCount(0, { timeout: 10000 })
+})
+
+// V1.5 S2 Spec 轴（S2-Sp-3 补缺）：pending 冻结——工具路径置 pending 后状态机冻结
+// （A0 §3.4「用户决策是下一状态唯一输入」——shouldStopContinuation 停续聊，模型不再自动调工具）；
+// 用户确认后恢复（决策点走完——卡消失）。
+test('V1.5-S2-5：工具路径 pending 冻结——propose_goal 置 pending 后模型停轮（不自动续聊）→ 确认后恢复', async ({
+  page,
+}) => {
+  await installMockBridge(page, {
+    project: 'none',
+    capture: { chatCount: true },
+    script: compose(
+      // 工具路径 goal 提议 → pending:goal（冻结开始）
+      [[toolCall.proposeGoal('做一个待办应用'), chunk.done()]],
+    ),
+  })
+  await startFromScratch(page, '做个待办应用')
+  // 目标卡弹出（工具路径 pending:goal）
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  // 冻结：pending 置位后模型不自动续聊（chatCount 停在 1——shouldStopContinuation 停；无第二轮 read 等）
+  await page.waitForTimeout(1200)
+  expect(
+    await page.evaluate(() => (window as unknown as { __nfChatCount: number }).__nfChatCount),
+  ).toBe(1)
+  // 确认目标 → 冻结解除（卡消失——决策点走完）
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expect(page.getByRole('button', { name: '确认目标' })).toHaveCount(0, { timeout: 10000 })
 })

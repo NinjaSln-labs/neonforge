@@ -540,8 +540,20 @@ export class DeepSeekGateway {
       }
     }
     // 收集到的工具调用 → 修复 → 逐个发出（A0 边界：Gateway 修复，ToolRegistry 执行）
-    // V1.5 S2 A-018：repair 失败保留 rawArguments 重试 1 次（round 1 更强策略——双重序列化剥层/
-    // 杂质剥离）——静默丢弃会吞掉模型决策（附录 B S0 结论 6 承诺）。重试仍失败才放弃（打点原因）。
+    // V1.5 S2 A-018：repair 失败保留 rawArguments 重试 1 次（round 1 更强策略——杂质剥离；
+    // 双重序列化剥层在基态已覆盖）——静默丢弃会吞掉模型决策（附录 B S0 结论 6 承诺）。
+    // 重试仍失败才放弃（打点原因）。
+    const emitToolCall = (name: string, args: unknown, viaRetry: boolean) => {
+      console.log(
+        `[gateway] tool-call ${viaRetry ? 'repaired (retry)' : 'emit'}:`,
+        name,
+        JSON.stringify(args).slice(0, 120),
+      )
+      opts.onDelta({
+        type: 'tool-call',
+        toolCall: { name, args: args as Record<string, unknown> },
+      })
+    }
     for (const acc of toolAcc) {
       if (!acc.name) continue
       const repaired = toolCallRepair(acc.arguments, 0)
@@ -555,22 +567,10 @@ export class DeepSeekGateway {
           )
           continue
         }
-        console.log(
-          '[gateway] tool-call repaired (retry):',
-          acc.name,
-          JSON.stringify(retried).slice(0, 120),
-        )
-        opts.onDelta({
-          type: 'tool-call',
-          toolCall: { name: acc.name, args: retried as Record<string, unknown> },
-        })
+        emitToolCall(acc.name, retried, true)
         continue
       }
-      console.log('[gateway] tool-call emit:', acc.name, JSON.stringify(repaired).slice(0, 120))
-      opts.onDelta({
-        type: 'tool-call',
-        toolCall: { name: acc.name, args: repaired as Record<string, unknown> },
-      })
+      emitToolCall(acc.name, repaired, false)
     }
     console.log('[gateway] stream done')
     opts.onDelta({ type: 'done' })
