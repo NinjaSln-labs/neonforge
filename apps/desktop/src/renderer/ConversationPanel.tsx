@@ -942,8 +942,9 @@ export default function ConversationPanel({
         )
       }
       const fallbackDetected = fallbackMarkers.length > 0
-      // 降级路径不构造 proposals（文本标记不产卡）；正常路径（无标记）保留原 proposals 解析
-      // （userRequested 信号——write 拦截/方案征询——非标记产卡，与降级无冲突）
+      // 降级路径不构造 proposals（文本标记不产卡）；正常路径（无标记）保留原 proposals 解析。
+      // 注意：userRequested 信号（write 拦截/方案征询文本「等你确认」）是**非标记**的「等确认」语义——
+      // 与降级无冲突（它们不来自标记，保留产卡路径）；plan 标记降级时 plannedFiles 也不并入（见下）
       const goalProposal: GoalProposal | undefined = fallbackDetected
         ? undefined
         : goalMark
@@ -1081,7 +1082,10 @@ export default function ConversationPanel({
       }
       // 2026-08-07 无阶段重构 S5：执行方案清单解析——模型输出【执行方案】块 → 并入 plannedFiles（任务完成度——deepcode unimplemented_files 借鉴）
       // 2026-08-08 根因 3 修复③：trustPath 规范化（模型写相对路径如 game.js）——与 approvePlan 的绝对路径清单（1036 行）统一比较基准
-      const planFiles = parseExecutionPlan(content)
+      // V1.5 S3（S3-St-3 修正）：fallbackDetected（文本方案标记降级）时不并入 plannedFiles——
+      // 降级不产卡（无确认执行），清单并入会让 write 绕过确认自动放行（语义漏洞）；
+      // 工具路径 propose_plan 的 plannedFiles 并入在事件层（propose_plan 分支）——正常通道不受影响
+      const planFiles = !fallbackDetected ? parseExecutionPlan(content) : []
       if (planFiles.length > 0) {
         addPlannedFiles(planFiles.map((f) => trustPath(f)))
       }
