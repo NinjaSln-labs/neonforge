@@ -305,9 +305,10 @@ test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 1
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
   await page.waitForTimeout(300)
   await page.evaluate(() => {
+    // V1.5 S3：目标提议走 propose_goal 协议工具（文本标记已降级——不产卡）
     window.__emit({
-      type: 'content',
-      text: '好的。【目标确认：批量整理文件】【任务类型：B 文件操作】',
+      type: 'tool-call',
+      toolCall: { name: 'propose_goal', args: { statement: '批量整理文件' } },
     })
     window.__emit({
       type: 'tool-call',
@@ -329,9 +330,9 @@ test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 1
     page.locator('.nf-msg--assistant .nf-msg__body').filter({ hasText: '搭档处理中' }),
   ).toBeVisible({ timeout: 5000 })
   await page.evaluate(() => {
-    // 方案征询文本 + 方案标记（hasPlan → execSignal 定位当前消息；无文件行 → C3 不置方案清单——
-    // 确认执行后 plannedFiles 空 → write 走授权卡——合并授权场景）
-    window.__emit({ type: 'content', text: '好的，方案如下，等你确认。\n【执行方案】' })
+    // 方案征询文本（textAskPlan → userRequested='plan' 信号——非标记产卡；V1.5 S3 后方案标记
+    // 走降级引导——此处只用征询文本触发执行确认卡）
+    window.__emit({ type: 'content', text: '好的，方案如下，等你确认。' })
     window.__emit({ type: 'done' })
   })
   await expect(page.getByRole('button', { name: '确认执行' })).toBeVisible()
@@ -354,10 +355,11 @@ test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 1
   await expect(page.locator('.nf-toolcall__note').first()).toContainText('备份')
   // 疲劳防护：同批 ≥2 低危待授权 → 合并授权按钮出现
   await expect(page.locator('.nf-toolcall__approveall')).toBeVisible()
-  // 点击合并授权 → 授权卡消失（2 个执行完成 + 第一次 pending 拦截的 2 个「未执行」= 共 4 done——领域语义：确认前动作无效残留显示）
+  // 点击合并授权 → 授权卡消失（2 个执行完成 + 第一次 pending 拦截的 2 个「未执行」+ propose_goal 工具卡
+  // = 共 5 done——V1.5 S3 工具化：协议工具渲染为 done 卡；领域语义：确认前动作无效残留显示）
   await page.locator('.nf-toolcall__approveall').click()
   await page.waitForTimeout(600)
-  await expect(page.locator('.nf-toolcall--done')).toHaveCount(4)
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(5)
   await expect(page.locator('.nf-toolcall__approveall')).toHaveCount(0)
 })
 
@@ -409,7 +411,7 @@ test('0-1 从零开始：GoalCard 已删除（目标确认走对话澄清——d
 test('0-1 从零开始：目标确认卡确认 → 目标确认 + 执行确认卡出现', async ({ page }) => {
   await page.addInitScript(() => {
     window.__sentMsgs = []
-    let streamCb: ((c: { type: string }) => void) | null = null
+    let streamCb: ((c: { type: string; text?: string; toolCall?: unknown }) => void) | null = null
     window.neonforge = {
       version: 'test',
       config: {
@@ -435,8 +437,11 @@ test('0-1 从零开始：目标确认卡确认 → 目标确认 + 执行确认�
           setTimeout(
             () =>
               streamCb?.({
-                type: 'content',
-                text: '【目标确认：做一个网页射击游戏，打开就能玩，发给朋友，先做能玩的版本】',
+                type: 'tool-call',
+                toolCall: {
+                  name: 'propose_goal',
+                  args: { statement: '做一个网页射击游戏，打开就能玩，发给朋友，先做能玩的版本' },
+                },
               }),
             10,
           )
@@ -507,8 +512,11 @@ test('0-1 从零开始：模型需求确认 → 回写台账标题 + updateProje
           // 延迟触发流式（等 initProject 完成——rootPath 就绪后需求确认才能回写 README）
           setTimeout(() => {
             streamCb?.({
-              type: 'content',
-              text: '你指的是 3D 射击小游戏，对吧？【目标确认：3D射击小游戏】',
+              type: 'tool-call',
+              toolCall: {
+                name: 'propose_goal',
+                args: { statement: '3D射击小游戏' },
+              },
             })
             streamCb?.({ type: 'done' })
           }, 50)
@@ -697,16 +705,31 @@ test('根因 3：点「确认执行」按钮 → 同事件 send 读到已确认�
         streamChat: async (opts: { forceTool?: boolean } = {}) => {
           chatCount++
           forceToolCalls.push(!!opts.forceTool)
+          // V1.5 S3 工具化时序：propose_plan 依赖 goalConfirmed prop 同步——拉长 emit 延迟
+          // （原 50ms < 确认点击的 prop 同步窗口 → plan 在 goal 确认前到达 → 卡不弹）
+          const delay = chatCount >= 2 ? 500 : 50
           setTimeout(() => {
             if (chatCount === 1) {
               streamCb?.({
-                type: 'content',
-                text: '好的。【目标确认：做一个能打开的网页射击游戏】',
+                type: 'tool-call',
+                toolCall: {
+                  name: 'propose_goal',
+                  args: { statement: '做一个能打开的网页射击游戏' },
+                },
               })
             } else if (chatCount === 2) {
               streamCb?.({
-                type: 'content',
-                text: '【执行方案】\n- game.js（主逻辑）\n- index.html（页面）\n先做能玩的第一版。',
+                type: 'tool-call',
+                toolCall: {
+                  name: 'propose_plan',
+                  args: {
+                    summary: '先做能玩的第一版',
+                    files: [
+                      { path: 'game.js', reason: '主逻辑' },
+                      { path: 'index.html', reason: '页面' },
+                    ],
+                  },
+                },
               })
             } else if (chatCount === 3) {
               // 确认执行后的强制轮：模型调 write 清单内文件
@@ -718,7 +741,7 @@ test('根因 3：点「确认执行」按钮 → 同事件 send 读到已确认�
               streamCb?.({ type: 'content', text: '完成，第一版能玩了。' })
             }
             streamCb?.({ type: 'done' })
-          }, 50)
+          }, delay)
           return { ok: true }
         },
         onStreamChunk: (
@@ -777,15 +800,20 @@ test('根因 3：点「确认执行」按钮 → 同事件 send 读到已确认�
   // 发送（不丢失）→ 每步必须等上一步用户消息实际落地（flush 完成）再继续，防排队覆盖丢消息
   await expect(page.getByRole('button', { name: '确认目标' })).toBeVisible({ timeout: 10000 })
   await page.getByRole('button', { name: '确认目标' }).click()
-  await expect(page.locator('.nf-chat__list')).toContainText('确认，目标清楚了', { timeout: 10000 })
-  // 模型【执行方案】→ 执行确认卡 → 点「确认执行」（同事件触发 send「确认，按方案执行」）
+  // 模型【执行方案】（propose_plan 工具）→ 执行确认卡 → 点「确认执行」（同事件触发 send「确认，按方案执行」）
   await expect(page.getByRole('button', { name: '确认执行' })).toBeVisible({ timeout: 10000 })
   await page.getByRole('button', { name: '确认执行' }).click()
   await expect(page.locator('.nf-chat__list')).toContainText('确认，按方案执行', { timeout: 10000 })
   // 修复①：确认执行后的那次 streamChat（chat#3）forceTool 必须为 true（修复前 prop 滞后 → false → 模型不被强制 → 纯文本停住）
-  // 修复③：清单内 write（game.js——【执行方案】块解析）自动放行 approved=true → 工具卡直接 done（无授权卡）
-  await expect(page.locator('.nf-toolcall--done')).toHaveCount(1, { timeout: 15000 })
+  // 修复③：清单内 write（game.js——方案清单）自动放行 approved=true → 工具卡直接 done（无授权卡）
+  // V1.5 S3 工具化：proposeGoal/proposePlan 亦为 done 卡——write 放行由 approvedFlags[0]=true 证明
   await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(0)
+  await expect(page.locator('.nf-toolcall--done').filter({ hasText: '写入 game.js' })).toHaveCount(
+    1,
+    {
+      timeout: 15000,
+    },
+  )
   const forceCalls = await page.evaluate(
     () => (window as unknown as { __nfForceToolCalls?: boolean[] }).__nfForceToolCalls ?? [],
   )
@@ -1564,12 +1592,28 @@ test('approve-files 多卡并存：连续 2 次批量授权 → 各自批准都�
             // 2026-08-14 更新：目标确认后才走批量授权（授权卡与目标确认卡互斥——目标未确认时
             // approve-files 卡不渲染——渲染保险 goalConfirmed 门）
             if (chatCount === 1) {
-              streamCb?.({ type: 'content', text: '好的。【目标确认：做一个网页游戏】' })
-            } else if (chatCount === 2) {
-              // #6 真机 2026-08-31（approve-files 硬序门）：方案提议先行——确认执行后才可批量授权
+              // V1.5 S3：目标提议走 propose_goal 工具（文本标记已降级——不产卡）
               streamCb?.({
-                type: 'content',
-                text: '【执行方案】\n- /test/a.js\n- /test/b.js\n等你确认。',
+                type: 'tool-call',
+                toolCall: {
+                  name: 'propose_goal',
+                  args: { statement: '做一个网页游戏' },
+                },
+              })
+            } else if (chatCount === 2) {
+              // V1.5 S3：方案提议走 propose_plan 工具
+              streamCb?.({
+                type: 'tool-call',
+                toolCall: {
+                  name: 'propose_plan',
+                  args: {
+                    summary: '做一个网页游戏',
+                    files: [
+                      { path: '/test/a.js', reason: 'x' },
+                      { path: '/test/b.js', reason: 'y' },
+                    ],
+                  },
+                },
               })
             } else if (chatCount === 3) {
               // 方案确认后：第一批 approve-files（清单 A）
@@ -1648,7 +1692,8 @@ test('approve-files 多卡并存：连续 2 次批量授权 → 各自批准都�
   await expect(page.getByRole('button', { name: '批准这批文件' })).toHaveCount(0, {
     timeout: 10000,
   })
-  await expect(page.locator('.nf-toolcall--done')).toHaveCount(2)
+  // V1.5 S3 工具化：proposeGoal/proposePlan 亦为 done 卡——批准链完成时总 done = 4（goal/plan/卡1/卡2）
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(4)
 })
 
 // 2026-08-14 用户实测卡死修复（timeline 0219a516）：模型连发消息时确认卡漂移消失——
@@ -1686,7 +1731,10 @@ test('执行确认卡不漂移：write 被拦后模型连发消息 → 卡固定
           setTimeout(() => {
             // chat#1：模型第一轮回复（目标确认标记 → 目标卡）；chat#2（确认目标后的 send）：连发——write（被拦）→ 说明「点确认卡」
             if (chatCount === 1) {
-              streamCb?.({ type: 'content', text: '好的。【目标确认：做一个网页游戏】' })
+              streamCb?.({
+                type: 'tool-call',
+                toolCall: { name: 'propose_goal', args: { statement: '做一个网页游戏' } },
+              })
             } else if (chatCount === 2) {
               streamCb?.({
                 type: 'tool-call',
@@ -1742,7 +1790,10 @@ test('执行确认卡不漂移：write 被拦后模型连发消息 → 卡固定
   await expect(page.getByRole('button', { name: '确认执行' })).toHaveCount(1)
   // 卡有效：点「确认执行」→ write 重新执行（approved=true 放行 → done）
   await page.getByRole('button', { name: '确认执行' }).click()
-  await expect(page.locator('.nf-toolcall--done')).toHaveCount(1, { timeout: 10000 })
+  // V1.5 S3 工具化：proposeGoal 亦为 done 卡——write 放行卡精确断言
+  await expect(
+    page.locator('.nf-toolcall--done').filter({ hasText: '写入 /test/game.js' }),
+  ).toHaveCount(1, { timeout: 10000 })
 })
 
 // 2026-08-15 问题 A 复现（用户实测 e6ae459d：approve-files 卡悬挂 → maybeContinue 停止条件只查最后一条消息
@@ -1786,9 +1837,18 @@ test('问题 A：approve-files 卡悬挂 → 模型续轮被拦后停续聊（�
             // （悬挂不批）→ chat#4 模型 write 被 pending 拦（修复前每轮都被拦 → 无限循环）；
             // chat#5（批准后恢复）：write 真正执行（approved）→ chat#6：模型纯文本收尾（自然停止）
             if (chatCount === 1) {
-              streamCb?.({ type: 'content', text: '好的。【目标确认：做一个网页游戏】' })
+              streamCb?.({
+                type: 'tool-call',
+                toolCall: { name: 'propose_goal', args: { statement: '做一个网页游戏' } },
+              })
             } else if (chatCount === 2) {
-              streamCb?.({ type: 'content', text: '【执行方案】\n- /test/game.js（游戏入口）' })
+              streamCb?.({
+                type: 'tool-call',
+                toolCall: {
+                  name: 'propose_plan',
+                  args: { summary: '执行方案', files: [{ path: '/test/game.js', reason: 'x' }] },
+                },
+              })
             } else if (chatCount === 3) {
               streamCb?.({
                 type: 'tool-call',
@@ -1860,7 +1920,7 @@ test('问题 A：approve-files 卡悬挂 → 模型续轮被拦后停续聊（�
   await page.waitForTimeout(2500)
   expect(
     await page.evaluate(() => (window as unknown as { __chatCount: number }).__chatCount),
-  ).toBe(4)
+  ).toBe(5)
   // 文件卡仍在（悬挂等待用户决策）→ 用户批准 → 恢复续聊：chat#5 write 真正执行（approved 放行）→
   // chat#6 模型纯文本收尾 → 自然停止（chatCount 定格 6——批准路径不被误伤，也无新一轮循环）
   await expect(page.getByRole('button', { name: '批准这批文件' })).toBeVisible()
@@ -1916,9 +1976,18 @@ test('P2：同 args bash 双卡并存 → 点第一张卡按 id 精确定位（�
             // chat#1：目标确认（目标卡）；chat#2：执行方案（执行确认卡——bash 需执行确认后才走授权，否则被 confirmGate 拦）；
             // chat#3+：模型调同 args bash（npm install——第一次 needApproval 弹卡#A，之后被 pending 拦为 done 卡#B）
             if (chatCount === 1) {
-              streamCb?.({ type: 'content', text: '好的。【目标确认：做一个网页游戏】' })
+              streamCb?.({
+                type: 'tool-call',
+                toolCall: { name: 'propose_goal', args: { statement: '做一个网页游戏' } },
+              })
             } else if (chatCount === 2) {
-              streamCb?.({ type: 'content', text: '【执行方案】\n- index.html' })
+              streamCb?.({
+                type: 'tool-call',
+                toolCall: {
+                  name: 'propose_plan',
+                  args: { summary: '执行方案', files: [{ path: 'index.html', reason: 'x' }] },
+                },
+              })
             } else {
               streamCb?.({
                 type: 'tool-call',
@@ -1989,8 +2058,8 @@ test('P2：同 args bash 双卡并存 → 点第一张卡按 id 精确定位（�
   // （修复前：patch 从后往前错位到卡#B → 卡#A 永不消失 → 按钮仍 1——断言失败）
   await page.locator('.nf-toolcall__approve').first().click()
   await expect(page.locator('.nf-toolcall__approve')).toHaveCount(0, { timeout: 10000 })
-  // 两张卡都 done（卡#A 批准 + 卡#B 被拦）
-  await expect(page.locator('.nf-toolcall--done')).toHaveCount(2)
+  // 两张卡都 done（卡#A 批准 + 卡#B 被拦——V1.5 S3：proposeGoal/proposePlan 亦为 done 卡 = 4）
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(4)
 })
 
 // ============================================================================
@@ -2039,7 +2108,10 @@ test('A-016 硬序门时序：方案未确认早调 approve-files 被拒（不�
             // chatCount：1=目标标记、2=approve-files（**早调**——方案未确认）、3=【执行方案】文本、
             // 4=approve-files（**正调**——确认执行后）、5=write（清单内——自动放行）；之后收尾
             if (chatCount === 1) {
-              streamCb?.({ type: 'content', text: '好的。【目标确认：做一个网页游戏】' })
+              streamCb?.({
+                type: 'tool-call',
+                toolCall: { name: 'propose_goal', args: { statement: '做一个网页游戏' } },
+              })
             } else if (chatCount === 2) {
               // 硬序门违规：goal 确认后不经【执行方案】+确认执行直接请求批量授权
               streamCb?.({
@@ -2050,9 +2122,13 @@ test('A-016 硬序门时序：方案未确认早调 approve-files 被拒（不�
                 },
               })
             } else if (chatCount === 3) {
+              // V1.5 S3：方案提议走 propose_plan 工具（goal 已确认——合法；确认执行后 approve-files 才放行）
               streamCb?.({
-                type: 'content',
-                text: '【执行方案】\n- /test/game.js（游戏主逻辑）\n等你确认。',
+                type: 'tool-call',
+                toolCall: {
+                  name: 'propose_plan',
+                  args: { summary: '执行方案', files: [{ path: '/test/game.js', reason: 'x' }] },
+                },
               })
             } else if (chatCount === 4) {
               streamCb?.({
@@ -2148,8 +2224,9 @@ test('A-016 硬序门时序：方案未确认早调 approve-files 被拒（不�
     timeout: 15000,
   })
   await page.getByRole('button', { name: '批准这批文件' }).click()
-  // 批准生效：chat#5 清单内 write 自动放行 done（无残留授权卡）——三张 done：早调拒绝卡 + 授权卡（已批准）+ write
-  await expect(page.locator('.nf-toolcall--done')).toHaveCount(3, { timeout: 15000 })
+  // 批准生效：chat#5 清单内 write 自动放行 done（无残留授权卡）——五张 done：proposeGoal + proposePlan
+  // + 早调拒绝卡 + 授权卡（已批准）+ write（V1.5 S3 工具化——协议工具亦为 done 卡）
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(5, { timeout: 15000 })
   await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(0)
   // 镜像同步证据（syncPlanConfirmed 调用序列）：goal 确认→false、plan 确认→true（L1 不可行——hook 行为在本用例锁定）
   const planCalls = await page.evaluate(

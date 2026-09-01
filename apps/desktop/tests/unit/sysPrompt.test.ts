@@ -17,7 +17,12 @@ describe('buildSysHint（提示词外置——完整性）', () => {
     expect(h.content).toContain('【执行方案】')
     expect(h.content).toContain('【已达成】')
     expect(h.content).toContain('approve-files')
-    expect(h.content).toContain('</candidates>')
+    // V1.5 S3：协议工具契约锚点（ask_user/propose_goal/propose_plan/report_completion——主通道）
+    expect(h.content).toContain('ask_user')
+    expect(h.content).toContain('propose_goal')
+    expect(h.content).toContain('propose_plan')
+    expect(h.content).toContain('report_completion')
+    expect(h.content).toContain('降级通道') // 文本标记降级声明（仅工具调用不可用时）
     expect(h.content).toContain('5173/5175')
     expect(h.content).toContain('start-server')
     expect(h.content).toContain('npm init')

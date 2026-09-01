@@ -77,6 +77,8 @@ export type TimelineEventType =
   | 'proposal.plan' // 方案提议解析结果（载荷：ok/files/summary——parse-error: reason 打点）
   | 'proposal.completion' // 完成声明解析结果（载荷：ok/summary/evidence 计数）
   | 'proposal.clarify' // ask_user 会话级澄清（V1.5 S1 Task 1.3——载荷：question/type/options）
+  // —— Protocol：协议工具化（V1.5——文本标记降级打点；S5 兜底率统计基线）——
+  | 'protocol.text_fallback' // 文本标记降级命中（载荷：marker/goal|plan|completion + content_snip——S3 打点）
   // —— Completion：完成对账（S4 登记——§3.5；证据不足诊断事件）——
   | 'completion.evidence_missing' // 完成声明被拒原因（载荷：ok/missing/unverifiable 清单——S4 打点）
   // —— 元事件（运行时可观测——诊断/状态）——
@@ -100,6 +102,7 @@ export interface TimelineEventSpec {
     | 'decision'
     | 'proposal'
     | 'completion'
+    | 'protocol'
   role?: 'user' | 'assistant' | 'system' | 'tool'
   detailKeys?: string[] // 期望载荷字段（宽松约定——不强制全有，用于 dev 校验提示）
   dedupe?: boolean // 同会话同 detail 只记一次（卡 shown 等）
@@ -194,6 +197,12 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
     domain: 'proposal',
     role: 'assistant',
     detailKeys: ['question', 'type', '?options'],
+  },
+  // V1.5 S3：文本标记降级命中（模型未走协议工具——done 分支探测到标记 → 打点 + 合成引导）
+  'protocol.text_fallback': {
+    domain: 'protocol',
+    role: 'system',
+    detailKeys: ['marker', '?content_snip'],
   },
   'completion.evidence_missing': {
     domain: 'completion',

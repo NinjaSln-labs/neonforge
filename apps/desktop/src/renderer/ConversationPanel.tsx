@@ -354,6 +354,9 @@ export default function ConversationPanel({
   // （Spike-4 实证「同响应混合协议+普通工具」：协议工具置 pending 等用户决策 → 普通工具无意义
   // ——挂起不执行，结果引导模型等确认后重试；deriveDecisionPoint 单决策点互斥语义的流式承载）
   const suspendRoundRef = useRef(false)
+  // V1.5 S3：文本标记降级引导计数——每会话最多 3 次自动引导（模型连续输出标记不改用工具则停，
+  // 防 silent 续聊空转；超过转用户可见提示——等用户输入/手动处理）
+  const textFallbackCountRef = useRef(0)
   const applyChunkRef = useRef<
     | ((c: {
         type: string
@@ -822,6 +825,9 @@ export default function ConversationPanel({
               { ok: true, summary: p.summary, files: p.files.map((f) => f.path) },
               'assistant',
             )
+            // V1.5 S3：工具路径方案清单并入 plannedFiles（与文本路径 parseExecutionPlan 等价——
+            // 任务完成度/清单内 write 放行的依赖源；trustPath 规范化与文本路径统一比较基准）
+            addPlannedFiles(p.files.map((f) => trustPath(f.path)))
             setPendingState('plan', { proposal: content.proposal, since: content.since })
             protocolResult = '执行方案提议已提交——等待用户确认执行'
           } else {
@@ -903,16 +909,51 @@ export default function ConversationPanel({
       // S7（A0 审校 P1-1——S3 触发权 DoD 补课）：触发判定 = 领域层 deriveDecisionPoint（不变量 2——
       // 决策点确定性纯函数——单源）；renderer 只做**信号翻译**（解析 proposals + 兜底 userRequested）——
       // pendingCardToShow 文本探测兼容壳生产调用移除（降级为仅测试/备用）
+      // V1.5 S3：文本标记降级——标记命中不再直接产卡（sysPrompt ⑬⑭⑮ 已改为工具契约主通道；
+      // 标记=降级通道——仅工具调用不可用时）。探测到标记 → 打 protocol.text_fallback + 记录降级标记，
+      // **不构造 proposals**（不置决策点）——done 分支末尾注入引导（合成 tool result + 引导文本）
+      // 推动模型下一轮改用 propose_* 工具（maybeContinue 一轮改道闭环）。S4 才退役解析器本身。
       const goalMark = content.match(/【目标确认[:：]\s*([^】]+)/)
-      const goalProposal =
-        goalMark || /【目标确认/.test(content)
+      const planMark = /【执行方案/.test(content)
+      const claimMark = /【已达成/.test(content)
+      const fallbackMarkers: string[] = []
+      if (goalMark || /【目标确认/.test(content)) {
+        fallbackMarkers.push('goal')
+        tlog(
+          'protocol.text_fallback',
+          { marker: 'goal', content_snip: content.slice(0, 80) },
+          'system',
+        )
+      }
+      if (planMark) {
+        fallbackMarkers.push('plan')
+        tlog(
+          'protocol.text_fallback',
+          { marker: 'plan', content_snip: content.slice(0, 80) },
+          'system',
+        )
+      }
+      if (claimMark) {
+        fallbackMarkers.push('completion')
+        tlog(
+          'protocol.text_fallback',
+          { marker: 'completion', content_snip: content.slice(0, 80) },
+          'system',
+        )
+      }
+      const fallbackDetected = fallbackMarkers.length > 0
+      // 降级路径不构造 proposals（文本标记不产卡）；正常路径（无标记）保留原 proposals 解析
+      // （userRequested 信号——write 拦截/方案征询——非标记产卡，与降级无冲突）
+      const goalProposal: GoalProposal | undefined = fallbackDetected
+        ? undefined
+        : goalMark
           ? {
-              statement: goalMark?.[1]?.trim() ?? (initialPrompt || content.trim()),
+              statement: goalMark[1]?.trim() ?? (initialPrompt || content.trim()),
               assumptions: extractAssumptionsSection(content),
             }
           : undefined
-      const planR = /【执行方案/.test(content) ? parsePlanProposal(content) : undefined
-      const claim = /【已达成/.test(content) ? parseCompletionClaim(content) : undefined
+      const planR = !fallbackDetected && planMark ? parsePlanProposal(content) : undefined
+      const claim = !fallbackDetected && claimMark ? parseCompletionClaim(content) : undefined
       const proposals: DecisionProposals = {
         ...(goalProposal ? { goal: goalProposal } : {}),
         ...(planR?.ok ? { plan: planR.proposal } : {}), // malformed/no-block → C3 不置决策点（诊断事件）
@@ -1110,6 +1151,28 @@ export default function ConversationPanel({
       streamingRef.current = { content: '', reasoning: '', toolCalls: [] }
       // V1.5 S2 A-017：本轮结束复位挂起标记（挂起只约束同轮兄弟调用——下一轮重新判定）
       suspendRoundRef.current = false
+      // V1.5 S3：文本标记降级闭环——标记命中（fallbackDetected）且未置决策点（pending 仍 none——
+      // 降级不产卡）→ 合成引导 tool result + 触发下一轮（模型收到「请改用 propose_* 工具」改用工具）。
+      // silent 续聊不注入用户可见消息（对齐 escalate 模式）；防死循环：降级引导每会话最多 3 次
+      // （textFallbackCountRef 计数——模型连续输出标记不改用工具则停止，避免自动续聊空转）
+      if (
+        fallbackDetected &&
+        stateRef.current.pending === 'none' &&
+        textFallbackCountRef.current < 3
+      ) {
+        textFallbackCountRef.current++
+        // 按标记类型给针对性引导（目标/方案/完成各自对应工具）
+        const guideByMarker = (m: string): string => {
+          if (m === 'goal')
+            return '请改用 propose_goal 工具提交目标提议（statement 一句话准确目标 + assumptions 列假设）'
+          if (m === 'plan')
+            return '请改用 propose_plan 工具提交执行方案（summary + files[{path,reason}] + assumptions + verification_plan）'
+          return '请改用 report_completion 工具提交完成声明（summary + verification[{command,output,passed}] + pending_questions）'
+        }
+        const firstMarker = fallbackMarkers[0]
+        inputRef.current = `【系统提示·非用户发言】检测到文本协议标记（${firstMarker}）——${guideByMarker(firstMarker)}`
+        void sendRef.current?.({ silent: true })
+      }
     }
     setMessages((prev) => {
       // 纯 UI 更新（无副作用——StrictMode 双调安全；onReasoning/setWorkingStage 已在事件层——Q3）

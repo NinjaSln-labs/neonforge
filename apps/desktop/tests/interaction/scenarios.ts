@@ -13,7 +13,8 @@ export function compose(...segments: StreamChunk[][][]): StreamChunk[][] {
 
 // ── 旅程步骤（各返回一段轮次脚本）──────────────────────────────────────────
 
-/** 澄清：模型提问 + <candidates> 结构化候选（1 轮） */
+/** 澄清：模型提问 + <candidates> 结构化候选（1 轮）——降级通道（S3 前文本协议；candidates 已迁移
+ * ask_user——旧 helper 保留供降级断言用） */
 export function goalClarify(question: string, candidates: string[]): StreamChunk[][] {
   const block = candidates.length
     ? `\n\n<candidates>\n${candidates.map((c) => `- ${c}`).join('\n')}\n</candidates>\n\n你点选或者直接回复序号都行。`
@@ -21,13 +22,32 @@ export function goalClarify(question: string, candidates: string[]): StreamChunk
   return [[chunk.content(`${question}${block}`), chunk.done()]]
 }
 
-/** 目标确认：模型输出【目标确认：】标记（1 轮） */
-export function goalConfirm(goal: string): StreamChunk[][] {
-  return [[chunk.content(`好的。【目标确认：${goal}】`), chunk.done()]]
+/** 目标确认：模型调 propose_goal 工具（1 轮——V1.5 S3 工具契约主通道；assumptions 可选） */
+export function goalConfirm(goal: string, assumptions: string[] = []): StreamChunk[][] {
+  return [[toolCall.proposeGoal(goal, assumptions), chunk.done()]]
 }
 
-/** 方案提议：模型输出【执行方案】清单（1 轮；files 为清单内文件行） */
-export function planPropose(files: string[], note = '等你确认。'): StreamChunk[][] {
+/** 目标确认（降级通道）：模型输出【目标确认：】文本标记（1 轮——S3 前形态；降级断言用） */
+export function goalConfirmText(goal: string, assumptions: string[] = []): StreamChunk[][] {
+  const block = assumptions.length
+    ? `\n关键假设：\n${assumptions.map((a) => `- ${a}`).join('\n')}`
+    : ''
+  return [[chunk.content(`好的。【目标确认：${goal}】${block}`), chunk.done()]]
+}
+
+/** 方案提议：模型调 propose_plan 工具（1 轮——V1.5 S3 工具契约主通道；
+ * files 为清单文件行（文本 helper 兼容：原「- 路径（原因）」行 → {path, reason}）；
+ * _note 保留（原文本 helper 的尾部征询语——工具形态下不进 summary，summary 用固定「执行方案」） */
+export function planPropose(files: string[], _note = '等你确认。'): StreamChunk[][] {
+  const fileObjs = files.map((f) => {
+    const m = f.match(/^(.+?)[（(]([^（）()]*)[）)]\s*$/)
+    return m ? { path: m[1].trim(), reason: m[2].trim() } : { path: f.trim(), reason: '' }
+  })
+  return [[toolCall.proposePlan('执行方案', fileObjs), chunk.done()]]
+}
+
+/** 方案提议（降级通道）：模型输出【执行方案】文本块（1 轮——S3 前形态；降级断言用） */
+export function planProposeText(files: string[], note = '等你确认。'): StreamChunk[][] {
   return [
     [
       chunk.content(`【执行方案】\n${files.map((f) => `- ${f}`).join('\n')}\n${note}`),
@@ -38,13 +58,13 @@ export function planPropose(files: string[], note = '等你确认。'): StreamCh
 
 /** 方案提议 + 批量授权请求：方案回合（等确认执行）→ 授权回合（2 轮）
  * #6 真机 2026-08-31（复验轮硬序门）：approve-files 只在确认执行后可调（sysPrompt ⑭——
- * 同轮请求属违规形态，main 侧 policy 拒绝）——场景助手同步改为两回合 */
+ * 同轮请求属违规形态，main 侧 policy 拒绝）——场景助手同步改为两回合
+ * V1.5 S3：方案回合走 propose_plan 工具（工具契约主通道） */
 export function planProposeWithApproval(
   files: Array<{ path: string; reason: string }>,
 ): StreamChunk[][] {
-  const lines = files.map((f) => `- ${f.path}`).join('\n')
   return [
-    [chunk.content(`【执行方案】\n${lines}\n等你确认。`), chunk.done()],
+    [toolCall.proposePlan('执行方案', files), chunk.done()],
     [toolCall.approveFiles('第一批', files), chunk.done()],
   ]
 }
@@ -59,9 +79,43 @@ export function executeBash(command: string): StreamChunk[][] {
   return [[toolCall.bash(command), chunk.done()]]
 }
 
-/** 完成声明：模型纯文本收尾（1 轮） */
+/** 完成声明：模型调 report_completion 工具（1 轮——V1.5 S3 工具契约主通道；
+ * text 兼容「【已达成】…验证证据/遗留问题」→ 解析为工具 args） */
 export function completeClaim(text: string): StreamChunk[][] {
-  return [[chunk.content(text), chunk.done()]]
+  const summary = text.replace(/【已达成】/g, '').trim()
+  // 从文本提取验证证据行（「- 命令（结果）」）与遗留问题行
+  const verification: Array<{ command: string; output?: string; passed: boolean }> = []
+  const pendingQuestions: string[] = []
+  let section: 'summary' | 'verification' | 'questions' = 'summary'
+  for (const line of summary.split('\n')) {
+    const t = line.trim()
+    if (/^验证证据[:：]/.test(t)) {
+      section = 'verification'
+      continue
+    }
+    if (/^遗留问题[:：]/.test(t)) {
+      section = 'questions'
+      continue
+    }
+    if (section === 'verification') {
+      const m = t.match(/^[-•]\s*(.+?)(?:[（(]([^（）()]*)[）)])?\s*$/)
+      if (m) verification.push({ command: m[1].trim(), passed: true })
+    } else if (section === 'questions' && /^[-•]\s*无[。.！!]?$/.test(t)) {
+      // 空遗留——不入清单
+    } else if (section === 'questions') {
+      pendingQuestions.push(t.replace(/^[-•]\s*/, ''))
+    }
+  }
+  return [
+    [
+      toolCall.reportCompletion(
+        summary.split('\n')[0]?.trim() || summary,
+        verification,
+        pendingQuestions,
+      ),
+      chunk.done(),
+    ],
+  ]
 }
 
 // ── 夹具（demo 注入——交付对账步骤的渲染数据）─────────────────────────────

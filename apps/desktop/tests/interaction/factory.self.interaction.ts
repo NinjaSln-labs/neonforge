@@ -32,6 +32,9 @@ test('T0 自测 1：根因3 重搭——轮次脚本 + forceTool/approved 捕获
 }) => {
   const h = await installMockBridge(page, {
     project: 'none',
+    // V1.5 S3 工具化时序：propose_plan 的 goalConfirmed prop 同步窗口拉长（同 S7-1 flaky 修复模式——
+    // 默认 50ms < Playwright 轮询间隔 → plan 卡渲染窗口被压缩；400ms 给确认 send 的轮询余量）
+    streamDelay: 400,
     script: compose(
       goalConfirm('做一个能打开的网页射击游戏'),
       planPropose(['game.js（主逻辑）', 'index.html（页面）'], '先做能玩的第一版。'),
@@ -50,7 +53,8 @@ test('T0 自测 1：根因3 重搭——轮次脚本 + forceTool/approved 捕获
   await page.getByRole('button', { name: '确认执行' }).click()
   await expectText(page.locator('.nf-chat__list'), '确认，按方案执行', 10000)
   // 确认执行后的强制轮：清单内 write 自动放行（approved=true → 直接 done，无授权卡）
-  await expectToolCallState(page, 'done', 1, 15000)
+  // V1.5 S3 工具化：proposeGoal/proposePlan 亦为 done 卡——write 放行由 approvedFlags[0]=true 证明
+  // （write 卡可能在确认前拦截轮出现——done 计数不精确断言；无授权卡 + 放行标记为核心语义）
   await expectToolCallState(page, 'need-approval', 0)
   expect((await h.forceToolCalls())[2]).toBe(true)
   expect((await h.approvedFlags())[0]).toBe(true)
@@ -68,7 +72,8 @@ test('T0 自测 2：S3 语义重写——manualEmit 手动推流 + 方案确认�
   await enterWorkspace(page)
   await sendChat(page, '批量整理文件')
   await h.emit([
-    chunk.content('好的。【目标确认：批量整理文件】【任务类型：B 文件操作】'),
+    // V1.5 S3：目标提议走 propose_goal 工具（工具契约主通道——manualEmit 精确轮次不受降级引导干扰）
+    toolCall.proposeGoal('批量整理文件'),
     toolCall.write('/test/a.txt', 'x'),
     toolCall.write('/test/c.txt', 'y'),
     chunk.done(),
@@ -78,11 +83,12 @@ test('T0 自测 2：S3 语义重写——manualEmit 手动推流 + 方案确认�
   await page.getByRole('button', { name: '确认目标' }).click()
   // 等 send 的流式消息创建（send 是 async——click 完成时消息可能未 push，emit 会被丢弃）
   await expectAssistantMsg(page, '搭档处理中', 5000)
-  // S3 场景：结构化方案块（C3——无文件行文本不弹卡）+ 方案文件 = write 目标
+  // S3 场景：方案提议走 propose_plan 工具（文件清单 = write 目标）
   await h.emit([
-    chunk.content(
-      '好的，方案如下，等你确认。\n【执行方案】\n- /test/a.txt（整理）\n- /test/c.txt（整理）',
-    ),
+    toolCall.proposePlan('批量整理文件', [
+      { path: '/test/a.txt', reason: '整理' },
+      { path: '/test/c.txt', reason: '整理' },
+    ]),
     chunk.done(),
   ])
   await expectVisible(page.getByRole('button', { name: '确认执行' }))
@@ -94,9 +100,13 @@ test('T0 自测 2：S3 语义重写——manualEmit 手动推流 + 方案确认�
     chunk.done(),
   ])
   // S3 语义：方案确认后清单内 write 自动放行（根因 3 修复——approved=true 直接 done，无授权卡）
-  await expectToolCallState(page, 'done', 4, 15000)
+  // V1.5 S3 工具化：proposeGoal/proposePlan 亦为 done 卡；write 卡出现两次（pending 拦截轮 + 放行轮）——
+  // 放行由 approvedFlags 证明（断言 ≥1 次 approved=true）
+  await expect(
+    page.locator('.nf-toolcall--done').filter({ hasText: '写入 /test/a.txt' }),
+  ).toHaveCount(2, { timeout: 15000 })
   await expectAbsent(page.locator('.nf-toolcall__approveall'))
-  expect((await h.approvedFlags())?.length).toBeGreaterThanOrEqual(1)
+  expect((await h.approvedFlags())?.filter(Boolean).length).toBeGreaterThanOrEqual(1)
 })
 
 test('T0 自测 3：P2 双卡重搭——approval all + defaultRound + 卡按 id 精确定位', async ({ page }) => {
@@ -129,7 +139,10 @@ test('T0 自测 3：P2 双卡重搭——approval all + defaultRound + 卡按 id
   // 点卡#A「允许执行」→ 按 id 精确定位：卡#A done、按钮归 0
   await page.locator('.nf-toolcall__approve').first().click()
   await expectCount(page.locator('.nf-toolcall__approve'), 0, 10000)
-  await expectToolCallState(page, 'done', 2)
+  // bash 卡#A 批准后 done（V1.5 S3：proposeGoal/proposePlan 亦为 done 卡——bash 授权卡精确断言）
+  await expect(
+    page.locator('.nf-toolcall--done').filter({ hasText: '执行 npm install' }),
+  ).toHaveCount(1, { timeout: 10000 })
   expect(await h.chatCount()).toBe(4)
 })
 
