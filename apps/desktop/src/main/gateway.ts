@@ -74,20 +74,37 @@ export class ModelRouter {
 }
 
 // A0 §2 边界判定：ToolRegistry 执行、Gateway 修复（4 轮）
+// V1.5 S2 A-018：round 驱动渐进修复——parse 失败不再单次即弃（spike 附录 B 承诺「parse 失败
+// 保留 rawArguments 重试 1 次」）。
+// - 解析基态（任意 round）：原样 parse + 双重序列化剥层（crush 教训——args 被 JSON 字符串包裹时
+//   parse 结果仍是 string → 再 parse 一层——spike-lib parseArguments 行为对齐）
+// - round 0 失败：最简尾逗号补全（V1 基础实现）——不可补则明确 null（交给调用方 round 1 重试）
+// - round 1+：杂质剥离（模型输出混入说明文本——提取首个 JSON 值到闭合括号）
+// - round >= 4 放弃（上限不变——防死循环）
 export function toolCallRepair(raw: unknown, round: number = 0): unknown | null {
   if (round >= 4) return null // 4 轮上限
   try {
-    if (typeof raw === 'string') return JSON.parse(raw)
+    if (typeof raw === 'string') {
+      const parsed = JSON.parse(raw)
+      return typeof parsed === 'string' ? JSON.parse(parsed) : parsed
+    }
     return raw
   } catch {
-    // 截断/畸形：尝试补全最简修复（V1 基础实现）
-    const s = String(raw)
-    const fixed = s.replace(/,\s*}$/, '}').replace(/,\s*\]$/, ']')
-    try {
-      return JSON.parse(fixed)
-    } catch {
-      return null
+    const s = String(raw).trim()
+    // round 0：截断/畸形最简补全（V1 基础实现）
+    if (round === 0) {
+      const fixed = s.replace(/,\s*}$/, '}').replace(/,\s*\]$/, ']')
+      if (fixed === s) return null // 无尾逗号可修——明确失败，交给调用方 round 1 更强策略重试
+      return toolCallRepair(fixed, round + 1)
     }
+    // round 1+：杂质剥离——提取首个 JSON 值到闭合括号（模型输出混入说明文本——格式漂移兜底）
+    const start = s.search(/[{[]/)
+    const end = Math.max(s.lastIndexOf('}'), s.lastIndexOf(']'))
+    if (start >= 0 && end > start) {
+      const sub = s.slice(start, end + 1)
+      if (sub !== s) return toolCallRepair(sub, round + 1)
+    }
+    return null
   }
 }
 
@@ -523,11 +540,30 @@ export class DeepSeekGateway {
       }
     }
     // 收集到的工具调用 → 修复 → 逐个发出（A0 边界：Gateway 修复，ToolRegistry 执行）
+    // V1.5 S2 A-018：repair 失败保留 rawArguments 重试 1 次（round 1 更强策略——双重序列化剥层/
+    // 杂质剥离）——静默丢弃会吞掉模型决策（附录 B S0 结论 6 承诺）。重试仍失败才放弃（打点原因）。
     for (const acc of toolAcc) {
       if (!acc.name) continue
-      const repaired = toolCallRepair(acc.arguments)
+      const repaired = toolCallRepair(acc.arguments, 0)
       if (repaired === null) {
-        console.log('[gateway] tool-call repair failed:', acc.name, acc.arguments.slice(0, 80))
+        const retried = toolCallRepair(acc.arguments, 1)
+        if (retried === null) {
+          console.log(
+            '[gateway] tool-call repair failed (after retry):',
+            acc.name,
+            acc.arguments.slice(0, 80),
+          )
+          continue
+        }
+        console.log(
+          '[gateway] tool-call repaired (retry):',
+          acc.name,
+          JSON.stringify(retried).slice(0, 120),
+        )
+        opts.onDelta({
+          type: 'tool-call',
+          toolCall: { name: acc.name, args: retried as Record<string, unknown> },
+        })
         continue
       }
       console.log('[gateway] tool-call emit:', acc.name, JSON.stringify(repaired).slice(0, 120))

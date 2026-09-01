@@ -344,6 +344,10 @@ export default function ConversationPanel({
   } | null>(null)
   const sessionRef = useRef(0) // 会话隔离：每次发送递增——旧会话事件/续聊失效
   const streamingSidRef = useRef(0) // 2026-08-04：当前活跃流 sid——停止（sid++）后旧流 chunk 忽略（applyChunk 只处理活跃流）
+  // V1.5 S2 A-017：同轮并存挂起标记——本轮流中出现协议工具后，同轮后续普通工具一律挂起
+  // （Spike-4 实证「同响应混合协议+普通工具」：协议工具置 pending 等用户决策 → 普通工具无意义
+  // ——挂起不执行，结果引导模型等确认后重试；deriveDecisionPoint 单决策点互斥语义的流式承载）
+  const suspendRoundRef = useRef(false)
   const applyChunkRef = useRef<
     | ((c: {
         type: string
@@ -490,16 +494,25 @@ export default function ConversationPanel({
     for (let k = messages.length - 1; k >= 0; k--) {
       const x = messages[k]
       if (x.role !== 'assistant') continue
+      // V1.5 S2 A-017：信号消息定位识别协议工具（propose_goal/propose_plan/report_completion）——
+      // 协议工具置 pending 后卡挂在该消息下（文本探测只认标记——协议路径消息无标记 → 卡不弹缺口）
+      const protoCalls = (x.toolCalls ?? []).map((c) => c.name)
       if (
         exec === -1 &&
         (x.content.includes('【执行方案') ||
+          protoCalls.includes('propose_plan') ||
           (x.toolCalls ?? []).some((c) =>
             isSideEffectAction(c.name, String(c.args?.command ?? '')),
           ))
       )
         exec = k
-      if (goal === -1 && /【目标确认[:：]/.test(x.content)) goal = k
-      if (achieve === -1 && x.content.includes('【已达成')) achieve = k
+      if (goal === -1 && (/【目标确认[:：]/.test(x.content) || protoCalls.includes('propose_goal')))
+        goal = k
+      if (
+        achieve === -1 &&
+        (x.content.includes('【已达成') || protoCalls.includes('report_completion'))
+      )
+        achieve = k
       if (exec !== -1 && goal !== -1 && achieve !== -1) break
     }
     return { exec, goal, achieve }
@@ -770,6 +783,12 @@ export default function ConversationPanel({
       // 每事件恰好一次（updater 双调安全——对齐「副作用移出 updater」惯例）。
       // 状态机只经 setPendingState 进入（不变量 1——决策是状态推进唯一输入）；resolution 走 S4 现有 verifyThenResolve 路径
       // （不变量 4：已解决卡条件 = verifyCompletion 通过——不直接置决策点）。
+      // V1.5 S2 A-017：协议工具出现即置挂起标记——同轮后续普通工具不再执行
+      // （suspendedRound 只对本轮生效——done 分支复位；与 setPendingState 后 pendingBlocked 语义不同：
+      // 协议工具置 pending 是**未来轮**的冻结，同轮兄弟调用需本标记显式挂起——deer-flow 丢弃语义）
+      if (PROTOCOL_TOOL_NAMES.has(chunk.toolCall.name)) {
+        suspendRoundRef.current = true
+      }
       if (PROTOCOL_TOOL_NAMES.has(chunk.toolCall.name)) {
         const d = decideProtocolToolCall(stateRef.current, chunk.toolCall.name, chunk.toolCall.args)
         if (d.action === 'pending') {
@@ -1079,6 +1098,8 @@ export default function ConversationPanel({
         }
       }
       streamingRef.current = { content: '', reasoning: '', toolCalls: [] }
+      // V1.5 S2 A-017：本轮结束复位挂起标记（挂起只约束同轮兄弟调用——下一轮重新判定）
+      suspendRoundRef.current = false
     }
     setMessages((prev) => {
       // 纯 UI 更新（无副作用——StrictMode 双调安全；onReasoning/setWorkingStage 已在事件层——Q3）
@@ -1240,6 +1261,29 @@ export default function ConversationPanel({
       // 用户决策未到——read/search 结果无意义——做了白做）。原条件只拦 side-effect——escalate 新轮
       // 在 pending 下仍可 read（轮级 confirmGate 无信号时不拦 + readonly 豁免）→ 与状态机语义不一致
       const pendingBlocked = stateRef.current.pending !== 'none'
+      // V1.5 S2 A-017：同轮并存挂起——本轮流中出现协议工具（suspendRoundRef）后，兄弟普通工具
+      // 一律挂起不执行（deer-flow 兄弟调用丢弃语义——Spike-4）。与 pendingBlocked 互补：
+      // pendingBlocked 拦的是**已置 pending 后**的新轮；本标记拦的是**同轮先行到达的协议工具之后**
+      // 的兄弟调用（协议工具置 pending 在事件层同步发生，但普通工具执行是异步副作用——竞态窗口）。
+      // 结果文本回灌模型「等确认后重试」——挂起不是拦截（不置 tool.blocked——决策点尚未弹卡
+      // 渲染时无卡可回；用户确认后 maybeContinue 的下一轮模型自然重试）
+      if (suspendRoundRef.current) {
+        setMessages((prev) => {
+          const last = prev[prev.length - 1]
+          if (!last || last.role !== 'assistant') return prev
+          const calls = (last.toolCalls ?? []).map((c) =>
+            c.name === tc.name && c.status === 'pending'
+              ? {
+                  ...c,
+                  status: 'done' as const,
+                  result: `${tc.name} 挂起——本轮已提交协议提议等待用户确认，确认后请重新执行`,
+                }
+              : c,
+          )
+          return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
+        })
+        return
+      }
       if (
         confirmGate ||
         pendingBlocked ||
@@ -2329,7 +2373,10 @@ export default function ConversationPanel({
                 达成确认（【已达成】→ 已解决/还要改）——模型标记=提议，用户按钮=生效（不再自报即确认） */}
             {m.role === 'assistant' &&
               m.status === 'done' &&
-              m.content &&
+              // V1.5 S2 A-017：协议工具轮消息 content 为空（只调工具无文本——propose_goal/propose_plan/
+              // report_completion 决策内容经 decisionContent 承载）→ 放宽 content 条件：含协议工具调用
+              // 的消息同样进入卡渲染（否则 pending 置位后卡永不弹——文本路径消息有标记故不受影响）
+              (m.content || (m.toolCalls ?? []).some((c) => PROTOCOL_TOOL_NAMES.has(c.name))) &&
               (() => {
                 // A-005：转换计数引用——stateVersion 变化触发重渲染（ref 非响应式——reject/confirm 后卡即时消失）
                 void stateVersion

@@ -33,6 +33,40 @@ export const toolCall = {
   approveFiles: (summary: string, files: Array<{ path: string; reason: string }>): StreamChunk =>
     chunk.tool('approve-files', { summary, files }),
   checkCapability: (dir = '/test'): StreamChunk => chunk.tool('check-capability', { dir }),
+  // V1.5 S2：协议工具（propose_goal/propose_plan/report_completion/ask_user——A-017 并存测试 + Task 2.1 派生路径断言共用）
+  proposeGoal: (statement: string, assumptions: string[] = []): StreamChunk =>
+    chunk.tool('propose_goal', { statement, ...(assumptions.length ? { assumptions } : {}) }),
+  proposePlan: (
+    summary: string,
+    files: Array<{ path: string; reason: string }>,
+    extra: { assumptions?: string[]; verification_plan?: string[] } = {},
+  ): StreamChunk =>
+    chunk.tool('propose_plan', {
+      summary,
+      files,
+      ...(extra.assumptions?.length ? { assumptions: extra.assumptions } : {}),
+      ...(extra.verification_plan?.length ? { verification_plan: extra.verification_plan } : {}),
+    }),
+  reportCompletion: (
+    summary: string,
+    verification: Array<{ command: string; output?: string; passed: boolean }>,
+    pendingQuestions: string[] = [],
+  ): StreamChunk =>
+    chunk.tool('report_completion', {
+      summary,
+      verification,
+      ...(pendingQuestions.length ? { pending_questions: pendingQuestions } : {}),
+    }),
+  askUser: (
+    question: string,
+    type: string,
+    options: Array<{ label: string; description?: string }> = [],
+  ): StreamChunk =>
+    chunk.tool('ask_user', {
+      question,
+      type,
+      ...(options.length ? { options } : {}),
+    }),
 }
 
 // 模型语义块（测试域 §2——与领域术语对齐的标记文本）

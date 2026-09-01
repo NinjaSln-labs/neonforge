@@ -685,3 +685,110 @@ test('#7-2：goal 已确认后模型正常推进（无标记）→ 不弹目标�
   // 方案卡在（pending='plan'）——没有额外的目标卡（确认目标按钮 count=0）
   await expect(page.getByRole('button', { name: '确认目标' })).toHaveCount(0)
 })
+
+// V1.5 S2 A-017：同轮并存挂起（Spike-4 实证「同响应混合协议+普通工具」——deer-flow 兄弟调用丢弃语义）
+// 协议工具与普通工具同轮到达：协议工具置 pending（弹确认卡等用户决策）→ 兄弟普通工具**挂起**
+// （不执行、无授权卡——done + 引导文本「等确认后重试」）；确认后下一轮模型自然重试。
+test('A-017-1：goal 协议工具与 read 同轮并存 → read 挂起不执行（无授权卡 + 结果引导重试）', async ({
+  page,
+}) => {
+  await installMockBridge(page, {
+    project: 'none',
+    // 逃生舱：read execute 调用计数——断言 read 确实未执行（挂起=跳过副作用）
+    extraInit: `
+      let readExec = 0
+      window.__readExec = () => readExec
+      const origExec = bridge.tools.execute
+      bridge.tools.execute = async (name, args, opts) => {
+        if (name === 'read') readExec++
+        return origExec(name, args, opts)
+      }
+    `,
+    script: compose([
+      // 同轮：propose_goal + read（Spike-4 实证形态——「先看文件再给目标」）
+      [
+        toolCall.proposeGoal('做一个待办应用', ['单用户本地使用']),
+        toolCall.read('/test/app.ts'),
+        chunk.done(),
+      ],
+    ]),
+  })
+  await startFromScratch(page, '做个待办应用')
+  // 协议工具置 pending → 目标卡弹出
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await expectText(page.locator('.nf-confirmcard'), '做一个待办应用', 5000)
+  // 兄弟 read 挂起：不执行（无授权卡）——read 调用计数 0
+  await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(0)
+  await expect(
+    await page.evaluate(() => (window as unknown as { __readExec: () => number }).__readExec()),
+  ).toBe(0)
+  // read 卡可见（done 状态——挂起结果文本引导模型等确认后重试）
+  await expectText(page.locator('.nf-chat__list'), 'read 挂起', 5000)
+  // 确认目标 → 卡消失（决策点走完——挂起不残留）
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expect(page.getByRole('button', { name: '确认目标' })).toHaveCount(0, { timeout: 10000 })
+})
+
+test('A-017-2：plan 协议工具与 write 同轮并存 → write 挂起（副作用工具同受挂起——不做白做）', async ({
+  page,
+}) => {
+  await installMockBridge(page, {
+    project: 'none',
+    extraInit: `
+      let writeExec = 0
+      window.__writeExec = () => writeExec
+      const origExec = bridge.tools.execute
+      bridge.tools.execute = async (name, args, opts) => {
+        if (name === 'write') writeExec++
+        return origExec(name, args, opts)
+      }
+    `,
+    script: compose(goalConfirm('做一个待办应用'), [
+      // 同轮：propose_plan + write（goal 已确认——协议工具合法 pending:plan；write 是兄弟副作用）
+      [
+        toolCall.proposePlan('单文件落地首页', [{ path: '/test/app.ts', reason: '核心' }]),
+        toolCall.write('/test/app.ts', 'x'),
+        chunk.done(),
+      ],
+    ]),
+  })
+  await startFromScratch(page, '做个待办应用')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  // 协议工具置 pending → 方案卡弹出（三要素渲染）
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  await expectText(page.locator('.nf-confirmcard'), '/test/app.ts（核心）', 5000)
+  // 兄弟 write 挂起：不执行（write 调用计数 0 + 无授权卡）
+  await expect(
+    await page.evaluate(() => (window as unknown as { __writeExec: () => number }).__writeExec()),
+  ).toBe(0)
+  await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(0)
+  await expectText(page.locator('.nf-chat__list'), 'write 挂起', 5000)
+  // 确认执行 → 挂起不残留
+  await page.getByRole('button', { name: '确认执行' }).click()
+  await expect(page.getByRole('button', { name: '确认执行' })).toHaveCount(0, { timeout: 10000 })
+})
+
+test('A-017-3：reject（乱序）协议工具与普通工具并存 → 普通工具挂起（协议分支结果=引导重走顺序）', async ({
+  page,
+}) => {
+  await installMockBridge(page, {
+    project: 'none',
+    script: compose([
+      // goal 未确认：propose_plan（reject——引导先 propose_goal）+ read（兄弟普通工具）
+      [
+        toolCall.proposePlan('单文件落地', [{ path: '/test/app.ts', reason: '核心' }]),
+        toolCall.read('/test/app.ts'),
+        chunk.done(),
+      ],
+    ]),
+  })
+  await startFromScratch(page, '做个待办应用')
+  // 无目标卡（协议分支 reject——不置 pending）
+  await expect(page.getByRole('button', { name: '确认目标' })).toHaveCount(0, { timeout: 10000 })
+  // 协议工具 reject 文本回灌（引导先 propose_goal）
+  await expectText(page.locator('.nf-chat__list'), 'propose_goal', 5000)
+  // 兄弟 read 挂起（不执行——无授权卡）
+  await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(0)
+  await expectText(page.locator('.nf-chat__list'), 'read 挂起', 5000)
+})
