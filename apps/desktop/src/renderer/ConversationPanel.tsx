@@ -20,6 +20,7 @@ import {
   isDoneLike,
   parseExecutionPlan,
   summarizeCapability,
+  // V1.5-S4 退役——goalFallbackTrigger 仅剩兜底探测（text_fallback 路径），见 ADR-009
   goalFallbackTrigger,
 } from '../domain/agentLoop'
 // 2026-08-14 会话状态机（Task 聚合——A0 §2/§3/§4/§5）：状态单一来源 + 转换唯一入口（session-state-machine.md S2）
@@ -43,7 +44,9 @@ import {
   type CompletionClaim,
 } from '../domain/conversationState'
 // S2 提议解析（S3 接线：done 分支结构化解析 → decisionContent 快照——卡渲染唯一来源）
+// V1.5-S4 退役——parsePlanProposal/parseCompletionClaim 仅剩兜底调用；extractAssumptionsSection 为假设提取（非解析），见 ADR-009
 import { parsePlanProposal, extractAssumptionsSection } from '../domain/planProposalParser'
+// V1.5-S4 退役——parseCompletionClaim 仅剩兜底调用，见 ADR-009
 import { parseCompletionClaim } from '../domain/completionClaimParser'
 import { resolveSandboxPath } from '../domain/sandboxPath'
 // 2026-08-15 Q1a+Q2：状态机转换单点封装（写路径唯一入口）
@@ -950,10 +953,13 @@ export default function ConversationPanel({
         : goalMark
           ? {
               statement: goalMark[1]?.trim() ?? (initialPrompt || content.trim()),
+              // V1.5-S4 退役标注——extractAssumptionsSection 为假设提取（文本节提取，非解析），见 ADR-009
               assumptions: extractAssumptionsSection(content),
             }
           : undefined
+      // V1.5-S4 退役标注——兜底调用（受 fallbackDetected 守卫：无降级标记才解析），见 ADR-009
       const planR = !fallbackDetected && planMark ? parsePlanProposal(content) : undefined
+      // V1.5-S4 退役标注——兜底调用（受 fallbackDetected 守卫），见 ADR-009
       const claim = !fallbackDetected && claimMark ? parseCompletionClaim(content) : undefined
       const proposals: DecisionProposals = {
         ...(goalProposal ? { goal: goalProposal } : {}),
@@ -1010,6 +1016,7 @@ export default function ConversationPanel({
             for (let k = messages.length - 1; k >= 0; k--) {
               const mm = messages[k]
               if (mm.role !== 'assistant' || !/【执行方案/.test(mm.content)) continue
+              // V1.5-S4 退役标注——孤儿提议回收兜底（回搜历史消息解析），见 ADR-009
               const r = parsePlanProposal(mm.content)
               if (r.ok) {
                 reused = r.proposal
@@ -1042,7 +1049,7 @@ export default function ConversationPanel({
             since: new Date().toISOString(),
           })
         } else if (cardToShow === 'resolution') {
-          // 完成声明 → parseCompletionClaim 结构化解析 → S4：已解决卡条件 = verifyCompletion 通过
+          // V1.5-S4 退役标注——完成声明兜底解析 → 已解决卡条件 = verifyCompletion 通过
           // （不变量 4 接线——不再直接置决策点；异步系统核验（V1a 代跑 + V1b 派生）后判定）
           if (claim) {
             tlog(
@@ -2494,6 +2501,7 @@ export default function ConversationPanel({
                   !goalConfirmed &&
                   isLastAssistant &&
                   !hasCandidates &&
+                  // V1.5-S4 退役标注——消息列表渲染兜底探测，见 ADR-009
                   goalFallbackTrigger(m.content)
                 // 2026-08-14 S2b（缝隙 4/5）：触发统一走状态机派生 pendingCardToShow（渲染与 maybeContinue 停模型同源）——
                 // 「等确认」语义命中即弹 + 停；探索期（只读 bash/无等确认语义）不弹（冒烟实证：探索期弹卡 → 模型困惑）
