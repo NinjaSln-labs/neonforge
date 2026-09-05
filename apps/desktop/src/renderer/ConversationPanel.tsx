@@ -748,6 +748,12 @@ export default function ConversationPanel({
         // 完整 system 角色渲染归 V2 会话快照
         inputRef.current = `【系统对账·非用户发言】${guide}`
         void sendRef.current()
+      } else {
+        // A-015（V1.5-S4）：对账失败用户侧可见提示——无回填引导（或达防死循环上限停止自动 send）时，
+        // 注入消息不存在 → 状态栏非侵入提示（对齐 needs-human 模式），否则用户不知道对账未通过
+        onActionPromiseHint?.(
+          '证据对账未通过——正在要求搭档补充证据（不再自动重试，可手动继续对话）',
+        )
       }
       // ≥2 次：停止自动引导（防死循环——引导消息已注入过一次，用户可见；等用户输入或手动处理）
     }

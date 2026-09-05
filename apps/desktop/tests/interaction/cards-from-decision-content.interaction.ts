@@ -353,6 +353,9 @@ test('S4-3：系统复核失败推翻自报 → 不弹卡 + 引导 → 重输出
   await page.getByRole('button', { name: '确认执行' }).click()
   // 引导后重输出 → 第二次复核通过 → 卡出现（第一次失败不弹卡的证据 = evidence_missing 打点）
   await expectVisible(page.getByRole('button', { name: '已解决' }), 15000)
+  // A-015（V1.5-S4）：对账失败用户侧可见提示——引导注入消息在对话内用户可见
+  // （断言置于卡出现后——插在确认与卡之间会干扰 mockBridge 轮次推进时序，实测 3/3 失败）
+  await expectVisible(page.locator('.nf-msg--user', { hasText: '系统对账' }), 8000)
   // evidence_missing 打点（第一次复核失败——missing 含 verification:ls dist）
   const tlogs = await page.evaluate(() => (window as unknown as { __tlogs2: unknown[] }).__tlogs2)
   const ev = tlogs.find((l) => (l as { type: string }).type === 'completion.evidence_missing') as
