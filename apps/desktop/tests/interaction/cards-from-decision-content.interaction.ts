@@ -1162,3 +1162,48 @@ test('S3-4：ask_user 选项按钮化——点选发送 + 已回应禁用（输�
   await sendChat(page, '就待办清单吧')
   await expectText(page.locator('.nf-msg--user').last(), '就待办清单吧', 10000)
 })
+
+// A-015（V1.5-S4）：对账失败防死循环上限（≥2 次停止自动引导）→ 状态栏用户可见提示
+// （引导注入消息不存在——用户不知道对账未通过；状态栏非侵入提示对齐 needs-human 模式）
+test('S4-3b：对账持续失败达引导上限 → 状态栏提示可见（A-015 用户侧提示）', async ({ page }) => {
+  await installMockBridge(page, {
+    project: 'none',
+    // extraInit 逃生舱：V1a mock（核验恒失败——verifyCompletion 永不通过）
+    extraInit: `
+      bridge.completion = {
+        verify: async (commands) => Object.fromEntries(commands.map((c) => [c, { ok: false, output: '失败' }])),
+      }
+    `,
+    script: compose(
+      goalConfirm('完成待办应用'),
+      planPropose(['/test/app.ts（核心）']),
+      [[toolCall.write('/test/app.ts', 'x'), chunk.done()]],
+      // 引导 send 每次触发下一轮——3 轮 completion：第 1/2 次自动引导（计数 1/2），第 3 次达上限 → 状态栏提示
+      [
+        [
+          toolCall.reportCompletion('完成', [{ command: 'ls dist', passed: true }], []),
+          chunk.done(),
+        ],
+      ],
+      [
+        [
+          toolCall.reportCompletion('完成', [{ command: 'ls dist', passed: true }], []),
+          chunk.done(),
+        ],
+      ],
+      [
+        [
+          toolCall.reportCompletion('完成', [{ command: 'ls dist', passed: true }], []),
+          chunk.done(),
+        ],
+      ],
+    ),
+  })
+  await startFromScratch(page, '做个待办应用')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  await page.getByRole('button', { name: '确认执行' }).click()
+  // 达防死循环上限 → 状态栏提示可见（不再自动重试）
+  await expectVisible(page.getByText(/证据对账未通过/), 20000)
+})
