@@ -2810,6 +2810,43 @@ export default function ConversationPanel({
                       </span>
                       <span className="nf-toolcall__args">{fmtToolArgs(tc)}</span>
                       {tc.result && <span className="nf-toolcall__result">{tc.result}</span>}
+                      {/* V1.5 S4（S3-Sp-3）：ask_user 选项按钮化——点选文本替代序号（输入框主通道不变——
+                          打字与点选等价）；本消息之后出现用户消息 = 已回应 → 按钮转已回复态（同 candidates 语义） */}
+                      {tc.name === 'ask_user' &&
+                        tc.status === 'done' &&
+                        Array.isArray(tc.args?.options) &&
+                        (tc.args.options as Array<{ label?: string; description?: string }>)
+                          .length > 0 &&
+                        (() => {
+                          const replied = messages.slice(i + 1).some((mm) => mm.role === 'user')
+                          const NUMS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧']
+                          return (
+                            <div className="nf-candidates" role="group" aria-label="选择一项">
+                              {(
+                                tc.args.options as Array<{ label?: string; description?: string }>
+                              ).map((o, j) => (
+                                <button
+                                  key={j}
+                                  type="button"
+                                  disabled={replied}
+                                  className={`nf-candidates__btn${replied ? ' nf-candidates__btn--chosen' : ''}`}
+                                  onClick={() => {
+                                    inputRef.current = String(o.label ?? '')
+                                    void sendRef.current()
+                                  }}
+                                >
+                                  <span className="nf-candidates__idx" aria-hidden="true">
+                                    {NUMS[j] ?? `${j + 1}.`}
+                                  </span>
+                                  <span>
+                                    {o.label}
+                                    {o.description ? `：${o.description}` : ''}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          )
+                        })()}
                       {/* 2026-08-05 体验反馈：详细输出折叠（默认不展示代码——需要时展开查看） */}
                       {tc.status === 'done' && tc.rawResult && (
                         <details className="nf-toolcall__detail">

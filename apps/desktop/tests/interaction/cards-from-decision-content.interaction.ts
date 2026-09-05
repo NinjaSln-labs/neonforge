@@ -13,6 +13,7 @@ import {
   planProposeWithApproval,
   startFromScratch,
   sendChat,
+  enterWorkspace,
 } from './scenarios'
 import { expectVisible, expectText } from '../helpers/assertions'
 
@@ -1131,4 +1132,33 @@ test('V1.5-S3-1：文本标记降级——【目标确认】标记 → 不弹卡
   expect(
     await page.evaluate(() => (window as unknown as { __nfChatCount: number }).__nfChatCount),
   ).toBe(2)
+})
+
+// V1.5 S4 Task 4.6（S3-Sp-3）：ask_user 选项按钮化——options 渲染为可点选按钮（复用 candidates 样式），
+// 点选 → 对应文本作为用户消息发送（输入框主通道不变——打字与点选等价）；已回应后按钮转已回复态
+test('S3-4：ask_user 选项按钮化——点选发送 + 已回应禁用（输入备选通道不变）', async ({ page }) => {
+  const h = await installMockBridge(page, {
+    project: 'open',
+    manualEmit: true,
+  })
+  await enterWorkspace(page)
+  await sendChat(page, '做什么样的应用')
+  await h.emit([
+    toolCall.askUser('想要哪种应用？', 'approach_choice', [
+      { label: '待办清单', description: '简单易上手' },
+      { label: '记账本', description: '带统计' },
+    ]),
+    chunk.done(),
+  ])
+  // 选项按钮可见（复用 nf-candidates 样式）
+  await expectVisible(page.locator('.nf-candidates__btn', { hasText: '待办清单' }), 10000)
+  await expectVisible(page.locator('.nf-candidates__btn', { hasText: '记账本' }), 5000)
+  // 点选 → 对应文本作为用户消息发送
+  await page.locator('.nf-candidates__btn', { hasText: '待办清单' }).click()
+  await expectText(page.locator('.nf-msg--user').last(), '待办清单', 10000)
+  // 已回应 → 按钮转已回复态（禁用）
+  await expect(page.locator('.nf-candidates__btn--chosen').first()).toBeVisible({ timeout: 10000 })
+  // 备选通道：文本输入仍可发送（点选后继续打字——新决策点）
+  await sendChat(page, '就待办清单吧')
+  await expectText(page.locator('.nf-msg--user').last(), '就待办清单吧', 10000)
 })
