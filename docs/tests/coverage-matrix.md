@@ -133,6 +133,18 @@
 
 > **e2e 模拟器域**（`2603afa` DDD 重构——设计 `docs/design/e2e-simulator-domain-design.md`）：领域层纯函数 **L1 可测 44 用例**（e2eSim.test.ts——信号派生 15/收敛守卫 5/决策策略 14/旅程 5/验证 5）；收敛守卫（原 #9 `9604016` 域对象化——探索容忍/停滞判死）；真机复验依赖 NF_TEST_KEY（记录于 issue #9）。
 
+## 表 9：V1.5 协议工具 ↔ 决策点 ↔ 断言三向（2026-09-05 S4 新增）
+
+| 协议工具 | 决策点 | 入口断言（schema/契约） | 逻辑断言（判定） | 渲染断言（卡） |
+|----------|--------|------------------------|------------------|----------------|
+| `propose_goal` | pending:goal | `protocolTools.test.ts` PROTOCOL_TOOL_DEFS 四工具 schema 存在性 | `protocolTools.test.ts` decideProtocolToolCall goal 分支（乱序矩阵——goal 未确认分支） | `cards-from-decision-content.interaction.ts` S3-3 goal 卡内容来自 decisionContent 快照 |
+| `propose_plan` | pending:plan | `protocolTools.test.ts` PROTOCOL_TOOL_DEFS schema | `protocolTools.test.ts` decideProtocolToolCall plan 分支（goal 未确认 → reject 引导/已确认 → pending；A-016 硬序门） | `cards-from-decision-content.interaction.ts` S3-1 plan 卡三要素渲染 |
+| `report_completion` | pending:resolution（证据门） | `protocolTools.test.ts` PROTOCOL_TOOL_DEFS schema | `protocolTools.test.ts` decideProtocolToolCall completion 分支（双未确认/plan 未确认 reject）+ `verifyCompletionSystem.test.ts` 证据门 | `cards-from-decision-content.interaction.ts` S4-1a/S4-3 已解决卡（证据不足不弹 + 系统复核推翻） |
+| `ask_user` | 无（clarify 不置决策点） | `protocolTools.test.ts` PROTOCOL_TOOL_DEFS schema + getDef('ask_user') | `protocolTools.test.ts` decideProtocolToolCall ask_user 分支（任何 state → clarify） | `cards-from-decision-content.interaction.ts` S3-4 选项按钮化（点选发送/已回应禁用/文本备选） |
+| `protocol.text_fallback` | 降级通道（打点不产卡） | `timeline.ts` 事件注册表（dev 校验——timelineEvents L1 既有机制） | `ConversationPanel.tsx` done 分支降级路径（fallbackDetected 守卫——标记命中不产卡） | L3 `cards-from-decision-content.interaction.ts` V1.5-S3-1 一轮改道（text_fallback 打点 + 引导后工具轮） |
+
+> 断言锚点经 grep 实证（S4 Task 4.3 收口）：`protocolTools.test.ts` 63 处命中、L3 卡渲染场景 11 处命中、text_fallback 由 L3 timeline 捕获承载（无独立 L1 文件）。
+
 ## 缺口清单
 
 - **无**（A-003 已关闭——proposal.* 事件断言 c91079e 补齐；A-010 已关闭——S4 V1a integration 7 用例 + L3 4 场景；S3/S4/S5 行为全部有测试承载——S5 新增 progressGuarantee.test.ts 12 用例 + agentLoop 5 + L3 2 场景；D3 全行为有测试承载——plannedFilesStore 12 + tools 1 + L3 D3-1/2；#8 引导有 L1 断言锁定；#9 e2e 脚本无单测基建——真机复验跟踪中）
