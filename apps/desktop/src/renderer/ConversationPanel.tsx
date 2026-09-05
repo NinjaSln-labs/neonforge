@@ -57,6 +57,8 @@ import { useToolApproval } from './useToolApproval'
 // 2026-08-07 无阶段重构 S4：buildAdvanceInstruction/stageFlow import 删除（advanceChat 随阶段体系移除）
 // 2026-08-05 方案 3：结构化候选按钮——<candidates> 块解析/剥离（点选文本替代序号，消除模型序号解析漂移）
 import { parseCandidates, stripCandidates, stripTags } from './candidates'
+// A-019（S4-St-1）：候选按钮共享组件——candidates 降级通道 + ask_user 选项按钮单源
+import { CandidateButtons, type CandidateOption } from './CandidateButtons'
 // 2026-08-03 视觉审计 P1-6：内联 SVG 图标（替换 emoji 图标）
 import {
   IconBrain,
@@ -2432,33 +2434,18 @@ export default function ConversationPanel({
                 // 候选之后出现用户消息（无论点选还是打字）= 用户已回应决策点 → 候选完成
                 // 点选路径：chosen 标记已选；输入路径：replied 标记已回复（两条路径都解除 pending）
                 const replied = messages.slice(i + 1).some((mm) => mm.role === 'user')
-                const NUMS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧']
                 return (
-                  <div className="nf-candidates" role="group" aria-label="选择一项">
-                    {opts.map((o, j) => {
-                      const chosen = chosenCandidates[i] === j
-                      const done = chosen || replied
-                      return (
-                        <button
-                          key={j}
-                          type="button"
-                          disabled={done}
-                          className={`nf-candidates__btn${done ? ' nf-candidates__btn--chosen' : ''}`}
-                          onClick={() => {
-                            // 2026-08-08 B 修复：点击后标记已选（决策点走完——按钮变已选态，不再可点）
-                            setChosenCandidates((p) => ({ ...p, [i]: j }))
-                            inputRef.current = o
-                            void sendRef.current()
-                          }}
-                        >
-                          <span className="nf-candidates__idx" aria-hidden="true">
-                            {chosen ? '✓' : replied ? '·' : (NUMS[j] ?? `${j + 1}.`)}
-                          </span>
-                          <span>{chosen ? `${o}（已选）` : replied ? `${o}（已回复）` : o}</span>
-                        </button>
-                      )
-                    })}
-                  </div>
+                  <CandidateButtons
+                    options={opts.map((o) => ({ label: o }))}
+                    replied={replied}
+                    chosen={chosenCandidates[i]}
+                    onPick={(label, j) => {
+                      // 2026-08-08 B 修复：点击后标记已选（决策点走完——按钮变已选态，不再可点）
+                      setChosenCandidates((p) => ({ ...p, [i]: j }))
+                      inputRef.current = label
+                      void sendRef.current()
+                    }}
+                  />
                 )
               })()}
             {/* 2026-08-07 确认/拒绝卡片（用户决策——行业共识：显式结构化确认，替代确认词匹配；对话流内嵌——像授权卡）
@@ -2815,36 +2802,22 @@ export default function ConversationPanel({
                       {tc.name === 'ask_user' &&
                         tc.status === 'done' &&
                         Array.isArray(tc.args?.options) &&
-                        (tc.args.options as Array<{ label?: string; description?: string }>)
-                          .length > 0 &&
                         (() => {
+                          // A-019：共享 CandidateButtons（原 ask_user 内联按钮块——S4-St-1 去重）
+                          const opts = (tc.args.options as CandidateOption[]).filter(
+                            (o) => o && typeof o.label === 'string',
+                          )
+                          if (opts.length === 0) return null
                           const replied = messages.slice(i + 1).some((mm) => mm.role === 'user')
-                          const NUMS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧']
                           return (
-                            <div className="nf-candidates" role="group" aria-label="选择一项">
-                              {(
-                                tc.args.options as Array<{ label?: string; description?: string }>
-                              ).map((o, j) => (
-                                <button
-                                  key={j}
-                                  type="button"
-                                  disabled={replied}
-                                  className={`nf-candidates__btn${replied ? ' nf-candidates__btn--chosen' : ''}`}
-                                  onClick={() => {
-                                    inputRef.current = String(o.label ?? '')
-                                    void sendRef.current()
-                                  }}
-                                >
-                                  <span className="nf-candidates__idx" aria-hidden="true">
-                                    {NUMS[j] ?? `${j + 1}.`}
-                                  </span>
-                                  <span>
-                                    {o.label}
-                                    {o.description ? `：${o.description}` : ''}
-                                  </span>
-                                </button>
-                              ))}
-                            </div>
+                            <CandidateButtons
+                              options={opts}
+                              replied={replied}
+                              onPick={(label) => {
+                                inputRef.current = label
+                                void sendRef.current()
+                              }}
+                            />
                           )
                         })()}
                       {/* 2026-08-05 体验反馈：详细输出折叠（默认不展示代码——需要时展开查看） */}
