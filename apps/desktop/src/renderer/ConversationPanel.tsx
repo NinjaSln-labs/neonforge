@@ -1910,7 +1910,7 @@ export default function ConversationPanel({
           'system',
         )
         loopGuardSuffix =
-          '\n\n【系统对账·非用户发言】对话出现循环：用户文本回复不能替代结构化确认。请停止重复提议，等待用户点击界面上的确认卡；如需用户选择，请用 ask_user 提供明确选项。'
+          '\n\n【系统对账·非用户发言】对话出现循环：用户文本回复不能替代结构化确认。请检查目标提议（propose_goal）是否已提交——若尚未提交（或已被用户拒绝），必须重新调用 propose_goal 工具提交目标提议，否则界面上不会出现确认卡；提交后停止输出，等待用户点击确认卡。如需用户选择，请用 ask_user 提供明确选项。'
         console.log('[adr010] loop guard injected')
       } else if (dialogueVerdict === 'forced-clarify') {
         // 二级（强制澄清卡）：系统直接置 system_clarify 决策点（不经模型）——本回合不再调用模型
