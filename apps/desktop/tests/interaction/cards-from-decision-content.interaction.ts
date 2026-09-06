@@ -121,22 +121,16 @@ test('S3-3b：无 decisionContent 不弹卡——纯文本含标记但解析失�
   await expect(page.getByRole('button', { name: '确认执行' })).toHaveCount(0)
 })
 
-test('S3-4：拒绝超限回退——连续拒绝 3 次 → 澄清提示（不弹卡轰炸）', async ({ page }) => {
+// ADR-010 阈值覆盖（9f70c0b）：rejectStreak 1 → loop-guard 注入、2 → 强制澄清卡——
+// 旧 §4.1「3 连拒 → .nf-reject-overflow」被强制卡先行截断（overflow 提示保留为更深层兜底：
+// 拒绝 system_clarify 卡等路径 streak 仍可到 3）
+test('S3-4：拒绝超限回退——连续拒绝 2 次 → 强制澄清卡（不弹卡轰炸）', async ({ page }) => {
   await installMockBridge(page, {
     project: 'none',
     // 拒绝按钮 onClick 自动 send（inputRef+sendRef）驱动轮次——不需要测试内 sendChat
     script: compose(
       goalConfirm('做一个待办清单应用'),
-      // V1.5 S3：三次方案重提议走 propose_plan 工具（重复提议幂等覆盖——rejectStreak 累积）
-      [
-        [
-          toolCall.proposePlan('待办清单应用', [{ path: 'src/App.tsx', reason: '核心组件' }], {
-            assumptions: ['使用 React 19'],
-            verification_plan: ['npx tsc --noEmit'],
-          }),
-          chunk.done(),
-        ],
-      ],
+      // V1.5 S3：方案重提议走 propose_plan 工具（重复提议幂等覆盖——rejectStreak 累积）
       [
         [
           toolCall.proposePlan('待办清单应用', [{ path: 'src/App.tsx', reason: '核心组件' }], {
@@ -161,13 +155,13 @@ test('S3-4：拒绝超限回退——连续拒绝 3 次 → 澄清提示（不�
   // 确认目标 → 方案卡
   await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
   await page.getByRole('button', { name: '确认目标' }).click()
-  // 拒绝方案 3 次（每次拒绝自动 send「方案需要调整」→ 模型重提议 → 卡重现）
-  for (let i = 0; i < 3; i++) {
-    await expectVisible(page.getByRole('button', { name: '确认执行' }), 15000)
-    await page.getByRole('button', { name: '修改方案' }).click()
-  }
-  // 第 3 次拒绝后：对话区出现澄清提示（rejectStreak ≥3——§4.1 超限回退）
-  await expectText(page.locator('.nf-reject-overflow'), '连续拒绝了 3 次', 10000)
+  // 第 1 次拒绝（自动 send「方案需要调整」→ loop-guard 注入 → 模型重提议 → 卡重现）
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 15000)
+  await page.getByRole('button', { name: '修改方案' }).click()
+  // 第 2 次拒绝 → rejectStreak=2 → ADR-010 强制澄清卡（本回合不再调模型——卡轰炸被截断）
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 15000)
+  await page.getByRole('button', { name: '修改方案' }).click()
+  await expectVisible(page.locator('.nf-forcedcard'), 15000)
 })
 
 // S4 完成证据对账场景（设计 §6 S4——已解决卡条件 = verifyCompletion 通过；证据不足不弹卡 + 回填引导）
