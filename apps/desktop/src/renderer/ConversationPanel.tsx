@@ -729,7 +729,13 @@ export default function ConversationPanel({
     const v = verifyCompletion(claim, systemState)
     if (v.ok) {
       evidenceGuideCountRef.current = 0 // 证据通过 → 计数重置
-      // 核验期间可能已有其它决策点置位（竞态防护——pending 非 none 不覆盖）
+      // 核验期间可能已有其它决策点置位（竞态防护——pending 非 none 不覆盖）。
+      // A-022（S5 真机 2026-09-06）：直接丢弃 = resolution 不可达死锁（真机实证：核验通过瞬间
+      // 残留授权卡 pending 占用 → return → 之后再无重试，forceTool 循环不止）。修正：等 pending
+      // 清空后置位（上限 20s——超时放弃走 A-015 用户侧提示路径），不覆盖其它决策点语义不变
+      for (let i = 0; i < 40 && stateRef.current.pending !== 'none'; i++) {
+        await new Promise((r) => setTimeout(r, 500))
+      }
       if (stateRef.current.pending !== 'none') return
       setPendingState('resolution', { proposal: claim, since: new Date().toISOString() })
     } else {
