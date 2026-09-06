@@ -246,20 +246,27 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   grid-template-areas: none;
 }
 
-.nf-config { width: 360px; display: flex; flex-direction: column; gap: var(--nf-space-3); }
-.nf-config__title { font-size: 28px; font-weight: 700; }
-.nf-config__sub { color: var(--nf-text-dim); font-size: var(--nf-font-md); margin-bottom: var(--nf-space-2); }
+/* 2026-09-07 用户决策：配置页对齐启动页品牌效果——渐变标题 + 光晕背景 + 大输入/渐变 CTA */
+.nf-config { width: 420px; display: flex; flex-direction: column; gap: var(--nf-space-3); }
+.nf-config__title {
+  font-size: 44px; font-weight: 700; letter-spacing: -1px; margin-top: 0; margin-bottom: 0;
+  background: linear-gradient(90deg, #6366f1, #a855f7, #ff8a00);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent; text-align: center;
+}
+.nf-config__sub { color: var(--nf-text-dim); font-size: 15px; font-weight: 500; margin: 6px 0 0; text-align: center; }
+.nf-config__lead { color: var(--nf-text-tertiary); font-size: var(--nf-font-sm); margin: 0 0 var(--nf-space-2); text-align: center; }
 
 .nf-config__input {
   background: var(--nf-bg-panel); color: var(--nf-text);
-  border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md);
-  padding: var(--nf-space-3); font-size: var(--nf-font-md);
+  border: 1px solid var(--nf-border); border-radius: 12px;
+  padding: 14px var(--nf-space-3); font-size: var(--nf-font-md);
   outline: none; width: 100%;
 }
-.nf-config__input:focus { border-color: var(--nf-accent); }
+.nf-config__input:focus { border-color: var(--nf-accent); box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.22); }
 .nf-config__input--error { border-color: #ef4444; }
 
-.nf-config__err { color: #ef4444; font-size: var(--nf-font-sm); padding: var(--nf-space-2); }
+.nf-config__err { color: #ef4444; font-size: var(--nf-font-sm); padding: var(--nf-space-2); text-align: center; }
 .nf-config__banner {
   display: flex; align-items: center; justify-content: space-between; gap: var(--nf-space-2);
   background: var(--nf-accent-soft); border-radius: var(--nf-radius-sm);
@@ -271,15 +278,27 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   cursor: pointer; font-size: var(--nf-font-sm); text-decoration: underline; flex-shrink: 0;
 }
 
+/* CTA 对齐启动页主按钮：渐变 + 光晕（nf-start__cta--primary 同语言） */
 .nf-config__cta {
-  background: var(--nf-accent-strong); color: #fff;
-  border: none; border-radius: var(--nf-radius-md);
-  padding: var(--nf-space-3); font-size: var(--nf-font-md); cursor: pointer;
+  border: none; border-radius: 10px;
+  padding: 12px 32px; font-size: 15px; font-weight: 600; cursor: pointer;
+  background-image: linear-gradient(90deg, var(--nf-accent-strong), #7c3aed);
+  color: #fff; box-shadow: 0 0 14px rgba(99, 102, 241, 0.28);
 }
-.nf-config__cta:disabled { opacity: 0.6; cursor: default; }
+.nf-config__cta:hover { box-shadow: 0 0 20px rgba(99, 102, 241, 0.42); }
+.nf-config__cta:disabled { opacity: 0.6; cursor: default; box-shadow: none; }
 
-.nf-config__why { color: var(--nf-text-dim); font-size: var(--nf-font-sm); cursor: pointer; }
-.nf-config__why-text { padding: var(--nf-space-2) 0; color: var(--nf-text-dim); }
+/* details 对齐启动页场景芯片：胶囊 + hover 点亮 */
+.nf-config__why {
+  color: var(--nf-text-dim); font-size: var(--nf-font-sm); cursor: pointer;
+  background: var(--nf-bg-elevated); border: 1px solid var(--nf-border);
+  border-radius: 999px; padding: 7px 14px;
+}
+.nf-config__why:hover { border-color: var(--nf-accent); color: var(--nf-accent); }
+.nf-config__why[open] { border-radius: 12px; color: var(--nf-text); }
+.nf-config__why summary { list-style: none; }
+.nf-config__why summary::-webkit-details-marker { display: none; }
+.nf-config__why-text { padding: var(--nf-space-2) 0 0; color: var(--nf-text-dim); }
 
 /* 启动页（D5 屏幕1）——2026-08-03 品牌化：渐变品牌 + 双 CTA
    2026-08-04 方案 A：真实输入框（占位轮播）+ 场景卡（点击预填）+ 二选一芯片（D0 §3.2/屏幕1） */
@@ -784,21 +803,22 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-toolcall--pending .nf-toolcall__icon { animation: nf-breath-blue 1.6s ease-in-out infinite; }
 .nf-toolcall--done .nf-toolcall__icon { animation: nf-node-in 200ms ease-out; }
 
-/* 2026-08-03 v30 D2：启动页深空氛围——靛蓝/紫 ambient 光晕（克制：柔和不抢品牌渐变签名） */
-.nf-app--start { position: relative; overflow: hidden; }
-.nf-app--start::before {
+/* 2026-08-03 v30 D2：启动页深空氛围——靛蓝/紫 ambient 光晕（克制：柔和不抢品牌渐变签名）
+   2026-09-07：配置页（第一屏）复用同一氛围——品牌语言一致 */
+.nf-app--start, .nf-app--config { position: relative; overflow: hidden; }
+.nf-app--start::before, .nf-app--config::before {
   content: ''; position: absolute; pointer-events: none;
   width: 720px; height: 540px; left: 50%; top: 18%;
   transform: translateX(-50%);
   background: radial-gradient(ellipse at center, rgba(99, 102, 241, 0.14), transparent 65%);
 }
-.nf-app--start::after {
+.nf-app--start::after, .nf-app--config::after {
   content: ''; position: absolute; pointer-events: none;
   width: 560px; height: 420px; left: 50%; bottom: -10%;
   transform: translateX(-50%);
   background: radial-gradient(ellipse at center, rgba(168, 85, 247, 0.10), transparent 65%);
 }
-.nf-app--start .nf-start { position: relative; z-index: 1; }
+.nf-app--start .nf-start, .nf-app--config .nf-config { position: relative; z-index: 1; }
 
 /* v30 D1/D2：prefers-reduced-motion 降级（动效关闭——光晕是静态，保留） */
 @media (prefers-reduced-motion: reduce) {

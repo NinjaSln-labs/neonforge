@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 // 首次配置页（D0 §3.1）：粘贴 Key → 验证 → 启动页；失败红边/断网横幅/跳过
+// 2026-09-07 用户决策：视觉对齐启动页（渐变品牌标题 + 光晕背景 + 大输入框/渐变 CTA）——第一屏同一品牌语言
 export default function ConfigPage({ onDone }: { onDone: () => void }) {
   const [key, setKey] = useState('')
   const [status, setStatus] = useState<'idle' | 'validating' | 'fail' | 'network'>('idle')
@@ -36,7 +37,8 @@ export default function ConfigPage({ onDone }: { onDone: () => void }) {
   return (
     <div className="nf-config">
       <h1 className="nf-config__title">NeonForge</h1>
-      <p className="nf-config__sub">需要 Command Code API Key</p>
+      <p className="nf-config__sub">说出问题，拿到结果</p>
+      <p className="nf-config__lead">连接你的 AI 搭档——Key 只存你本地</p>
 
       <input
         className={`nf-config__input${status === 'fail' ? ' nf-config__input--error' : ''}`}
