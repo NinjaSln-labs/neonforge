@@ -97,3 +97,25 @@ describe('deriveDiffs（S4 V1b——planned/produced 系统派生）', () => {
     expect(diffs.length).toBe(1)
   })
 })
+
+// A-021（S5 真机 2026-09-06）：plannedFiles 相对/绝对双形态登记（propose_plan 注册时 rootPath 未注入
+// → 相对 'index.html'；approve-files 批准 → 绝对）——精确匹配恒 miss → resolution 不可达死锁
+//（真机实证：report_completion 连续 3 次 evidence_missing: diff:planned-not-produced）
+describe('A-021 deriveDiffs 路径形态对账', () => {
+  it('相对 planned × 绝对 produced → 末段边界匹配命中（不再恒 miss）', () => {
+    const diffs = deriveDiffs(
+      new Set(['/Users/sin/x/task/index.html', 'index.html']),
+      new Set(['/Users/sin/x/task/index.html']),
+    )
+    expect(diffs).toHaveLength(1)
+    expect(
+      deriveDiffs(new Set(['index.html']), new Set(['/Users/sin/x/task/index.html'])),
+    ).toHaveLength(1)
+  })
+  it('真未产出 → 仍 miss（不放开对账面）', () => {
+    expect(
+      deriveDiffs(new Set(['index.html', 'style.css']), new Set(['/Users/sin/x/index.html'])),
+    ).toHaveLength(1)
+    expect(deriveDiffs(new Set(['src/a/b.js']), new Set(['/x/other/b.js']))).toHaveLength(0)
+  })
+})

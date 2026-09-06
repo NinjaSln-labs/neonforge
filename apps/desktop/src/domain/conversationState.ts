@@ -687,9 +687,23 @@ export function verifyCompletion(
 }
 
 /** V1b diff 对账系统派生（S4 单源——renderer/main 共用）：planned ∩ produced 匹配项。
- * verifyCompletion 消费语义：匹配数 < planned 数 → missing diff:planned-not-produced（系统核对，非模型自述） */
+ * verifyCompletion 消费语义：匹配数 < planned 数 → missing diff:planned-not-produced（系统核对，非模型自述）
+ * A-021（S5 真机 2026-09-06）：plannedFiles 存在相对/绝对双形态登记（propose_plan 注册时 rootPath 尚未
+ * 注入 → trustPath 保留相对 'index.html'；approve-files 批准 → 绝对）——精确匹配恒 miss → 相对项永远
+ * not-produced → resolution 不可达（真机实证：report_completion 连续 3 次 evidence_missing 死锁）。
+ * 修正：精确匹配外加路径末段边界匹配（'/…/index.html' 以 '/index.html' 结尾 = 同一文件）。 */
 export function deriveDiffs(planned: Set<string>, produced: Set<string>): Array<{ path: string }> {
-  return [...produced].filter((p) => planned.has(p)).map((path) => ({ path }))
+  return [...produced].filter((p) => matchesPlannedPath(p, planned)).map((path) => ({ path }))
+}
+
+/** A-021：produced 产物 p 是否命中 planned 清单——精确相等或末段边界匹配（'/a/b.js' 命中 planned 'b.js'） */
+export function matchesPlannedPath(p: string, planned: Set<string>): boolean {
+  if (planned.has(p)) return true
+  for (const q of planned) {
+    if (q.includes('/') || !q) continue // 仅相对单段文件名参与末段匹配（多级相对路径仍需精确——防误吞）
+    if (p.endsWith('/' + q)) return true
+  }
+  return false
 }
 
 // —— 证据不足回填引导（S4——§6 S4 + §3.3：完成声明被拒 → 引导文本注入模型重新输出带证据声明） ——
