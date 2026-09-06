@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { parseUnifiedDiff, applyDiffToFile, snapshot, revert } from '../../src/main/applyDiff'
+import {
+  parseUnifiedDiff,
+  applyDiffToFile,
+  snapshot,
+  revert,
+  cleanupSnapshots,
+} from '../../src/main/applyDiff'
 
 const TMP = '/tmp/nf-unit-test'
 
@@ -93,5 +99,24 @@ describe('applyDiff（L1 领域逻辑——纯函数不变量）', () => {
     const r = revert(path.join(TMP, 'no-snapshot.txt'))
     expect(r.ok).toBe(false)
     expect(r.error).toContain('无快照')
+  })
+
+  // UAT #6（P3）：任务边界清理写前快照——nf-bak 不残留工作区
+  it('cleanupSnapshots：删除已登记快照 + 清空登记（无快照文件静默跳过）', () => {
+    const f1 = path.join(TMP, 'c1.txt')
+    const f2 = path.join(TMP, 'c2.txt')
+    writeFileSync(f1, 'one', 'utf-8')
+    writeFileSync(f2, 'two', 'utf-8')
+    const bak1 = snapshot(f1)
+    const bak2 = snapshot(f2)
+    expect(existsSync(bak1!)).toBe(true)
+    expect(existsSync(bak2!)).toBe(true)
+    // 模拟「快照已被外部删掉」——静默跳过不崩
+    unlinkSync(bak2!)
+    const r = cleanupSnapshots()
+    expect(r.removed).toBe(1)
+    expect(existsSync(bak1!)).toBe(false)
+    // 重复清理 = 空操作
+    expect(cleanupSnapshots().removed).toBe(0)
   })
 })

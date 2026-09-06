@@ -1,6 +1,6 @@
 // applyDiff：统一 diff 解析 + 应用 + 快照回滚（05 交付包执行层 A1）
 // V1 支持：行级新增/删除/替换（统一 diff 格式）；复杂变更（重命名/二进制）返回不支持
-import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'node:fs'
 
 export interface DiffChange {
   line: number // 目标行号（1-based——原始文件）
@@ -87,15 +87,36 @@ export function applyDiffToFile(
 }
 
 // 写前快照（<file>.nf-bak——原内容）
+// 登记快照路径（cleanupSnapshots 任务边界清理用——UAT #6：nf-bak 残留无清理/对账不覆盖）
+const snapshotPaths = new Set<string>()
+
 export function snapshot(filePath: string): string | null {
   try {
     if (!existsSync(filePath)) return null
     const bak = filePath + '.nf-bak'
     writeFileSync(bak, readFileSync(filePath, 'utf-8'), { mode: 0o600 })
+    snapshotPaths.add(bak)
     return bak
   } catch {
     return null
   }
+}
+
+// 任务边界清理：删除本任务全部写前快照（已解决/新目标确认后回滚语义终结——nf-bak 不再残留工作区）
+export function cleanupSnapshots(): { removed: number } {
+  let removed = 0
+  for (const bak of snapshotPaths) {
+    try {
+      if (existsSync(bak)) {
+        unlinkSync(bak)
+        removed++
+      }
+    } catch {
+      /* 单个清理失败不阻断——下轮任务边界再试 */
+    }
+  }
+  snapshotPaths.clear()
+  return { removed }
 }
 
 // 从快照恢复

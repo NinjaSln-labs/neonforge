@@ -1075,6 +1075,17 @@ describe('buildEvidenceBackfill（S4——完成声明被拒的回填引导文�
     expect(text).toContain('未经系统核验')
   })
 
+  // UAT #4（P2）：模型把工具调用当 verification 证据 ×3——回填引导显式排除
+  it('引导文本显式声明工具调用不算验证证据', () => {
+    const text = buildEvidenceBackfill({
+      ok: false,
+      missing: ['verification:ls src'],
+      unverifiable: [],
+    })
+    expect(text).toContain('工具调用记录')
+    expect(text).toContain('只代跑只读 shell 命令')
+  })
+
   it('ok=true（无缺失）→ 空引导（不注入）', () => {
     expect(buildEvidenceBackfill({ ok: true, missing: [], unverifiable: [] })).toBe('')
   })

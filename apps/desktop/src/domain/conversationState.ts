@@ -797,7 +797,7 @@ export function buildEvidenceBackfill(v: {
   if (v.missing.length > 0) lines.push(`证据不足：${v.missing.join('；')}`)
   if (v.unverifiable.length > 0) lines.push(`以下证据未经系统核验：${v.unverifiable.join('；')}`)
   lines.push(
-    '请补充可核验的验证证据（只读验证命令 + 括号内写真实结果）后重新输出【已达成】声明；不确定事项写入「遗留问题：」节（不影响对账）。',
+    '请补充可核验的验证证据（只读验证命令 + 括号内写真实结果）后重新输出【已达成】声明；不确定事项写入「遗留问题：」节（不影响对账）。工具调用记录（read/write/edit/open 等）不算验证证据——系统只代跑只读 shell 命令。',
   )
   return lines.join('\n')
 }

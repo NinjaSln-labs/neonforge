@@ -1,6 +1,12 @@
 // IPC handlers：renderer 经 preload → 主进程 gateway/configStore/workspace
 import { app, BrowserWindow, ipcMain } from 'electron'
-import { parseUnifiedDiff, applyDiffToFile, snapshot, revert } from './applyDiff.js'
+import {
+  parseUnifiedDiff,
+  applyDiffToFile,
+  snapshot,
+  revert,
+  cleanupSnapshots,
+} from './applyDiff.js'
 import { gateway, classifyGatewayError } from './gateway.js'
 import { configStore } from './configStore.js'
 import { workspace } from './workspace.js'
@@ -213,6 +219,12 @@ ipcMain.handle('session:plan-confirmed', (_e, v: boolean) => {
 ipcMain.handle('planned-files:reset', () => {
   const data = getPlannedFilesStore().reset()
   syncPlanApprovedFromStore()
+  // UAT #6：任务边界清理写前快照（.nf-bak）——回滚语义随任务终结，备份不再残留工作区
+  try {
+    cleanupSnapshots()
+  } catch {
+    /* 清理失败不影响边界重置 */
+  }
   return data
 })
 ipcMain.handle(
