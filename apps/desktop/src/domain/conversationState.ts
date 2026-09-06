@@ -86,7 +86,13 @@ export interface ActionAttribute {
 }
 
 /** 决策点种类 */
-export type DecisionKind = 'goal' | 'plan' | 'approval' | 'resolution'
+export type DecisionKind = 'goal' | 'plan' | 'approval' | 'resolution' | 'system_clarify'
+
+/** ADR-010 强制澄清卡内容（系统触发——不经模型；underlying 指向被循环阻塞的真实决策点） */
+export interface SystemClarifyProposal {
+  underlying: 'goal' | 'plan' | 'resolution'
+  statement: string // 被阻塞决策点的摘要（目标 statement / 方案 summary / 完成声明 summary）
+}
 
 // ============================================================================
 // 会话级单一 PENDING（A0 §3.2——所有卡统一「等用户决策」；来源只是卡类型）
@@ -96,7 +102,7 @@ export type PendingKind = 'none' | DecisionKind
 /** 决策点内容快照（决策点呈现与审计的唯一来源——run4「确认了什么无法追溯」解法） */
 export interface DecisionContent {
   kind: DecisionKind
-  proposal?: GoalProposal | PlanProposal | CompletionClaim // 结构化内容
+  proposal?: GoalProposal | PlanProposal | CompletionClaim | SystemClarifyProposal // 结构化内容
   approval?: ApprovalRequest // 授权请求内容
   since: string // 决策点出现时间（诊断）
 }
@@ -147,6 +153,18 @@ export function userDecided(
 ): ConversationState {
   if (!decision.confirm && !decision.reason) {
     throw new TypeError('拒绝决策必须携带 RejectReason（不变量 8）')
+  }
+  // ADR-010：system_clarify 是系统触发的包装决策点——确认/拒绝直接委派 underlying（真实决策点）
+  if (point === 'system_clarify') {
+    const dc = s.decisionContent
+    const underlying =
+      dc?.kind === 'system_clarify'
+        ? (dc.proposal as SystemClarifyProposal | undefined)?.underlying
+        : undefined
+    if (!underlying) {
+      throw new TypeError('system_clarify 决策缺少 underlying（快照缺失/损坏）')
+    }
+    return userDecided(s, underlying, decision)
   }
   const next: ConversationState = { ...s, pending: 'none', decisionContent: undefined }
   // ADR-010：任何用户决策都终结「无进展对话」状态——两类计数清零
@@ -259,14 +277,14 @@ export function approvalDecided(
 // 兼容壳（S3 由 userDecided 直连取代——renderer 现状消费；缺省拒绝原因仅兼容旧调用，新代码一律显式带原因）
 export function userConfirmed(
   s: ConversationState,
-  point: 'goal' | 'plan' | 'resolution',
+  point: 'goal' | 'plan' | 'resolution' | 'system_clarify',
 ): ConversationState {
   return userDecided(s, point, { confirm: true })
 }
 
 export function userRejected(
   s: ConversationState,
-  point: 'goal' | 'plan' | 'resolution',
+  point: 'goal' | 'plan' | 'resolution' | 'system_clarify',
   reason: RejectReason,
 ): ConversationState {
   // A-006：reason 必传——不变量 8 真身（userDecided throw）不得被兼容壳缺省绕过

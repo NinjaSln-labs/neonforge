@@ -24,7 +24,7 @@ import {
 } from '../domain/conversationState'
 import { deriveStateEvents } from '../domain/timeline'
 
-export type ConfirmPoint = 'goal' | 'plan' | 'resolution'
+export type ConfirmPoint = 'goal' | 'plan' | 'resolution' | 'system_clarify'
 
 export interface UseConversationStateOpts {
   // 领域事件发出（应用层接 IPC——落盘时间线）

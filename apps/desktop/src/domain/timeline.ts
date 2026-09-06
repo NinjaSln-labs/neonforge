@@ -36,6 +36,10 @@ export type TimelineEventType =
   // —— Conversation 聚合：会话级单一 PENDING（06 §3.2 核心）——
   | 'session.pending_set' // 卡弹出 → 会话进入 PENDING（载荷：kind）
   | 'session.pending_cleared' // 用户决策 → PENDING 解除
+  // —— Dialogue 聚合：无进展对话强制澄清（ADR-010——UAT-Sim A-024/A-025）——
+  | 'dialogue.loop_guard' // 一级介入：loop guard 指令注入模型（载荷：rounds）
+  | 'dialogue.forced_clarify' // 二级介入：系统强制澄清卡弹出（载荷：underlying）
+  | 'dialogue.needs_human' // 三级兜底：强制卡也被拒 → 人工接管（载荷：reason）
   // —— PlannedFiles：宿主边界（06 §1.2）——
   | 'plan.approved' // approve-files 批准（载荷：files 新增清单——追加语义）
   | 'plan.rejected' // 写清单外被拒（载荷：file/approvedList——拒绝带边界）
@@ -132,6 +136,9 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
   'task.achievement_rejected': { domain: 'task', role: 'system', detailKeys: ['point'] },
   'session.pending_set': { domain: 'session', role: 'system', detailKeys: ['kind'] },
   'session.pending_cleared': { domain: 'session', role: 'system', detailKeys: ['kind'] },
+  'dialogue.loop_guard': { domain: 'session', role: 'system', detailKeys: ['rounds'] },
+  'dialogue.forced_clarify': { domain: 'session', role: 'system', detailKeys: ['underlying'] },
+  'dialogue.needs_human': { domain: 'session', role: 'system', detailKeys: ['reason'] },
   'plan.approved': { domain: 'plan', role: 'system', detailKeys: ['files'] },
   'plan.rejected': { domain: 'plan', role: 'tool', detailKeys: ['file'] },
   'tool.requested': { domain: 'tool', role: 'tool', detailKeys: ['name', 'args'] },

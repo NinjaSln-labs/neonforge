@@ -1262,3 +1262,65 @@ describe('无进展对话检测（ADR-010 T1/T2）', () => {
     expect(detectUnproductiveDialogue(initialState(), 39)).toBeNull()
   })
 })
+
+// ============================================================================
+// ADR-010：system_clarify 包装决策点（确认/拒绝委派 underlying）
+// ============================================================================
+describe('system_clarify 决策点（ADR-010）', () => {
+  const clarifyState = (
+    underlyingState: ConversationState,
+    statement: string,
+  ): ConversationState => ({
+    ...underlyingState,
+    pending: 'system_clarify',
+    decisionContent: {
+      kind: 'system_clarify',
+      proposal: { underlying: 'goal', statement },
+      since: new Date().toISOString(),
+    },
+  })
+
+  it('确认 → 委派 underlying=goal 确认且计数清零', () => {
+    let s = initialState()
+    s = userDecided(s, 'goal', { confirm: true })
+    s = setPending(s, 'system_clarify')
+    s = {
+      ...s,
+      decisionContent: {
+        kind: 'system_clarify',
+        proposal: { underlying: 'plan', statement: '重做页面' },
+        since: '2026-01-01',
+      },
+    }
+    s = userDecided(s, 'system_clarify', { confirm: true })
+    expect(s.planConfirmed).toBe(true)
+    expect(s.pending).toBe('none')
+    expect(s.pendingRepeatCount).toBe(0)
+  })
+  it('拒绝不带 reason → throw（不变量 8）', () => {
+    const s = clarifyState(initialState(), 'x')
+    // @ts-expect-error 缺 reason
+    expect(() => userDecided(s, 'system_clarify', { confirm: false })).toThrow(/RejectReason/)
+  })
+  it('拒绝带 reason → 委派 underlying 拒绝', () => {
+    let s = initialState()
+    s = userDecided(s, 'goal', { confirm: true })
+    s = setPending(s, 'system_clarify')
+    s = {
+      ...s,
+      decisionContent: {
+        kind: 'system_clarify',
+        proposal: { underlying: 'goal', statement: 'x' },
+        since: '2026-01-01',
+      },
+    }
+    s = userDecided(s, 'system_clarify', { confirm: false, reason: { kind: 'direction' } })
+    expect(s.goalConfirmed).toBe(false)
+    expect(s.pending).toBe('none')
+  })
+  it('缺 underlying 快照 → throw（防御）', () => {
+    let s = initialState()
+    s = setPending(s, 'system_clarify')
+    expect(() => userDecided(s, 'system_clarify', { confirm: true })).toThrow(/underlying/)
+  })
+})
