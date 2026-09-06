@@ -43,9 +43,13 @@ test.describe('ADR-010 强制澄清卡', () => {
     await expect(page.locator('.nf-forcedcard')).toBeVisible({ timeout: 15000 })
     await page.locator('.nf-forcedcard__btn--ok').click()
     await expect(page.locator('.nf-forcedcard')).toHaveCount(0)
+    // UAT 二轮修复：确认后必须续转（自动 send 确认语触发下一模型回合——原缺陷：点完卡流程停滞）
+    await expect(page.locator('body')).toContainText('确认，目标清楚了', { timeout: 10000 })
   })
 
-  test('T-FORCE-3：点「我要重新描述」→ 卡消失（reject direction）', async ({ page }) => {
+  test('T-FORCE-3：点「我要重新描述」→ 卡消失 + 重述引导续转（rejectStreak 重置）', async ({
+    page,
+  }) => {
     installMockBridge(page, { project: 'none', script: loopScript() })
     await startFromScratch(page, '做一个番茄钟页面')
     await expect(page.getByRole('button', { name: '确认目标' })).toBeVisible({ timeout: 10000 })
@@ -57,5 +61,7 @@ test.describe('ADR-010 强制澄清卡', () => {
     await expect(page.locator('.nf-forcedcard')).toBeVisible({ timeout: 15000 })
     await page.locator('.nf-forcedcard__btn', { hasText: '我要重新描述' }).click()
     await expect(page.locator('.nf-forcedcard')).toHaveCount(0)
+    // 点卡 = 新一轮协商（rejectStreak 重置）+ 重述引导自动 send——模型收到反馈重新提交提议
+    await expect(page.locator('body')).toContainText('目标需要重新描述一下', { timeout: 10000 })
   })
 })

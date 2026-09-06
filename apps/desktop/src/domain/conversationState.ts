@@ -164,6 +164,8 @@ export function userDecided(
     if (!underlying) {
       throw new TypeError('system_clarify 决策缺少 underlying（快照缺失/损坏）')
     }
+    // 强制卡 = 升级梯度终点：点卡上「我要重新描述」是明确的新一轮协商——由调用方（强制卡按钮）
+    // 经 resetRejectStreak 重置；pending 期间的打字拒绝仍走 C2 累积（A-024 循环形态，不重置）
     return userDecided(s, underlying, decision)
   }
   const next: ConversationState = { ...s, pending: 'none', decisionContent: undefined }

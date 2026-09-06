@@ -293,11 +293,19 @@ export function deriveStateEvents(
     } else if (prev.pending === 'approval') {
       events.push({ type: 'decision.resolved', detail: { point: 'approval', action: 'confirm' } })
     } else {
+      // ADR-010 UAT 二轮修复：system_clarify 的确认/拒绝按 underlying 确认位推断——
+      // 原逻辑落 resolutionConfirmed 兜底，委派确认 goal 时被误记为 reject（真机 seq 97 实证）
       const point = prev.pending
+      const underlying =
+        point === 'system_clarify' && prev.decisionContent?.kind === 'system_clarify'
+          ? (prev.decisionContent.proposal as { underlying?: 'goal' | 'plan' | 'resolution' })
+              .underlying
+          : undefined
+      const effective = underlying ?? point
       const confirmed =
-        point === 'goal'
+        effective === 'goal'
           ? next.goalConfirmed
-          : point === 'plan'
+          : effective === 'plan'
             ? next.planConfirmed
             : next.resolutionConfirmed
       events.push({

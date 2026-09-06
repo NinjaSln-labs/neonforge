@@ -461,6 +461,7 @@ export default function ConversationPanel({
     applyTool,
     setPending: setPendingState,
     clearPending,
+    resetRejectStreak,
     addPlannedFiles,
     setFilesApproved,
     restorePlanned,
@@ -3063,14 +3064,43 @@ export default function ConversationPanel({
                 <button
                   type="button"
                   className="nf-forcedcard__btn nf-forcedcard__btn--ok"
-                  onClick={() => confirm('system_clarify')}
+                  onClick={() => {
+                    // UAT 二轮真机（2026-09-07）：强制卡确认后必须续转——仅 confirm 不 send 会让
+                    // 流程停滞（用户点完卡无反馈，模型回合不再触发）。按 underlying 对齐普通卡续转。
+                    confirm('system_clarify')
+                    tlog('card.resolved', { card: 'system_clarify', action: 'confirm' }, 'system')
+                    const u = prop?.underlying
+                    if (u === 'goal') {
+                      onGoalConfirmed?.(prop?.statement ?? '目标已确认')
+                      inputRef.current = '确认，目标清楚了'
+                    } else if (u === 'plan') {
+                      onPlanConfirmed?.()
+                      inputRef.current = '确认，按方案执行'
+                    } else {
+                      inputRef.current = '确认，继续'
+                    }
+                    void sendRef.current()
+                  }}
                 >
                   确认执行
                 </button>
                 <button
                   type="button"
                   className="nf-forcedcard__btn"
-                  onClick={() => reject('system_clarify', { kind: 'direction' })}
+                  onClick={() => {
+                    // 拒绝委派 underlying + 续转引导（A-026 同源——拒绝后模型必须收到反馈并重提议）；
+                    // 点卡 = 明确新一轮协商 → rejectStreak 重置（打字拒绝不重置——C2 循环形态）
+                    reject('system_clarify', { kind: 'direction' })
+                    resetRejectStreak()
+                    tlog(
+                      'card.rejected',
+                      { card: 'system_clarify', action: 'reject', reason: 'direction' },
+                      'system',
+                    )
+                    inputRef.current =
+                      prop?.underlying === 'plan' ? '方案需要调整' : '目标需要重新描述一下'
+                    void sendRef.current()
+                  }}
                 >
                   我要重新描述
                 </button>
@@ -3079,8 +3109,20 @@ export default function ConversationPanel({
                   className="nf-forcedcard__btn"
                   onClick={() => {
                     confirm('system_clarify')
+                    tlog('card.resolved', { card: 'system_clarify', action: 'confirm' }, 'system')
                     if (lastAssistant?.toolCalls?.length)
                       approveAllToolCalls(lastAssistant.toolCalls)
+                    const u = prop?.underlying
+                    if (u === 'goal') {
+                      onGoalConfirmed?.(prop?.statement ?? '目标已确认')
+                      inputRef.current = '确认，目标清楚了'
+                    } else if (u === 'plan') {
+                      onPlanConfirmed?.()
+                      inputRef.current = '确认，按方案执行'
+                    } else {
+                      inputRef.current = '确认，继续'
+                    }
+                    void sendRef.current()
                   }}
                 >
                   由搭档全权决定

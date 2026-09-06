@@ -18,6 +18,8 @@ export default tseslint.config(
       '**/snapshots/**',
       '**/coverage/**',
       '**/._*',
+      // 私有 CDP 驱动脚本（.git/info/exclude 约定不入库——真机验收工具，非产品代码）
+      'scripts-cdp/**',
     ],
   },
   js.configs.recommended,
