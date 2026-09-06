@@ -1319,18 +1319,16 @@ describe('system_clarify 决策点（ADR-010）', () => {
     s = setPending(s, 'system_clarify')
     expect(() => userDecided(s, 'system_clarify', { confirm: true })).toThrow(/underlying/)
   })
-})
 
-it('C2 隐式拒绝：streak 1 → loop-guard（A-026 立即引导重提议），streak 2 → forced-clarify', () => {
-  let s = initialState()
-  s = userDecided(s, 'goal', { confirm: true })
-  s = setPending(s, 'goal')
-  s = userDecided(s, 'goal', { confirm: false, reason: { kind: 'direction' } }) // streak 1
-  s = setPending(s, 'goal')
-  s = userDecided(s, 'goal', { confirm: false, reason: { kind: 'direction' } }) // streak 2
-  s = setPending(s, 'goal')
-  expect(detectUnproductiveDialogue(s)).toBe('loop-guard')
-  s = userDecided(s, 'goal', { confirm: false, reason: { kind: 'direction' } }) // streak 3
-  s = setPending(s, 'goal')
-  expect(detectUnproductiveDialogue(s)).toBe('forced-clarify')
+  it('C2 隐式拒绝：streak 1 → loop-guard（A-026 立即引导重提议），streak 2 → forced-clarify', () => {
+    let s = initialState()
+    s = userDecided(s, 'goal', { confirm: true })
+    s = setPending(s, 'goal')
+    s = userDecided(s, 'goal', { confirm: false, reason: { kind: 'direction' } }) // streak 1
+    s = setPending(s, 'goal')
+    expect(detectUnproductiveDialogue(s)).toBe('loop-guard')
+    s = userDecided(s, 'goal', { confirm: false, reason: { kind: 'direction' } }) // streak 2
+    s = setPending(s, 'goal')
+    expect(detectUnproductiveDialogue(s)).toBe('forced-clarify')
+  })
 })
