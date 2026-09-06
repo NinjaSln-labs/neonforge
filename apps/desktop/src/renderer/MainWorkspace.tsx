@@ -163,6 +163,9 @@ export default function MainWorkspace({
   }
   const handleGoalConfirmed = (title: string) => {
     setGoalConfirmed(true) // 目标已确认 → 解锁执行确认卡
+    setPlanConfirmed(false) // A-023（S5 真机 2026-09-06）：换目标重确认 = 新任务边界——镜像必须随领域状态
+    // （stateRef.confirm('goal') 已重置 planConfirmed）同步回 false，否则执行确认卡渲染条件
+    // `!planConfirmed` 恒 false → 换目标后 propose_plan 卡永不渲染（真机 repro：卡不渲染死锁）
     setGoalSeq((s) => s + 1) // 任务边界递增——ConversationPanel clearTrust（授权收回）
     // 2026-08-07 会话时间线（Session Timeline BC）：目标确认事件（来源：模型标记 onGoalConfirmed / 用户打字确认词）
     if (activeProblem) {
