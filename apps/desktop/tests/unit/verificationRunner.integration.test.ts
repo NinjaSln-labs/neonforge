@@ -6,6 +6,7 @@ import { runVerificationCommands } from '../../src/main/verification'
 import {
   verifyCompletion,
   deriveDiffs,
+  matchesPlannedPath,
   type CompletionClaim,
 } from '../../src/domain/conversationState'
 
@@ -117,5 +118,12 @@ describe('A-021 deriveDiffs 路径形态对账', () => {
       deriveDiffs(new Set(['index.html', 'style.css']), new Set(['/Users/sin/x/index.html'])),
     ).toHaveLength(1)
     expect(deriveDiffs(new Set(['src/a/b.js']), new Set(['/x/other/b.js']))).toHaveLength(0)
+  })
+  it('A-021 r2：planned 侧覆盖判定（matchesPlannedPath）——双形态登记不再恒 miss', () => {
+    const produced = new Set(['/Users/sin/x/task/index.html'])
+    expect(matchesPlannedPath('index.html', produced)).toBe(true)
+    expect(matchesPlannedPath('/Users/sin/x/task/index.html', produced)).toBe(true)
+    expect(matchesPlannedPath('style.css', produced)).toBe(false)
+    expect(matchesPlannedPath('', produced)).toBe(false)
   })
 })

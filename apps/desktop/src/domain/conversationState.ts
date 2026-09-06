@@ -678,8 +678,13 @@ export function verifyCompletion(
       }
     }
     // S2 V1b：diff 对账系统派生——planned 有文件未产出（不在 produced）→ missing（系统核对，非模型自述）
-    const sysDiffs = systemState.deriveDiffs(systemState.plannedFiles, systemState.producedFiles)
-    if (systemState.plannedFiles.size > 0 && sysDiffs.length < systemState.plannedFiles.size) {
+    // A-021 r2：覆盖判定从 produced 侧计数改为 **planned 侧逐项覆盖**——集合可能含同一文件的相对/绝对
+    // 双形态登记（真机实证：propose_plan 注册时 rootPath 未注入 → 'index.html'；approve-files → 绝对），
+    // 产生侧计数恒 < planned.size → 相对形态永远 not-produced → resolution 不可达（真机三连 evidence_missing）
+    if (
+      systemState.plannedFiles.size > 0 &&
+      [...systemState.plannedFiles].some((q) => !matchesPlannedPath(q, systemState.producedFiles))
+    ) {
       missing.push('diff:planned-not-produced')
     }
   }
@@ -687,20 +692,23 @@ export function verifyCompletion(
 }
 
 /** V1b diff 对账系统派生（S4 单源——renderer/main 共用）：planned ∩ produced 匹配项。
- * verifyCompletion 消费语义：匹配数 < planned 数 → missing diff:planned-not-produced（系统核对，非模型自述）
+ * verifyCompletion 消费语义（A-021 r2）：planned 逐项 matchesPlannedPath 覆盖判定。
  * A-021（S5 真机 2026-09-06）：plannedFiles 存在相对/绝对双形态登记（propose_plan 注册时 rootPath 尚未
  * 注入 → trustPath 保留相对 'index.html'；approve-files 批准 → 绝对）——精确匹配恒 miss → 相对项永远
  * not-produced → resolution 不可达（真机实证：report_completion 连续 3 次 evidence_missing 死锁）。
  * 修正：精确匹配外加路径末段边界匹配（'/…/index.html' 以 '/index.html' 结尾 = 同一文件）。 */
 export function deriveDiffs(planned: Set<string>, produced: Set<string>): Array<{ path: string }> {
-  return [...produced].filter((p) => matchesPlannedPath(p, planned)).map((path) => ({ path }))
+  return [...produced]
+    .filter((p) => [...planned].some((q) => q === p || p.endsWith('/' + q)))
+    .map((path) => ({ path }))
 }
 
-/** A-021：produced 产物 p 是否命中 planned 清单——精确相等或末段边界匹配（'/a/b.js' 命中 planned 'b.js'） */
-export function matchesPlannedPath(p: string, planned: Set<string>): boolean {
-  if (planned.has(p)) return true
-  for (const q of planned) {
-    if (q.includes('/') || !q) continue // 仅相对单段文件名参与末段匹配（多级相对路径仍需精确——防误吞）
+/** A-021：planned 清单项 q 是否已被 produced 产出覆盖——精确相等或 produced 末段边界匹配
+ *（q 相对 'index.html'，produced '/…/index.html' → 同一文件；q 需非空——trustPath 空 fallback 不算已产出） */
+export function matchesPlannedPath(q: string, produced: Set<string>): boolean {
+  if (!q) return false
+  if (produced.has(q)) return true
+  for (const p of produced) {
     if (p.endsWith('/' + q)) return true
   }
   return false
