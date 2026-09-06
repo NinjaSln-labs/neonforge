@@ -115,6 +115,8 @@ export interface ConversationState {
   deniedApprovals: Array<{ toolName: string; subject: string }> // 拒绝记忆（§3.4 C6——同轮同类动作短封，S6 actionGate 消费；任务边界重置）
   rejectStreak: number // 同一决策点连续拒绝计数（§4.1 C8——上限 3 超限回退澄清/人工接管；随确认/新提议重置；S3 消费）
   lastRejectReason?: RejectReason // S7（A0 审校 P1-4）：最近一次拒绝的原因（诊断——decision.resolved 载荷；confirm/其他转换清除）
+  pendingRepeatCount: number // ADR-010 T1：同 kind 决策点连续 pending_set 次数（换 kind/决策清零）
+  unresolvedTextReplies: number // ADR-010 T2：pending 存在期间用户连续文本回复数（决策清零）
 }
 
 export const initialState = (): ConversationState => ({
@@ -128,6 +130,8 @@ export const initialState = (): ConversationState => ({
   lastToolFailed: false,
   deniedApprovals: [],
   rejectStreak: 0,
+  pendingRepeatCount: 0,
+  unresolvedTextReplies: 0,
 })
 
 // ============================================================================
@@ -145,6 +149,9 @@ export function userDecided(
     throw new TypeError('拒绝决策必须携带 RejectReason（不变量 8）')
   }
   const next: ConversationState = { ...s, pending: 'none', decisionContent: undefined }
+  // ADR-010：任何用户决策都终结「无进展对话」状态——两类计数清零
+  next.pendingRepeatCount = 0
+  next.unresolvedTextReplies = 0
   if (decision.confirm) {
     next.lastRejectReason = undefined // S7（P1-4）：确认清除拒绝原因（诊断字段只保留最近一次拒绝）
     next.rejectStreak = 0 // §4.1 C8：决策点确认 → 连续拒绝计数重置
@@ -175,6 +182,9 @@ export function userDecided(
     }
     if (point === 'resolution') {
       next.resolutionConfirmed = true
+      // A-025（UAT-Sim 2026-09-07）：resolution = 任务边界——planConfirmed 必须重置，否则同会话
+      // 下一任务的执行确认卡渲染条件 `!planConfirmed` 恒假 → 卡不渲染（真机实证 seq 848/851）
+      next.planConfirmed = false
     }
     if (point === 'approval') {
       // 确认点不处理 approval（approval 走 approvalDecided）——防御：不推进任何确认位
@@ -190,6 +200,36 @@ export function userDecided(
     next.lastRejectReason = reason
   }
   return next
+}
+
+// ============================================================================
+// ADR-010：无进展对话检测（T1 同决策点重复 / T2 pending 期间文本回复 / T4 总回合软上限）
+// 行业对标：cline 连续错误上限（mistake-tracker）、gemini-cli loop detection、reasonix storm-breaker；
+// 上限挂「无进展重复」而非总轮数——T4 仅作兜底（见 research/uat-forced-clarify-research-20260907.md）
+// ============================================================================
+
+/** T1：决策点置位计数——同 kind 连续 +1，换 kind 则重置为 1。
+ *  调用契约：必须在 pending 变更**之前**调用（比较的是旧 pending）——renderer setPendingState 内先 note 后改 pending */
+export function notePendingSet(s: ConversationState, kind: PendingKind): ConversationState {
+  const sameAsLast = s.pending === kind
+  return { ...s, pendingRepeatCount: sameAsLast ? s.pendingRepeatCount + 1 : 1 }
+}
+
+/** T2：pending 存在期间用户文本回复 +1（用户在试图用文字确认/回应——A-024 主动检测）；无 pending 清零 */
+export function noteUserTextReply(s: ConversationState): ConversationState {
+  return { ...s, unresolvedTextReplies: s.pending !== 'none' ? s.unresolvedTextReplies + 1 : 0 }
+}
+
+/** 触发判定：loop-guard（软重定向——引导模型让用户点卡）/ forced-clarify（系统强制澄清卡）/ null */
+export function detectUnproductiveDialogue(
+  s: ConversationState,
+  turnCount = 0,
+): 'loop-guard' | 'forced-clarify' | null {
+  const repeated = Math.max(s.pendingRepeatCount, s.unresolvedTextReplies)
+  if (turnCount >= 40) return 'forced-clarify' // T4：总回合软上限兜底
+  if (repeated >= 3) return 'forced-clarify'
+  if (repeated >= 2) return 'loop-guard'
+  return null
 }
 
 /** 授权决策（设计 §3.4 approvalDecided——允许清 pending；拒绝 + reason 登记拒绝记忆） */

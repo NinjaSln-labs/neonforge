@@ -5,6 +5,9 @@ import { describe, it, expect } from 'vitest'
 import {
   initialState,
   userDecided,
+  notePendingSet,
+  noteUserTextReply,
+  detectUnproductiveDialogue,
   approvalDecided,
   userConfirmed,
   userRejected,
@@ -1204,5 +1207,58 @@ describe('#6 真机回归：P2-5 复合只读命令', () => {
   })
   it('curl -o 真实文件 → 仍 hazardous（写副作用语义保留）', () => {
     expect(classifyReadonly('bash', 'curl -s -o out.json http://example.com/api')).toBe('hazardous')
+  })
+})
+
+// ============================================================================
+// ADR-010：无进展对话检测（UAT-Sim A-024/A-025 触发器）
+// ============================================================================
+describe('无进展对话检测（ADR-010 T1/T2）', () => {
+  it('T1：同 kind 连续 pending_set 2 次 → loop-guard，3 次 → forced-clarify', () => {
+    let s = initialState()
+    s = notePendingSet(s, 'goal') // pending 变更前调用（比较旧值）
+    s = setPending(s, 'goal') // 首次置位
+    expect(detectUnproductiveDialogue(s)).toBeNull()
+    s = notePendingSet(s, 'goal') // 模型重复提议（pending 仍 goal——期间无用户决策）
+    s = setPending(s, 'goal')
+    expect(detectUnproductiveDialogue(s)).toBe('loop-guard')
+    s = notePendingSet(s, 'goal')
+    s = setPending(s, 'goal')
+    expect(detectUnproductiveDialogue(s)).toBe('forced-clarify')
+  })
+  it('T1：换 kind 清零', () => {
+    let s = initialState()
+    s = notePendingSet(s, 'goal')
+    s = notePendingSet(s, 'plan') // 换 kind → 重置为 1
+    expect(detectUnproductiveDialogue(s)).toBeNull()
+  })
+  it('T2：pending 期间用户文本回复 2 条 → loop-guard', () => {
+    let s = initialState()
+    s = setPending(s, 'goal')
+    s = noteUserTextReply(s)
+    s = noteUserTextReply(s)
+    expect(detectUnproductiveDialogue(s)).toBe('loop-guard')
+  })
+  it('T2：无 pending 时的文本回复不计入', () => {
+    let s = initialState()
+    s = noteUserTextReply(s)
+    s = noteUserTextReply(s)
+    expect(detectUnproductiveDialogue(s)).toBeNull()
+  })
+  it('用户决策后两类计数清零（A-025 同源——resolution 确认也重置 planConfirmed）', () => {
+    let s = initialState()
+    s = userDecided(s, 'goal', { confirm: true })
+    s = userDecided(s, 'plan', { confirm: true })
+    s = notePendingSet(s, 'resolution')
+    s = notePendingSet(s, 'resolution')
+    s = userDecided(s, 'resolution', { confirm: true })
+    expect(s.pendingRepeatCount).toBe(0)
+    expect(s.unresolvedTextReplies).toBe(0)
+    // A-025 领域修复断言：resolution 确认后 planConfirmed 重置——下一任务的 plan 卡可渲染
+    expect(s.planConfirmed).toBe(false)
+  })
+  it('T4：turnCount ≥ 40 → 直接 forced-clarify', () => {
+    expect(detectUnproductiveDialogue(initialState(), 40)).toBe('forced-clarify')
+    expect(detectUnproductiveDialogue(initialState(), 39)).toBeNull()
   })
 })
