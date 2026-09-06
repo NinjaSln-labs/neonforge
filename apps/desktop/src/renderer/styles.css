@@ -288,14 +288,12 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-config__cta:hover { box-shadow: 0 0 20px rgba(99, 102, 241, 0.42); }
 .nf-config__cta:disabled { opacity: 0.6; cursor: default; box-shadow: none; }
 
-/* details 对齐启动页场景芯片：胶囊 + hover 点亮 */
+/* details：纯文字态（2026-09-07 用户反馈——不要芯片背景，只是文字） */
 .nf-config__why {
   color: var(--nf-text-dim); font-size: var(--nf-font-sm); cursor: pointer;
-  background: var(--nf-bg-elevated); border: 1px solid var(--nf-border);
-  border-radius: 999px; padding: 7px 14px;
+  background: none; border: none; border-radius: 0; padding: 0;
 }
-.nf-config__why:hover { border-color: var(--nf-accent); color: var(--nf-accent); }
-.nf-config__why[open] { border-radius: 12px; color: var(--nf-text); }
+.nf-config__why:hover { color: var(--nf-accent); }
 .nf-config__why summary { list-style: none; }
 .nf-config__why summary::-webkit-details-marker { display: none; }
 .nf-config__why-text { padding: var(--nf-space-2) 0 0; color: var(--nf-text-dim); }
