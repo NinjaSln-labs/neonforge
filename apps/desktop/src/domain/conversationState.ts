@@ -245,7 +245,11 @@ export function detectUnproductiveDialogue(
 ): 'loop-guard' | 'forced-clarify' | null {
   // rejectStreak 纳入（C2 隐式拒绝循环——A-024 真机机制：用户文本→隐式 reject(direction)→模型重提议→循环，
   // 每轮 reject 都走 userDecided 会清零 T1/T2 计数，唯 rejectStreak 持续累积）
-  const repeated = Math.max(s.pendingRepeatCount, s.unresolvedTextReplies, s.rejectStreak)
+  // rejectStreak 走更低阈值（1/2）：C2 隐式拒绝后模型常不重新提交提议（A-026——口头称卡已弹出），
+  // 每一次拒绝都应立即注入「重新提交提议」引导；连续 2 次拒绝 = 协商失败 → 强制澄清卡
+  if (s.rejectStreak >= 2) return 'forced-clarify'
+  if (s.rejectStreak >= 1) return 'loop-guard'
+  const repeated = Math.max(s.pendingRepeatCount, s.unresolvedTextReplies)
   if (turnCount >= 40) return 'forced-clarify' // T4：总回合软上限兜底
   if (repeated >= 3) return 'forced-clarify'
   if (repeated >= 2) return 'loop-guard'

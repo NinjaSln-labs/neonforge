@@ -1321,7 +1321,7 @@ describe('system_clarify 决策点（ADR-010）', () => {
   })
 })
 
-it('C2 隐式拒绝循环：rejectStreak 2 → loop-guard，3 → forced-clarify（A-024 真机机制）', () => {
+it('C2 隐式拒绝：streak 1 → loop-guard（A-026 立即引导重提议），streak 2 → forced-clarify', () => {
   let s = initialState()
   s = userDecided(s, 'goal', { confirm: true })
   s = setPending(s, 'goal')
