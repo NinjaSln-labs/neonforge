@@ -425,7 +425,28 @@ export class DeepSeekGateway {
 
   // 流式 chat（SSE）：reasoning_content → content → tool_calls 状态机
   // 回调返回解析出的增量；V1 先透传文本流，tool_calls 解析留 04
+  // A-024 放大器（UAT-Sim 2026-09-07）：上游瞬态 http-400 杀死用户确认回合 → 模型收不到确认 →
+  // 反复重提议循环。对 400 恰好重试一次；连续 400 仍抛（不掩盖确定性 payload bug）；401/5xx 语义不变。
   async streamChat(
+    apiKey: string,
+    opts: Parameters<DeepSeekGateway['streamChatOnce']>[1],
+  ): Promise<void> {
+    let attempt = 0
+    while (true) {
+      attempt++
+      try {
+        return await this.streamChatOnce(apiKey, opts)
+      } catch (e) {
+        if (e instanceof GatewayHttpError && e.status === 400 && attempt === 1) {
+          console.log('[gateway] http-400 transient — retrying once')
+          continue
+        }
+        throw e
+      }
+    }
+  }
+
+  private async streamChatOnce(
     apiKey: string,
     opts: {
       model?: ModelID
