@@ -840,6 +840,20 @@ describe('继承锁定——classifyReadonly/classifyAction（缝隙 4 单一权
     expect(classifyReadonly('bash', 'node -e "require(fs).writeFileSync(...)"')).toBe('hazardous')
     expect(classifyReadonly('bash', 'npm install three && node main.js')).toBe('hazardous')
   })
+  // A-020（S5 真机 2026-09-06）：stderr 丢弃重定向 `2>/dev/null` 不落盘——readonly 不误伤
+  //（真机实证：`head -20 README.md 2>/dev/null` 被判 hazardous → 兜底强置空方案卡冻结工具）
+  it('bash stderr 丢弃（2>/dev/null）→ readonly（A-020——不落盘不误伤）', () => {
+    expect(classifyReadonly('bash', 'head -20 README.md 2>/dev/null')).toBe('readonly')
+    expect(
+      classifyReadonly(
+        'bash',
+        'pwd && ls -la && echo "---readme---" && head -20 README.md 2>/dev/null',
+      ),
+    ).toBe('readonly')
+    expect(classifyReadonly('bash', 'cat config.yaml 2>>/dev/null')).toBe('readonly')
+    // 真正写重定向 → 仍 hazardous（不放开危险面）
+    expect(classifyReadonly('bash', 'echo hi > out.txt 2>/dev/null')).toBe('hazardous')
+  })
 
   it('git 子命令级：status/log/diff 只读；push/commit 写（Codex is_safe_git_command 方向）', () => {
     expect(classifyReadonly('bash', 'git status')).toBe('readonly')

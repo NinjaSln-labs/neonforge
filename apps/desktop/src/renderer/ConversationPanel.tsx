@@ -570,7 +570,6 @@ export default function ConversationPanel({
   useEffect(() => {
     const last = messages[messages.length - 1]
     const isLastAssistant = last?.role === 'assistant' && last.status === 'done'
-    const content = last?.content ?? ''
     const show = (card: string, extra?: Record<string, unknown>) => {
       if (cardShownRef.current.has(card)) return
       cardShownRef.current.add(card)
@@ -586,12 +585,10 @@ export default function ConversationPanel({
         dc?.kind === 'goal' ? ((dc.proposal as { statement?: string })?.statement ?? '') : ''
       if (stateRef.current.pending === 'goal' && goalStatement)
         show('goal-confirm', { goalText: goalStatement.slice(0, 120) })
-      if (
-        (content.includes('【执行方案') || (goalConfirmed && !planConfirmed)) &&
-        goalConfirmed &&
-        !planConfirmed
-      )
-        show('exec-confirm')
+      // A-020 附带（P2-2 对齐）：原条件 `goalConfirmed && !planConfirmed` 使目标确认后**任何**
+      // assistant 回合都打 card.shown exec-confirm（真机 seq54 实证——无卡也打点，排查误导）。
+      // 对齐真实决策点（与 goal-confirm/resolution 同款）：只在 plan pending 真实存在时打点
+      if (stateRef.current.pending === 'plan') show('exec-confirm')
       // #6 真机 2026-08-30（P2-2）：对齐真实决策点——原条件【已达成】+产物即打点，
       // S4 门控（verifyCompletion 不通过不弹卡）下产生假「已弹卡」遥测（真机排查误导）
       if (stateRef.current.pending === 'resolution') show('achieve-confirm')
@@ -914,6 +911,9 @@ export default function ConversationPanel({
         (c) =>
           isSideEffectAction(c.name, String(c.args?.command ?? '')) &&
           (c.status === 'pending' ||
+            // A-020：need-approval（授权卡挂起——tools.execute needApproval:true）同为「被拦等决策」；
+            // 漏掉会让占位执行卡误判为空卡路径被跳过（L3「执行确认卡不漂移」实证）
+            c.status === 'need-approval' ||
             String(c.result ?? '').includes('等待你的决策') ||
             String(c.result ?? '').includes('未确认')),
       )
@@ -1035,6 +1035,9 @@ export default function ConversationPanel({
               ...(reused ? { proposal: reused } : {}),
               since: new Date().toISOString(),
             })
+            // A-020（S5 真机 2026-09-06）：无 proposal 的占位卡保留（write 被拦的同意面——L3「执行确认卡
+            // 不漂移」契约；done 时 execute 结果尚未回填，sideEffectPendingUi 不可依赖）。占位卡的事故
+            // 触发源（bash `2>/dev/null` 误判副作用→被拦→空卡冻结）由 classifyReadonly stderr 丢弃修正根除。
           }
         } else if (cardToShow === 'goal') {
           // 目标提议 → GoalProposal（statement + assumptions——S2 ⑬ 契约：必要时附「关键假设：」行）

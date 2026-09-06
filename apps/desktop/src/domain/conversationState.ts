@@ -358,13 +358,15 @@ export function classifyReadonly(name: string, command?: string): ActionKind {
     return 'hazardous'
   }
   // 重定向到文件 → 写副作用（2026-08-22 问题 4：排除 stderr 重定向 `2>&1`/`2>>1`——不写文件）
-  const stripped = c.replace(/2>&1|2>>1/g, '')
+  // A-020（S5 真机）：stderr 丢弃 `2>/dev/null`/`2>>/dev/null` 同为不落盘——一并排除
+  //（真机实证：`head -20 README.md 2>/dev/null` 被判 hazardous → 兜底强置空方案卡冻结工具——P1 ①）
+  const stripped = c.replace(/2>&1|2>>1|2>>?\/dev\/null/g, '')
   if (/>\s*[^|]*$/m.test(stripped)) return 'hazardous'
   // 链递归：& / ; / | 分隔的每一段——段首为危险命令且非只读形态 → hazardous
   // 2026-08-22 问题 4：段级只读形态排除（node -v / npm --version / which node 查询 → 非危险）；
   // 段首匹配（echo ---npm--- 的 npm 是参数——不误伤）；
   // 链分隔：`2>&1` 中的 `&` 是 stderr 重定向不是链分隔——先保护再分割（原 `[;&|]` 把 2>&1 误拆成 2> 和 1）
-  const protectedCmd = c.replace(/2>&1|2>>1/g, '§§§') // 保护 stderr 重定向（§ 非链分隔符）
+  const protectedCmd = c.replace(/2>&1|2>>1|2>>?\/dev\/null/g, '§§§') // 保护 stderr 重定向（§ 非链分隔符）
   const segments = protectedCmd.split(/[;&|]/).map((seg) => seg.trim().replace(/§§§/g, '2>&1'))
   if (
     segments.length > 1 &&
