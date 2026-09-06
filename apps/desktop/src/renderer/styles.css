@@ -288,10 +288,12 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-config__cta:hover { box-shadow: 0 0 20px rgba(99, 102, 241, 0.42); }
 .nf-config__cta:disabled { opacity: 0.6; cursor: default; box-shadow: none; }
 
-/* details：纯文字态（2026-09-07 用户反馈——不要芯片背景，只是文字） */
+/* details：纯文字态（2026-09-07 用户反馈——不要芯片背景，只是文字）；
+   左缘与输入框内文字（12px 内边距）对齐 */
 .nf-config__why {
   color: var(--nf-text-dim); font-size: var(--nf-font-sm); cursor: pointer;
-  background: none; border: none; border-radius: 0; padding: 0;
+  background: none; border: none; border-radius: 0;
+  padding: 0 0 0 var(--nf-space-3);
 }
 .nf-config__why:hover { color: var(--nf-accent); }
 .nf-config__why summary { list-style: none; }
@@ -810,6 +812,8 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   transform: translateX(-50%);
   background: radial-gradient(ellipse at center, rgba(99, 102, 241, 0.14), transparent 65%);
 }
+/* 2026-09-07 用户反馈：配置页内容更矮——光晕下移罩住品牌标题（观感对齐启动页） */
+.nf-app--config::before { top: 4%; }
 .nf-app--start::after, .nf-app--config::after {
   content: ''; position: absolute; pointer-events: none;
   width: 560px; height: 420px; left: 50%; bottom: -10%;

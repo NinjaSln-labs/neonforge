@@ -37,7 +37,6 @@ export default function ConfigPage({ onDone }: { onDone: () => void }) {
   return (
     <div className="nf-config">
       <h1 className="nf-config__title">NeonForge</h1>
-      <p className="nf-config__sub">说出问题，拿到结果</p>
       <p className="nf-config__lead">连接你的 AI 搭档——Key 只存你本地</p>
 
       <input
