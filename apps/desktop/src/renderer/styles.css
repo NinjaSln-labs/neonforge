@@ -351,21 +351,28 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-msg__reasoning { font-size: var(--nf-font-sm); color: var(--nf-text-dim); }
 .nf-reasoning { max-height: 160px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; }
 .nf-chat__input { display: flex; gap: var(--nf-space-2); align-items: flex-end; position: relative; bottom: 0; background: var(--nf-bg-panel); padding-top: var(--nf-space-2); z-index: 2; }
+.nf-chat__field { position: relative; flex: 1; display: flex; }
 .nf-chat__input textarea {
   flex: 1; resize: none; background: var(--nf-bg-elevated); color: var(--nf-text);
   border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md);
-  padding: var(--nf-space-3) var(--nf-space-3); font-size: var(--nf-font-md);
+  padding: var(--nf-space-3) 84px var(--nf-space-3) var(--nf-space-3); font-size: var(--nf-font-md);
   line-height: 1.6; min-height: 64px; outline: none;
 }
 .nf-chat__input textarea:focus { border-color: var(--nf-accent); }
-/* 2026-08-05 用户反馈 4：停止按钮（working 时显示）——打断当前流/杀 bash；红色描边警示（区别于发送） */
-.nf-chat__stop {
-  background: transparent; color: #f87171;
-  border: 1px solid #f87171; border-radius: var(--nf-radius-md);
-  padding: var(--nf-space-2) var(--nf-space-3); font-size: var(--nf-font-sm);
-  cursor: pointer; white-space: nowrap; height: 40px;
+/* 2026-09-07 用户决策：发送/停止合并为一个按钮——置于输入框内右下角；working=停止（红描边警示），空闲=发送 */
+.nf-chat__send {
+  position: absolute; right: 10px; bottom: 10px; height: 32px; min-width: 64px;
+  background-image: linear-gradient(90deg, var(--nf-accent-strong), #7c3aed); color: #fff;
+  border: none; border-radius: var(--nf-radius-md);
+  padding: 0 var(--nf-space-3); font-size: var(--nf-font-sm);
+  cursor: pointer; white-space: nowrap;
 }
-.nf-chat__stop:hover { background: rgba(248, 113, 113, 0.12); }
+.nf-chat__send:disabled { opacity: 0.6; cursor: default; }
+.nf-chat__send--stop {
+  background-image: none; background: transparent; color: #f87171;
+  border: 1px solid #f87171;
+}
+.nf-chat__send--stop:hover { background: rgba(248, 113, 113, 0.12); }
 
 /* WIG：prefers-reduced-motion 降级（呼吸光条动效 + 按钮按压位移） */
 @media (prefers-reduced-motion: reduce) {
