@@ -826,3 +826,42 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-confirmcard__btn--ok { border-color: var(--nf-accent); color: var(--nf-accent); }
 .nf-confirmcard__btn--ok:hover { background: var(--nf-accent-soft); }
 .nf-confirmcard__btn--no:hover { background: var(--nf-border); }
+
+
+/* ADR-010：强制澄清卡（无进展对话二级介入——悬浮输入框上方，警示样式，不物理锁输入） */
+.nf-forcedcard {
+  margin: 8px 16px;
+  padding: 12px 14px;
+  border: 1px solid #f5a623;
+  border-radius: 10px;
+  background: rgba(245, 166, 35, 0.08);
+}
+.nf-forcedcard__head {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f5a623;
+  margin-bottom: 6px;
+}
+.nf-forcedcard__body {
+  font-size: 13px;
+  opacity: 0.9;
+  margin-bottom: 10px;
+}
+.nf-forcedcard__actions {
+  display: flex;
+  gap: 8px;
+}
+.nf-forcedcard__btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 13px;
+}
+.nf-forcedcard__btn--ok {
+  border-color: #7c5cff;
+  background: rgba(124, 92, 255, 0.25);
+  font-weight: 600;
+}

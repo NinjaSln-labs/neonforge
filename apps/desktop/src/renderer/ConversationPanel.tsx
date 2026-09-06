@@ -26,6 +26,8 @@ import {
 // 2026-08-14 会话状态机（Task 聚合——A0 §2/§3/§4/§5）：状态单一来源 + 转换唯一入口（session-state-machine.md S2）
 import {
   isSideEffectAction,
+  detectUnproductiveDialogue,
+  noteUserTextReply,
   canExecute,
   decideProgressGuarantee,
   deriveDecisionPoint,
@@ -1887,12 +1889,57 @@ export default function ConversationPanel({
         },
         'assistant',
       )
+      // ADR-010：无进展对话四级梯度（UAT-Sim A-024/A-025）——T1/T2 计数已在 setPendingState/message_sent 累积
+      const dialogueVerdict = detectUnproductiveDialogue(stateRef.current)
+      console.log(
+        '[adr010] verdict=' +
+          dialogueVerdict +
+          ' rep=' +
+          stateRef.current.pendingRepeatCount +
+          ' txt=' +
+          stateRef.current.unresolvedTextReplies +
+          ' pending=' +
+          stateRef.current.pending,
+      )
+      let loopGuardSuffix = ''
+      if (dialogueVerdict === 'loop-guard') {
+        // 一级（软重定向，reasonix 式）：注入 [loop guard]——用户文本不能替代结构化确认
+        tlog(
+          'dialogue.loop_guard',
+          { rounds: stateRef.current.pendingRepeatCount + stateRef.current.unresolvedTextReplies },
+          'system',
+        )
+        loopGuardSuffix =
+          '\n\n【系统对账·非用户发言】对话出现循环：用户文本回复不能替代结构化确认。请停止重复提议，等待用户点击界面上的确认卡；如需用户选择，请用 ask_user 提供明确选项。'
+        console.log('[adr010] loop guard injected')
+      } else if (dialogueVerdict === 'forced-clarify') {
+        // 二级（强制澄清卡）：系统直接置 system_clarify 决策点（不经模型）——本回合不再调用模型
+        const curPending = stateRef.current.pending
+        const underlying = (
+          curPending === 'none' || curPending === 'system_clarify' ? 'goal' : curPending
+        ) as 'goal' | 'plan' | 'resolution'
+        const dc = stateRef.current.decisionContent
+        const prop = dc?.proposal as { statement?: string; summary?: string } | undefined
+        const statement = prop?.statement ?? prop?.summary ?? '当前任务决策点等待你的选择'
+        setPendingState('system_clarify', {
+          proposal: { underlying, statement },
+          since: new Date().toISOString(),
+        })
+        tlog('dialogue.forced_clarify', { underlying }, 'system')
+        console.log('[adr010] forced clarify card set, underlying=' + underlying)
+        return // 等待用户在强制卡上做出选择——不进入模型回合
+      }
       const res = await window.neonforge.gateway.streamChat({
         apiKey: key,
         level: 'basic',
         tools: true,
         forceTool,
-        messages: [sysHint, ...msgs],
+        messages: [
+          ...(loopGuardSuffix
+            ? [{ ...sysHint, content: sysHint.content + loopGuardSuffix }]
+            : [sysHint]),
+          ...msgs,
+        ],
       })
       if (!res.ok) {
         finishError(res.error ?? 'gateway-error', res.errorType)
@@ -2136,6 +2183,8 @@ export default function ConversationPanel({
       onUserMessage?.(text)
       // 2026-08-04：对话日志（自动记录用户消息——与 assistant done 互补成完整对话）；2026-08-08 会话归属
       tlog('conversation.message_sent', { content: text }, 'user')
+      // ADR-010 T2：pending 存在期间的用户文本回复计数（用户在试图用文字确认——A-024 主动检测）
+      stateRef.current = noteUserTextReply(stateRef.current)
       window.neonforge.chatLog?.log?.({
         ts: new Date().toISOString(),
         role: 'user',
@@ -2994,11 +3043,61 @@ export default function ConversationPanel({
           </button>
         </div>
       )}
+      {/* ADR-010：强制澄清卡——无进展对话二级介入（系统触发不经模型；悬浮输入框上方，不物理锁定输入） */}
+      {stateRef.current.pending === 'system_clarify' &&
+        (() => {
+          void stateVersion
+          const fdc = stateRef.current.decisionContent
+          const prop = fdc?.proposal as { underlying?: string; statement?: string } | undefined
+          if (!prop) return null
+          const lastAssistant = [...messagesRef.current]
+            .reverse()
+            .find((m) => m.role === 'assistant')
+          return (
+            <div className="nf-forcedcard" role="alertdialog" aria-label="需要你做出选择">
+              <div className="nf-forcedcard__head">
+                对话出现循环——请直接选择（文字回复不能替代确认）
+              </div>
+              <div className="nf-forcedcard__body">{prop.statement}</div>
+              <div className="nf-forcedcard__actions">
+                <button
+                  type="button"
+                  className="nf-forcedcard__btn nf-forcedcard__btn--ok"
+                  onClick={() => confirm('system_clarify')}
+                >
+                  确认执行
+                </button>
+                <button
+                  type="button"
+                  className="nf-forcedcard__btn"
+                  onClick={() => reject('system_clarify', { kind: 'direction' })}
+                >
+                  我要重新描述
+                </button>
+                <button
+                  type="button"
+                  className="nf-forcedcard__btn"
+                  onClick={() => {
+                    confirm('system_clarify')
+                    if (lastAssistant?.toolCalls?.length)
+                      approveAllToolCalls(lastAssistant.toolCalls)
+                  }}
+                >
+                  由搭档全权决定
+                </button>
+              </div>
+            </div>
+          )
+        })()}
       <div className="nf-chat__input">
         <textarea
           ref={textareaRef}
           value={input}
-          placeholder="输入想法…（Enter 发送 · Shift+Enter 换行）"
+          placeholder={
+            stateRef.current.pending === 'system_clarify'
+              ? '请先在上方卡片做出选择（文字回复不能替代确认）'
+              : '输入想法…（Enter 发送 · Shift+Enter 换行）'
+          }
           aria-label="给搭档的消息"
           role="combobox"
           aria-haspopup="listbox"

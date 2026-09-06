@@ -243,7 +243,9 @@ export function detectUnproductiveDialogue(
   s: ConversationState,
   turnCount = 0,
 ): 'loop-guard' | 'forced-clarify' | null {
-  const repeated = Math.max(s.pendingRepeatCount, s.unresolvedTextReplies)
+  // rejectStreak 纳入（C2 隐式拒绝循环——A-024 真机机制：用户文本→隐式 reject(direction)→模型重提议→循环，
+  // 每轮 reject 都走 userDecided 会清零 T1/T2 计数，唯 rejectStreak 持续累积）
+  const repeated = Math.max(s.pendingRepeatCount, s.unresolvedTextReplies, s.rejectStreak)
   if (turnCount >= 40) return 'forced-clarify' // T4：总回合软上限兜底
   if (repeated >= 3) return 'forced-clarify'
   if (repeated >= 2) return 'loop-guard'
@@ -301,7 +303,10 @@ export function setPending(
   // （否则「连续拒绝 3 次上限」因每次重提议清零而永远不触发——协商保护失效）；
   // 「随新提议重置」按 C2 语义 = 用户新意图（pending 期间新自由文本 → reject(direction)+新 GoalProposal）
   // 是**新决策点**——由应用层经 goal 确认边界/新任务重置（S3 接线）；领域层只承载计数
-  return { ...s, pending: kind, decisionContent: content ? { kind, ...content } : undefined }
+  // ADR-010 T1：同 kind 连续置位计数（换 kind 重置为 1——notePendingSet 比较旧 pending）；
+  // 计数只增不清（清零唯二入口：userDecided / noteUserTextReply 的 none 分支），避免重提议洗掉循环证据
+  const noted = notePendingSet(s, kind)
+  return { ...noted, pending: kind, decisionContent: content ? { kind, ...content } : undefined }
 }
 
 // approve-files 批准 → 计划清单追加（A0 §5 追加语义——不覆盖前批）+ 幂等标记（坑 95）

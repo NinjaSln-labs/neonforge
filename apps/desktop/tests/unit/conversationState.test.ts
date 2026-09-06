@@ -5,7 +5,6 @@ import { describe, it, expect } from 'vitest'
 import {
   initialState,
   userDecided,
-  notePendingSet,
   noteUserTextReply,
   detectUnproductiveDialogue,
   approvalDecided,
@@ -1216,20 +1215,17 @@ describe('#6 真机回归：P2-5 复合只读命令', () => {
 describe('无进展对话检测（ADR-010 T1/T2）', () => {
   it('T1：同 kind 连续 pending_set 2 次 → loop-guard，3 次 → forced-clarify', () => {
     let s = initialState()
-    s = notePendingSet(s, 'goal') // pending 变更前调用（比较旧值）
-    s = setPending(s, 'goal') // 首次置位
+    s = setPending(s, 'goal') // 首次置位（setPending 内置 T1 计数 = 1）
     expect(detectUnproductiveDialogue(s)).toBeNull()
-    s = notePendingSet(s, 'goal') // 模型重复提议（pending 仍 goal——期间无用户决策）
-    s = setPending(s, 'goal')
+    s = setPending(s, 'goal') // 模型重复提议（期间无用户决策）→ 计数 2
     expect(detectUnproductiveDialogue(s)).toBe('loop-guard')
-    s = notePendingSet(s, 'goal')
-    s = setPending(s, 'goal')
+    s = setPending(s, 'goal') // 计数 3
     expect(detectUnproductiveDialogue(s)).toBe('forced-clarify')
   })
   it('T1：换 kind 清零', () => {
     let s = initialState()
-    s = notePendingSet(s, 'goal')
-    s = notePendingSet(s, 'plan') // 换 kind → 重置为 1
+    s = setPending(s, 'goal')
+    s = setPending(s, 'plan') // 换 kind → 重置为 1
     expect(detectUnproductiveDialogue(s)).toBeNull()
   })
   it('T2：pending 期间用户文本回复 2 条 → loop-guard', () => {
@@ -1249,8 +1245,8 @@ describe('无进展对话检测（ADR-010 T1/T2）', () => {
     let s = initialState()
     s = userDecided(s, 'goal', { confirm: true })
     s = userDecided(s, 'plan', { confirm: true })
-    s = notePendingSet(s, 'resolution')
-    s = notePendingSet(s, 'resolution')
+    s = setPending(s, 'resolution')
+    s = setPending(s, 'resolution')
     s = userDecided(s, 'resolution', { confirm: true })
     expect(s.pendingRepeatCount).toBe(0)
     expect(s.unresolvedTextReplies).toBe(0)
@@ -1323,4 +1319,18 @@ describe('system_clarify 决策点（ADR-010）', () => {
     s = setPending(s, 'system_clarify')
     expect(() => userDecided(s, 'system_clarify', { confirm: true })).toThrow(/underlying/)
   })
+})
+
+it('C2 隐式拒绝循环：rejectStreak 2 → loop-guard，3 → forced-clarify（A-024 真机机制）', () => {
+  let s = initialState()
+  s = userDecided(s, 'goal', { confirm: true })
+  s = setPending(s, 'goal')
+  s = userDecided(s, 'goal', { confirm: false, reason: { kind: 'direction' } }) // streak 1
+  s = setPending(s, 'goal')
+  s = userDecided(s, 'goal', { confirm: false, reason: { kind: 'direction' } }) // streak 2
+  s = setPending(s, 'goal')
+  expect(detectUnproductiveDialogue(s)).toBe('loop-guard')
+  s = userDecided(s, 'goal', { confirm: false, reason: { kind: 'direction' } }) // streak 3
+  s = setPending(s, 'goal')
+  expect(detectUnproductiveDialogue(s)).toBe('forced-clarify')
 })

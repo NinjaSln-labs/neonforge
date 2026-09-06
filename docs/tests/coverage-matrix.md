@@ -103,6 +103,8 @@
 | 推进检测统一（proposed/providedEvidence——结构化提议/完成声明带证据 = 推进） | agentLoop.test.ts::evaluateTurnProgress S5 2 用例（【目标确认】/【执行方案】/【已达成】检测 + parseCompletionClaim 证据判定）| ✅ |
 | StuckDetector 对齐（提议/证据轮重置——模型走决策点流程不被打断；纯文本承诺仍 escalate——只说不做保留） | agentLoop.test.ts::detectStuck S5 3 用例 + L3 S5-1（连续提议不打断）/S5-2（纯文本 escalate 打点）| ✅ |
 | renderer 切换（decideTurnPolicy → decideProgressGuarantee——已确认决策点提议过滤 + toolsAvailable 能力快照） | L3 全量 42（根因 3/T0-1 forceTool 强制回归 + S5-1/2）| ✅ |
+| 对话健康度 T1/T2/T4（无进展对话检测——同决策点重复/文本拒绝循环/总回合上限） | conversationState.test.ts ADR-010 7 用例（notePendingSet/noteUserTextReply/detectUnproductiveDialogue + system_clarify 委派） | ✅ |
+| 强制澄清卡（system_clarify 三选项 + loop guard 注入 + C2 隐式拒绝循环拦截） | L3 forcedClarify T-FORCE-1/2/3 + gatewayRetry 3 用例（A-024 放大器） | ✅ |
 | execution.forced/released 事件语义（mode/reason 可回放） | timeline.ts detailKeys ['reason','?mode'] + 接线处打点 | ✅ |
 | turnPolicy.ts/forceToolInput 移除（无悬挂引用） | L2 双 tsc 0 错（turnPolicy.ts 已删）| ✅ |
 

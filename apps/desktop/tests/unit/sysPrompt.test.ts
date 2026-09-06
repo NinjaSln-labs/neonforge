@@ -69,3 +69,14 @@ describe('sysPrompt ↔ 解析器格式契约互锁（S2——§8.1 C）', () =>
     expect(hint).toContain('关键假设')
   })
 })
+
+describe('ADR-010/A-024：sysPrompt 硬约束', () => {
+  const hint = buildSysHint('', '', '')
+  it('禁止确认暗号话术（⑳）', () => {
+    expect(hint.content).toContain('严禁要求用户')
+    expect(hint.content).toContain('输入特定文字')
+  })
+  it('verification 只收只读 shell 命令（21）', () => {
+    expect(hint.content).toContain('禁止把 read/write/open/edit 等工具调用名填进 verification')
+  })
+})
