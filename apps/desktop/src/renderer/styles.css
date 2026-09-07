@@ -249,10 +249,11 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 /* 2026-09-07 用户决策：配置页对齐启动页品牌效果——渐变标题 + 光晕背景 + 大输入/渐变 CTA */
 .nf-config { width: 420px; display: flex; flex-direction: column; gap: var(--nf-space-3); }
 .nf-config__title {
-  font-size: 44px; font-weight: 700; letter-spacing: -1px; margin-top: 0; margin-bottom: 0;
+  font-size: 44px; font-weight: 700; letter-spacing: -1px; margin: 0 auto;
+  width: fit-content;
   background: linear-gradient(90deg, #6366f1, #a855f7, #ff8a00);
   -webkit-background-clip: text; background-clip: text;
-  color: transparent; text-align: center;
+  color: transparent;
 }
 .nf-config__sub { color: var(--nf-text-dim); font-size: 15px; font-weight: 500; margin: 6px 0 0; text-align: center; }
 .nf-config__lead { color: var(--nf-text-tertiary); font-size: var(--nf-font-sm); margin: 0 0 var(--nf-space-2); text-align: center; }
@@ -812,8 +813,6 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   transform: translateX(-50%);
   background: radial-gradient(ellipse at center, rgba(99, 102, 241, 0.14), transparent 65%);
 }
-/* 2026-09-07 用户反馈：配置页内容更矮——光晕下移罩住品牌标题（观感对齐启动页） */
-.nf-app--config::before { top: 4%; }
 .nf-app--start::after, .nf-app--config::after {
   content: ''; position: absolute; pointer-events: none;
   width: 560px; height: 420px; left: 50%; bottom: -10%;
