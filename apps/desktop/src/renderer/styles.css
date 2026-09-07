@@ -313,12 +313,13 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   -webkit-background-clip: text; background-clip: text;
   color: transparent; margin-top: 0;
 }
+/* 2026-09-07 用户反馈：slogan 居中于品牌名与输入框之间（上下间距对称） */
 .nf-start__slogan {
-  margin-top: 6px; font-size: 15px; font-weight: 500;
+  margin-top: 20px; font-size: 15px; font-weight: 500;
   color: var(--nf-text-dim);
 }
 /* 方案 A：输入框 + 场景快捷卡（占位轮播——展示能做什么） */
-.nf-start__compose { width: 100%; margin-top: 36px; display: flex; flex-direction: column; gap: var(--nf-space-3); }
+.nf-start__compose { width: 100%; margin-top: 20px; display: flex; flex-direction: column; gap: var(--nf-space-3); }
 .nf-start__input {
   width: 100%; resize: none; border-radius: 12px; padding: 12px 14px;
   background: var(--nf-bg-panel); border: 1px solid var(--nf-border);
