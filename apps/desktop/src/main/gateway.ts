@@ -20,6 +20,26 @@ export class GatewayHttpError extends Error {
   }
 }
 
+// UAT 钩子缺口 #8：chat 路径故障注入（模块级一次性消耗——与 validateKey 的 NF_FORCE_NETWORK_ERROR 分立）
+let chatErrorHookConsumed = false
+/** @internal vitest 复位 */
+export function resetChatErrorHookForTests(): void {
+  chatErrorHookConsumed = false
+}
+
+function injectChatErrorHook(): void {
+  // 运行时再读 env——vitest 可 stubEnv 而不必 resetModules；产品路径 TEST_HOOKS 已在启动时固化
+  const mode =
+    TEST_HOOKS.forceChatError ??
+    (process.env.NF_FORCE_CHAT_ERROR as typeof TEST_HOOKS.forceChatError)
+  if (!mode || chatErrorHookConsumed) return
+  chatErrorHookConsumed = true
+  console.log('[gateway] TEST_HOOK forceChatError=' + mode)
+  if (mode === '400-once') throw new GatewayHttpError(400)
+  if (mode === '503-once') throw new GatewayHttpError(503)
+  if (mode === 'network-once') throw new TypeError('fetch failed')
+}
+
 export const classifyGatewayError = (e: unknown): GatewayErrorType => {
   if (e instanceof GatewayHttpError) return e.status === 401 ? 'key-invalid' : 'service'
   const msg = e instanceof Error ? e.message : ''
@@ -473,6 +493,7 @@ export class DeepSeekGateway {
   ): Promise<void> {
     const model = opts.model ?? this.router.route({ thinking: opts.level ?? 'basic' })
     console.log('[gateway] stream start model=' + model + ' tools=' + (opts.tools ?? false))
+    injectChatErrorHook()
     const res = await fetch(`${API_BASE}/chat/completions`, {
       method: 'POST',
       headers: {

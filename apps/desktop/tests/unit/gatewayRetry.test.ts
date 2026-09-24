@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { DeepSeekGateway, GatewayHttpError } from '../../src/main/gateway'
+import {
+  DeepSeekGateway,
+  GatewayHttpError,
+  classifyGatewayError,
+  resetChatErrorHookForTests,
+} from '../../src/main/gateway'
 
 // A-024 放大器（UAT-Sim 2026-09-07）：上游瞬态 http-400 杀死用户确认回合 → 模型收不到确认 →
 // 反复重提议循环。修复：streamChat 对 400 恰好重试一次（连续 400 仍抛——不掩盖确定性 payload bug）；
@@ -64,5 +69,52 @@ describe('gateway chat http-400 单次重试（A-024 放大器）', () => {
       }),
     ).rejects.toThrow(GatewayHttpError)
     expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('gateway chat 路径故障钩子（UAT 缺口 #8）', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
+    vi.restoreAllMocks()
+    resetChatErrorHookForTests()
+  })
+
+  it('NF_FORCE_CHAT_ERROR=400-once：首击抛 400，streamChat 重试后走真实 fetch 成功', async () => {
+    vi.stubEnv('NF_FORCE_CHAT_ERROR', '400-once')
+    resetChatErrorHookForTests()
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(sseBody('recovered'), {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const gw = new DeepSeekGateway()
+    const chunks: string[] = []
+    await gw.streamChat('sk-test', {
+      messages: [{ role: 'user', content: 'hi' }],
+      onDelta: (c) => {
+        if (c.type === 'content' && c.text) chunks.push(c.text)
+      },
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1) // 钩子抛在 fetch 前；重试才 fetch
+    expect(chunks.join('')).toContain('recovered')
+  })
+
+  it('NF_FORCE_CHAT_ERROR=network-once：classify 为 service（非 key-invalid），不重试', async () => {
+    vi.stubEnv('NF_FORCE_CHAT_ERROR', 'network-once')
+    resetChatErrorHookForTests()
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const gw = new DeepSeekGateway()
+    await expect(
+      gw.streamChat('sk-test', {
+        messages: [{ role: 'user', content: 'hi' }],
+        onDelta: () => {},
+      }),
+    ).rejects.toThrow(TypeError)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(classifyGatewayError(new TypeError('fetch failed'))).toBe('service')
   })
 })

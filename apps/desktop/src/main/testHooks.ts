@@ -4,6 +4,10 @@
 export const TEST_HOOKS = {
   // 配置页验证：模拟断网/超时/5xx（gateway.validateKey 分支）
   forceNetworkError: process.env.NF_FORCE_NETWORK_ERROR as '1' | 'timeout' | 'service' | undefined,
+  // chat 路径瞬态故障（streamChatOnce 首次命中后消耗——UAT 钩子缺口 #8）
+  // 400-once：抛 GatewayHttpError(400)→streamChat 单次重试路径；network-once/503-once：不重试，断言勿误报 key-invalid
+  forceChatError: process.env.NF_FORCE_CHAT_ERROR as
+    '400-once' | 'network-once' | '503-once' | undefined,
   // 打开项目跳过系统对话框（e2e/L4）
   testProject: process.env.NF_TEST_PROJECT ?? undefined,
   // 独立 userData（e2e 隔离——main.ts import 期读取）
