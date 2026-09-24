@@ -29,6 +29,9 @@ yarn-error.log*
 coverage/
 .nyc_output/
 
+# Local audit output (not product source)
+audit-report/
+
 # OS
 .DS_Store
 ._*
