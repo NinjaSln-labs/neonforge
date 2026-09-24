@@ -1,6 +1,6 @@
 # 意图确认机制——领域模型重设计（v1）
 
-> 2026-08-16 · 依据：三视角调研（9 竞品文档 + 14 仓库源码 + 20+ 学术/工业）→ `analysis/competitor-crawler/reports/neonforge-intent-confirmation-research.md`（物理位置 `~/Documents/myself/analysis/competitor-crawler/`——仓库外，2026-08-16 第 14 轮审计 #5 标注）；领域对照分析 → `.scratch/neonforge-v1/intent-confirmation-domain-analysis.md`（本机私有——预设计对照）
+> 2026-08-16 · 依据：三视角调研（9 竞品文档 + 14 仓库源码 + 20+ 学术/工业）→ `F:\neonforge-competitors\reports\neonforge-intent-confirmation-research.md`（物理位置 `F:\neonforge-competitors\`——仓库外，2026-08-16 第 14 轮审计 #5 标注）；领域对照分析 → `.scratch/neonforge-v1/intent-confirmation-domain-analysis.md`（本机私有——预设计对照）
 > 原则：**从领域出发，不受现有实现束缚**（推翻没关系，向正确的道路前行）。沿用项目 DDD 重建先例（2026-08-14 会话状态机 S1-S6、2026-08-15 Timeline BC）——文档先行，分阶段落地，每步门禁。
 > 本设计只覆盖「意图确认」有界上下文（Conversation BC 内）——工具执行/沙箱/授权执行层不在此设计范围（V2 另行）。
 

@@ -58,7 +58,7 @@
 
 ## 6. 本地竞品源码实证（14 仓库——最可靠证据）
 
-`~/Documents/myself/analysis/competitor-crawler/data/source/`（aider/cline/codex/deep-code/deepcode-hkuds/deepseek-harness/gemini-cli/goose/oh-my-pi/openclaw/openhands/pi/reasonix/swe-agent）：
+`F:\neonforge-competitors\`（aider/cline/codex/deep-code/deepcode-hkuds/deepseek-harness/gemini-cli/goose/oh-my-pi/openclaw/openhands/pi/reasonix/swe-agent）：
 
 | 竞品                                                                         | tool_choice 用法                                                                                         | 强制机制                                                                                                                                                |
 | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
