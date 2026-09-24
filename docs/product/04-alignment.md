@@ -118,7 +118,7 @@ neonforge/
 | `.scratch/neonforge-v1/intent-confirmation-domain-design.md` | **重构期设计权威**（§1-9：决策点触发权/完成证据/PlanProposal/RejectReason/推进保障/双维门控/测试域 DDD；S0-S7 分阶段）|
 | `.scratch/neonforge-v1/intent-confirmation-doc-audit.md` | 设计文档五轮审计闭环（1C+16M+14m 全修）|
 | `F:\neonforge-competitors\reports\neonforge-intent-confirmation-research.md` | 三视角调研依据（9 竞品+14 源码+20+ 学术）——2026-08-16 第 14 轮审计 #5：**物理位置在项目外** `F:\neonforge-competitors\`（仓库内引用为逻辑路径——内容已内化设计文档）|
-| `docs/PRODUCT-DOC-AUDIT.md`（最新轮——当前第 13 轮；r4-r12 归档）| 产品文档审计（领域/产品文档就绪度与验收标准——修复随轮次回写）|
+| `docs/PRODUCT-DOC-AUDIT.md`（最新轮——当前第 23 轮；r4–r22 / r24–r25 归档）| 产品文档审计（领域/产品文档就绪度与验收标准——修复随轮次回写）|
 
 > 冲突裁决：重构期实现语义以 scratch 设计文档为准（领域/产品文档同步已完成——A0 v4.0 / D0 v2.2 / 07 v1.1 / 07-api-gateway 推进保障同步）；本索引的旧 Phase 1-3 为 0-1 初始搭建序，重构按设计文档 S0-S7 执行。
 > 历史文档标注（2026-08-16 第 6/9 轮审计）：`product/06-product-design-audit.md`（07-31）与 `domain/08-domain-design-audit.md`（M1-M10）为历史审计——裁决已回写 A0，与新设计无冲突，仅作追溯参考；`domain/01-reference-analysis.md`（07-30）为历史竞品技术分析——无确认语义冲突（新调研引用见本表上方）。

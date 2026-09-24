@@ -27,6 +27,7 @@ NeonForge：为 DeepSeek 打造的 AI 问题工作台（Electron 桌面应用，
 | 语义裁定            | `docs/decisions/`（ADR 001-009…）               |
 | 覆盖矩阵            | `docs/tests/coverage-matrix.md`                 |
 | 阶段评审            | `docs/audits/`                                  |
+| 产品文档审计链      | `docs/PRODUCT-DOC-AUDIT.md`（最新·第 23 轮）+ `docs/PRODUCT-DOC-AUDIT-r4~r22.md` / `r24~r25.md` |
 | 最新索引            | 上表 + `.handoff/status`（旧 `HANDOFF.md` §5 已废） |
 
 ## 验证链（一律在 `apps/desktop` 下执行）
