@@ -1,0 +1,1 @@
+[20260926-16:09:31] 新增 templates/pi/orca-autotakeover.ts（pi 全局扩展，安装位 ~/.pi/agent/extensions/）：pi 冷启动且 cwd 有 .handoff/index 时于首个 turn 自动注入接手指令（自跑 handoff check/confirm/view）；resume/fork 不触发；无 .handoff 目录零影响。实测注入生效
