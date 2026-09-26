@@ -57,3 +57,6 @@ aliment/
 # Orca ADE（本机配置，不入仓）
 orca.yaml
 .worktreeinclude
+# --- private-docs (auto 2026-09-26) ---
+docs/PRODUCT-DOC-AUDIT-r*.md
+apps/desktop/E2E-AUDIT.md
