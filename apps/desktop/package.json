@@ -16,7 +16,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"*.mjs\" \"*.config.*\" \"../../.prettierrc.json\" \"../../lefthook.yml\" \"../../.github/workflows/qa.yml\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"*.mjs\" \"*.config.*\" \"../../.prettierrc.json\" \"../../lefthook.yml\" \"../../.github/workflows/qa.yml\"",
-    "dist": "npm run build && electron-builder"
+    "dist": "npm run build && node -e \"require('fs').accessSync('dist/preload/preload.cjs')\" && electron-builder"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
