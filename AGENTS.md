@@ -32,4 +32,4 @@ python3 <project-handoff 技能目录>/scripts/handoff.py check
 5. 语义裁定 → `docs/decisions/`
 6. 覆盖矩阵 → `docs/tests/coverage-matrix.md`
 7. 审计：阶段评审 → `docs/audits/`；产品文档 → `docs/PRODUCT-DOC-AUDIT.md`（历史同目录 `r*`）；本机草稿 → `.scratch/neonforge-v1/audit-items/`（候选）
-8. 私有本机 → `.git/info/exclude`；旧交接 → `.handoff/legacy/`；环境例外 → `.handoff/pitfalls`
+8. 私有本机 → `.git/info/exclude`；旧交接 → `.handoff/legacy/`；环境例外 → `.handoff/pitfalls/<domain>.jsonl`（ops / e2e / mac / wsl / uat）

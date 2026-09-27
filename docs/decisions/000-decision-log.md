@@ -16,3 +16,5 @@
 | 005 | PlannedFiles 权威下沉 main + 批准事实跨重启（D3——IPlannedFilesRepository）         | accepted | 2026-08-16 |
 | 006 | 换目标重新确认（#7——goal 已确认后的新目标提议=新任务提议；拒绝=回澄清）            | accepted | 2026-08-16 |
 | 007 | provider 切换——DeepSeek 官方 → Command Code（模型仍 DeepSeek V4 系列；接入方可切） | accepted | 2026-08-21 |
+| 008 | 遗留问题不阻塞完成对账（S4 证据语义修订）                                         | accepted | 2026-08-30 |
+| 009 | 确认协议工具化（V1.5——文本标记 → schema 工具调用）                               | accepted | 2026-08-31 |
