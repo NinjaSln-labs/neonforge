@@ -68,6 +68,7 @@ test('工具卡片（bash 需授权 🔒）', async ({ page }) => {
   await expect(bashCard).toContainText('需要授权')
   await expect(bashCard.locator('.nf-toolcall__approve')).toBeVisible()
   await expect(page.locator('.nf-statusbar')).toContainText('待你批准')
+  await page.evaluate(() => document.fonts.ready)
   await expect(page.locator('.nf-chat')).toHaveScreenshot('toolcall-bash-approval.png')
 })
 

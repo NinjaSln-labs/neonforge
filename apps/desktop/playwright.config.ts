@@ -3,6 +3,8 @@ import { defineConfig } from '@playwright/test'
 // NeonForge 质量链：
 // - L5 视觉回归（pixel-perfect 截图——macOS 基线，本地跑；CI Linux 渲染不同 → 不进 CI）
 // - L3 组件交互测试（纯 DOM 断言无截图——跨平台稳定，CI 可跑；ddd-qa-chain 缺层 2026-08-02 补）
+// L5 基线：只在 macOS 更新（npx playwright test --project=visual --update-snapshots）。
+// WSL/Linux 渲染 ≠ 基线宿主——禁止在非 Mac 上 update 后入库（K8）。
 export default defineConfig({
   testDir: './tests',
   testMatch: /\.(visual|interaction)\.ts$/,

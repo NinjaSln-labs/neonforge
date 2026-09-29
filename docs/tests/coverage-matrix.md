@@ -156,6 +156,12 @@
 | probe：DDG→keyed search / health；从不打 public | webTools.test.ts | ✅ |
 | UAT 显式试用或 `NF_UAT_KEENABLE_KEY`（T3/G-web） | uat-lib `ensureWebAccessEnabled` + `docs/tests/uat-tier-baseline.md` | ✅ harness |
 
+## L5 视觉基线纪律（K8）
+
+- 基线权威宿主 = **macOS**；仅在 Mac 上 `--update-snapshots` 后入库（见 `apps/desktop/playwright.config.ts`）。
+- WSL/Linux 渲染 ≠ 基线宿主——禁止在非 Mac 上 update 后入库。
+- 勿与 eslint / UAT 等重任务并行跑 L5（资源竞争假失败——p000114 / K8）。
+
 ## 缺口清单
 
 - **无**（A-003 已关闭——proposal.* 事件断言 c91079e 补齐；A-010 已关闭——S4 V1a integration 7 用例 + L3 4 场景；S3/S4/S5 行为全部有测试承载——S5 新增 progressGuarantee.test.ts 12 用例 + agentLoop 5 + L3 2 场景；D3 全行为有测试承载——plannedFilesStore 12 + tools 1 + L3 D3-1/2；#8 引导有 L1 断言锁定；#9 e2e 脚本无单测基建——真机复验跟踪中）
