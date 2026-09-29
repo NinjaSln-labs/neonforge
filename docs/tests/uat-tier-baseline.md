@@ -32,7 +32,7 @@ bash scripts-cdp/run-uat-tiers.sh
 # 结果：/tmp/nf-uat-tier-results.txt（T1=0 表示 PASS）
 ```
 
-需已有 `release/mac/NeonForge.app`。e2e 中非阻断问题只记，整轮后再汇（p000127）。
+需已有 `release/mac/NeonForge.app`。硬闸：**ADR-012**（测完再修 / p000127）。
 
 ## 外网 / Keenable（T3 · G-web）
 

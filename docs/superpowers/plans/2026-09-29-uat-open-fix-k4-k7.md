@@ -36,7 +36,7 @@
 | G7 | **关单硬闸：** `/tmp/nf-uat-tier-results.txt` 含 `T1=0`…`T4=0` **且** `/tmp/nf-uat-persona-results.txt` 含 `G-impatient=0`…`G-web=0`（脚本约定 0=PASS）。任一非 0 → **禁止** `close t000057`；只 `edit` + `add action` 拆残留。禁止用部分断言冒充绿 |
 | G8 | 模块或 K4/2b 产品补丁后：先 `uat-T1.mjs` PASS，再单跑被修档 |
 | G9 | 未要求不 commit；Conventional Commits |
-| G10 | p000127：过程问题整轮后再汇 |
+| G10 | 硬闸 **ADR-012**（p000127：测完再修；测试轮禁止临修） |
 | G11 | Task4 启动前 shell 必须 `test -n "${NF_UAT_KEENABLE_KEY}"` |
 | G12 | asar 门禁只用 **稳定字面量**（URL/中文文案）；不用易被 minify 吞掉的函数名作唯一依据 |
 
