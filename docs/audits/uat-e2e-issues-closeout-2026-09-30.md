@@ -27,7 +27,7 @@
 | **K5** Mac 外网开不了 / 脚本假阴 | `webAccessUiOk=false` 或 `webToolCount=0` | DDG 不可达；静默 `/public` 禁用后无 Key/试用；timeline 错文件 | Keenable Key 或显式试用；关单强制 Key（G11）；UD 全量 timeline 计 web 工具 | Task1 trial 诊断；Task4 key PASS |
 | **K6** G-picky 拒计划后半程 | `planRejects=2` 后 timeout | 拒后不重提 / 证据后不重报 | `shouldNudgeProposeAfterPlanReject`；`shouldNudgeReportAfterEvidenceMissing` + backfill 禁纯文字 | t000058；Task2b |
 | **K7** T4 残留 timeout | 曾与证据门缠在一起 | 取证后本轮 **leaf E 且脚本 PASS** | 无 2b；关单轮 T4=0 | Task2 |
-| **K8** L5 视觉 flake | `.nf-start` / AA | 测试环境噪声 | **未纳入 t000057 关单轴**；快照有更新但并行 | 另表 |
+| **K8** L5 视觉 flake | `.nf-start` / AA | mock 契约 / 宿主基线 / 偶发超时 | A mock 单源；B Mac-only 基线 + `fonts.ready`；C WSL solo 未复现超时 — Mac 全量 L5 仍建议复验后再称全关 | [plan](../superpowers/plans/2026-09-30-k8-l5-visual-harness.md)；fix/k8-l5-visual-harness |
 | **配置页连跑挂起** | G-picky 卡「验证并开始→从零开始」180s；独跑绿 | 连跑 Electron/9222 残留；validate 一次失败 | validate≤3 重试 + 已在启动页跳过；9222 忙 `kill -9` | t000062 |
 | **合规** 静默公共搜索 | 生产静默打 `/public` | 合规禁止 | 禁静默 `/public`；设置 Key + 可选显式试用 | p000134；Keenable plan |
 
@@ -59,7 +59,8 @@
 
 ## 仍非本次关单范围
 
-- **K8** L5 视觉偶发（可另开）  
+- **K8** L5：方案已落地（[plan](../superpowers/plans/2026-09-30-k8-l5-visual-harness.md)）；A/B 已修、C WSL solo 未复现；**Mac 全量 L5 复验前不宜称全关**  
+
 - 发布/博客等非 UAT action（t000011–013）  
 - 未要求不 commit 前的本机 `.handoff/` / `.scratch/`（不入库）
 
