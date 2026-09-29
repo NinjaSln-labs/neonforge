@@ -84,6 +84,29 @@ describe('runVerificationCommands（S4 V1a——真实只读命令代跑）', ()
     expect(r.ok).toBe(true)
     expect(r.missing).toEqual([])
   })
+
+  it('grep -c 零命中：exit 非0 仍带回 stdout「0」；领域对齐 claim 后 ok', async () => {
+    writeFileSync(join(cwd, 'nolink.txt'), 'no urls here\n')
+    const cmd = "grep -cE 'https?://' nolink.txt"
+    const results = await runVerificationCommands([cmd], { cwd })
+    expect(results[cmd].ok).toBe(false)
+    expect(String(results[cmd].output ?? '').trim()).toBe('0')
+    const claim: CompletionClaim = {
+      summary: '完成',
+      evidence: {
+        verification: [{ command: cmd, output: '0', passed: true }],
+        diffs: [],
+        pendingQuestions: [],
+      },
+    }
+    const r = verifyCompletion(claim, {
+      verificationResults: results,
+      deriveDiffs,
+      plannedFiles: new Set(),
+      producedFiles: new Set(),
+    })
+    expect(r.ok).toBe(true)
+  })
 })
 
 describe('deriveDiffs（S4 V1b——planned/produced 系统派生）', () => {

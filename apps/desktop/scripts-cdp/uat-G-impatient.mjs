@@ -2,10 +2,19 @@
 // Key：环境变量 NEONFORGE_COMMANDCODE，或文件路径 NF_UAT_KEY_FILE（用后删除文件）
 // 专属预期：插话 ≥6；forceTool 无死锁；相邻 message_sent 无同文双发；红线 0；已解决
 import { connect, snap, ensureOut } from './cdp-lib.mjs'
-import { PERSONAS, autopilot, driveScenario, runRedLines, UAT_DIR } from './uat-lib.mjs'
+import {
+  PERSONAS,
+  autopilot,
+  driveScenario,
+  runRedLines,
+  UAT_DIR,
+  ensureCommandCodeConfigured,
+  TASKS,
+  taskLandedHints,
+} from './uat-lib.mjs'
 import { mkdirSync, readFileSync, unlinkSync, existsSync } from 'fs'
 
-const TASK = '帮我做一个简单的待办清单网页（单文件 todo.html，能添加和勾选完成）'
+const TASK = TASKS.impatient
 const OUT = `${UAT_DIR}/G-impatient`
 mkdirSync(OUT, { recursive: true })
 await ensureOut()
@@ -26,17 +35,24 @@ function loadKey() {
   throw new Error('missing NEONFORGE_COMMANDCODE / NF_UAT_KEY_FILE')
 }
 
-/** 连续两次 execution.forced 同 reason 且中间无 tool.requested = forceTool 死锁 */
+/** 同 reason 连续强制且中间无工具：≥3 次重逼才算死锁（偶发重逼允许） */
 function forceToolDeadlocks(ev) {
   const forced = ev.filter((e) => e.type === 'execution.forced')
   const hits = []
+  let streak = 1
   for (let i = 1; i < forced.length; i++) {
     const a = forced[i - 1]
     const b = forced[i]
     const sameReason = String(a.detail?.reason ?? '') === String(b.detail?.reason ?? '')
-    if (!sameReason) continue
+    // 仅 tool.requested 算推进（executed 空转不能洗死锁——A-027）
     const mid = ev.filter((e) => e.seq > a.seq && e.seq < b.seq && e.type === 'tool.requested')
-    if (mid.length === 0) hits.push(`deadlock:forced@${a.seq}-${b.seq} reason=${a.detail?.reason}`)
+    if (sameReason && mid.length === 0) {
+      streak++
+      if (streak >= 3)
+        hits.push(`deadlock:forced@${a.seq}-${b.seq} reason=${a.detail?.reason} streak=${streak}`)
+    } else {
+      streak = 1
+    }
   }
   return hits
 }
@@ -59,13 +75,8 @@ if (!key) throw new Error('empty key')
 
 const { browser, page } = await connect()
 
-if (await page.getByRole('button', { name: '验证并开始' }).count()) {
-  console.log('config page: validating key…')
-  await page.getByLabel('Command Code API Key').fill(key)
-  await page.getByRole('button', { name: '验证并开始' }).click()
-  await page.getByRole('button', { name: '从零开始' }).waitFor({ timeout: 120000 })
-  console.log('config ok → start page')
-}
+// 从零：空 userData → 必须先过钥匙配置页（选源 + 填 Key + 验证）
+await ensureCommandCodeConfigured(page, key)
 
 if (await page.getByRole('button', { name: '从零开始' }).count()) {
   const ta = page.getByLabel('想解决的问题')
@@ -80,7 +91,8 @@ console.log('workspace ready')
 
 await page.waitForTimeout(4000)
 const body = await page.locator('body').innerText()
-if (!body.includes('todo.html') && !body.includes('待办')) {
+const hints = taskLandedHints('impatient')
+if (!hints.some((h) => body.includes(h))) {
   console.log('no auto-send detected — sending task manually')
   await page.locator('textarea').last().fill(TASK)
   await page.getByRole('button', { name: '发送' }).click()

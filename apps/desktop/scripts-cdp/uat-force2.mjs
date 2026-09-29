@@ -14,7 +14,7 @@ console.log('watermark', mark)
 await page.getByRole('button', { name: '新问题' }).click({ timeout: 8000, force: true })
 await page.waitForTimeout(1200)
 const input = page.locator('textarea').last()
-await input.fill('写一个猜数字小游戏网页')
+await input.fill('写个猜数字小游戏网页给我玩，别整太复杂')
 await page.locator('text=发送').last().click({ timeout: 5000 })
 console.log('task sent')
 
@@ -29,10 +29,10 @@ for (let i = 1; i <= 3; i++) {
   const inp = page.locator('textarea').last()
   await inp.fill(
     i === 1
-      ? '就按你说的做，直接开始'
+      ? '就按你说的做呗，直接开始'
       : i === 2
-        ? '别问了，直接确认开始'
-        : '我说了直接开始，别再确认了',
+        ? '别老问了，直接干就行'
+        : '我说了直接开始，别再让我确认了',
   )
   await page.locator('text=发送').last().click({ timeout: 5000 })
   console.log(`text reply #${i} sent`)

@@ -446,7 +446,7 @@ interface IntentConfirmationServices {
   canExecute(state, action, policy) = sessionGate 优先 → actionGate
   // 只读判定升级（Codex is_safe_command 方向）
   classifyReadonly(name, command?): ActionAttribute['kind']
-  // 完成证据对账（A0 §4.2——系统代跑只读验证/diff 派生；无证据不对账）
+  // 完成证据对账（A0 §4.2——系统代跑只读验证/diff 派生；无证据不对账；ok 谓词见 ADR-011）
   verifyCompletion(claim, systemState): { ok, missing, unverifiable }
   // 提议解析（含坑 102 过滤/解析失败降级）
   parsePlanProposal(text): { ok: true; proposal: PlanProposal } | { ok: false; reason }

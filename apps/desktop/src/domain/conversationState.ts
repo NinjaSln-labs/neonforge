@@ -684,13 +684,22 @@ function isSystemVerifiable(command: string): boolean {
   return kind === 'readonly' || kind === 'network-read'
 }
 
-/** 证据可核验性（不变量 4 单源——Q2 审计：completionEvidenceComplete 与 verifyCompletion 共用，消除分歧）：
- * verification 非空 + 全部系统可代跑（只读）。
- * #6 真机 2026-08-30（ADR-008）：pendingQuestions 不再计入——遗留问题是「呈给用户的知情项」非「证据缺失」，
- * 阻塞语义使诚实列遗留的声明永不通过对账（死锁实测），见 docs/decisions/008 */
+/** 证据可核验性（不变量 4 单源——completionEvidenceComplete 与 verifyCompletion.ok 共用）：
+ * verification 非空 + **至少一条**系统可代跑（`isSystemVerifiable`）。
+ * ADR-011：unverifiable 仅标注，不单独否决；零条可代跑 → false。
+ * ADR-008：pendingQuestions 不计入（遗留问题=知情项，非证据缺失）。 */
 export function evidenceVerifiable(evidence: CompletionEvidence): boolean {
   if (evidence.verification.length === 0) return false
-  return evidence.verification.every((item) => isSystemVerifiable(item.command))
+  return evidence.verification.some((item) => isSystemVerifiable(item.command))
+}
+
+/** V1a：claim.output ↔ 代跑 stdout 对齐（ADR-011）——去空白后双向包含；空串不对齐 */
+function outputAligns(claimed: string | undefined, actual: string | undefined): boolean {
+  if (claimed == null || actual == null) return false
+  const a = claimed.replace(/\s+/g, '').trim()
+  const b = actual.replace(/\s+/g, '').trim()
+  if (!a || !b) return false
+  return a.includes(b) || b.includes(a)
 }
 
 /** 证据完整性判定（兼容壳——语义 = evidenceVerifiable；S4 接线时可由 verifyCompletion 直连取代） */
@@ -710,14 +719,12 @@ export interface SystemVerifier {
 }
 
 /**
- * 完成声明核验（设计 §3.3）：证据不足（verification 空 / passed=false / 存在 unverifiable）→ ok=false + 清单
- * - 纯逻辑部分（S1）：passed=false → missing；非只读命令 → unverifiable（拍板 4——与 evidenceVerifiable 同源）
- * - V1a/V1b（S2 扩展）：systemState 提供时——系统代跑结果复核（ok:false → missing）；
- *   diffs 由系统从 plannedFiles/producedFiles 派生比对（planned 有文件未产出 → missing）
- * - systemState 缺省 = 纯逻辑判定（S1 兼容——不代跑；S4 接线后必传）
- * - #6 真机 2026-08-30（ADR-008）：pendingQuestions 不再阻塞 ok——遗留问题由解决卡呈现、
- *   用户知情决策（「- 无」空标记已由解析层剔除）；原「pendingQuestions 非空 → 不进入对账」
- *   与 sysPrompt ⑮「必须列遗留问题」构成死锁（诚实模型永不可达已解决——真机实测）
+ * 完成声明核验（设计 §3.3 / ADR-011）：
+ * ok = missing 空且至少一条可代跑（hasSystemEvidence）；unverifiable 可非空（仅标注）。
+ * - 纯逻辑：verification 空 / passed=false → missing；非只读 → unverifiable（仍列出）
+ * - V1a/V1b（systemState）：代跑 ok:false → missing；planned 未产出 → missing
+ * - 全部不可代跑 → ok=false（无系统证据）；空 verification 不放宽
+ * - ADR-008：pendingQuestions 不阻塞 ok
  */
 export function verifyCompletion(
   claim: CompletionClaim,
@@ -737,12 +744,16 @@ export function verifyCompletion(
     if (!isSystemVerifiable(item.command)) unverifiable.push(item.command)
   }
   // S2 V1a：系统代跑结果复核（只读命令——系统已核验且失败 → missing；「自报」降级为「系统复核」）
+  // ADR-011：exit 非0 但 stdout 与 claim.output 对齐（如 grep -c → "0"）→ 不 missing
   if (systemState) {
     for (const item of claim.evidence.verification) {
       if (item.passed === false) continue // 已计 missing
       if (!isSystemVerifiable(item.command)) continue // 已计 unverifiable——系统不代跑
       const result = systemState.verificationResults[item.command]
-      if (result && !result.ok && !missing.includes(`verification:${item.command}`)) {
+      if (!result) continue
+      const aligned = !result.ok && outputAligns(item.output, result.output)
+      if (result.ok || aligned) continue
+      if (!missing.includes(`verification:${item.command}`)) {
         missing.push(`verification:${item.command}`)
       }
     }
@@ -757,7 +768,10 @@ export function verifyCompletion(
       missing.push('diff:planned-not-produced')
     }
   }
-  return { ok: missing.length === 0 && unverifiable.length === 0, missing, unverifiable }
+  const hasSystemEvidence = claim.evidence.verification.some((item) =>
+    isSystemVerifiable(item.command),
+  )
+  return { ok: missing.length === 0 && hasSystemEvidence, missing, unverifiable }
 }
 
 /** V1b diff 对账系统派生（S4 单源——renderer/main 共用）：planned ∩ produced 匹配项。
@@ -774,7 +788,7 @@ export function deriveDiffs(planned: Set<string>, produced: Set<string>): Array<
 
 /** A-021：planned 清单项 q 是否已被 produced 产出覆盖——精确相等或 produced 末段边界匹配
  *（q 相对 'index.html'，produced '/…/index.html' → 同一文件；q 需非空——trustPath 空 fallback 不算已产出） */
-export function matchesPlannedPath(q: string, produced: Set<string>): boolean {
+export function matchesPlannedPath(q: string, produced: ReadonlySet<string>): boolean {
   if (!q) return false
   if (produced.has(q)) return true
   for (const p of produced) {
@@ -795,11 +809,23 @@ export function buildEvidenceBackfill(v: {
   if (v.ok) return ''
   const lines: string[] = []
   if (v.missing.length > 0) lines.push(`证据不足：${v.missing.join('；')}`)
-  if (v.unverifiable.length > 0) lines.push(`以下证据未经系统核验：${v.unverifiable.join('；')}`)
+  if (v.unverifiable.length > 0) {
+    lines.push(`以下证据未经系统核验：${v.unverifiable.join('；')}`)
+    lines.push(
+      '禁止在 verification 里使用重定向（>、>>）或写临时文件；请改用只读命令（如 ls、grep、cat、curl -I localhost）并重新提交 report_completion。',
+    )
+  }
+  // 可执行下一步（UAT P1：抽象「补充证据」不够——模型在 force 下空转 write/read）
   lines.push(
-    '请补充可核验的验证证据（只读验证命令 + 括号内写真实结果）后重新输出【已达成】声明；不确定事项写入「遗留问题：」节（不影响对账）。工具调用记录（read/write/edit/open 等）不算验证证据——系统只代跑只读 shell 命令。',
+    '下一步：① bash 跑一条只读命令（例：ls -la <产物相对路径>；或 grep -n . <文件> | head）；② 必须再次调用 report_completion 工具，把该 command 与真实 stdout 填进 verification（禁止只用文字声称完成）；③ 再提交。read/write/edit/open 工具记录不算验证证据；不确定事项写入 pending_questions。',
   )
   return lines.join('\n')
+}
+
+/** 静默回填次数上限（与 count++ 后 `<= max` 配对）。
+ * missing 路径保持旧行为 1 次（原 `count < 2`）；仅 unverifiable（无 missing）允许多到 3 次换只读证据。 */
+export function evidenceGuideMaxAttempts(v: { missing: string[]; unverifiable: string[] }): number {
+  return v.unverifiable.length > 0 && v.missing.length === 0 ? 3 : 1
 }
 
 // —— 方案清单派生（不变量 6 承载：plannedFiles 只由已确认的 PlanProposal.files 派生——追加语义 A0 §5） ——
@@ -863,9 +889,12 @@ export function decideProgressGuarantee(
 // ============================================================================
 
 // 计划完成度（A0 §4 表 + 补行：无计划时以 produced 为准——缝隙 3 无计划死锁）
+// A-021 同构：planned/produced 可能相对↔绝对双形态——精确 .has 会让 force 永转（四档 T1 forced×15）
 export function plannedComplete(s: ConversationState, projectFiles: ReadonlySet<string>): boolean {
   if (s.plannedFiles.size === 0) return s.producedFiles.size > 0
-  return [...s.plannedFiles].every((f) => s.producedFiles.has(f) || projectFiles.has(f))
+  return [...s.plannedFiles].every(
+    (f) => matchesPlannedPath(f, s.producedFiles) || matchesPlannedPath(f, projectFiles),
+  )
 }
 
 // S5 复审修正（坑 97 单源）：结构化提议信号唯一探测（【目标确认】/【执行方案】/【已达成】——

@@ -8,8 +8,10 @@ async function mockBridge(page: import('@playwright/test').Page) {
       config: {
         hasKey: async () => true,
         getKey: async () => 'test-key',
+        getProvider: async () => 'commandcode',
         setKey: async () => {},
         clearKey: async () => {},
+        listProviders: async () => [],
       },
       workspace: {
         openFolder: async () => '/tmp/nf-visual-test',
@@ -51,8 +53,10 @@ test('断点续做：发送 → reload → 会话恢复', async ({ page }) => {
       config: {
         hasKey: async () => true,
         getKey: async () => 'test-key',
+        getProvider: async () => 'commandcode',
         setKey: async () => {},
         clearKey: async () => {},
+        listProviders: async () => [],
       },
       workspace: {
         openFolder: async () => '/test',
@@ -101,8 +105,10 @@ test('搭档须知 .neonforge 注入（项目级指令——08d 消费）', asyn
       config: {
         hasKey: async () => true,
         getKey: async () => 'test-key',
+        getProvider: async () => 'commandcode',
         setKey: async () => {},
         clearKey: async () => {},
+        listProviders: async () => [],
       },
       workspace: {
         openFolder: async () => '/test',

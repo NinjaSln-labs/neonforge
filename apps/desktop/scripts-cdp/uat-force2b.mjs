@@ -24,7 +24,11 @@ for (let i = 1; i <= 3; i++) {
   await page.waitForTimeout(2000)
   const inp = page.locator('textarea').last()
   await inp.fill(
-    i === 1 ? '就按你说的做，直接开始' : i === 2 ? '别问了，直接开始' : '直接开始，不用再确认',
+    i === 1
+      ? '就按你说的做呗，直接开始'
+      : i === 2
+        ? '别老问了，直接干'
+        : '直接开始就行，不用再确认',
   )
   await page.locator('text=发送').last().click({ timeout: 5000 })
   console.log(`text reply #${i} sent`)

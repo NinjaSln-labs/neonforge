@@ -14,7 +14,6 @@ const readDelegate = () => {
 }
 
 export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
-  // 2026-08-04 审计修复（D3）：Esc 关闭设置（页内面板——键盘用户退出路径；点击外部关闭留给后续）
   useEffect(() => {
     if (!onClose) return
     const onKey = (e: KeyboardEvent) => {
@@ -23,7 +22,7 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
-  // 08 内置插件：真实注册表状态（mock/无通道 → null → 静态占位）
+
   const [plugins, setPlugins] = useState<Array<{ name: string; active: boolean }> | null>(null)
   useEffect(() => {
     void window.neonforge.plugins?.list?.().then(setPlugins)
@@ -42,7 +41,6 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
     })
   }
 
-  // L4 委托（ticket 14）：低危 write/edit 自动授权免确认——产品入口（对话授权行为实时联动）
   const [delegate, setDelegate] = useState(readDelegate)
   const handleDelegate = (v: boolean) => {
     setDelegate(v)
@@ -54,13 +52,75 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
     window.dispatchEvent(new Event('nf-delegate-changed'))
   }
 
-  // 2026-08-04：导出对话记录（用户反馈时可提供完整对话给 AI 看实际）
   const [exportMsg, setExportMsg] = useState<string | null>(null)
   const handleExport = () => {
     setExportMsg(null)
     void window.neonforge.chatLog?.export?.().then((r) => {
       setExportMsg(r.ok ? `已导出：${r.path ?? ''}` : (r.error ?? '导出失败'))
     })
+  }
+
+  // 外网检索（web_search / web_fetch）
+  const [webEnabled, setWebEnabled] = useState(false)
+  const [webProbeOk, setWebProbeOk] = useState(false)
+  const [webUrl, setWebUrl] = useState('')
+  const [webKey, setWebKey] = useState('')
+  const [keenableKey, setKeenableKey] = useState('')
+  const [keenableTrial, setKeenableTrial] = useState(false)
+  const [webBusy, setWebBusy] = useState(false)
+  const [webMsg, setWebMsg] = useState<string | null>(null)
+  useEffect(() => {
+    void window.neonforge.config.getWebAccess?.().then((w) => {
+      if (!w) return
+      setWebEnabled(w.enabled)
+      setWebProbeOk(w.probeOk)
+      setWebUrl(w.searchUrl ?? '')
+      setWebKey(w.searchKey ?? '')
+      setKeenableKey(w.keenableApiKey ?? '')
+      setKeenableTrial(w.keenablePublicTrial)
+    })
+  }, [])
+
+  const saveWebAccess = async (enabled: boolean, opts?: { keenablePublicTrial?: boolean }) => {
+    setWebBusy(true)
+    setWebMsg(null)
+    const trial = opts?.keenablePublicTrial ?? keenableTrial
+    const res = await window.neonforge.config.setWebAccess?.({
+      enabled,
+      searchUrl: webUrl.trim() || null,
+      searchKey: webKey.trim() || null,
+      keenableApiKey: keenableKey.trim() || null,
+      keenablePublicTrial: trial,
+      probe: enabled,
+    })
+    setWebBusy(false)
+    if (!res) {
+      setWebMsg('当前环境不支持外网设置')
+      return
+    }
+    if (!res.ok) {
+      setWebEnabled(false)
+      setWebProbeOk(false)
+      setWebMsg(res.error ?? '外网探测失败')
+      return
+    }
+    setWebEnabled(res.config.enabled)
+    setWebProbeOk(res.config.probeOk)
+    setWebMsg(
+      res.config.enabled
+        ? res.config.searchUrl
+          ? '已开启（使用自有搜索端点）'
+          : res.config.builtinProvider === 'keenable'
+            ? res.config.hasKeenableKey
+              ? '已开启（内置：Keenable，已配置 Key）'
+              : res.config.keenablePublicTrial
+                ? '已开启（内置：Keenable 公共试用）'
+                : '已开启（Keenable 可达；搜索前请配置 Key 或开启试用）'
+            : res.config.builtinProvider === 'ddg'
+              ? '已开启（内置：DuckDuckGo）'
+              : '已开启（外网探测通过）'
+        : '已关闭外网检索',
+    )
   }
 
   return (
@@ -71,7 +131,6 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
         </span>
       </div>
 
-      {/* 2026-08-04：对话记录导出（自动记录对话日志——可导出 .md 发给 AI 反馈） */}
       <div className="nf-settings__row">
         <span>
           导出对话记录{' '}
@@ -82,6 +141,92 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
         </button>
       </div>
       {exportMsg && <p className="nf-settings__export-msg">{exportMsg}</p>}
+
+      <div className="nf-settings__plugins">
+        <span className="nf-settings__plugins-title">外网检索（web_search / web_fetch）</span>
+        <div className="nf-settings__row">
+          <span>
+            允许外网检索{' '}
+            <em>
+              开启时探测外网；可填自有搜索 URL（POST {'{'}query{'}'}）覆盖内置。探测状态：
+              {webProbeOk ? '通过' : '未通过/未测'}
+            </em>
+          </span>
+          <label className="nf-settings__row--switch">
+            <input
+              type="checkbox"
+              checked={webEnabled}
+              disabled={webBusy}
+              onChange={(e) => void saveWebAccess(e.target.checked)}
+              aria-label="允许外网检索"
+            />
+          </label>
+        </div>
+        <label className="nf-settings__row">
+          <span>自有搜索端点 URL（可选）</span>
+          <input
+            type="url"
+            className="nf-config__input"
+            placeholder="https://example.com/search"
+            value={webUrl}
+            onChange={(e) => setWebUrl(e.target.value)}
+            onBlur={() => {
+              if (webEnabled) void saveWebAccess(true)
+            }}
+          />
+        </label>
+        <label className="nf-settings__row">
+          <span>自有搜索 Key（可选 Bearer）</span>
+          <input
+            type="password"
+            className="nf-config__input"
+            placeholder="留空则不带 Authorization"
+            value={webKey}
+            onChange={(e) => setWebKey(e.target.value)}
+            onBlur={() => {
+              if (webEnabled) void saveWebAccess(true)
+            }}
+          />
+        </label>
+        <label className="nf-settings__row">
+          <span>
+            Keenable API Key{' '}
+            <em>
+              DDG 不可达时使用；查询由 Keenable 在美国处理。免费额度见 keenable.ai（需账号）。
+            </em>
+          </span>
+          <input
+            type="password"
+            className="nf-config__input"
+            placeholder="keen_…"
+            value={keenableKey}
+            onChange={(e) => setKeenableKey(e.target.value)}
+            onBlur={() => {
+              if (webEnabled) void saveWebAccess(true)
+            }}
+            aria-label="Keenable API Key"
+          />
+        </label>
+        <div className="nf-settings__row">
+          <span>
+            允许无 Key 公共试用 <em>每 IP 约 1000 次/小时，共享池，仅评估</em>
+          </span>
+          <label className="nf-settings__row--switch">
+            <input
+              type="checkbox"
+              checked={keenableTrial}
+              disabled={webBusy}
+              onChange={(e) => {
+                const v = e.target.checked
+                setKeenableTrial(v)
+                if (webEnabled) void saveWebAccess(true, { keenablePublicTrial: v })
+              }}
+              aria-label="允许无 Key 公共试用"
+            />
+          </label>
+        </div>
+        {webMsg && <p className="nf-settings__export-msg">{webMsg}</p>}
+      </div>
 
       <div className="nf-settings__plugins">
         <span className="nf-settings__plugins-title">内置插件（暂不支持安装新插件）</span>
@@ -102,7 +247,6 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
         </div>
       </div>
 
-      {/* 2026-08-04：L4 委托开关（真实——与对话授权联动；原仅 demo TrustLadderPanel 可开，产品无入口） */}
       <div className="nf-settings__row">
         <span>
           低风险文件操作自动授权{' '}

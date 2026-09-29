@@ -81,6 +81,7 @@
 | `message.appended` | 消息变更（用户/搭档/工具）——**#1 承接标注：注册表以 `conversation.message_sent` / `conversation.assistant_start` / `conversation.assistant_done` 表达（按角色分事件——`message.appended` 为语义别名）** |
 | `streaming.started` / `completed` | 流式输出——**#1 承接标注：注册表以 `conversation.assistant_start` / `conversation.assistant_done` 表达（`streaming.*` 为语义别名）** |
 | `conversation.message_sent` | 用户消息（含确认卡触发）|
+| `conversation.system_nudge` | 系统引导/提示注入（非用户通道；载荷 content/kind——时间线取证）|
 | `conversation.assistant_start` / `assistant_done`（2026-08-16 第 16 轮审计 #1 补录——注册表实现）| 搭档回合开始/结束（含流式边界）|
 | `conversation.status_change`（#1 补录）| 会话状态变化（活动/等待/错误）|
 | `conversation.error`（#1 补录）| 会话级错误 |

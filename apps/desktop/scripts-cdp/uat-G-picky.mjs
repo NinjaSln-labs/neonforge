@@ -1,10 +1,19 @@
 // UAT G-picky 全流程（Mac 本机）：读 Key → 验证 → 从零开始 → autopilot 挑剔人格
 // Key：环境变量 NEONFORGE_COMMANDCODE，或文件路径 NF_UAT_KEY_FILE（用后删除文件）
 import { connect, snap, ensureOut } from './cdp-lib.mjs'
-import { PERSONAS, autopilot, driveScenario, runRedLines, UAT_DIR } from './uat-lib.mjs'
+import {
+  PERSONAS,
+  autopilot,
+  driveScenario,
+  runRedLines,
+  UAT_DIR,
+  ensureCommandCodeConfigured,
+  TASKS,
+  taskLandedHints,
+} from './uat-lib.mjs'
 import { mkdirSync, readFileSync, unlinkSync, existsSync } from 'fs'
 
-const TASK = '帮我做一个简单的待办清单网页（单文件 todo.html，能添加和勾选完成）'
+const TASK = TASKS.picky
 const OUT = `${UAT_DIR}/G-picky`
 mkdirSync(OUT, { recursive: true })
 await ensureOut()
@@ -30,15 +39,8 @@ if (!key) throw new Error('empty key')
 
 const { browser, page } = await connect()
 
-// —— 配置页 ——
-if (await page.getByRole('button', { name: '验证并开始' }).count()) {
-  console.log('config page: validating key…')
-  await page.getByLabel('Command Code API Key').fill(key)
-  await page.getByRole('button', { name: '验证并开始' }).click()
-  // 等启动页
-  await page.getByRole('button', { name: '从零开始' }).waitFor({ timeout: 120000 })
-  console.log('config ok → start page')
-}
+// 从零：空 userData → 必须先过钥匙配置页
+await ensureCommandCodeConfigured(page, key)
 
 // —— 启动页：预填任务 + 从零开始（initialPrompt 会自动发送） ——
 if (await page.getByRole('button', { name: '从零开始' }).count()) {
@@ -56,7 +58,8 @@ console.log('workspace ready')
 // 若 auto-send 未发生（输入框仍空闲且无消息），补发一次
 await page.waitForTimeout(4000)
 const body = await page.locator('body').innerText()
-if (!body.includes('todo.html') && !body.includes('待办')) {
+const hints = taskLandedHints('picky')
+if (!hints.some((h) => body.includes(h))) {
   console.log('no auto-send detected — sending task manually')
   await page.locator('textarea').last().fill(TASK)
   await page.getByRole('button', { name: '发送' }).click()

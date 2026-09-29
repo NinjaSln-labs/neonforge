@@ -8,6 +8,9 @@ import {
   goalFallbackTrigger,
   isQuestionLike,
   isConfirmIntent,
+  shouldNudgeProposeAfterResearch,
+  shouldNudgeProposeAfterPlanReject,
+  shouldNudgeReportAfterEvidenceMissing,
 } from '../../src/domain/agentLoop'
 
 // 领域层：progress-aware 卡住检测（2026-08-06 DDD 落地——行业调研 tavily+serper 双源：activity≠progress + 连续无进展升级 + needs-human）
@@ -455,5 +458,127 @@ describe('isConfirmIntent（确认语义判定——条件式/将来时排除）
     expect(isConfirmIntent('可以吗？')).toBe(false)
     expect(isConfirmIntent('确认执行吗？')).toBe(false)
     expect(isConfirmIntent('按这个方案可以吗')).toBe(false)
+  })
+})
+
+describe('shouldNudgeProposeAfterResearch（分析期 research→propose）', () => {
+  const base = {
+    goalConfirmed: false,
+    pending: 'none',
+    toolNamesThisTurn: ['web_search', 'web_fetch'],
+    webOnlyStreak: 2,
+    alreadyNudged: false,
+  }
+  it('streak≥2 仅 web + 未确认 → nudge 含 propose_goal', () => {
+    const r = shouldNudgeProposeAfterResearch(base)
+    expect(r.nudge).toBe(true)
+    if (r.nudge) expect(r.message).toContain('propose_goal')
+  })
+  it('streak<2 → 不触发', () => {
+    expect(shouldNudgeProposeAfterResearch({ ...base, webOnlyStreak: 1 }).nudge).toBe(false)
+  })
+  it('已确认目标 → 不触发', () => {
+    expect(shouldNudgeProposeAfterResearch({ ...base, goalConfirmed: true }).nudge).toBe(false)
+  })
+  it('pending 非 none → 不触发', () => {
+    expect(shouldNudgeProposeAfterResearch({ ...base, pending: 'goal' }).nudge).toBe(false)
+  })
+  it('已 nudge → 不触发', () => {
+    expect(shouldNudgeProposeAfterResearch({ ...base, alreadyNudged: true }).nudge).toBe(false)
+  })
+  it('含 write → 不触发（非纯 web）', () => {
+    expect(
+      shouldNudgeProposeAfterResearch({
+        ...base,
+        toolNamesThisTurn: ['web_search', 'write'],
+      }).nudge,
+    ).toBe(false)
+  })
+  it('本轮无工具 → 不触发', () => {
+    expect(shouldNudgeProposeAfterResearch({ ...base, toolNamesThisTurn: [] }).nudge).toBe(false)
+  })
+})
+
+describe('shouldNudgeProposeAfterPlanReject（拒方案后催重提）', () => {
+  const base = {
+    goalConfirmed: true,
+    planConfirmed: false,
+    pending: 'none',
+    planWasRejected: true,
+    alreadyNudged: false,
+    toolNamesThisTurn: [] as string[],
+  }
+  it('goal 已确认 + 曾拒方案 + 纯文本收尾 → nudge 含 propose_plan', () => {
+    const r = shouldNudgeProposeAfterPlanReject(base)
+    expect(r.nudge).toBe(true)
+    if (r.nudge) {
+      expect(r.message).toContain('propose_plan')
+      expect(r.message).toContain('report_completion')
+    }
+  })
+  it('未拒过方案 → 不触发', () => {
+    expect(shouldNudgeProposeAfterPlanReject({ ...base, planWasRejected: false }).nudge).toBe(false)
+  })
+  it('方案已确认 → 不触发', () => {
+    expect(shouldNudgeProposeAfterPlanReject({ ...base, planConfirmed: true }).nudge).toBe(false)
+  })
+  it('本轮已 propose_plan → 不触发', () => {
+    expect(
+      shouldNudgeProposeAfterPlanReject({ ...base, toolNamesThisTurn: ['propose_plan'] }).nudge,
+    ).toBe(false)
+  })
+  it('本轮有其它工具 → 不触发（等纯文本收尾）', () => {
+    expect(shouldNudgeProposeAfterPlanReject({ ...base, toolNamesThisTurn: ['read'] }).nudge).toBe(
+      false,
+    )
+  })
+  it('已 nudge → 不触发', () => {
+    expect(shouldNudgeProposeAfterPlanReject({ ...base, alreadyNudged: true }).nudge).toBe(false)
+  })
+})
+
+describe('shouldNudgeReportAfterEvidenceMissing（证据门拒后催再 report）', () => {
+  const base = {
+    planConfirmed: true,
+    pending: 'none',
+    evidenceWasMissing: true,
+    alreadyNudged: false,
+    toolNamesThisTurn: [] as string[],
+  }
+  it('plan 已确认 + 曾 evidence_missing + 纯文本收尾 → nudge 含 report_completion', () => {
+    const r = shouldNudgeReportAfterEvidenceMissing(base)
+    expect(r.nudge).toBe(true)
+    if (r.nudge) {
+      expect(r.message).toContain('report_completion')
+      expect(r.message).toContain('不要只用文字')
+    }
+  })
+  it('未曾 evidence_missing → 不触发', () => {
+    expect(
+      shouldNudgeReportAfterEvidenceMissing({ ...base, evidenceWasMissing: false }).nudge,
+    ).toBe(false)
+  })
+  it('方案未确认 → 不触发', () => {
+    expect(shouldNudgeReportAfterEvidenceMissing({ ...base, planConfirmed: false }).nudge).toBe(
+      false,
+    )
+  })
+  it('本轮已 report_completion → 不触发', () => {
+    expect(
+      shouldNudgeReportAfterEvidenceMissing({
+        ...base,
+        toolNamesThisTurn: ['report_completion'],
+      }).nudge,
+    ).toBe(false)
+  })
+  it('本轮有其它工具 → 不触发', () => {
+    expect(
+      shouldNudgeReportAfterEvidenceMissing({ ...base, toolNamesThisTurn: ['bash'] }).nudge,
+    ).toBe(false)
+  })
+  it('已 nudge → 不触发', () => {
+    expect(shouldNudgeReportAfterEvidenceMissing({ ...base, alreadyNudged: true }).nudge).toBe(
+      false,
+    )
   })
 })

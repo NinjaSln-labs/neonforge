@@ -15,7 +15,8 @@ Accepted（2026-08-30）
 
 ## Decision
 
-1. **pendingQuestions 不再阻塞对账**（不变量 4 修订）：blockers 收窄为 verification 空 / passed=false / 存在 unverifiable。遗留问题是「呈给用户的知情项」，由解决卡显式呈现（渲染层列出），用户知情决策——符合 D0 用户主权定位
+1. **pendingQuestions 不再阻塞对账**（不变量 4 修订）：blockers 收窄为 verification 空 / passed=false / **零条可代跑或可代跑条 V1a 失败**。遗留问题是「呈给用户的知情项」，由解决卡显式呈现（渲染层列出），用户知情决策——符合 D0 用户主权定位
+   - 注：原「存在 unverifiable」由 ADR-011（2026-09-29）修订——unverifiable 仅标注，不单独否决 ok
 2. **解析器**：「- 无/暂无/没有/none」空标记不入 pendingQuestions；验证证据命令剥离任意尾随括号注释（全/半角）作为结果文本，passed 从结果文本判定
 3. **passed=false 仍判不通过**（语义保留：失败的验证=达成未证明；诚实模型应把失败检查移入遗留问题/说明节——回填引导文本已明确此路径）
 4. 回填引导文本同步：明示「不确定事项写入遗留问题节（不影响对账）」

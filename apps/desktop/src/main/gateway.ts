@@ -1,11 +1,32 @@
-// DeepSeekGateway：V1 = DeepSeek-only（A0 §1 裁决 D-C1）
-// toDeepSeekParams 四档映射 / ModelRouter / ToolCallRepair / streamChat SSE
+// DeepSeekGateway 门面：Provider 注册表 + DeepSeek ModelProfile + OpenAI 兼容传输（ADR-010）
 // 网络侧收敛在 Main Process（A0 §6 裁决 D-M8）；renderer 经 IPC 调用
 
-export type ThinkingLevel = 'none' | 'basic' | 'medium' | 'high'
 import { TEST_HOOKS } from './testHooks.js'
 // V1.5 S1 Task 1.3：协议工具接入模型工具面（schema 单源——domain/protocolTools.ts）
 import { PROTOCOL_TOOL_DEFS } from '../domain/protocolTools.js'
+import {
+  type ModelID,
+  type ModelTier,
+  type ProviderId,
+  type ThinkingLevel,
+  DEEPSEEK_TOOL_CHOICE,
+  filterDeepSeekModels,
+  fallbackUpstream,
+  getProvider,
+  listModels,
+  resolveFromList,
+  resolveUpstreamModel,
+  toDeepSeekParams,
+  extractReasoningText,
+  REASONING_FIELDS,
+  postChatCompletions,
+  classifyValidateResponse,
+  classifyFetchError,
+} from './providers/index.js'
+
+export type { ModelID, ModelTier, ThinkingLevel, ProviderId }
+export type { DeepSeekThinkingParams } from './providers/index.js'
+export { toDeepSeekParams, extractReasoningText, REASONING_FIELDS }
 
 // 2026-08-07 T1 根因补强（regex-todo）：网关错误结构化透传——原 streamChat throw 文本
 // `gateway: http-${status}` → ipc 文本 → renderer 正则抠状态码（文本重建=打地鼠）；
@@ -37,59 +58,37 @@ function injectChatErrorHook(): void {
   console.log('[gateway] TEST_HOOK forceChatError=' + mode)
   if (mode === '400-once') throw new GatewayHttpError(400)
   if (mode === '503-once') throw new GatewayHttpError(503)
+  if (mode === 'timeout-once') {
+    const err = new DOMException('The operation was aborted due to timeout', 'TimeoutError')
+    throw err
+  }
   if (mode === 'network-once') throw new TypeError('fetch failed')
+}
+
+/** 可瞬态重试：超时 / 5xx / 网络；400 单独限 1 次（见 streamChat） */
+export function isTransientStreamError(e: unknown): boolean {
+  if (e instanceof GatewayHttpError) return e.status >= 500 || e.status === 400
+  if (e instanceof DOMException && e.name === 'TimeoutError') return true
+  if (e instanceof TypeError) return true // fetch failed
+  const msg = e instanceof Error ? e.message : ''
+  return /aborted due to timeout|timed?\s*out/i.test(msg)
 }
 
 export const classifyGatewayError = (e: unknown): GatewayErrorType => {
   if (e instanceof GatewayHttpError) return e.status === 401 ? 'key-invalid' : 'service'
   const msg = e instanceof Error ? e.message : ''
   if (msg.startsWith('gateway')) return 'service' // gateway: no-body 等我方网关层错误
-  if (e instanceof DOMException && e.name === 'TimeoutError') return 'service' // AbortSignal.timeout(45000)
+  if (e instanceof DOMException && e.name === 'TimeoutError') return 'service' // AbortSignal.timeout(stream)
   if (e instanceof TypeError) return 'service' // fetch 网络错误（'fetch failed' 等）
   return 'unknown'
 }
 
-export interface DeepSeekThinkingParams {
-  thinking: { type: 'enabled' | 'disabled' }
-  reasoning_effort?: 'high' | 'max'
-}
-
-// A0 §2 Layer 2：ThinkingLevel 四档 → API 参数（裁决 D-C4，映射全量一次到位）
-export function toDeepSeekParams(level: ThinkingLevel): DeepSeekThinkingParams {
-  switch (level) {
-    case 'none':
-      return { thinking: { type: 'disabled' } }
-    case 'basic':
-      return { thinking: { type: 'enabled' } }
-    case 'medium':
-      return { thinking: { type: 'enabled' }, reasoning_effort: 'high' }
-    case 'high':
-      return { thinking: { type: 'enabled' }, reasoning_effort: 'max' }
-  }
-}
-
-export type ModelID = 'deepseek-v4-flash' | 'deepseek-v4-pro'
-
-// 2026-08-21 ADR-007/provider 兼容：reasoning 字段多源提取（纯函数——SSE 解析 + 单测共用）
-// thinking 内容可能出现在 reasoning_content（DeepSeek 官方/llama.cpp）或 reasoning（Command Code 等 OpenAI 兼容端点）
-// 或 reasoning_text；取第一个非空（对齐 pi/DSH `["reasoning_content","reasoning","reasoning_text"]` 归一——
-// openai-completions.js L349-362「some endpoints return reasoning, others reasoning_content」）
-export const REASONING_FIELDS = ['reasoning_content', 'reasoning', 'reasoning_text'] as const
-export function extractReasoningText(delta: Record<string, unknown>): string | undefined {
-  for (const k of REASONING_FIELDS) {
-    const v = delta[k]
-    if (typeof v === 'string' && v.length > 0) return v
-  }
-  return undefined
-}
-
-// A0 §2 边界判定：ThinkingLevel=定义、ModelRouter=决策（返回完整 API 模型名）
-// 2026-08-15 D7：route 签名去除六阶段残留 stageAgent（无调用方传值——dead parameter）
+// A0 §2：ThinkingLevel=定义、ModelRouter=档位；上游名 = /models DeepSeek 过滤 + fallback
 export class ModelRouter {
-  route(task: { userRequestedPro?: boolean; thinking: ThinkingLevel }): ModelID {
-    if (task.userRequestedPro) return 'deepseek-v4-pro'
-    if (task.thinking === 'high') return 'deepseek-v4-pro'
-    return 'deepseek-v4-flash'
+  route(task: { userRequestedPro?: boolean; thinking: ThinkingLevel }): ModelTier {
+    if (task.userRequestedPro) return 'pro'
+    if (task.thinking === 'high') return 'pro'
+    return 'flash'
   }
 }
 
@@ -186,11 +185,16 @@ export const TOOL_DEFS = [
     type: 'function',
     function: {
       name: 'open',
-      description: '打开网页（默认浏览器）——用户说「帮我打开」「打开网页」时调用，传入服务实际地址',
+      description:
+        '打开网页或项目内本地文件（默认浏览器）——用户说「帮我打开」时调用；http/https，或项目内相对路径/file://（如 index.html）',
       parameters: {
         type: 'object',
         properties: {
-          url: { type: 'string', description: 'http/https 地址（如 http://localhost:5174/）' },
+          url: {
+            type: 'string',
+            description:
+              'http/https，或项目内路径（index.html / file:///…/项目内/index.html）——项目外 file:// 会被拒',
+          },
         },
         required: ['url'],
       },
@@ -240,6 +244,36 @@ export const TOOL_DEFS = [
           query: { type: 'string', description: '搜索关键词（如 "greet 定义" 或 "TODO"）' },
         },
         required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'web_search',
+      description:
+        '外网网页检索（须用户在设置开启「允许外网检索」）。查文档/报错/公开资料用；项目内代码用 search。未开启时不要调用。',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: '检索词' },
+        },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'web_fetch',
+      description:
+        '拉取外网 URL 正文（须已开启外网检索）。读文档页/API 说明用；仅打开浏览器用 open。只支持 http/https。',
+      parameters: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', description: 'http/https 地址' },
+        },
+        required: ['url'],
       },
     },
   },
@@ -390,22 +424,96 @@ export const TOOL_DEFS = [
   })),
 ]
 
-// 2026-08-21 ADR-007 provider 切换（成本优化）：DeepSeek 官方 → Command Code（OpenAI 兼容聚合代理，commandcode.ai）
-// 上游模型名映射：内部档位 → Command Code 上游（deepseek/ 前缀）；切回官方只改 API_BASE + API_MODEL 两处
-const API_BASE = 'https://api.commandcode.ai/provider/v1'
-const API_MODEL: Record<ModelID, string> = {
-  'deepseek-v4-flash': 'deepseek/deepseek-v4-flash',
-  'deepseek-v4-pro': 'deepseek/deepseek-v4-pro',
-}
-function apiModel(id: ModelID): string {
-  return API_MODEL[id]
-}
-
 export class DeepSeekGateway {
   private router = new ModelRouter()
+  /** provider → 已解析上游档位（validate/首次请求时灌入） */
+  private resolvedModels = new Map<ProviderId, Record<ModelTier, string>>()
 
-  // 非流式：验证 Key 用（max_tokens 最小）
-  async validateKey(apiKey: string): Promise<{ ok: boolean; error?: string }> {
+  /**
+   * /models → DeepSeek 过滤；无列表时用 manualModelId；再无则 fallback（运行时兜底）。
+   * validate 路径见 validateKey（无列表且无手填 → needs-model-id）。
+   */
+  async refreshModels(
+    providerId: ProviderId,
+    apiKey: string,
+    manualModelId?: string | null,
+  ): Promise<{ resolved: Record<ModelTier, string>; source: 'list' | 'manual' | 'fallback' }> {
+    const { baseURL } = getProvider(providerId)
+    let ids: string[] = []
+    let listed = false
+    try {
+      ids = await listModels(baseURL, apiKey)
+      listed = true
+    } catch (e) {
+      console.log('[gateway] /models failed:', e instanceof Error ? e.message : e)
+    }
+    const deepseek = filterDeepSeekModels(ids)
+    let resolved: Record<ModelTier, string>
+    let source: 'list' | 'manual' | 'fallback'
+    if (deepseek.length > 0) {
+      resolved = resolveFromList(providerId, ids)
+      source = 'list'
+    } else {
+      const mid = manualModelId?.trim()
+      if (mid) {
+        resolved = { flash: mid, pro: mid }
+        source = 'manual'
+      } else {
+        resolved = {
+          flash: fallbackUpstream(providerId, 'flash'),
+          pro: fallbackUpstream(providerId, 'pro'),
+        }
+        source = 'fallback'
+      }
+    }
+    this.resolvedModels.set(providerId, resolved)
+    console.log(
+      '[gateway] models provider=' +
+        providerId +
+        ' source=' +
+        source +
+        ' listed=' +
+        listed +
+        ' flash=' +
+        resolved.flash +
+        ' pro=' +
+        resolved.pro,
+    )
+    return { resolved, source }
+  }
+
+  private upstream(providerId: ProviderId, tier: ModelTier): string {
+    return resolveUpstreamModel(providerId, tier, this.resolvedModels.get(providerId))
+  }
+
+  /** UI：接入方 + 实际上游模型（未刷列表时用 fallback；手填优先） */
+  peekActiveModel(
+    providerId: ProviderId,
+    manualModelId?: string | null,
+    tier: ModelTier = 'flash',
+  ): { providerId: ProviderId; providerLabel: string; upstream: string; shortName: string } {
+    const mid = manualModelId?.trim()
+    const upstream = mid || this.upstream(providerId, tier)
+    const leaf = upstream.includes('/') ? upstream.slice(upstream.lastIndexOf('/') + 1) : upstream
+    return {
+      providerId,
+      providerLabel: getProvider(providerId).label,
+      upstream,
+      shortName: leaf,
+    }
+  }
+
+  // 非流式：验证 Key——有 /models 自动挑；无列表须手填 modelId
+  async validateKey(
+    apiKey: string,
+    providerId: ProviderId,
+    modelId?: string | null,
+  ): Promise<{
+    ok: boolean
+    error?: string
+    suggestModelId?: string
+    modelSource?: 'list' | 'manual' | 'fallback'
+  }> {
     // 测试钩子：模拟断网/超时（不改系统网络——Q7 集中 TEST_HOOKS）
     if (TEST_HOOKS.forceNetworkError === '1') {
       return { ok: false, error: 'network' }
@@ -417,51 +525,69 @@ export class DeepSeekGateway {
       return { ok: false, error: 'service-error' }
     }
     try {
-      const res = await fetch(`${API_BASE}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: apiModel('deepseek-v4-flash'),
+      const { resolved, source } = await this.refreshModels(providerId, apiKey, modelId)
+      if (source === 'fallback') {
+        return {
+          ok: false,
+          error: 'needs-model-id',
+          suggestModelId: fallbackUpstream(providerId, 'flash'),
+        }
+      }
+      const { baseURL } = getProvider(providerId)
+      const res = await postChatCompletions(
+        baseURL,
+        apiKey,
+        {
+          model: resolved.flash,
           ...toDeepSeekParams('none'),
           messages: [{ role: 'user', content: 'hi' }],
           max_tokens: 1,
-        }),
-        signal: AbortSignal.timeout(15000),
-      })
-      if (res.ok) return { ok: true }
-      if (res.status === 401) return { ok: false, error: 'key-invalid' }
-      if (res.status >= 500) return { ok: false, error: 'service-error' }
-      return { ok: false, error: `http-${res.status}` }
+        },
+        15000,
+      )
+      const classified = await classifyValidateResponse(res)
+      if (classified.ok) return { ok: true, modelSource: source }
+      return classified
     } catch (e) {
-      return {
-        ok: false,
-        error: e instanceof DOMException && e.name === 'TimeoutError' ? 'timeout' : 'network',
-      }
+      return { ok: false, error: classifyFetchError(e) }
     }
   }
 
   // 流式 chat（SSE）：reasoning_content → content → tool_calls 状态机
-  // 回调返回解析出的增量；V1 先透传文本流，tool_calls 解析留 04
-  // A-024 放大器（UAT-Sim 2026-09-07）：上游瞬态 http-400 杀死用户确认回合 → 模型收不到确认 →
-  // 反复重提议循环。对 400 恰好重试一次；连续 400 仍抛（不掩盖确定性 payload bug）；401/5xx 语义不变。
+  // A-024：上游瞬态 http-400 → 恰好重试一次
+  // 2026-09-28：超时/5xx/网络 → 最多再试 2 次（共 3 击）；中途已推 delta 则先 stream-reset 再重拉
   async streamChat(
     apiKey: string,
     opts: Parameters<DeepSeekGateway['streamChatOnce']>[1],
   ): Promise<void> {
+    const maxAttempts = 3
     let attempt = 0
-    while (true) {
+    while (attempt < maxAttempts) {
       attempt++
+      let emitted = false
       try {
-        return await this.streamChatOnce(apiKey, opts)
+        return await this.streamChatOnce(apiKey, {
+          ...opts,
+          onDelta: (chunk) => {
+            emitted = true
+            opts.onDelta(chunk)
+          },
+        })
       } catch (e) {
-        if (e instanceof GatewayHttpError && e.status === 400 && attempt === 1) {
-          console.log('[gateway] http-400 transient — retrying once')
-          continue
-        }
-        throw e
+        const is400 = e instanceof GatewayHttpError && e.status === 400
+        const transient = isTransientStreamError(e)
+        const canRetry = is400 ? attempt === 1 : transient && attempt < maxAttempts
+        if (!canRetry) throw e
+        const kind = is400
+          ? 'http-400'
+          : e instanceof DOMException && e.name === 'TimeoutError'
+            ? 'timeout'
+            : e instanceof GatewayHttpError
+              ? `http-${e.status}`
+              : 'network'
+        console.log(`[gateway] ${kind} transient — retrying (${attempt}/${maxAttempts - 1})`)
+        if (emitted) opts.onDelta({ type: 'stream-reset' })
+        await new Promise((r) => setTimeout(r, 400 * attempt))
       }
     }
   }
@@ -469,7 +595,10 @@ export class DeepSeekGateway {
   private async streamChatOnce(
     apiKey: string,
     opts: {
+      providerId: ProviderId
       model?: ModelID
+      /** 无 /models 时的手填上游 id */
+      manualModelId?: string | null
       level?: ThinkingLevel
       messages: Array<{
         role: string
@@ -479,42 +608,50 @@ export class DeepSeekGateway {
         reasoning_content?: string
       }>
       tools?: boolean
-      // 2026-08-21 ADR-007/provider 兼容：tool_choice 恒 auto——DeepSeek V4 全系拒绝 'required'（thinking 模式 400，
-      // 官方 issue #1376 + 真机实测——显式 thinking disabled 也 400）；「只说不做」由循环层（StuckDetector/escalate）+
-      // prompt 层（sysPrompt ⑨「说了就做」）兜底（对齐 Codex/pi/DSH 共识——docs/design/provider-toolchoice-compat-research.md §7）。
-      // forceTool 布尔仍传递（timeline 取证 execution.forced + L3 断言 mock 布尔），但不再翻译成 API 参数。
+      // tool_choice 恒 auto（DeepSeek Profile）；forceTool 仅 timeline 取证，不进 API
       forceTool?: boolean
       onDelta: (chunk: {
-        type: 'reasoning' | 'content' | 'tool-call' | 'done'
+        type: 'reasoning' | 'content' | 'tool-call' | 'done' | 'stream-reset'
         text?: string
         toolCall?: { name: string; args: Record<string, unknown> }
       }) => void
     },
   ): Promise<void> {
-    const model = opts.model ?? this.router.route({ thinking: opts.level ?? 'basic' })
-    console.log('[gateway] stream start model=' + model + ' tools=' + (opts.tools ?? false))
+    const tier = opts.model ?? this.router.route({ thinking: opts.level ?? 'basic' })
+    if (!this.resolvedModels.has(opts.providerId)) {
+      await this.refreshModels(opts.providerId, apiKey, opts.manualModelId)
+    }
+    const upstream = this.upstream(opts.providerId, tier)
+    const { baseURL } = getProvider(opts.providerId)
+    console.log(
+      '[gateway] stream start provider=' +
+        opts.providerId +
+        ' tier=' +
+        tier +
+        ' upstream=' +
+        upstream +
+        ' tools=' +
+        (opts.tools ?? false),
+    )
     injectChatErrorHook()
-    const res = await fetch(`${API_BASE}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: apiModel(model),
-        // 工具调用模式禁用 thinking（DeepSeek thinking+tools 易陷入思考-工具循环——直接调工具快速收敛）
+    const res = await postChatCompletions(
+      baseURL,
+      apiKey,
+      {
+        model: upstream,
+        // 工具调用模式禁用 thinking（DeepSeek thinking+tools 易陷入思考-工具循环）
         ...toDeepSeekParams(opts.tools ? 'none' : (opts.level ?? 'basic')),
         messages: opts.messages,
         stream: true,
-        ...(opts.tools ? { tools: TOOL_DEFS, tool_choice: 'auto' } : {}),
-      }),
-      signal: AbortSignal.timeout(45000),
-    })
+        ...(opts.tools ? { tools: TOOL_DEFS, tool_choice: DEEPSEEK_TOOL_CHOICE } : {}),
+      },
+      // 流式整段共用 AbortSignal——含读 body；批准后写产物常 >45s，过短会误报「服务暂时不可用」
+      180000,
+    )
     console.log('[gateway] http', res.status)
     if (!res.ok) {
       const bodyText = await res.text().catch(() => '')
       console.log('[gateway] error body:', bodyText.slice(0, 500))
-      // 2026-08-07 T1 根因补强：结构化状态码透传（ipc 层 classifyGatewayError 分类——不再靠文本 gateway: http-xxx 正则重建）
       throw new GatewayHttpError(res.status)
     }
     if (!res.body) throw new Error('gateway: no-body')
@@ -523,14 +660,13 @@ export class DeepSeekGateway {
     const decoder = new TextDecoder()
     let buffer = ''
     const toolAcc: Array<{ name: string; arguments: string }> = []
-    let toolStart = 0 // 工具调用收集开始时间
+    let toolStart = 0
 
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
       buffer += decoder.decode(value, { stream: true })
 
-      // SSE 按行解析 data: {...}
       const lines = buffer.split('\n')
       buffer = lines.pop() ?? ''
       for (const line of lines) {
@@ -538,16 +674,14 @@ export class DeepSeekGateway {
         if (!trimmed.startsWith('data:')) continue
         const payload = trimmed.slice(5).trim()
         if (payload === '[DONE]') {
-          continue // 不在此处发 done——循环结束统一发（保证 tool-call 先于 done）
+          continue
         }
         try {
           const json = JSON.parse(payload)
           const delta = json.choices?.[0]?.delta ?? {}
-          // 2026-08-21 ADR-007/provider 兼容：reasoning 字段多源兼容——取第一个非空（extractReasoningText 纯函数）
           const reasoningText = extractReasoningText(delta)
           if (reasoningText) opts.onDelta({ type: 'reasoning', text: reasoningText })
           if (delta.content) opts.onDelta({ type: 'content', text: delta.content })
-          // tool_calls 增量（DeepSeek SSE：按 index 分片，arguments 为字符串增量）
           if (Array.isArray(delta.tool_calls)) {
             for (const tc of delta.tool_calls) {
               const idx = tc.index ?? 0
@@ -556,8 +690,6 @@ export class DeepSeekGateway {
               if (fn.name) toolAcc[idx].name += fn.name
               if (fn.arguments) toolAcc[idx].arguments += fn.arguments
             }
-            // 模型已决定调工具——等 arguments 完整后发出（分片到达——半截 JSON 会解析失败）
-            // 2026-08-04 体验修复：原 5s 超时对大 content write（几千字符 arguments 流式传输）误判截断 → 写入内容不完整（「代码被截断打散」根因）；提到 30s 且完整即发
             const named = toolAcc.filter((x) => x && x.name)
             if (named.length > 0) {
               if (toolStart === 0) toolStart = Date.now()
@@ -581,10 +713,6 @@ export class DeepSeekGateway {
         }
       }
     }
-    // 收集到的工具调用 → 修复 → 逐个发出（A0 边界：Gateway 修复，ToolRegistry 执行）
-    // V1.5 S2 A-018：repair 失败保留 rawArguments 重试 1 次（round 1 更强策略——杂质剥离；
-    // 双重序列化剥层在基态已覆盖）——静默丢弃会吞掉模型决策（附录 B S0 结论 6 承诺）。
-    // 重试仍失败才放弃（打点原因）。
     const emitToolCall = (name: string, args: unknown, viaRetry: boolean) => {
       console.log(
         `[gateway] tool-call ${viaRetry ? 'repaired (retry)' : 'emit'}:`,
@@ -618,31 +746,33 @@ export class DeepSeekGateway {
     opts.onDelta({ type: 'done' })
   }
 
-  // 预热（ticket 09 / A0 §6 裁决 D-C7）：最小成本请求让服务端缓存 prefix KV
-  // v4-flash + thinking=disabled + max_tokens=1；system 携带完整 prefix（KV 缓存前缀）+ 极简 user 保证请求合法
+  // 预热：flash 档 + thinking=disabled + max_tokens=1
   async preheat(
     apiKey: string,
     prefix: string,
+    providerId: ProviderId,
+    manualModelId?: string | null,
   ): Promise<{ ok: boolean; error?: string; ms: number }> {
     const start = Date.now()
     try {
-      const res = await fetch(`${API_BASE}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: apiModel('deepseek-v4-flash'),
+      if (!this.resolvedModels.has(providerId)) {
+        await this.refreshModels(providerId, apiKey, manualModelId)
+      }
+      const { baseURL } = getProvider(providerId)
+      const res = await postChatCompletions(
+        baseURL,
+        apiKey,
+        {
+          model: this.upstream(providerId, 'flash'),
           ...toDeepSeekParams('none'),
           messages: [
             { role: 'system', content: prefix },
             { role: 'user', content: '继续' },
           ],
           max_tokens: 1,
-        }),
-        signal: AbortSignal.timeout(20000),
-      })
+        },
+        20000,
+      )
       const ms = Date.now() - start
       if (res.ok) return { ok: true, ms }
       return { ok: false, error: `http-${res.status}`, ms }
@@ -655,20 +785,23 @@ export class DeepSeekGateway {
     }
   }
 
-  // 压缩摘要（ticket 11 Compaction）：compactor 角色非流式——历史 → 紧凑摘要（thinking=none + v4-flash）
+  // 压缩摘要：compactor 非流式——thinking=none + flash
   async summarize(
     apiKey: string,
     history: Array<{ role: string; content: string | null }>,
+    providerId: ProviderId,
+    manualModelId?: string | null,
   ): Promise<{ ok: true; summary: string } | { ok: false; error: string }> {
     try {
-      const res = await fetch(`${API_BASE}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: apiModel('deepseek-v4-flash'),
+      if (!this.resolvedModels.has(providerId)) {
+        await this.refreshModels(providerId, apiKey, manualModelId)
+      }
+      const { baseURL } = getProvider(providerId)
+      const res = await postChatCompletions(
+        baseURL,
+        apiKey,
+        {
+          model: this.upstream(providerId, 'flash'),
           ...toDeepSeekParams('none'),
           messages: [
             {
@@ -681,9 +814,9 @@ export class DeepSeekGateway {
           ],
           max_tokens: 400,
           stream: false,
-        }),
-        signal: AbortSignal.timeout(30000),
-      })
+        },
+        30000,
+      )
       const j = (await res.json()) as {
         choices?: Array<{ message?: { content?: string } }>
         error?: { message?: string }

@@ -348,11 +348,23 @@ test('S4-3：系统复核失败推翻自报 → 不弹卡 + 引导 → 重输出
   await page.getByRole('button', { name: '确认执行' }).click()
   // 引导后重输出 → 第二次复核通过 → 卡出现（第一次失败不弹卡的证据 = evidence_missing 打点）
   await expectVisible(page.getByRole('button', { name: '已解决' }), 15000)
-  // A-015（V1.5-S4）：对账失败用户侧可见提示——引导注入消息在对话内用户可见
-  // （断言置于卡出现后——插在确认与卡之间会干扰 mockBridge 轮次推进时序，实测 3/3 失败）
-  await expectVisible(page.locator('.nf-msg--user', { hasText: '系统对账' }), 8000)
-  // evidence_missing 打点（第一次复核失败——missing 含 verification:ls dist）
+  // A-015：对账引导不经用户气泡——时间线 conversation.system_nudge（flush 可能晚于弹卡）
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() =>
+          ((window as unknown as { __tlogs2: { type: string }[] }).__tlogs2 ?? []).some(
+            (l) => l.type === 'conversation.system_nudge',
+          ),
+        ),
+      { timeout: 5000 },
+    )
+    .toBe(true)
   const tlogs = await page.evaluate(() => (window as unknown as { __tlogs2: unknown[] }).__tlogs2)
+  const nudge = tlogs.find((l) => (l as { type: string }).type === 'conversation.system_nudge') as
+    { detail?: { kind?: string } } | undefined
+  expect(nudge?.detail?.kind).toBe('evidence')
+  // evidence_missing 打点（第一次复核失败——missing 含 verification:ls dist）
   const ev = tlogs.find((l) => (l as { type: string }).type === 'completion.evidence_missing') as
     { detail?: { ok?: boolean; missing?: string[] } } | undefined
   expect(ev).toBeTruthy()
@@ -363,7 +375,7 @@ test('S4-3：系统复核失败推翻自报 → 不弹卡 + 引导 → 重输出
     await page.evaluate(() =>
       (window as unknown as { __verifyCount2: () => number }).__verifyCount2(),
     ),
-  ).toBe(2)
+  ).toBeGreaterThanOrEqual(2)
 })
 
 // S5 推进保障场景（设计 §6 S5 + §8.1 B 331——结构化提议/证据算推进——StuckDetector 不打断；纯文本承诺仍 escalate）

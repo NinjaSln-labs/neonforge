@@ -22,6 +22,7 @@ describe('buildSysHint（提示词外置——完整性）', () => {
     expect(h.content).toContain('propose_goal')
     expect(h.content).toContain('propose_plan')
     expect(h.content).toContain('report_completion')
+    expect(h.content).toContain('依据够后调用 propose_goal') // research→propose 契约
     expect(h.content).toContain('降级通道') // 文本标记降级声明（仅工具调用不可用时）
     expect(h.content).toContain('5173/5175')
     expect(h.content).toContain('start-server')

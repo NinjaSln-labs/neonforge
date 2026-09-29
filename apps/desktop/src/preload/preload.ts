@@ -12,11 +12,32 @@ contextBridge.exposeInMainWorld('neonforge', {
   config: {
     hasKey: () => ipcRenderer.invoke('config:has-key'),
     getKey: () => ipcRenderer.invoke('config:get-key'),
-    setKey: (key: string) => ipcRenderer.invoke('config:set-key', key),
+    getProvider: () => ipcRenderer.invoke('config:get-provider'),
+    setKey: (key: string, providerId?: string, modelId?: string | null) =>
+      ipcRenderer.invoke('config:set-key', key, providerId, modelId),
     clearKey: () => ipcRenderer.invoke('config:clear-key'),
+    listProviders: () => ipcRenderer.invoke('config:list-providers'),
+    getModel: () => ipcRenderer.invoke('config:get-model'),
+    getWebAccess: () => ipcRenderer.invoke('config:get-web-access'),
+    setWebAccess: (patch: {
+      enabled?: boolean
+      searchUrl?: string | null
+      searchKey?: string | null
+      keenableApiKey?: string | null
+      keenablePublicTrial?: boolean
+      probe?: boolean
+    }) => ipcRenderer.invoke('config:set-web-access', patch),
   },
   gateway: {
-    validate: (apiKey: string) => ipcRenderer.invoke('gateway:validate', apiKey),
+    validate: (apiKey: string, providerId?: string, modelId?: string | null) =>
+      ipcRenderer.invoke('gateway:validate', apiKey, providerId, modelId),
+    activeModel: () =>
+      ipcRenderer.invoke('gateway:active-model') as Promise<{
+        providerId: string
+        providerLabel: string
+        upstream: string
+        shortName: string
+      }>,
     streamChat: (opts: {
       apiKey: string
       level?: string

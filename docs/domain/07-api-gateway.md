@@ -1,7 +1,18 @@
 # 07 — DeepSeek API 网关设计
 
-> Streaming 解析、Prefix-Cache + 预热、Compaction 协调、1M 上下文策略。DeepSeek-only。
+> Streaming 解析、Prefix-Cache + 预热、Compaction 协调、1M 上下文策略。模型 DeepSeek-only；接入方多源（ADR-010）。
 > 2026-08-07 无阶段对齐：新增 §1.1 forceTool 传递（执行保障的网关链路——确认点驱动）。
+> 2026-09-28（ADR-010）：`gateway.ts` 收成门面；Provider / Catalog / ModelProfile 在 `src/main/providers/`——传输与模型调优两轴分离。
+
+### 0. 接入方与 Catalog（ADR-010）
+
+| 轴 | 落位 | 职责 |
+| --- | --- | --- |
+| Provider | `providers/descriptors/*` + `transport/openaiCompat` | baseURL、鉴权、错误分类 |
+| Catalog | `providers/catalog.ts` | 档位 flash/pro；`/models` DeepSeek 过滤 + fallback |
+| ModelProfile | `providers/profiles/deepseek.ts` | thinking / tool_choice / reasoning 字段 |
+
+首期 provider：`deepseek` / `commandcode` / `opencode-zen` / `opencode-go`。Config 存 `providerId`；旧配置默认 `commandcode`。运行时默认 flash。
 
 ---
 
@@ -9,7 +20,7 @@
 
 | 参数                                                                                            | 说明                                                                                                                                                                                                                                                              |
 | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `model`                                                                                         | `deepseek-v4-flash` / `deepseek-v4-pro`                                                                                                                                                                                                                           |
+| `model`                                                                                         | 上游 id：各源 `/models` 过滤 DeepSeek 后挑 flash（默认 v4.1）/ pro；失败用 descriptor.fallback                                                                                                                                                                 |
 | `thinking`                                                                                      | `{type: 'enabled' \| 'disabled'}`                                                                                                                                                                                                                                 |
 | `reasoning_effort` ★                                                                            | `'high'` / `'max'`（仅 thinking=enabled 时有效）                                                                                                                                                                                                                  |
 | `messages`                                                                                      | OpenAI 兼容格式                                                                                                                                                                                                                                                   |
@@ -120,7 +131,7 @@ class PreheatingService {
     try {
       // 最低成本的虚拟请求
       await this.deepseek.streamChat({
-        model: 'deepseek-v4-flash',
+        model: 'flash',
         thinking: { type: 'disabled' },
         messages: [{ role: 'user', content: prefix.stringify() }],
         max_tokens: 1  // 最小输出
@@ -194,15 +205,15 @@ class PreheatingService {
 
 ```typescript
 class ModelRouter {
-  route(task: TaskContext, thinking: ThinkingLevel): ModelID {
-    if (task.userRequestedPro) return 'v4-pro'
-    if (thinking === 'high') return 'v4-pro'
-    return 'v4-flash'
+  route(task: TaskContext, thinking: ThinkingLevel): ModelTier {
+    if (task.userRequestedPro) return 'pro'
+    if (thinking === 'high') return 'pro'
+    return 'flash'
   }
 }
 ```
 
-> 2026-08-16 第 13 轮审计 #4：移除六阶段残留 `stageAgent`（analyst/architect）分支——无阶段领域 Task 无此字段（04 §1.1）；路由仅按 userRequestedPro / thinking（V1 DeepSeek-only：Flash/Pro 双模型——A0 §1）。
+> 2026-08-16 第 13 轮审计 #4：移除六阶段残留 `stageAgent`（analyst/architect）分支——无阶段领域 Task 无此字段（04 §1.1）；路由仅按 userRequestedPro / thinking（V1 DeepSeek-only：Flash/Pro 档位——A0 §1）。上游具体名由 Catalog 解析。
 
 ---
 

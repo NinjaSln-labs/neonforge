@@ -16,7 +16,7 @@ console.log('timeline watermark seq =', mark)
 await page.locator('text=从零开始').first().click({ timeout: 8000 })
 await page.waitForTimeout(1500)
 const input = page.locator('textarea').last()
-await input.fill('做一个简单的待办清单网页，能添加和勾选待办')
+await input.fill('帮我弄个待办网页呗，能加点事、勾掉完成的那种，越简单越好')
 await page.locator('text=发送').last().click({ timeout: 5000 })
 console.log('task sent')
 

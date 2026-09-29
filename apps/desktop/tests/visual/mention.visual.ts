@@ -8,8 +8,10 @@ async function mockBridge(page: import('@playwright/test').Page) {
       config: {
         hasKey: async () => true,
         getKey: async () => 'test-key',
+        getProvider: async () => 'commandcode',
         setKey: async () => {},
         clearKey: async () => {},
+        listProviders: async () => [],
       },
       workspace: {
         openFolder: async () => '/test',
@@ -56,8 +58,10 @@ test('@引用注入（ContextEngine：@文件 → 精准上下文注入 streamCh
       config: {
         hasKey: async () => true,
         getKey: async () => 'test-key',
+        getProvider: async () => 'commandcode',
         setKey: async () => {},
         clearKey: async () => {},
+        listProviders: async () => [],
       },
       workspace: {
         openFolder: async () => '/test',

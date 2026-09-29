@@ -2,6 +2,7 @@ import { promises as fs } from 'fs'
 import path from 'path'
 import { execSync } from 'child_process'
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { app } from 'electron' // main 进程内置——vitest 下为 undefined（subprocFile 防御走 fallback）
 import { snapshot as takeSnapshot, revert as revertFile } from './applyDiff.js'
 import { codeRag } from './codeRag.js'
@@ -19,8 +20,9 @@ import {
 // 2026-08-06 能力模型（坑 83）：check-env 返回能力视图（平台原生 + 外部扩展 Status——模型按需求选能力）
 import { detectCapabilities, attributeCommandFailure } from './envManager.js'
 import { logTimeline } from './timelineLogger.js'
-// 2026-08-14 S3：动作分类单一权威（领域层——renderer/main 同源判定；缝隙 4）
 import { classifyReadonly, isLocalhostCommand } from '../domain/conversationState.js'
+import { configStore } from './configStore.js'
+import { webSearch, webFetch } from './webTools.js'
 
 // ToolRegistry（ticket 10 / A0 §2）：工具注册与执行分发
 // 边界判定：ToolRegistry=目录与分发；ShellAgent=bash 执行；Gateway=工具调用修复（02 已实现）
@@ -174,6 +176,11 @@ class ToolRegistry {
     }
     try {
       const data = await tool.execute(args, { rootPath: opts.rootPath, sessionId: opts.sessionId })
+      // ADR-011：内层 {ok:false} 透传为外层失败（原恒 ok:true 吞掉工具命题失败）
+      if (data !== null && typeof data === 'object' && (data as { ok?: unknown }).ok === false) {
+        const err = (data as { error?: unknown }).error
+        return { ok: false, error: err != null ? String(err) : 'tool failed', data }
+      }
       return { ok: true, data }
     } catch (e) {
       // 2026-08-04：ENOENT 友好化——原始报错（含完整路径）透传给非技术用户不可读（talk.txt 实测）；提示用相对路径或先看工程文件
@@ -479,19 +486,43 @@ export function isReadOnlyBash(cmd: string): boolean {
   return false
 }
 
-// 2026-08-06 用户反馈「帮我打开」（催 4 次都没打开网页）：open 工具——默认浏览器打开 http/https 地址
-// 语义化优于 bash `open`（macOS 限定 + 白名单外需授权）；打开网页无害 → 无需授权（risk none）
-// 仅放行 http/https（拒绝 file:// 等本地协议，防越权打开本地文件）
-export function isValidOpenUrl(url: string): boolean {
-  return /^https?:\/\/\S+$/.test(url)
+// 2026-08-06 open：默认浏览器打开地址。http/https 任意；本地文件仅项目根内（单文件 HTML 交付——
+// 拒 file:///etc/passwd 等越权；UAT 2026-09-28：拒一切 file:// → 模型改口「做好了你自己双击」假完成）
+export function resolveOpenUrl(raw: string, rootPath?: string): string {
+  const url = raw.trim()
+  if (!url) throw new Error('open: 缺少 url')
+  if (/^(javascript|data|vbscript):/i.test(url)) throw new Error('open: 不支持该协议')
+  if (/^https?:\/\/\S+$/i.test(url)) return url
+  let abs: string
+  if (/^file:/i.test(url)) {
+    abs = fileURLToPath(url)
+  } else if (rootPath) {
+    abs = resolvePath(url, { rootPath })
+  } else {
+    throw new Error('open: 本地文件须在项目内（如 open {url: "index.html"}）')
+  }
+  if (!rootPath || !isInSandbox(abs, rootPath)) {
+    throw new Error('open: 只允许打开项目内文件，或 http/https 地址')
+  }
+  return pathToFileURL(path.resolve(abs)).href
 }
-async function openExecutor(args: Record<string, unknown>): Promise<unknown> {
-  const url = String(args.url ?? args.target ?? '')
-  if (!isValidOpenUrl(url))
-    throw new Error('open: 只支持 http/https 地址（如 open {url: "http://localhost:5174/"}）')
+/** @deprecated 用 resolveOpenUrl；保留给旧测——无 rootPath 时仅 http/https */
+export function isValidOpenUrl(url: string, rootPath?: string): boolean {
   try {
-    // 2026-08-06 open 失败根因（用户反馈「open 调用出现了错误」）：main 是 ESM（NodeNext）——require 未定义 → 永远失败；
-    // 用动态 import（vitest 可 mock；同文件其他 require 都被 try/catch 兜住走 fallback，唯独 open 的失败暴露）
+    resolveOpenUrl(url, rootPath)
+    return true
+  } catch {
+    return false
+  }
+}
+async function openExecutor(
+  args: Record<string, unknown>,
+  ctx: { rootPath?: string },
+): Promise<unknown> {
+  const raw = String(args.url ?? args.target ?? args.path ?? '')
+  const url = resolveOpenUrl(raw, ctx.rootPath)
+  try {
+    // 2026-08-06 open 失败根因：main ESM——require 未定义；动态 import（vitest 可 mock）
     const { shell } = await import('electron')
     if (!shell?.openExternal) throw new Error('当前环境不支持打开浏览器（非 Electron 运行）')
     await shell.openExternal(url)
@@ -607,6 +638,20 @@ export function initTools(): void {
         ctx?.rootPath ?? null,
         String(args.query ?? ''),
       ) as unknown as Promise<unknown>,
+  })
+  toolRegistry.register({
+    name: 'web_search',
+    source: 'core',
+    requiresApproval: false,
+    risk: 'none',
+    execute: async (args) => webSearch(String(args.query ?? ''), configStore.getWebAccess()),
+  })
+  toolRegistry.register({
+    name: 'web_fetch',
+    source: 'core',
+    requiresApproval: false,
+    risk: 'none',
+    execute: async (args) => webFetch(String(args.url ?? ''), configStore.getWebAccess()),
   })
   // 2026-08-06 设计层升级（服务生命周期独立）：start/check/stop-server——模型不用 bash 起服务（端口冲突/超时杀进程/进程残留）也不用 curl 验证（弹卡）
   // 授权：全部自动（start 白名单命令 + NeonForge 管生命周期可停；check 只读；stop 只停自己起的）

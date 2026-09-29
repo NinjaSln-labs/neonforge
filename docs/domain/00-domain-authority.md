@@ -1,8 +1,9 @@
-# 00 — 领域权威总纲（无阶段·目标驱动版 v4.1）
+# 00 — 领域权威总纲（无阶段·目标驱动版 v4.2）
 
-> 版本：v4.1 · 2026-08-21（v4.0 · 2026-08-16）
+> 版本：v4.2 · 2026-09-28（v4.1 · 2026-08-21）
 > 状态：**实现权威**。本总纲为领域设计的唯一权威；旧六阶段版（v2.0）及 A1–A7 降级为参考（冲突处以本总纲为准）。
 > 重构依据：无阶段重构（S1-S8——目标驱动 + 能力驱动 + 确认驱动）替代六阶段产品流水线；领域模型重新生成（02/03/04/06 无阶段版）。
+> v4.2（2026-09-28）：§1 接入方从「两常量」升级为 Provider 注册表 + DeepSeek Catalog（ADR-010——官方/Command Code/OpenCode Zen/Go）。
 > v4.1（2026-08-21）：§1 模型策略澄清——「DeepSeek-only 指模型非接入方」+ provider 可切换单点（ADR-007）+ tool_choice 恒 auto（V4 拒 required——推进强制改循环层+prompt 兜底，`provider-toolchoice-compat-research.md`）。
 > v4.0（2026-08-16）：意图确认领域模型重设计落地——§3.1 确认点更名（方案/解决）、§3.5b 动作属性门控、§3.6 决策点触发权、§4 推进保障+§4.2 完成证据、§5 PlanProposal/RejectReason（详见 `intent-confirmation-domain-design.md`；v3.0 全文经两轮审计同步）。
 > 方法：领域模型驱动设计——从「确认驱动的执行代理」领域概念出发，不反推现有实现。
@@ -11,7 +12,7 @@
 
 ## 1. 模型策略
 
-**V1 = DeepSeek-only（指模型，非接入方）。** 上游模型固定 DeepSeek V4 系列（`deepseek-v4-flash` / `deepseek-v4-pro`）；接入方（provider）可切换——`API_BASE` + `API_MODEL` 单点映射（ADR-007：当前 Command Code，切官方只改两行）；请求参数构造收敛在 `toDeepSeekParams()` 一处（V2 多模型只动网关）。
+**V1 = DeepSeek-only（指模型，非接入方）。** 产品档位 `flash` | `pro`；上游名由各接入方 `/models` 列表过滤 DeepSeek 后挑选（默认 flash → v4.1；官方 alias `deepseek-flash`）；接入方经 `src/main/providers/` 注册表切换（ADR-010：DeepSeek 官方 / Command Code / OpenCode Zen / OpenCode Go；旧配置默认 Command Code）；模型行为调优挂 ModelProfile（`toDeepSeekParams` 等），不挂 provider。
 
 **tool_choice 传递**：**API 层恒 `auto`**——DeepSeek V4 全系拒绝 `tool_choice: 'required'`（thinking 模式 400——官方 issue #1376 + 真机实测；`provider-toolchoice-compat-research.md`）；推进保障（§4）的 `require-advance/require-action` 输出改由**循环层（StuckDetector/escalate）+ prompt 层（sysPrompt ⑨「说了就做」）**承载——对齐 Codex/pi/DSH 工业共识（2026-08-21）。
 
@@ -211,7 +212,7 @@ CompletionClaim{ summary, evidence: CompletionEvidence }
 CompletionEvidence{ verification: [{command, output?, passed?}], diffs: [{path}], pendingQuestions: [] }
 ```
 
-- **无证据不对账**（不变量）：evidence.verification 空 或 pendingQuestions 非空 → 声明不完整 → **不进入 resolution 决策点**（「已解决」卡不弹）→ 回填「缺验证」引导模型补证据
+- **无证据不对账**（不变量，ADR-011）：verification 空 / passed=false / 零条可代跑或可代跑条 V1a 失败 → 声明不完整 → **不进入 resolution 决策点**（「已解决」卡不弹）→ 回填「缺验证」引导模型补证据；unverifiable 仅标注；**pendingQuestions 不阻塞**（ADR-008）
 - 用户确认的是「声明 + 证据」的对账结果（用户原始目标 vs 模型声称完成），不是对声明的背书
 - 证据不足诊断事件：`completion.evidence_missing`
 

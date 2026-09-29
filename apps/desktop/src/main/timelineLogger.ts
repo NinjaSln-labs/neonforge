@@ -4,6 +4,7 @@
 // 纯 Node（main 进程）——appendFileSync 追加 JSONL（崩溃也保留已写行）
 // 2026-08-08 会话级文件：renderer 进入对话（ConversationPanel 挂载）生成 UUID 会话 ID → timeline-<会话ID>.jsonl
 // （每会话独立文件——不再按日期聚合所有会话；无会话 ID（启动页阶段/单元测试）→ 降级按日期文件）
+// 2026-09-28：落盘对齐 app.getPath('userData')/logs（NF_TEST_USERDATA 隔离——不再写死 Application Support）
 
 import { appendFileSync, mkdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
@@ -13,13 +14,33 @@ import type { TimelineEvent, TimelineLogger, TimelineEventType } from '../domain
 // 会话内 seq（设计文档 §2.1：seq=会话内序号）——按会话隔离自增（原进程级计数器——多次启动 seq 冲突）
 const seqBySession = new Map<string, number>()
 
+// main 在 setPath(userData) 后注入——asar ESM 里 require('electron') 不可靠，会误落 Application Support
+let userDataLogsDir: string | null = null
+
+/** 与 configStore.reload 同序：NF_TEST_USERDATA / 默认 userData 就绪后调用 */
+export function setTimelineUserData(userData: string): void {
+  userDataLogsDir = path.join(userData, 'logs')
+}
+
 // 文件名安全（会话 ID 是 UUID，防御性清洗——防路径注入）
 function safeName(s: string): string {
   return s.replace(/[^a-zA-Z0-9-_]/g, '_')
 }
 
+function timelineLogsDir(): string {
+  if (userDataLogsDir) return userDataLogsDir
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { app } = require('electron') as typeof import('electron')
+    if (app?.getPath) return path.join(app.getPath('userData'), 'logs')
+  } catch {
+    /* 单测 / 无 electron */
+  }
+  return path.join(os.homedir(), 'Library/Application Support/neonforge-desktop/logs')
+}
+
 export function timelineFile(session?: string): string {
-  const dir = path.join(os.homedir(), 'Library/Application Support/neonforge-desktop/logs')
+  const dir = timelineLogsDir()
   try {
     mkdirSync(dir, { recursive: true })
   } catch {
@@ -31,11 +52,6 @@ export function timelineFile(session?: string): string {
   return path.join(dir, name)
 }
 
-// 事件类型（穷举会话步骤——2026-08-15 DDD 重建后权威在 src/domain/timeline.ts 事件目录：
-// conversation.*/task.*/session.*/plan.*/tool.*/capability.*/execution.*/stuck.*/problem.*/card.*
-// 旧事件名（user-message/assistant-*/tool-*/card-shown 等）已映射新命名——历史日志文件仍可读（type 字符串兼容）
-// 2026-08-15 领域事件体系（DDD 重建——domain/timeline.ts）：新事件命名对齐 06 目录（task.*/plan.*/tool.*/session.*）；
-// 旧事件名保留兼容（向后可读），新接入统一走领域事件目录
 export function logTimeline(evt: {
   session?: string
   type: string
@@ -60,8 +76,6 @@ export function logTimeline(evt: {
   }
 }
 
-// === 2026-08-15 DDD 重建：TimelineLogger 领域服务实现（对齐 domain/timeline.ts 接口） ===
-// append = logTimeline（现有）；query = JSONL 顺序读 + 过滤（纯函数式——通用接入 A3 查询层）
 export const timelineLogger: TimelineLogger = {
   append: (event) =>
     logTimeline({

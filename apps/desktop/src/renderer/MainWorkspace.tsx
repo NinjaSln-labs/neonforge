@@ -67,6 +67,16 @@ export default function MainWorkspace({
   const [chatKey, setChatKey] = useState(0)
   const [rerunRequest, setRerunRequest] = useState<string | null>(null) // 05 B：复跑请求
   const [showSettings, setShowSettings] = useState(false)
+  // 竞品（Cursor/Claude）：模型名常驻可见——放状态栏右段，不抢对话区
+  const [modelLabel, setModelLabel] = useState<string | null>(null)
+  const refreshModelLabel = useCallback(() => {
+    void window.neonforge.gateway.activeModel?.().then((m) => {
+      if (m) setModelLabel(`${m.providerLabel} · ${m.shortName}`)
+    })
+  }, [])
+  useEffect(() => {
+    refreshModelLabel()
+  }, [refreshModelLabel, showSettings])
   // 08 快捷键（D0 §6）：⌘, 打开/关闭设置 + ⌘N 新任务（全局）
   const handleNew = () => {
     setActiveProblem(null)
@@ -403,34 +413,48 @@ export default function MainWorkspace({
         fileTreeRefreshKey={fileTreeRefreshKey}
       />
 
-      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
+      {showSettings && (
+        <SettingsPanel
+          onClose={() => {
+            setShowSettings(false)
+            refreshModelLabel()
+          }}
+        />
+      )}
 
       {/* 2026-08-03 A4/C3 审计修复：移除硬编码假数据「待审核: 0」+ 状态栏 aria-live（处理中/就绪变化播报）
           2026-08-04 D2：待批准工具操作（授权卡）——状态栏 amber 提示（键盘用户感知） */}
       <footer className="nf-statusbar" role="status" aria-live="polite">
-        {working ? (
-          <>
-            <span className="nf-statusbar__dot nf-statusbar__dot--working" />
-            搭档处理中…
-          </>
-        ) : pendingApproval ? (
-          <>
-            <span className="nf-statusbar__dot nf-statusbar__dot--approval" />
-            有操作待你批准（对话区授权卡）
-          </>
-        ) : actionHint ? (
-          <>
-            <span className="nf-statusbar__dot nf-statusbar__dot--hint" />
-            {actionHint}
-          </>
-        ) : (
-          <>
-            <span className="nf-statusbar__dot nf-statusbar__dot--ready" />
-            就绪
-          </>
+        <span className="nf-statusbar__left">
+          {working ? (
+            <>
+              <span className="nf-statusbar__dot nf-statusbar__dot--working" />
+              搭档处理中…
+            </>
+          ) : pendingApproval ? (
+            <>
+              <span className="nf-statusbar__dot nf-statusbar__dot--approval" />
+              有操作待你批准（对话区授权卡）
+            </>
+          ) : actionHint ? (
+            <>
+              <span className="nf-statusbar__dot nf-statusbar__dot--hint" />
+              {actionHint}
+            </>
+          ) : (
+            <>
+              <span className="nf-statusbar__dot nf-statusbar__dot--ready" />
+              就绪
+            </>
+          )}
+          {' │ '}
+          {(rootPath ?? '从零开始').split(/[/\\]/).filter(Boolean).pop()}
+        </span>
+        {modelLabel && (
+          <span className="nf-statusbar__model" title={modelLabel}>
+            {modelLabel}
+          </span>
         )}
-        {' │ '}
-        {(rootPath ?? '从零开始').split(/[/\\]/).filter(Boolean).pop()}
       </footer>
     </div>
   )

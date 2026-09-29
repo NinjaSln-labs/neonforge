@@ -56,8 +56,9 @@ function runOne(command: string, cwd?: string): Promise<VerificationResult> {
     })
     child.on('error', (err) => finish(false, String(err.message)))
     child.on('close', (code) => {
+      const out = (stdout || stderr).slice(0, MAX_OUTPUT)
       if (code === 0) finish(true, stdout.slice(0, MAX_OUTPUT))
-      else finish(false, (stderr || stdout).slice(0, MAX_OUTPUT))
+      else finish(false, out) // 优先保留 stdout（grep -c → "0"）
     })
   })
 }

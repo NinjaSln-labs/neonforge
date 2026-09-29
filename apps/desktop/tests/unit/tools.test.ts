@@ -49,6 +49,20 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     expect(r.needApproval).toBeUndefined()
   })
 
+  // ADR-011：内层 data.ok===false 须抬到外层（原恒 ok:true 吞失败）
+  it('execute：内层 data.ok===false → 外层 ok=false（ADR-011）', async () => {
+    toolRegistry.register({
+      name: 'web_search_probe',
+      source: 'core',
+      requiresApproval: false,
+      risk: 'none',
+      execute: async () => ({ ok: false, error: 'fetch failed' }),
+    })
+    const r = await toolRegistry.execute('web_search_probe', {}, {})
+    expect(r.ok).toBe(false)
+    expect(String(r.error)).toMatch(/fetch failed/)
+  })
+
   // 2026-08-08 根因 3 修复②：write 规划门控（先 approve-files 再写）是**策略引导**不是「工具执行失败」——
   // policy 标记让 renderer 不置 lastToolFailed（否则 forceTool 恒释放 → 模型纯文本承诺后停住——冒烟 O4/O5 根因）
   it('write：未规划拒绝 = 策略引导（policy 标记）——非执行失败，不弹授权卡', async () => {
@@ -209,31 +223,56 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     expect(c2.ok).toBe(false)
   })
 
-  // 2026-08-06 open 工具（用户「帮我打开」4 次没打开网页）：http/https 打开默认浏览器（无需授权——无害操作）
-  // main 是 ESM——openExecutor 用 await import('electron')（require 在 ESM 未定义 = open 失败根因）；vitest mock 动态 import 生效 → 可断言完整成功路径
+  // 2026-08-06 open 工具（用户「帮我打开」）：http/https；项目内 file:// / 相对路径（单文件 HTML）
   it('open：http/https 地址放行并调用 shell.openExternal（无需授权）', async () => {
     openExternalMock.mockClear()
     const r = await toolRegistry.execute('open', { url: 'http://localhost:5174/' }, {})
     expect(r.ok).toBe(true)
     expect(openExternalMock).toHaveBeenCalledWith('http://localhost:5174/')
-    // requiresApproval false → 不传 approved 也执行（无需授权卡）
     const tool = toolRegistry.list().find((t) => t.name === 'open')
     expect(tool?.requiresApproval).toBe(false)
     expect(tool?.risk).toBe('none')
   })
 
-  it('open：非 http/https 地址拒绝（file:// 等本地协议防越权）', async () => {
+  it('open：项目外 file:// 拒绝（防越权）', async () => {
     openExternalMock.mockClear()
-    const r = await toolRegistry.execute('open', { url: 'file:///etc/passwd' }, {})
+    const r = await toolRegistry.execute(
+      'open',
+      { url: 'file:///etc/passwd' },
+      { rootPath: '/tmp/nf-proj' },
+    )
     expect(r.ok).toBe(false)
-    expect(r.error).toContain('http/https')
+    expect(r.error).toMatch(/项目内|http\/https/)
     expect(openExternalMock).not.toHaveBeenCalled()
   })
 
-  it('isValidOpenUrl：只认 http/https（防注入/空值）', () => {
+  it('open：项目内相对路径 / file:// 放行', async () => {
+    openExternalMock.mockClear()
+    const root = '/tmp/nf-open-proj'
+    const { mkdirSync, writeFileSync, rmSync } = await import('fs')
+    rmSync(root, { recursive: true, force: true })
+    mkdirSync(root, { recursive: true })
+    writeFileSync(`${root}/index.html`, '<h1>ok</h1>')
+    const r = await toolRegistry.execute('open', { url: 'index.html' }, { rootPath: root })
+    expect(r.ok).toBe(true)
+    expect(openExternalMock).toHaveBeenCalled()
+    const opened = String(openExternalMock.mock.calls[0][0])
+    expect(opened.startsWith('file://')).toBe(true)
+    expect(opened.includes('index.html')).toBe(true)
+    const r2 = await toolRegistry.execute(
+      'open',
+      { url: `file://${root}/index.html` },
+      { rootPath: root },
+    )
+    expect(r2.ok).toBe(true)
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  it('isValidOpenUrl：http 任意；file 须落在 rootPath', () => {
     expect(isValidOpenUrl('http://localhost:5174/')).toBe(true)
     expect(isValidOpenUrl('https://example.com')).toBe(true)
     expect(isValidOpenUrl('file:///etc/passwd')).toBe(false)
+    expect(isValidOpenUrl('file:///etc/passwd', '/tmp/proj')).toBe(false)
     expect(isValidOpenUrl('javascript:alert(1)')).toBe(false)
     expect(isValidOpenUrl('')).toBe(false)
     expect(isValidOpenUrl('not a url')).toBe(false)

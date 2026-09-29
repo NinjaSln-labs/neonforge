@@ -4,7 +4,11 @@
 // DDD 落地：Value Object（TurnProgress/StuckState）+ Domain Service（ProgressEvaluator/StuckDetector）+ Domain Event
 // 纯逻辑无 React 依赖——L1 可测；ConversationPanel（Application 层）调用
 // 2026-08-14 S4：副作用分类同源（缝隙 2 进展判定）；2026-08-16 S6：classifyAction 兼容壳移除——isSideEffectAction 直连（拍板 3）
-import { isSideEffectAction, isStructuredProposal } from './conversationState.js'
+import {
+  isSideEffectAction,
+  isStructuredProposal,
+  matchesPlannedPath,
+} from './conversationState.js'
 import { isLikelyPath } from './planProposalParser.js'
 import { parseCompletionClaim } from './completionClaimParser.js'
 
@@ -137,8 +141,10 @@ export function evaluateTurnProgress(input: {
   const projectFiles = input.projectFiles
   // 任务完成度：规划文件非空时——还有未产出规划文件 = 任务未完成（deepcode unimplemented_files 同思路）
   const hasPlannedFiles = !!plannedFiles && plannedFiles.size > 0
-  // 产出判定：write/edit 成功记录 ∪ 出现在项目文件树（projectFiles——回滚/删除后不在树中，更可靠）
-  const isProduced = (f: string): boolean => !!producedFiles?.has(f) || !!projectFiles?.has(f)
+  // 产出判定：write/edit ∪ 文件树；相对/绝对用 matchesPlannedPath（同 plannedComplete——防 force 空转）
+  const isProduced = (f: string): boolean =>
+    matchesPlannedPath(f, producedFiles ?? new Set()) ||
+    matchesPlannedPath(f, projectFiles ?? new Set())
   const hasRemainingPlanned =
     hasPlannedFiles && [...(plannedFiles ?? [])].some((f) => !isProduced(f))
   const remainingCount = hasRemainingPlanned
@@ -240,6 +246,81 @@ export function detectStuck(input: {
   return {
     state: { consecutiveNoProgress, escalations: prev.escalations },
     event: { type: 'no-progress' },
+  }
+}
+
+/** 分析期：连续纯外网检索且未确认目标 → 催 propose_goal（每会话最多 1 次）。
+ * 与 StuckDetector 并列——不改 post-goal 门控；≠ ProgressGuarantee require-action。 */
+export function shouldNudgeProposeAfterResearch(input: {
+  goalConfirmed: boolean
+  pending: string
+  toolNamesThisTurn: string[]
+  webOnlyStreak: number
+  alreadyNudged: boolean
+}): { nudge: false } | { nudge: true; message: string } {
+  if (input.goalConfirmed || input.pending !== 'none' || input.alreadyNudged)
+    return { nudge: false }
+  const onlyWeb =
+    input.toolNamesThisTurn.length > 0 &&
+    input.toolNamesThisTurn.every((n) => n === 'web_search' || n === 'web_fetch')
+  if (!onlyWeb) return { nudge: false }
+  if (input.webOnlyStreak < 2) return { nudge: false }
+  return {
+    nudge: true,
+    message:
+      '【系统提示·非用户发言】外网资料已连续检索多轮。请立即调用 propose_goal 提交目标（再 propose_plan / 写文件）；不要只用检索代替提议。',
+  }
+}
+
+/** 方案曾被拒绝且尚未确认：纯文本收尾 → 催 propose_plan（每会话最多 1 次；不 force 工具）。
+ * G-picky leaf C：plan reject 后无 report_completion 直至超时——缺重提方案文本 nudge。 */
+export function shouldNudgeProposeAfterPlanReject(input: {
+  goalConfirmed: boolean
+  planConfirmed: boolean
+  pending: string
+  planWasRejected: boolean
+  alreadyNudged: boolean
+  toolNamesThisTurn: string[]
+}): { nudge: false } | { nudge: true; message: string } {
+  if (
+    !input.goalConfirmed ||
+    input.planConfirmed ||
+    input.pending !== 'none' ||
+    !input.planWasRejected ||
+    input.alreadyNudged
+  )
+    return { nudge: false }
+  if (input.toolNamesThisTurn.includes('propose_plan')) return { nudge: false }
+  if (input.toolNamesThisTurn.length > 0) return { nudge: false }
+  return {
+    nudge: true,
+    message:
+      '【系统提示·非用户发言】方案已被拒绝且尚未确认。请立即调用 propose_plan 提交修订后的执行方案（吸收用户反馈）；用户确认执行并完成后调用 report_completion——不要只用文字描述方案。',
+  }
+}
+
+/** 证据门曾拒完成声明后：纯文本收尾（含「做好了」类）→ 催再调 report_completion（每会话最多 1 次；不 force）。
+ * G-picky leaf C：evidence_missing×1 后模型只文字声称完成 → StuckDetector 视 isDoneLike 为进展而不催工具。 */
+export function shouldNudgeReportAfterEvidenceMissing(input: {
+  planConfirmed: boolean
+  pending: string
+  evidenceWasMissing: boolean
+  alreadyNudged: boolean
+  toolNamesThisTurn: string[]
+}): { nudge: false } | { nudge: true; message: string } {
+  if (
+    !input.planConfirmed ||
+    input.pending !== 'none' ||
+    !input.evidenceWasMissing ||
+    input.alreadyNudged
+  )
+    return { nudge: false }
+  if (input.toolNamesThisTurn.includes('report_completion')) return { nudge: false }
+  if (input.toolNamesThisTurn.length > 0) return { nudge: false }
+  return {
+    nudge: true,
+    message:
+      '【系统提示·非用户发言】完成声明已被证据门拒绝。请立即调用 report_completion 重新提交（用只读 shell 命令填 verification，修正上次 missing）；不要只用文字声称已完成。',
   }
 }
 

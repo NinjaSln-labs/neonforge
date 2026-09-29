@@ -40,7 +40,7 @@
 | **提议 Proposal**              | 模型产出的结构化主张：目标提议 / 方案提议 / 完成声明。模型可随时产出，**不产生任何状态变化**，只进入「待决策」或「待对账」                                                       |
 | **决策点 DecisionPoint**       | 「需要用户输入才能继续」的确定性状态：`待决策的目标 / 待决策的方案 / 待决策的授权 / 待对账的完成`。由系统对（状态 × 提议 × 动作）求值产生，**模型不能制造**                      |
 | **决策 Decision**              | 用户对决策点的响应：确认 / 拒绝（带原因）/ 修改（带修正内容）。决策是状态推进的唯一输入（不变量 1）                                                                              |
-| **证据 Evidence**              | 完成声明的可核验支撑：验证命令+输出、测试结果、diff 对账、遗留问题清单。证据不足（verification 空 / passed=false / 存在 unverifiable——ADR-008）= 不进入对账；**遗留问题为知情项不阻塞对账**（解决卡呈现——ADR-008）                                                                       |
+| **证据 Evidence**              | 完成声明的可核验支撑：验证命令+输出、测试结果、diff 对账、遗留问题清单。证据不足（零条可代跑 / verification 空 / passed=false / V1a 对账失败）= 不进入对账；unverifiable 仅标注（ADR-011，恢复拍板 4）；**遗留问题为知情项不阻塞对账**（解决卡呈现——ADR-008）                                                                       |
 | **动作属性 ActionAttribute**   | 工具调用的客观性质：只读 / 网络只读 / 清单内写 / 越界写 / 高危命令（kind：readonly / network-read / in-plan / out-of-plan / hazardous——§3.2 同源）。由门控判定（与模型自评无关） |
 | **授权 Approval**              | 对「动作属性判定为需询问」的调用，向用户呈现请求（subject+reason+risk），用户允许（一次/会话/永久）或拒绝（带原因）                                                              |
 | **推进保障 ProgressGuarantee** | 会话级不变量：确认后的会话必须持续推进（产出/提议/证据），防止「只说不做」；推进 ≠ 必须调工具                                                                                    |
@@ -174,7 +174,7 @@ classifyReadonly(name, command?): ActionAttribute['kind']
 //   V1b diff 对账系统派生：claim.evidence.diffs 由系统从 plannedFiles/producedFiles 派生比对（非模型自述）
 //   verification 命令非只读（系统不可代跑）→ 该条证据标记 'unverifiable'（ADR-008：计入 unverifiable 清单而非 pendingQuestions）
 verifyCompletion(claim: CompletionClaim, systemState): { ok: boolean; missing: string[]; unverifiable: string[] }
-//   证据不足（verification 空 / passed=false / 存在 unverifiable）→ ok=false；pendingQuestions 不阻塞（ADR-008——解决卡知情呈现）
+//   ok = missing 空且至少一条可代跑通过对账；unverifiable 不计入 ok（ADR-011）；pendingQuestions 不阻塞（ADR-008——解决卡知情呈现）
 //   已知限制（§7 已知限制登记）：V1 系统核验覆盖只读命令；非只读验证命令的最终可信度依赖用户对账——残余风险显式声明
 
 // —— 方案解析（替代 parseExecutionPlan——含假设与验证计划提取）——
@@ -252,7 +252,7 @@ applyToolResult(...)  // 继承（producedFiles/lastToolFailed）
 1. **决策唯一输入**：状态推进只能由用户决策发生（无决策无推进——A0 §3.2 继承——承载：§3.4 转换函数）
 2. **决策点确定性**：同一（状态×提议×动作）输入 → 同一决策点（纯函数；模型文本不参与）
 3. **门控顺序**：SessionGate（冻结）优先于 ActionGate（属性）——pending 时任何动作无效（A0 §3.5 + §3.5b——2026-08-16 审计修正引用）
-4. **无证据不对账**：CompletionEvidence.verification 空或存在 passed=false/unverifiable → 不进入 resolution 决策点；**遗留问题（pendingQuestions）不阻塞**——ADR-008（2026-08-30 #6 真机：阻塞语义与 sysPrompt ⑮「必须列遗留问题」构成死锁，诚实声明永不可达已解决——遗留问题改为解决卡知情呈现）
+4. **无证据不对账**：verification 非空 ∧ ≥1 条 `isSystemVerifiable` 且 V1a/纯逻辑通过对账 ∧ missing 空 → ok；unverifiable 仅清单+提示，不单独否决 ok；全部不可代跑 → ok=false；**遗留问题（pendingQuestions）不阻塞**——ADR-008 / ADR-011（2026-08-30 #6 真机：阻塞语义与 sysPrompt ⑮「必须列遗留问题」构成死锁，诚实声明永不可达已解决——遗留问题改为解决卡知情呈现）
 5. **推进 ≠ 调工具**：推进保障的强制对象是「推进」不是「工具调用」；pending 时恒 auto
 6. **方案单一来源**：plannedFiles 只由已确认的 PlanProposal.files 派生（追加语义 A0 §5 继承）
 7. **PENDING 单一**：任一时刻只有一个决策点（继承）

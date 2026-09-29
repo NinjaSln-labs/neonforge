@@ -53,7 +53,7 @@ Say the problem → Clarify the goal (candidate buttons / free input) → [Goal 
 
 ## Quick Start
 
-> Requires a Command Code API Key (get one at `commandcode.ai` — Studio → API Keys → Generate; models are DeepSeek V4 series, accessed via the Command Code aggregator).
+> Requires a DeepSeek-compatible API key (pick one provider on first launch: DeepSeek official / Command Code / OpenCode Zen / OpenCode Go; models are DeepSeek V4 series).
 
 - **Download**: not yet available — the current build is going through real-device acceptance. The open will be announced via [GitHub Releases](https://github.com/NinjaSln-labs/neonforge/releases) and the official landing page (Watch Releases to get notified)
 
@@ -64,7 +64,7 @@ npm run dev                # renderer dev server only (:5173)
 npm run dev:electron       # full app (dev mode, connects to :5173)
 ```
 
-- First launch: paste your API Key in Settings (stored via OS-level `safeStorage`, never uploaded)
+- First launch: choose a provider and paste your API Key (stored via OS-level `safeStorage`, never uploaded)
 - **Open existing project** → describe the problem in chat → confirmation cards + step-by-step approval → receive the delivery
 - **Start from scratch** → auto-creates a project skeleton → 0-to-1 delivery
 

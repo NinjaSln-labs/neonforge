@@ -54,10 +54,10 @@ NeonForge 是为 DeepSeek 打造的 **AI 问题工作台**：用户用自然对�
 - 数字工具能力内：直接解决（文件整理/数据加工/建网站源码/修系统/做小工具/0-1 交付）
 - 超出数字能力（域名/备案/线下/法律）：交付数字产物 + 分步指导——明说"我做到哪、你必须做哪"
 
-**首次使用前提**：需要 Command Code API Key（模型为 DeepSeek V4 系列，经 Command Code 聚合接入——2026-08-21 provider 切换，ADR-007）。首次打开：
+**首次使用前提**：需要 DeepSeek 兼容 API Key（模型为 DeepSeek V4 系列；接入方：DeepSeek 官方 / Command Code / OpenCode Zen / OpenCode Go——ADR-010）。首次打开：
 
 - 本地已有有效 Key：自动检测，直接进入启动页
-- 没有：简洁配置页（粘贴 Key → 验证 → 进入）
+- 没有：简洁配置页（选接入方 → 粘贴 Key → 验证 → 进入）
 - 网络不通：提示 + [跳过（离线不可用）]
 
 零学习成本指不学 IDE 操作，不是零依赖。

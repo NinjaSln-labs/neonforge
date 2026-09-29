@@ -20,6 +20,7 @@ import {
   classifyReadonly,
   verifyCompletion,
   buildEvidenceBackfill,
+  evidenceGuideMaxAttempts,
   completionEvidenceComplete,
   decideProgressGuarantee,
   derivePlannedFiles,
@@ -377,7 +378,8 @@ describe('Inv 3 门控顺序——sessionGate × actionGate 双维正交', () =>
 })
 
 // ============================================================================
-// Inv 4 无证据不对账（ADR-008 修订）：verification 空 / passed=false / unverifiable → 不进入 resolution；遗留问题不阻塞
+// Inv 4 无证据不对账（ADR-011）：verification 空 / passed=false / 零条可代跑 → 不进入 resolution；
+// unverifiable 仅标注不单独否决 ok；遗留问题不阻塞（ADR-008）
 // ============================================================================
 describe('Inv 4 无证据不对账——verifyCompletion/completionEvidenceComplete/deriveDecisionPoint', () => {
   it('证据完整 → verifyCompletion ok + 进入 resolution 决策点', () => {
@@ -411,14 +413,28 @@ describe('Inv 4 无证据不对账——verifyCompletion/completionEvidenceCompl
     expect(r.missing).toContain('verification:grep x /test/a.js')
   })
 
-  it('非只读验证命令（系统不可代跑）→ unverifiable + 不进入对账（拍板 4；P0 审计修复——Inv 4 单源）', () => {
+  it('混合：≥1 条可代跑 + unverifiable → ok=true 且进 resolution（ADR-011）', () => {
+    const c = claim({
+      evidence: evidence({
+        verification: [
+          { command: 'ls /test', passed: true },
+          { command: 'npm install', passed: true },
+        ],
+      }),
+    })
+    const r = verifyCompletion(c)
+    expect(r.ok).toBe(true)
+    expect(r.unverifiable).toContain('npm install')
+    expect(completionEvidenceComplete(c.evidence)).toBe(true)
+    expect(deriveDecisionPoint(confirmed(), { completion: c })).toBe('resolution')
+  })
+
+  it('全部不可代跑 → ok=false 不进对账（无系统证据）', () => {
     const c = claim({
       evidence: evidence({ verification: [{ command: 'npm install', passed: true }] }),
     })
-    const r = verifyCompletion(c)
-    expect(r.ok).toBe(false) // 存在 unverifiable → 不通过（需用户对账）
-    expect(r.unverifiable).toContain('npm install')
-    // 与 evidenceVerifiable 同源：unverifiable 证据 = 证据不完整 → 不产生 resolution 决策点
+    expect(verifyCompletion(c).ok).toBe(false)
+    expect(verifyCompletion(c).unverifiable).toContain('npm install')
     expect(completionEvidenceComplete(c.evidence)).toBe(false)
     expect(deriveDecisionPoint(confirmed(), { completion: c })).toBe('none')
   })
@@ -1065,29 +1081,60 @@ describe('buildEvidenceBackfill（S4——完成声明被拒的回填引导文�
     expect(text).toContain('diff:planned-not-produced')
   })
 
-  it('unverifiable 清单 → 引导文本显式提示「未经系统核验」', () => {
+  it('unverifiable 清单 → 引导文本显式提示「未经系统核验」+ 禁止重定向（无 node -e）', () => {
     const text = buildEvidenceBackfill({
       ok: false,
       missing: [],
-      unverifiable: ['npm test'],
+      unverifiable: ['awk x > /tmp/y'],
     })
-    expect(text).toContain('npm test')
+    expect(text).toContain('awk x > /tmp/y')
     expect(text).toContain('未经系统核验')
+    expect(text).toContain('禁止')
+    expect(text).toContain('重定向')
+    expect(text).not.toContain('node -e')
+    expect(text).toMatch(/ls|grep|cat|curl -I localhost/)
   })
 
-  // UAT #4（P2）：模型把工具调用当 verification 证据 ×3——回填引导显式排除
-  it('引导文本显式声明工具调用不算验证证据', () => {
+  // UAT #4（P2）：模型把工具调用当 verification 证据 ×3——回填引导显式排除 + 可执行下一步
+  it('引导含可执行只读路径 + 工具记录不算证据', () => {
     const text = buildEvidenceBackfill({
       ok: false,
       missing: ['verification:ls src'],
       unverifiable: [],
     })
-    expect(text).toContain('工具调用记录')
-    expect(text).toContain('只代跑只读 shell 命令')
+    expect(text).toContain('下一步')
+    expect(text).toContain('ls -la')
+    expect(text).toContain('report_completion')
+    expect(text).toContain('不算验证证据')
+    expect(text).toContain('禁止只用文字')
   })
 
   it('ok=true（无缺失）→ 空引导（不注入）', () => {
     expect(buildEvidenceBackfill({ ok: true, missing: [], unverifiable: [] })).toBe('')
+  })
+})
+
+describe('plannedComplete 相对/绝对（A-021 同构——防 force 空转）', () => {
+  it('planned 相对 + produced 绝对 → 完成 → decideProgressGuarantee auto', () => {
+    let s = confirmed()
+    s = approvalGranted(s, ['index.html'])
+    s = applyToolResult(s, { name: 'write', ok: true, file: '/tmp/proj/index.html' })
+    expect(plannedComplete(s, new Set())).toBe(true)
+    expect(
+      decideProgressGuarantee(
+        s,
+        { produced: false, proposed: false, providedEvidence: false, toolsAvailable: true },
+        new Set(),
+      ).mode,
+    ).toBe('auto')
+  })
+})
+
+describe('evidenceGuideMaxAttempts', () => {
+  it('仅 unverifiable → 3；有 missing → 1（对齐旧 count<2）', () => {
+    expect(evidenceGuideMaxAttempts({ missing: [], unverifiable: ['rm -rf /'] })).toBe(3)
+    expect(evidenceGuideMaxAttempts({ missing: ['verification'], unverifiable: ['rm'] })).toBe(1)
+    expect(evidenceGuideMaxAttempts({ missing: ['verification'], unverifiable: [] })).toBe(1)
   })
 })
 

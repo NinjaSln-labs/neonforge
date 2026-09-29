@@ -783,8 +783,8 @@ Diff 审核中「全部接受并写入」的确认操作。非模态，不打断
 ```
 
 - 数据源：CompletionClaim+CompletionEvidence（verification/diffs/pendingQuestions）
-- **无证据不对账**：verifyCompletion 未通过（证据空/未核验项/pendingQuestions 非空）→ 卡不弹，回填「缺验证」引导（completion.evidence_missing 事件）
-- 证据呈现分级：系统核验通过（✓）/未核验（⚠️ unverifiable——提示用户自行判断）
+- **无证据不对账**：verifyCompletion 未通过（verification 空 / passed=false / 零条可代跑或可代跑条 V1a 失败——ADR-011）→ 卡不弹，回填「缺验证」引导（completion.evidence_missing 事件）；pendingQuestions 不阻塞（ADR-008）
+- 证据呈现分级：系统核验通过（✓）/未核验（⚠️ unverifiable——仅呈现提示，不单独否决卡弹出）
 - 按钮语义：确认解决 → confirm（resolution 确认——问题台账关闭联动）；还要改 → reject(kind)+原因
 
 ### 拒绝原因选择器（RejectReasonPicker）

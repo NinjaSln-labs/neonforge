@@ -9,6 +9,7 @@ import {
 } from './applyDiff.js'
 import { gateway, classifyGatewayError } from './gateway.js'
 import { configStore } from './configStore.js'
+import { isProviderId, listProviders } from './providers/index.js'
 import { workspace } from './workspace.js'
 import {
   initTools,
@@ -37,12 +38,120 @@ export function registerIpc(): void {
   syncPlanApprovedFromStore()
   ipcMain.handle('config:has-key', () => configStore.hasValidKey())
   ipcMain.handle('config:get-key', () => configStore.getApiKey())
-  ipcMain.handle('config:set-key', (_e, key: string) => configStore.setApiKey(key))
+  ipcMain.handle('config:get-provider', () => configStore.getProviderId())
+  ipcMain.handle('config:get-model', () => configStore.getModelId())
+  ipcMain.handle(
+    'config:set-key',
+    (_e, key: string, providerId?: string, modelId?: string | null) =>
+      configStore.setApiKey(
+        key,
+        isProviderId(providerId) ? providerId : configStore.getProviderId(),
+        modelId,
+      ),
+  )
   ipcMain.handle('config:clear-key', () => configStore.clearApiKey())
+  ipcMain.handle('config:list-providers', () => listProviders())
+  ipcMain.handle('config:get-web-access', () => {
+    const w = configStore.getWebAccess()
+    return {
+      enabled: w.enabled,
+      probeOk: w.probeOk,
+      builtinProvider: w.builtinProvider,
+      searchUrl: w.searchUrl,
+      hasSearchKey: w.hasSearchKey,
+      // 设置页回填编辑用——仅本机 IPC
+      searchKey: w.searchKey,
+      keenableApiKey: w.keenableApiKey,
+      hasKeenableKey: w.hasKeenableKey,
+      keenablePublicTrial: w.keenablePublicTrial,
+    }
+  })
+  ipcMain.handle(
+    'config:set-web-access',
+    async (
+      _e,
+      patch: {
+        enabled?: boolean
+        searchUrl?: string | null
+        searchKey?: string | null
+        keenableApiKey?: string | null
+        keenablePublicTrial?: boolean
+        /** true = 开启时跑探测；有覆盖 URL 时跳过 */
+        probe?: boolean
+      },
+    ) => {
+      const cur = configStore.getWebAccess()
+      const nextEnabled = patch.enabled ?? cur.enabled
+      const nextUrl =
+        patch.searchUrl !== undefined ? patch.searchUrl?.trim() || null : cur.searchUrl
+      let probeOk = cur.probeOk
+      if (patch.enabled === false) {
+        probeOk = false
+      } else if (nextEnabled && (patch.probe || patch.enabled === true)) {
+        let builtinProvider: 'ddg' | 'keenable' | null | undefined
+        if (nextUrl) {
+          probeOk = true // 有覆盖端点——跳过内置探测
+          builtinProvider = null
+        } else {
+          const { probeWebAccess } = await import('./webTools.js')
+          const keenKey =
+            patch.keenableApiKey !== undefined ? patch.keenableApiKey : cur.keenableApiKey
+          const r = await probeWebAccess(undefined, { keenableApiKey: keenKey })
+          probeOk = r.ok
+          builtinProvider = r.provider ?? null
+          if (!r.ok) {
+            configStore.setWebAccess({
+              enabled: false,
+              probeOk: false,
+              builtinProvider: null,
+              searchUrl: patch.searchUrl,
+              searchKey: patch.searchKey,
+              keenableApiKey: patch.keenableApiKey,
+              keenablePublicTrial: patch.keenablePublicTrial,
+            })
+            return {
+              ok: false,
+              error: r.error ?? '外网探测失败',
+              config: configStore.getWebAccess(),
+            }
+          }
+        }
+        const config = configStore.setWebAccess({
+          enabled: nextEnabled,
+          probeOk,
+          builtinProvider,
+          searchUrl: patch.searchUrl,
+          searchKey: patch.searchKey,
+          keenableApiKey: patch.keenableApiKey,
+          keenablePublicTrial: patch.keenablePublicTrial,
+        })
+        return { ok: true, config }
+      }
+      const config = configStore.setWebAccess({
+        enabled: nextEnabled,
+        probeOk,
+        searchUrl: patch.searchUrl,
+        searchKey: patch.searchKey,
+        keenableApiKey: patch.keenableApiKey,
+        keenablePublicTrial: patch.keenablePublicTrial,
+      })
+      return { ok: true, config }
+    },
+  )
 
-  // 验证 Key（非流式，max_tokens=1）
-  ipcMain.handle('gateway:validate', async (_e, apiKey: string) => {
-    return gateway.validateKey(apiKey)
+  // 验证 Key——无 /models 时须带 modelId
+  ipcMain.handle(
+    'gateway:validate',
+    async (_e, apiKey: string, providerId?: string, modelId?: string | null) => {
+      const id = isProviderId(providerId) ? providerId : configStore.getProviderId()
+      return gateway.validateKey(apiKey, id, modelId ?? configStore.getModelId())
+    },
+  )
+
+  // 当前模型展示（状态栏）——已缓存列表或 fallback / 手填
+  ipcMain.handle('gateway:active-model', () => {
+    const id = configStore.getProviderId()
+    return gateway.peekActiveModel(id, configStore.getModelId(), 'flash')
   })
 
   // 流式 chat：事件逐块推给 renderer（经 webContents.send）
@@ -65,7 +174,7 @@ export function registerIpc(): void {
       },
     ) => {
       const send = (
-        type: 'reasoning' | 'content' | 'tool-call' | 'done',
+        type: 'reasoning' | 'content' | 'tool-call' | 'done' | 'stream-reset',
         text?: string,
         toolCall?: { name: string; args: Record<string, unknown> },
       ) => {
@@ -76,6 +185,7 @@ export function registerIpc(): void {
             JSON.stringify(toolCall?.args).slice(0, 80),
           )
         if (type === 'done') console.log('[ipc] SEND done')
+        if (type === 'stream-reset') console.log('[ipc] SEND stream-reset (retry)')
         // 干净对象（无 undefined 字段——contextBridge 结构化传输兼容）
         const payload: Record<string, unknown> = { type }
         if (text !== undefined) payload.text = text
@@ -84,6 +194,8 @@ export function registerIpc(): void {
       }
       try {
         await gateway.streamChat(opts.apiKey, {
+          providerId: configStore.getProviderId(),
+          manualModelId: configStore.getModelId(),
           level: opts.level ?? 'basic',
           tools: opts.tools ?? false,
           forceTool: opts.forceTool ?? false,
@@ -138,8 +250,9 @@ export function registerIpc(): void {
         const { hit } = prefixCache.ensure(prefix)
         const key = configStore.getApiKey()
         if (!hit && key) {
+          const providerId = configStore.getProviderId()
           void preheating
-            .run(key, prefix, (k, p) => gateway.preheat(k, p))
+            .run(key, prefix, (k, p) => gateway.preheat(k, p, providerId, configStore.getModelId()))
             .catch((e) =>
               console.log('[preheat] run failed:', e instanceof Error ? e.message : String(e)),
             )
@@ -282,7 +395,12 @@ ipcMain.handle(
     if (!apiKey) return { ok: false, error: '无 API Key——无法压缩' }
     if (!compaction.shouldCompact(opts.history ?? []))
       return { ok: false, error: '历史未达压缩阈值' }
-    return compaction.compact(apiKey, (k, h) => gateway.summarize(k, h), opts.history ?? [])
+    const providerId = configStore.getProviderId()
+    return compaction.compact(
+      apiKey,
+      (k, h) => gateway.summarize(k, h, providerId, configStore.getModelId()),
+      opts.history ?? [],
+    )
   },
 )
 // S4 完成对账 V1a：系统代跑只读验证命令（fail-closed——非只读不执行；超时/截断护栏见 verification.ts）

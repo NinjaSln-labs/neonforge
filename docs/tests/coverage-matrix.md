@@ -11,7 +11,7 @@
 | Inv 1 | 决策唯一输入——无决策无推进 | conversationState.test.ts::Inv 1 决策唯一输入 | ✅ |
 | Inv 2 | 决策点确定性——deriveDecisionPoint 纯函数 | conversationState.test.ts::Inv 2 决策点确定性 | ✅ |
 | Inv 3 | 门控顺序——sessionGate × actionGate 双维正交 | conversationState.test.ts::Inv 3 门控顺序 | ✅ |
-| Inv 4 | 无证据不对账——verifyCompletion 单源 | conversationState.test.ts::Inv 4 + verifyCompletionSystem.test.ts（V1a/V1b 扩展） | ✅ |
+| Inv 4 | 无证据不对账——verifyCompletion 单源；≥1 条可代跑通过对账（ADR-011） | conversationState.test.ts::Inv 4 + verifyCompletionSystem.test.ts（V1a/V1b 扩展） | ✅ |
 | Inv 5 | 推进保障——decideProgressGuarantee | conversationState.test.ts::Inv 5 推进保障 | ✅ |
 | Inv 6 | 方案单一来源——derivePlannedFiles | conversationState.test.ts::Inv 6 + planProposalParser.test.ts（解析→派生链） | ✅ |
 | Inv 7 | PENDING 单一——单值 + 状态空间 | conversationState.test.ts::Inv 7 | ✅ |
@@ -146,6 +146,15 @@
 | `protocol.text_fallback` | 降级通道（打点不产卡） | `timeline.ts` 事件注册表（dev 校验——timelineEvents L1 既有机制） | `ConversationPanel.tsx` done 分支降级路径（fallbackDetected 守卫——标记命中不产卡） | L3 `cards-from-decision-content.interaction.ts` V1.5-S3-1 一轮改道（text_fallback 打点 + 引导后工具轮） |
 
 > 断言锚点经 grep 实证（S4 Task 4.3 收口）：`protocolTools.test.ts` 63 处命中、L3 卡渲染场景 11 处命中、text_fallback 由 L3 timeline 捕获承载（无独立 L1 文件）。
+
+## 表 10：Keenable 合规外网 ↔ 测试（2026-09-29）
+
+| 行为 | 场景/用例 | 判定 |
+|------|-----------|------|
+| 禁静默 `/public`；无 Key 且试用关 → policy | webTools.test.ts | ✅ |
+| Key → `/v1/search` + `X-API-Key`；试用 → `/public` + Title | webTools.test.ts | ✅ |
+| probe：DDG→keyed search / health；从不打 public | webTools.test.ts | ✅ |
+| UAT 显式试用或 `NF_UAT_KEENABLE_KEY`（T3/G-web） | uat-lib `ensureWebAccessEnabled` + `docs/tests/uat-tier-baseline.md` | ✅ harness |
 
 ## 缺口清单
 

@@ -32,7 +32,7 @@
 | **非技术用户任务完成率**（细分） | 非技术用户发起的任务中「接受全部并写入」占比（走改动说明主路径） | **≥ 60%** | Beta 起 |
 | **授权卡滞留率**（确认交互质量——2026-08-16 补，第 5 轮审计 #1）| 授权请求 → 用户决策时长 >30s 的占比（疲劳/悬挂代理——问题 A「卡悬挂模型乱动」复发监测）| **< 20%** | Beta 起（decision.requested(kind=approval)→decision.resolved 时长埋点——2026-08-16 第 14 轮审计 #4 事件名对齐）|
 | **方案修改率**（确认交互质量——#1）| 方案卡被修改/重出（拒绝 kind=modify）的占比（意图对齐质量：过低=橡皮图章化、过高=方案质量差）| **15-40%**（区间）| Beta 起（decision.resolved 带 RejectReason.kind 埋点）|
-| **证据核验通过率**（确认交互质量——#1）| 完成声明中系统核验（verifyCompletion——只读命令代跑/diff 派生）通过占比（证据机制生效度；unverifiable/证据不足计入未通过）| **≥ 70%** | Beta 起（verifyCompletion 埋点——含 completion.evidence_missing）|
+| **证据核验通过率**（确认交互质量——#1）| 完成声明中系统核验（verifyCompletion——只读命令代跑/diff 派生）通过占比；未通过 = `ok=false` / `evidence_missing`；混有 unverifiable 但已有一条 V1a 过 **算通过**（ADR-011）| **≥ 70%** | Beta 起（verifyCompletion 埋点——含 completion.evidence_missing）|
 
 **测量方法**：应用内事件埋点（本地统计，不上传；TokenTracker 扩展事件计数）——`task.started` / `task.written` / `diff.accepted` / `preheat.hit` + 非技术细分：`project.created_nondev` / `project.preview_started` / `diff.accepted_summary`（用户自报「不会写代码」时标记 segment）。确认交互指标（v1.1 新增）：`decision.requested/resolved`（含 RejectReason.kind——方案修改率）、`decision.requested(kind=approval)→decision.resolved` 时长（授权卡滞留率——2026-08-16 第 14 轮审计 #4：`approval.requested` 为埋点别名，事件目录以 `docs/domain/06-domain-events.md` 为准——授权请求出现 = decision.requested kind=approval）、`verifyCompletion` 通过/未通过（证据核验通过率——未通过打 `completion.evidence_missing`）。
 

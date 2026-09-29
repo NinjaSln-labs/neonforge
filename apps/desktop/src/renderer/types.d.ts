@@ -10,11 +10,69 @@ export interface NeonForgeBridge {
   config: {
     hasKey: () => Promise<boolean>
     getKey: () => Promise<string | null>
-    setKey: (key: string) => Promise<void>
+    getProvider: () => Promise<string>
+    setKey: (key: string, providerId?: string, modelId?: string | null) => Promise<void>
     clearKey: () => Promise<void>
+    getModel?: () => Promise<string | null>
+    getWebAccess?: () => Promise<{
+      enabled: boolean
+      probeOk: boolean
+      builtinProvider: 'ddg' | 'keenable' | null
+      searchUrl: string | null
+      hasSearchKey: boolean
+      searchKey: string | null
+      keenableApiKey: string | null
+      hasKeenableKey: boolean
+      keenablePublicTrial: boolean
+    }>
+    setWebAccess?: (patch: {
+      enabled?: boolean
+      searchUrl?: string | null
+      searchKey?: string | null
+      keenableApiKey?: string | null
+      keenablePublicTrial?: boolean
+      probe?: boolean
+    }) => Promise<{
+      ok: boolean
+      error?: string
+      config: {
+        enabled: boolean
+        probeOk: boolean
+        builtinProvider: 'ddg' | 'keenable' | null
+        searchUrl: string | null
+        hasSearchKey: boolean
+        searchKey: string | null
+        keenableApiKey: string | null
+        hasKeenableKey: boolean
+        keenablePublicTrial: boolean
+      }
+    }>
+    listProviders: () => Promise<
+      Array<{
+        id: string
+        label: string
+        howToGetKey: { zh: string; en: string }
+        docsUrl?: string
+      }>
+    >
   }
   gateway: {
-    validate: (apiKey: string) => Promise<{ ok: boolean; error?: string }>
+    validate: (
+      apiKey: string,
+      providerId?: string,
+      modelId?: string | null,
+    ) => Promise<{
+      ok: boolean
+      error?: string
+      suggestModelId?: string
+      modelSource?: 'list' | 'manual' | 'fallback'
+    }>
+    activeModel?: () => Promise<{
+      providerId: string
+      providerLabel: string
+      upstream: string
+      shortName: string
+    }>
     streamChat: (opts: {
       apiKey: string
       level?: string

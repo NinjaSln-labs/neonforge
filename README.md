@@ -53,7 +53,7 @@ NeonForge **不是 IDE，也不是 Chatbot**。你用自然语言描述问题，
 
 ## 快速上手
 
-> 需要 Command Code API Key（`commandcode.ai` 获取——Studio → API Keys → Generate；模型为 DeepSeek V4 系列，经 Command Code 聚合接入）。
+> 需要 DeepSeek 兼容 API Key（接入方任选其一：DeepSeek 官方 / Command Code / OpenCode Zen / OpenCode Go——首次启动配置页选择；模型为 DeepSeek V4 系列）。
 
 - **直接下载**：暂未开放——当前版本正在真机验收打磨，下载开放时会通过 [GitHub Releases](https://github.com/NinjaSln-labs/neonforge/releases) 与官网公告（可 Watch Releases 获取通知）
 
@@ -64,7 +64,7 @@ npm run dev                # 仅 renderer dev server（:5173）
 npm run dev:electron       # 完整应用（dev 模式，连接 :5173）
 ```
 
-- 首次启动在「设置」中粘贴 API Key（Key 存系统级 `safeStorage`，绝不上传）
+- 首次启动选择接入方并粘贴 API Key（Key 存系统级 `safeStorage`，绝不上传）
 - **打开已有项目** → 在对话里说出问题 → 确认卡 + 分步授权 → 拿到交付结果
 - **从零开始** → 自动创建项目骨架 → 0-1 交付
 

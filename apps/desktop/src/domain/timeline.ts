@@ -20,6 +20,7 @@ export interface TimelineEvent {
 export type TimelineEventType =
   // —— Conversation 聚合：消息/会话 ——
   | 'conversation.message_sent' // 用户消息（含确认词/候选点选）
+  | 'conversation.system_nudge' // 系统引导/提示注入（非用户通道——时间线取证）
   | 'conversation.assistant_start' // 模型轮开始（载荷：forceTool 判定）
   | 'conversation.assistant_done' // 模型轮完成（载荷：content/error）
   | 'conversation.interrupted' // 打断（停止按钮/silent）
@@ -114,6 +115,11 @@ export interface TimelineEventSpec {
 
 export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> = {
   'conversation.message_sent': { domain: 'conversation', role: 'user', detailKeys: ['content'] },
+  'conversation.system_nudge': {
+    domain: 'conversation',
+    role: 'system',
+    detailKeys: ['content', 'kind'],
+  },
   'conversation.assistant_start': {
     domain: 'conversation',
     role: 'assistant',

@@ -6,12 +6,14 @@ import { verifyCompletion, type CompletionClaim } from '../../src/domain/convers
 // - V1a：对 claim.evidence.verification[].command 中声明 passed 的命令，系统复核（代跑结果 ok:false → missing）
 // - V1b：claim.evidence.diffs 由系统从 plannedFiles/producedFiles 派生比对（非模型自述）
 // - verification 命令非只读（系统不可代跑）→ 该条证据标记 'unverifiable'
-// - 证据不足（verification 空 / passed=false / 存在 unverifiable）→ ok=false；pendingQuestions 不阻塞（ADR-008——真机死锁修正）
-// - unverifiable 语义保持 S1.1 单源（evidenceVerifiable/isSystemVerifiable 复用）
+// - 证据不足（verification 空 / passed=false / 零条可代跑）→ ok=false；unverifiable 仅标注（ADR-011）；pendingQuestions 不阻塞（ADR-008）
+// - unverifiable 语义保持单源（evidenceVerifiable/isSystemVerifiable 复用）
 // - 领域层消费同步快照（verificationResults）——代跑执行在 main 侧（S4 接线）
 
 /** mock 系统核验数据（V1a 复核结果 + V1b diff 派生——同步纯函数） */
-function mockSystemState(verificationResults: Record<string, { ok: boolean }> = {}) {
+function mockSystemState(
+  verificationResults: Record<string, { ok: boolean; output?: string }> = {},
+) {
   return {
     verificationResults,
     deriveDiffs: (planned: Set<string>, produced: Set<string>) =>
@@ -55,7 +57,23 @@ describe('verifyCompletion（V1a 系统复核 + V1b diff 派生——S2 扩展�
     expect(r.missing).toContain('verification:ls src')
   })
 
-  it('非只读验证命令（系统不可代跑）→ unverifiable（拍板 4：标记未经系统核验）', () => {
+  it('V1a：代跑 exit 非0 但 stdout 与 claim.output 对齐 → 不 missing（grep -c 零命中）', () => {
+    const c = claim({
+      evidence: {
+        verification: [{ command: "grep -cE 'https?://' a.txt", output: '0', passed: true }],
+        diffs: [],
+        pendingQuestions: [],
+      },
+    })
+    const r = verifyCompletion(
+      c,
+      mockSystemState({ "grep -cE 'https?://' a.txt": { ok: false, output: '0\n' } }),
+    )
+    expect(r.ok).toBe(true)
+    expect(r.missing).not.toContain("verification:grep -cE 'https?://' a.txt")
+  })
+
+  it('仅非只读验证命令（系统不可代跑）→ ok=false + unverifiable（无系统证据）', () => {
     const c = claim({
       evidence: {
         verification: [{ command: 'npm run deploy', passed: true }], // 非只读（写副作用）
@@ -65,6 +83,22 @@ describe('verifyCompletion（V1a 系统复核 + V1b diff 派生——S2 扩展�
     })
     const r = verifyCompletion(c, mockSystemState())
     expect(r.ok).toBe(false)
+    expect(r.unverifiable).toContain('npm run deploy')
+  })
+
+  it('混合可代跑+不可代跑：V1a 可代跑过 → ok=true，unverifiable 仍列出', () => {
+    const c = claim({
+      evidence: {
+        verification: [
+          { command: 'ls src', passed: true },
+          { command: 'npm run deploy', passed: true },
+        ],
+        diffs: [],
+        pendingQuestions: [],
+      },
+    })
+    const r = verifyCompletion(c, mockSystemState({ 'ls src': { ok: true } }))
+    expect(r.ok).toBe(true)
     expect(r.unverifiable).toContain('npm run deploy')
   })
 

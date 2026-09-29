@@ -9,8 +9,33 @@ async function mockBridge(page: import('@playwright/test').Page) {
       config: {
         hasKey: async () => true,
         getKey: async () => 'test-key',
+        getProvider: async () => 'commandcode',
         setKey: async () => {},
         clearKey: async () => {},
+        listProviders: async () => [],
+        getWebAccess: async () => ({
+          enabled: false,
+          probeOk: false,
+          searchUrl: null,
+          searchKey: null,
+          keenableApiKey: null,
+          hasKeenableKey: false,
+          keenablePublicTrial: false,
+          builtinProvider: null,
+        }),
+        setWebAccess: async () => ({
+          ok: true,
+          config: {
+            enabled: false,
+            probeOk: false,
+            searchUrl: null,
+            searchKey: null,
+            keenableApiKey: null,
+            hasKeenableKey: false,
+            keenablePublicTrial: false,
+            builtinProvider: null,
+          },
+        }),
       },
       workspace: {
         openFolder: async () => '/test',

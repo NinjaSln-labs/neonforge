@@ -22,6 +22,9 @@ import {
   summarizeCapability,
   // V1.5-S4 退役——goalFallbackTrigger 仅剩兜底探测（text_fallback 路径），见 ADR-009
   goalFallbackTrigger,
+  shouldNudgeProposeAfterResearch,
+  shouldNudgeProposeAfterPlanReject,
+  shouldNudgeReportAfterEvidenceMissing,
 } from '../domain/agentLoop'
 // 2026-08-14 会话状态机（Task 聚合——A0 §2/§3/§4/§5）：状态单一来源 + 转换唯一入口（session-state-machine.md S2）
 import {
@@ -37,6 +40,7 @@ import {
   inPlannedFiles as inPlannedFilesDomain,
   verifyCompletion,
   buildEvidenceBackfill,
+  evidenceGuideMaxAttempts,
   deriveDiffs,
   type SystemVerifier,
   type DecisionProposals,
@@ -80,6 +84,7 @@ import { SCENES } from './scenes'
 // 2026-08-07 T1（regex-todo）：聊天错误分类纯函数——原 includes('5') 过宽（token-limit-50/5000/x5x 误归 service）；
 // 根因补强：ipc 已返回结构化 errorType（gateway 源头分类）——classifyChatError 降级为兜底（字面量/未知格式）
 import { classifyChatError, type ChatErrorType } from './errorClassify'
+import { isSystemNudgeText, systemNudgeKind } from './systemNudge'
 // 2026-08-15 Q6：系统提示词外置（原内嵌 sysHint 模板）
 import { buildSysHint } from './sysPrompt'
 // 2026-08-15 Q10：demo 注入通道类型化单例
@@ -171,6 +176,10 @@ function fmtToolArgs(tc: { name: string; args: Record<string, unknown> }): strin
       return a.command ? `执行 ${String(a.command).slice(0, 60)}` : '执行命令'
     case 'search':
       return a.query ? `搜索 ${String(a.query)}` : '搜索代码'
+    case 'web_search':
+      return a.query ? `联网搜索：${String(a.query)}` : '联网搜索'
+    case 'web_fetch':
+      return a.url ? `读取网页：${String(a.url)}` : '读取网页'
     case 'approve-files':
       return `批量授权 ${((a.files ?? []) as unknown[]).length} 个文件`
     // 2026-08-06 用户反馈「get_diagnostics 具体干什么了不知道」：LSP 工具名技术化 → 人类化描述（工具卡显示）
@@ -439,9 +448,16 @@ export default function ConversationPanel({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   // 2026-08-04 体验修复（用户实测：启动页输入句预填多余）：initialPrompt 进入工作区自动发送——说了就直接开始
   // （区别于 externalRequest「预填+自动发送」复跑语义；initialPrompt 只用于启动页首句）
-  const sendRef = useRef<(opts?: { silent?: boolean }) => Promise<void>>(async () => {})
+  const sendRef = useRef<(opts?: { silent?: boolean; text?: string }) => Promise<void>>(
+    async () => {},
+  )
   // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层状态）：连续无进展计数 + 升级次数（不可变 StuckState）+ 已读文件集合
   const stuckStateRef = useRef(initialStuckState)
+  // research→propose：分析期连续纯 web 轮 streak（与 StuckDetector 分立；确认后清零）
+  const webOnlyStreakRef = useRef(0)
+  const researchProposeNudgedRef = useRef(false)
+  const planWasRejectedRef = useRef(false)
+  const planRejectNudgedRef = useRef(false)
   const prevReadFilesRef = useRef<Set<string>>(new Set())
   // S5：toolsAvailable 能力快照（require-advance 前提——工具不可用时逼「推进」不逼调工具；
   // 由 check-capability 结果更新；无检测记录默认 true——工具总是可用）
@@ -708,6 +724,12 @@ export default function ConversationPanel({
   // 引导护栏（S4 复审）：连续引导计数——≥2 次证据不足不再自动 send（防回填死循环——坑 103 同构：
   // 任何自动机制必须配套收敛判定；超限后停止自动引导，用户可见引导消息后手动处理）
   const evidenceGuideCountRef = useRef(0)
+  // evidence_missing 后纯文本收尾 → 再催 report_completion（每会话最多 1 次；对齐 planReject nudge）
+  const evidenceReportNudgedRef = useRef(false)
+  // 计划确认后 service/network：整会话最多自动续跑 1 次（与「重试」按钮同路径）
+  const autoRetriedServiceRef = useRef(false)
+  // 排队衔接（输入≠打断）——提前声明：verifyThenResolve 对账引导在 working 时写入此 ref
+  const pendingSendRef = useRef('')
   const verifyThenResolve = async (claim: CompletionClaim): Promise<void> => {
     const bridge = window.neonforge?.completion
     let systemState: SystemVerifier | undefined
@@ -750,12 +772,14 @@ export default function ConversationPanel({
       )
       const guide = buildEvidenceBackfill(v)
       evidenceGuideCountRef.current++
-      if (guide && evidenceGuideCountRef.current < 2) {
-        // #6 真机 2026-08-30（P2-3）：注入消息加系统来源标记——原样注入被当成用户发言
-        // （模型口气被带偏 + 台账标题混淆）；gateway 用户角色承载是 chat 协议约束，
-        // 完整 system 角色渲染归 V2 会话快照
-        inputRef.current = `【系统对账·非用户发言】${guide}`
-        void sendRef.current()
+      const maxGuides = evidenceGuideMaxAttempts(v)
+      if (guide && evidenceGuideCountRef.current <= maxGuides) {
+        // 对账引导：不经用户通道（isSystemNudgeText → silent），但不得 silent-interrupt 打断
+        // 当前核验轮（void verifyThenResolve 与 runChat 并行——中途 stopGeneration 会打乱
+        // mock/续聊轮次，S4-3 实证「已解决」卡不出）。working 中写入 pending，等本轮 finally flush。
+        const nudge = `【系统对账·非用户发言】${guide}`
+        if (workingRef.current) pendingSendRef.current = nudge
+        else void sendRef.current({ silent: true, text: nudge })
       } else {
         // A-015（V1.5-S4）：对账失败用户侧可见提示——无回填引导（或达防死循环上限停止自动 send）时，
         // 注入消息不存在 → 状态栏非侵入提示（对齐 needs-human 模式），否则用户不知道对账未通过
@@ -763,7 +787,7 @@ export default function ConversationPanel({
           '证据对账未通过——已停止自动补充证据，可手动继续对话（或核对证据后重新提交完成声明）',
         )
       }
-      // ≥2 次：停止自动引导（防死循环——引导消息已注入过一次，用户可见；等用户输入或手动处理）
+      // 达 maxGuides：停止自动引导（防死循环）
     }
   }
   const applyChunk = (chunk: {
@@ -772,6 +796,17 @@ export default function ConversationPanel({
     toolCall?: { name: string; args: Record<string, unknown> }
   }) => {
     console.log('[conv] chunk', chunk.type)
+    if (chunk.type === 'stream-reset') {
+      // 网关超时重试：丢掉半截流，等新流补上
+      streamingRef.current = { content: '', reasoning: '', toolCalls: [] }
+      setWorkingStage('重试中…')
+      setMessages((p) => {
+        const last = p[p.length - 1]
+        if (!last || last.role !== 'assistant' || last.status !== 'streaming') return p
+        return [...p.slice(0, -1), { ...last, content: '', reasoning: '', toolCalls: [] }]
+      })
+      return
+    }
     // 2026-08-15 P2：当前 tool-call chunk 的卡稳定 id（函数级——updater 闭包引用；tool-call chunk 时赋值）
     let tcId: string | undefined
     // V1.5 S1 Task 1.3：协议工具（propose_goal/propose_plan/report_completion/ask_user）结果文本
@@ -1137,46 +1172,114 @@ export default function ConversationPanel({
       // 2026-08-14 冒烟回归修复（escalate 打断合法链）：**工具轮不参与停滞检测**——有工具调用 = 模型在活动；
       // 流 done 时工具执行可能未回填（卡仍 pending → 误判无进展 → escalate silent 打断 write 链 → 后续空回复）。
       // 工具链的停滞由 maybeContinue 重复检测 + depth 40 兜底；StuckDetector 只管「纯文本停住」
+      // research→propose（分析期窄恢复——不改 StuckDetector 门控）：连续纯 web≥2 → 催 propose_goal 一次
+      {
+        const toolNames = streamingRef.current.toolCalls.map((c) => c.name)
+        const onlyWeb =
+          toolNames.length > 0 && toolNames.every((n) => n === 'web_search' || n === 'web_fetch')
+        if (onlyWeb) webOnlyStreakRef.current += 1
+        else webOnlyStreakRef.current = 0
+        if (stateRef.current.goalConfirmed) {
+          webOnlyStreakRef.current = 0
+        } else {
+          const rp = shouldNudgeProposeAfterResearch({
+            goalConfirmed: stateRef.current.goalConfirmed,
+            pending: stateRef.current.pending,
+            toolNamesThisTurn: toolNames,
+            webOnlyStreak: webOnlyStreakRef.current,
+            alreadyNudged: researchProposeNudgedRef.current,
+          })
+          if (rp.nudge) {
+            researchProposeNudgedRef.current = true
+            tlog(
+              'conversation.system_nudge',
+              { kind: 'protocol', content: rp.message.slice(0, 200) },
+              'system',
+            )
+            void sendRef.current?.({ silent: true, text: rp.message })
+          }
+        }
+      }
       if (
         stateRef.current.goalConfirmed &&
         stateRef.current.pending === 'none' &&
         streamingRef.current.toolCalls.length === 0
       ) {
-        // 2026-08-06 任务完成度：write/edit 成功标记产出（approve-files 规划文件 vs 已产出——deepcode unimplemented_files 借鉴）
-        // 2026-08-14 S2：产出记录走状态机转换（applyToolResult——不可变更新）
-        streamingRef.current.toolCalls.forEach((c) => {
-          if ((c.name === 'write' || c.name === 'edit') && c.status === 'done' && c.file)
-            applyTool({ name: c.name, ok: true, file: c.file })
-        })
-        const turn = evaluateTurnProgress({
-          toolCalls: streamingRef.current.toolCalls.map((c) => ({
-            name: c.name,
-            status: c.status,
-            file: c.file,
-            command: String(c.args?.command ?? ''),
-          })),
-          content,
-          prevReadFiles: prevReadFilesRef.current,
-          plannedFiles: stateRef.current.plannedFiles,
-          producedFiles: stateRef.current.producedFiles,
-          // 2026-08-06 补充（用户「清单来源不只 approve-files」——③ projectFiles 项目文件树）：产出校验（规划文件出现在文件树=已产出）
-          // 2026-08-15 坑 102 修复：projectFiles 统一绝对基准（MainWorkspace listDir 返回 basename——与 planned/produced 绝对基准分裂
-          // → projectFiles.has(f) 恒 false → 文件树权威分支失效 → plannedComplete 只靠 produced 记录）；trustPath 归一
-          projectFiles: new Set((recentFilesExternal ?? []).map((f) => trustPath(f))),
-        })
-        streamingRef.current.toolCalls.forEach((c) => {
-          if (c.name === 'read' && c.file) prevReadFilesRef.current.add(c.file)
-        })
-        const { state, event } = detectStuck({ turn, prev: stuckStateRef.current })
-        stuckStateRef.current = state
-        if (event?.type === 'escalate') {
-          tlog('stuck.escalated', { message: event.message }, 'system') // 2026-08-08 卡住升级打点
-          onActionPromiseHint?.(null)
-          inputRef.current = event.message
-          void sendRef.current?.({ silent: true })
-        } else if (event?.type === 'needs-human') {
-          tlog('stuck.needs_human', { message: event.message }, 'system') // 2026-08-08 升级达上限转用户
-          onActionPromiseHint?.(event.message)
+        // G-picky leaf C：拒方案后方案未确认时勿走 StuckDetector（会催 write，而 write 仍受 plan 门）——改催 propose_plan
+        if (!stateRef.current.planConfirmed) {
+          const toolNames = streamingRef.current.toolCalls.map((c) => c.name)
+          const rp = shouldNudgeProposeAfterPlanReject({
+            goalConfirmed: stateRef.current.goalConfirmed,
+            planConfirmed: stateRef.current.planConfirmed,
+            pending: stateRef.current.pending,
+            planWasRejected: planWasRejectedRef.current,
+            alreadyNudged: planRejectNudgedRef.current,
+            toolNamesThisTurn: toolNames,
+          })
+          if (rp.nudge) {
+            planRejectNudgedRef.current = true
+            tlog(
+              'conversation.system_nudge',
+              { kind: 'protocol', content: rp.message.slice(0, 200) },
+              'system',
+            )
+            void sendRef.current?.({ silent: true, text: rp.message })
+          }
+        } else {
+          // G-picky leaf C：evidence_missing 后纯文本「做好了」→ StuckDetector 视 isDoneLike 不催工具；先催再 report
+          const toolNamesDone = streamingRef.current.toolCalls.map((c) => c.name)
+          const evNudge = shouldNudgeReportAfterEvidenceMissing({
+            planConfirmed: stateRef.current.planConfirmed,
+            pending: stateRef.current.pending,
+            evidenceWasMissing: evidenceGuideCountRef.current > 0,
+            alreadyNudged: evidenceReportNudgedRef.current,
+            toolNamesThisTurn: toolNamesDone,
+          })
+          if (evNudge.nudge) {
+            evidenceReportNudgedRef.current = true
+            tlog(
+              'conversation.system_nudge',
+              { kind: 'protocol', content: evNudge.message.slice(0, 200) },
+              'system',
+            )
+            void sendRef.current?.({ silent: true, text: evNudge.message })
+          } else {
+            // 2026-08-06 任务完成度：write/edit 成功标记产出（approve-files 规划文件 vs 已产出——deepcode unimplemented_files 借鉴）
+            // 2026-08-14 S2：产出记录走状态机转换（applyToolResult——不可变更新）
+            streamingRef.current.toolCalls.forEach((c) => {
+              if ((c.name === 'write' || c.name === 'edit') && c.status === 'done' && c.file)
+                applyTool({ name: c.name, ok: true, file: c.file })
+            })
+            const turn = evaluateTurnProgress({
+              toolCalls: streamingRef.current.toolCalls.map((c) => ({
+                name: c.name,
+                status: c.status,
+                file: c.file,
+                command: String(c.args?.command ?? ''),
+              })),
+              content,
+              prevReadFiles: prevReadFilesRef.current,
+              plannedFiles: stateRef.current.plannedFiles,
+              producedFiles: stateRef.current.producedFiles,
+              // 2026-08-06 补充（用户「清单来源不只 approve-files」——③ projectFiles 项目文件树）：产出校验（规划文件出现在文件树=已产出）
+              // 2026-08-15 坑 102 修复：projectFiles 统一绝对基准（MainWorkspace listDir 返回 basename——与 planned/produced 绝对基准分裂
+              // → projectFiles.has(f) 恒 false → 文件树权威分支失效 → plannedComplete 只靠 produced 记录）；trustPath 归一
+              projectFiles: new Set((recentFilesExternal ?? []).map((f) => trustPath(f))),
+            })
+            streamingRef.current.toolCalls.forEach((c) => {
+              if (c.name === 'read' && c.file) prevReadFilesRef.current.add(c.file)
+            })
+            const { state, event } = detectStuck({ turn, prev: stuckStateRef.current })
+            stuckStateRef.current = state
+            if (event?.type === 'escalate') {
+              tlog('stuck.escalated', { message: event.message }, 'system') // 2026-08-08 卡住升级打点
+              onActionPromiseHint?.(null)
+              void sendRef.current?.({ silent: true, text: event.message })
+            } else if (event?.type === 'needs-human') {
+              tlog('stuck.needs_human', { message: event.message }, 'system') // 2026-08-08 升级达上限转用户
+              onActionPromiseHint?.(event.message)
+            }
+          }
         }
       }
       streamingRef.current = { content: '', reasoning: '', toolCalls: [] }
@@ -1201,8 +1304,10 @@ export default function ConversationPanel({
           return '请改用 report_completion 工具提交完成声明（summary + verification[{command,output,passed}] + pending_questions）'
         }
         const firstMarker = fallbackMarkers[0]
-        inputRef.current = `【系统提示·非用户发言】检测到文本协议标记（${firstMarker}）——${guideByMarker(firstMarker)}`
-        void sendRef.current?.({ silent: true })
+        void sendRef.current?.({
+          silent: true,
+          text: `【系统提示·非用户发言】检测到文本协议标记（${firstMarker}）——${guideByMarker(firstMarker)}`,
+        })
       }
     }
     setMessages((prev) => {
@@ -2076,6 +2181,12 @@ export default function ConversationPanel({
   const clearTrust = (): void => {
     taskTrustRef.current = []
     setTaskTrust([])
+    webOnlyStreakRef.current = 0
+    researchProposeNudgedRef.current = false
+    planWasRejectedRef.current = false
+    planRejectNudgedRef.current = false
+    evidenceGuideCountRef.current = 0
+    evidenceReportNudgedRef.current = false
     // 2026-08-05：阶段推进 = 任务边界；2026-08-07 无阶段重构 S4/S5：目标确认（goalSeq）= 任务边界——approve-files 幂等标记同步重置（新任务需重新规划授权）
     // 2026-08-14 S2：状态机字段（完整任务边界重置由 userConfirmed('goal') 承担——此处仅即时清幂等标记）
     setFilesApproved(false)
@@ -2118,25 +2229,32 @@ export default function ConversationPanel({
 
   // 2026-08-07 无阶段修复（用户「输入≠打断」）：排队衔接机制——模型产出中用户发送 → 存 pending，
   // 当前轮（流式+工具链）完成后自动发送（不打断）；打断 = 显式停止按钮（.nf-chat__stop）
-  const pendingSendRef = useRef('')
   const flushPendingSend = () => {
     const pending = pendingSendRef.current
     if (!pending) return
     pendingSendRef.current = ''
-    inputRef.current = pending
-    // 等 workingRef 更新（setWorking(false) effect 渲染后）——避免 send 开头误判 working 又排队
-    setTimeout(() => void sendRef.current(), 50)
+    // 直送——不经输入框（避免 pending 文案闪进 textarea）
+    setTimeout(() => void sendRef.current({ text: pending }), 50)
   }
 
-  // 2026-08-06 只说不做第 5 次升级（用户反馈「最后又卡住了」）：send 支持 silent（自动续聊用——不显示/不记录用户消息，避免用户看到「自己发的」困惑）
-  const send = async (opts?: { silent?: boolean }) => {
-    const text = inputRef.current.trim()
+  // 2026-08-06 只说不做第 5 次升级：send 支持 silent（自动续聊——不显示用户气泡）
+  // 2026-09-28：系统提示/对账前缀强制 silent；opts.text 直送——不经输入框（防系统文案停在 textarea）
+  const send = async (opts?: { silent?: boolean; text?: string }) => {
+    const fromBox = opts?.text === undefined
+    const text = (fromBox ? inputRef.current : opts.text!).trim()
     if (!text) return
+    const silent = Boolean(opts?.silent) || isSystemNudgeText(text)
+    // 来自输入框：立刻清框（silent 若先 await stop，文案会长时间停在框里——UAT typeAndSend / 用户可见）
+    // opts.text 直送：不动输入框，保留用户草稿
+    if (fromBox) {
+      inputRef.current = ''
+      setInput('')
+    }
     // 2026-08-07 无阶段修复（用户「输入≠打断」——竞品共识：Claude Code Esc / Cursor 停止按钮 / Devin 中断都是显式动作）：
     // 模型产出中发送 = 排队衔接（不打断当前流式/工具链，当前轮完成后自动发送）；打断 = 显式停止按钮（.nf-chat__stop）
     // 待授权（模型停住等批准）时发送 = 直接处理（用户未批准给新指令——排队会卡在授权等待）
     if (workingRef.current) {
-      if (opts?.silent) {
+      if (silent) {
         // 系统自动消息（StuckDetector escalate/执行确认触发——非用户输入）：直接处理（打断当前——内部机制干预卡住，
         // 不受「输入≠打断」约束；排队会让修正消息延迟到当前轮完成——卡住时正是要立即干预）
         console.log('[conversation] 处理中 silent 发送——打断当前（系统自动续聊/修正）')
@@ -2147,15 +2265,11 @@ export default function ConversationPanel({
         // （原排队时 push + flush 后 send 再 push = 重复用户消息——398 实测两条「可以」）
         console.log('[conversation] 处理中发送——排队衔接（当前轮完成后自动发送；要停请点停止按钮）')
         pendingSendRef.current = text
-        inputRef.current = ''
-        setInput('')
         return
       }
       console.log('[conversation] 待授权中发送——新指令直接处理（未批准给新指令）')
     }
-    inputRef.current = ''
-    setInput('')
-    if (!opts?.silent) {
+    if (!silent) {
       // S7（A0 审校 P1-5 + C2 完善——e2e-0to1 场景 B 暴露）：pending 期用户文本分流——
       // 确认语义（isConfirmIntent——「行/按这个方案」）→ 自动确认当前决策点（等价点按钮——确认卡时代
       // 遗漏文本确认——真实用户打字确认）；新意图文本 → 隐式拒绝（C2——reason.direction + text——
@@ -2193,6 +2307,9 @@ export default function ConversationPanel({
         session: sessionId,
       })
       setMessages((p) => [...p, { role: 'user', content: text, status: 'done', id: nextMsgId() }])
+    } else {
+      // 系统引导/提示：不经用户通道（气泡/输入框/message_sent/chatLog）；时间线记一条便于事后查
+      tlog('conversation.system_nudge', { content: text, kind: systemNudgeKind(text) }, 'system')
     }
     // 2026-08-04：新轮次——重置流式累积（防上轮异常残留）
     streamingRef.current = { content: '', reasoning: '', toolCalls: [] }
@@ -2204,11 +2321,12 @@ export default function ConversationPanel({
       ...p,
       { role: 'assistant', content: '', reasoning: '', status: 'streaming', id: nextMsgId() },
     ])
-    setWorkingStage('已发送，等待搭档…')
+    setWorkingStage(silent ? '系统引导中…' : '已发送，等待搭档…')
 
     // ticket 12 ContextEngine：@引用文件 → 注入精准上下文（零 token 确定性——不走 LLM read）
+    // silent：API 走 system（非 user——不经用户通道）；模型仍消费指令
     const msgs: Array<{ role: 'user' | 'system'; content: string }> = [
-      { role: 'user', content: text },
+      { role: silent ? 'system' : 'user', content: text },
     ]
     const mentionFiles = (text.match(/@(\S+)/g) ?? []).map((m) => m.slice(1))
     if (mentionFiles.length > 0 && rootPath) {
@@ -2358,12 +2476,13 @@ export default function ConversationPanel({
     // 2026-08-07 T1 根因补强：ipc 返回结构化 errorType 优先（gateway 源头分类）——classifyChatError 仅兜底（字面量/未知格式）
     const errorType = errorTypeHint ?? classifyChatError(err)
     tlog('conversation.error', { errorType, message: err }, 'system') // 2026-08-08 错误打点（错误链路可追溯）
-    let content = '刚才出错了，请再试一次。'
+    let content = '刚才出错了，点「重试」继续——不用重新说一遍。'
     if (errorType === 'key-invalid') {
       content = 'API Key 好像失效了，换个 Key 试试。'
     } else if (errorType === 'service') {
-      content = '服务暂时不可用，稍后再试。'
+      content = '服务暂时不可用（已自动重试）。点「重试」再试一次。'
     }
+    workingRef.current = false // 同步清——effect 滞后会导致立刻 retryFailedTurn 被 working 门挡掉
     setWorking(false)
     onWorkingChange?.(false)
     setWorkingStage('就绪')
@@ -2375,12 +2494,60 @@ export default function ConversationPanel({
       error: errorType,
       session: sessionId,
     })
-    setMessages((p) => {
-      const last = p[p.length - 1]
-      if (!last || last.role !== 'assistant') return p
-      return [...p.slice(0, -1), { ...last, status: 'error', error: errorType, content }]
-    })
+    const prev = messagesRef.current
+    const last = prev[prev.length - 1]
+    const nextMsgs =
+      !last || last.role !== 'assistant'
+        ? prev
+        : [...prev.slice(0, -1), { ...last, status: 'error' as const, error: errorType, content }]
+    messagesRef.current = nextMsgs
+    setMessages(nextMsgs)
+    // 目标或方案已确认后的瞬态失败：一次自动续跑（等同点「重试」——不追加用户消息）
+    if (
+      errorType === 'service' &&
+      (stateRef.current.goalConfirmed || stateRef.current.planConfirmed) &&
+      !autoRetriedServiceRef.current
+    ) {
+      autoRetriedServiceRef.current = true
+      setTimeout(() => {
+        void retryFailedTurnRef.current?.()
+      }, 0)
+    }
   }
+
+  // 竞品共识：失败气泡旁「重试」= 重放上一回合，不追加用户消息（Claude/Cursor 同类）
+  const retryFailedTurn = async () => {
+    if (workingRef.current) return
+    const base = messagesRef.current
+    const last = base[base.length - 1]
+    if (!last || last.role !== 'assistant' || last.status !== 'error') return
+    const prev = base.slice(0, -1)
+    streamingRef.current = {
+      content: '',
+      reasoning: '',
+      toolCalls: last.toolCalls ?? [],
+    }
+    setMessages([
+      ...prev,
+      {
+        role: 'assistant',
+        content: '',
+        reasoning: '',
+        status: 'streaming',
+        id: nextMsgId(),
+        toolCalls: last.toolCalls,
+      },
+    ])
+    setWorking(true)
+    onWorkingChange?.(true)
+    setWorkingStage('重试中…')
+    const sid = ++sessionRef.current
+    const hist = chatRef.current?.msgs ?? buildHistory(prev)
+    const depth = chatRef.current?.depth ?? 0
+    await runChat(hist, depth, sid)
+  }
+  const retryFailedTurnRef = useRef(retryFailedTurn)
+  retryFailedTurnRef.current = retryFailedTurn
 
   const demo = getDemoBridge()
   // 2026-08-07 无阶段重构 S4：demoFlow（DeliveryFlowPanel demo 通道）删除——阶段卡随阶段体系移除
@@ -2472,6 +2639,16 @@ export default function ConversationPanel({
               {m.error === 'key-invalid' && (
                 <button type="button" className="nf-config__link" onClick={onKeyExpired}>
                   要不要更新一下？
+                </button>
+              )}
+              {m.status === 'error' && m.error !== 'key-invalid' && (
+                <button
+                  type="button"
+                  className="nf-msg__retry"
+                  disabled={working}
+                  onClick={() => void retryFailedTurn()}
+                >
+                  重试
                 </button>
               )}
             </div>
@@ -2616,8 +2793,7 @@ export default function ConversationPanel({
                               confirm('goal')
                               tlog('card.resolved', { card: 'goal', action: 'confirm' }, 'system')
                               onGoalConfirmed?.(confirmedGoal)
-                              inputRef.current = '确认，目标清楚了'
-                              void sendRef.current()
+                              void sendRef.current({ text: '确认，目标清楚了' })
                             }}
                           >
                             确认目标
@@ -2635,8 +2811,7 @@ export default function ConversationPanel({
                                 'system',
                               )
                               onGoalRejected?.()
-                              inputRef.current = '目标需要重新描述一下'
-                              void sendRef.current()
+                              void sendRef.current({ text: '目标需要重新描述一下' })
                             }}
                           >
                             重新描述
@@ -2697,14 +2872,15 @@ export default function ConversationPanel({
                             className="nf-confirmcard__btn nf-confirmcard__btn--ok"
                             onClick={() => {
                               confirm('plan')
+                              planWasRejectedRef.current = false
+                              planRejectNudgedRef.current = false
                               tlog(
                                 'card.resolved',
                                 { card: 'execution', action: 'confirm' },
                                 'system',
                               )
                               onPlanConfirmed?.()
-                              inputRef.current = '确认，按方案执行'
-                              void sendRef.current()
+                              void sendRef.current({ text: '确认，按方案执行' })
                             }}
                           >
                             确认执行
@@ -2715,6 +2891,7 @@ export default function ConversationPanel({
                             onClick={() => {
                               // S3：拒绝带原因（不变量 8——RejectKind；「修改方案」= scope 调整方向）
                               reject('plan', { kind: 'scope', target: 'plan' })
+                              planWasRejectedRef.current = true
                               setRejectedCardIdx((p) => ({ ...p, execution: i }))
                               tlog(
                                 'card.rejected',
@@ -2722,8 +2899,7 @@ export default function ConversationPanel({
                                 'system',
                               )
                               onPlanRejected?.()
-                              inputRef.current = '方案需要调整一下'
-                              void sendRef.current()
+                              void sendRef.current({ text: '方案需要调整一下' })
                             }}
                           >
                             修改方案
@@ -2769,8 +2945,7 @@ export default function ConversationPanel({
                                 { card: 'achievement', action: 'confirm' },
                                 'system',
                               )
-                              inputRef.current = '已解决，谢谢'
-                              void sendRef.current()
+                              void sendRef.current({ text: '已解决，谢谢' })
                             }}
                           >
                             已解决
@@ -3070,16 +3245,19 @@ export default function ConversationPanel({
                     confirm('system_clarify')
                     tlog('card.resolved', { card: 'system_clarify', action: 'confirm' }, 'system')
                     const u = prop?.underlying
-                    if (u === 'goal') {
-                      onGoalConfirmed?.(prop?.statement ?? '目标已确认')
-                      inputRef.current = '确认，目标清楚了'
-                    } else if (u === 'plan') {
+                    const confirmText =
+                      u === 'goal'
+                        ? '确认，目标清楚了'
+                        : u === 'plan'
+                          ? '确认，按方案执行'
+                          : '确认，继续'
+                    if (u === 'goal') onGoalConfirmed?.(prop?.statement ?? '目标已确认')
+                    else if (u === 'plan') {
+                      planWasRejectedRef.current = false
+                      planRejectNudgedRef.current = false
                       onPlanConfirmed?.()
-                      inputRef.current = '确认，按方案执行'
-                    } else {
-                      inputRef.current = '确认，继续'
                     }
-                    void sendRef.current()
+                    void sendRef.current({ text: confirmText })
                   }}
                 >
                   确认执行
@@ -3092,14 +3270,15 @@ export default function ConversationPanel({
                     // 点卡 = 明确新一轮协商 → rejectStreak 重置（打字拒绝不重置——C2 循环形态）
                     reject('system_clarify', { kind: 'direction' })
                     resetRejectStreak()
+                    if (prop?.underlying === 'plan') planWasRejectedRef.current = true
                     tlog(
                       'card.rejected',
                       { card: 'system_clarify', action: 'reject', reason: 'direction' },
                       'system',
                     )
-                    inputRef.current =
-                      prop?.underlying === 'plan' ? '方案需要调整' : '目标需要重新描述一下'
-                    void sendRef.current()
+                    void sendRef.current({
+                      text: prop?.underlying === 'plan' ? '方案需要调整' : '目标需要重新描述一下',
+                    })
                   }}
                 >
                   我要重新描述
@@ -3113,16 +3292,19 @@ export default function ConversationPanel({
                     if (lastAssistant?.toolCalls?.length)
                       approveAllToolCalls(lastAssistant.toolCalls)
                     const u = prop?.underlying
-                    if (u === 'goal') {
-                      onGoalConfirmed?.(prop?.statement ?? '目标已确认')
-                      inputRef.current = '确认，目标清楚了'
-                    } else if (u === 'plan') {
+                    const confirmText =
+                      u === 'goal'
+                        ? '确认，目标清楚了'
+                        : u === 'plan'
+                          ? '确认，按方案执行'
+                          : '确认，继续'
+                    if (u === 'goal') onGoalConfirmed?.(prop?.statement ?? '目标已确认')
+                    else if (u === 'plan') {
+                      planWasRejectedRef.current = false
+                      planRejectNudgedRef.current = false
                       onPlanConfirmed?.()
-                      inputRef.current = '确认，按方案执行'
-                    } else {
-                      inputRef.current = '确认，继续'
                     }
-                    void sendRef.current()
+                    void sendRef.current({ text: confirmText })
                   }}
                 >
                   由搭档全权决定

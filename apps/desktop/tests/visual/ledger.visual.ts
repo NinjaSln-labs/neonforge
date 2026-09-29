@@ -8,8 +8,10 @@ async function mockBridge(page: import('@playwright/test').Page, withProblems: b
       config: {
         hasKey: async () => true,
         getKey: async () => 'test-key',
+        getProvider: async () => 'commandcode',
         setKey: async () => {},
         clearKey: async () => {},
+        listProviders: async () => [],
       },
       workspace: {
         openFolder: async () => '/test',

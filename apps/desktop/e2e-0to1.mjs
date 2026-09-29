@@ -160,7 +160,7 @@ ${this.personaText()}
         .join('\n')
       const prompt = `AI 搭档最新对你说（${c.length} 字）：\n${c.slice(0, 800)}${c.length > 800 ? '…' : ''}\n${msg.candidates.length > 0 ? `\n候选选项：${msg.candidates.join(' | ')}` : ''}\n\n只输出一个 JSON 对象（无 Markdown 代码块包裹）：{"action":"<choose|answer|clarify|agree|feedback>", "text":"<一句话回复>"}`
       const body = JSON.stringify({
-        model: 'deepseek/deepseek-v4-flash',
+        model: 'deepseek/deepseek-v4.1-flash',
         messages: [
           { role: 'system', content: this.systemPrompt(journeyLabel) },
           ...(hist ? [{ role: 'user', content: hist }] : []),

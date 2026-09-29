@@ -2,11 +2,20 @@
 // 启动要求：NF_FORCE_CHAT_ERROR=400-once（勿设 NF_FORCE_NETWORK_ERROR，否则配置页验证也挂）
 // Key：NEONFORGE_COMMANDCODE 或 NF_UAT_KEY_FILE
 import { connect, snap, ensureOut, dump } from './cdp-lib.mjs'
-import { PERSONAS, autopilot, driveScenario, runRedLines, UAT_DIR } from './uat-lib.mjs'
+import {
+  PERSONAS,
+  autopilot,
+  driveScenario,
+  runRedLines,
+  UAT_DIR,
+  ensureCommandCodeConfigured,
+  TASKS,
+  taskLandedHints,
+} from './uat-lib.mjs'
 import { mkdirSync, readFileSync, unlinkSync, existsSync } from 'fs'
 import { execSync } from 'child_process'
 
-const TASK = '帮我做一个简单的待办清单网页（单文件 todo.html，能添加和勾选完成）'
+const TASK = TASKS.network
 const OUT = `${UAT_DIR}/D-network`
 mkdirSync(OUT, { recursive: true })
 await ensureOut()
@@ -41,11 +50,7 @@ if (!key) throw new Error('empty key')
 const { browser, page } = await connect()
 
 if (await page.getByRole('button', { name: '验证并开始' }).count()) {
-  console.log('config page: validating key…')
-  await page.getByLabel('Command Code API Key').fill(key)
-  await page.getByRole('button', { name: '验证并开始' }).click()
-  await page.getByRole('button', { name: '从零开始' }).waitFor({ timeout: 120000 })
-  console.log('config ok → start page')
+  await ensureCommandCodeConfigured(page, key)
 }
 
 if (await page.getByRole('button', { name: '从零开始' }).count()) {
@@ -60,7 +65,8 @@ console.log('workspace ready')
 
 await page.waitForTimeout(4000)
 const body = await page.locator('body').innerText()
-if (!body.includes('todo.html') && !body.includes('待办')) {
+const hints = taskLandedHints('network')
+if (!hints.some((h) => body.includes(h))) {
   await page.locator('textarea').last().fill(TASK)
   await page.getByRole('button', { name: '发送' }).click()
 }

@@ -249,8 +249,15 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
     config: {
       hasKey: async () => true,
       getKey: async () => 'test-key',
+      getProvider: async () => 'commandcode',
       setKey: async () => {},
       clearKey: async () => {},
+      listProviders: async () => [
+        { id: 'deepseek', label: 'DeepSeek 官方', howToGetKey: { zh: '', en: '' } },
+        { id: 'commandcode', label: 'Command Code', howToGetKey: { zh: '', en: '' } },
+        { id: 'opencode-zen', label: 'OpenCode Zen', howToGetKey: { zh: '', en: '' } },
+        { id: 'opencode-go', label: 'OpenCode Go', howToGetKey: { zh: '', en: '' } },
+      ],
     },
     workspace: {
       openFolder: async () => ${json(spec.project === 'none' ? null : '/test')},

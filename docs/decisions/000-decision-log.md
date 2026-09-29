@@ -18,3 +18,5 @@
 | 007 | provider 切换——DeepSeek 官方 → Command Code（模型仍 DeepSeek V4 系列；接入方可切） | accepted | 2026-08-21 |
 | 008 | 遗留问题不阻塞完成对账（S4 证据语义修订）                                         | accepted | 2026-08-30 |
 | 009 | 确认协议工具化（V1.5——文本标记 → schema 工具调用）                               | accepted | 2026-08-31 |
+| 010 | 多源 Provider 注册表 + DeepSeek 模型 Catalog（Zen/Go/官方/Command Code）         | accepted | 2026-09-28 |
+| 011 | 成功＝领域命题成立（非外壳返回）                                                 | accepted | 2026-09-29 |
