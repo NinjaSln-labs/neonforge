@@ -161,6 +161,7 @@
 - 基线权威宿主 = **macOS**；仅在 Mac 上 `--update-snapshots` 后入库（见 `apps/desktop/playwright.config.ts`）。
 - WSL/Linux 渲染 ≠ 基线宿主——禁止在非 Mac 上 update 后入库。
 - 勿与 eslint / UAT 等重任务并行跑 L5（资源竞争假失败——p000114 / K8）。
+- `.nf-start` 超时（K8-C）：2026-09-30 WSL solo `start.visual` + 若干 `.nf-start` waiter 绿，未能证伪为产品/mock bug；关单前仍须 Mac solo 全量 L5（日志 `/tmp/nf-l5-solo-start.txt`）。
 
 ## 缺口清单
 
