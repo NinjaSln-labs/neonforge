@@ -1,35 +1,9 @@
 import { test, expect } from '@playwright/test'
+import { installVisualBridge } from './visualBridge'
 
 // ticket 15a：场景卡片——对话空态零学习成本入口（点击预填问题）
-async function mockBridge(page: import('@playwright/test').Page) {
-  await page.addInitScript(() => {
-    const bridge = {
-      version: 'test',
-      config: {
-        hasKey: async () => true,
-        getKey: async () => 'test-key',
-        getProvider: async () => 'commandcode',
-        setKey: async () => {},
-        clearKey: async () => {},
-        listProviders: async () => [],
-      },
-      workspace: {
-        openFolder: async () => '/test',
-        listDir: async () => [],
-        readFile: async () => ({ ok: true, content: '// x' }),
-      },
-      gateway: {
-        validate: async () => ({ ok: true }),
-        streamChat: async () => ({ ok: true }),
-        onStreamChunk: () => () => {},
-      },
-    }
-    ;(window as unknown as { neonforge: unknown }).neonforge = bridge
-  })
-}
-
 test('场景卡片渲染（对话空态）', async ({ page }) => {
-  await mockBridge(page)
+  await installVisualBridge(page)
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
@@ -42,7 +16,7 @@ test('场景卡片渲染（对话空态）', async ({ page }) => {
 })
 
 test('点击场景卡片预填输入框', async ({ page }) => {
-  await mockBridge(page)
+  await installVisualBridge(page)
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()

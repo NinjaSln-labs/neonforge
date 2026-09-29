@@ -1,36 +1,9 @@
 import { test, expect } from '@playwright/test'
+import { installVisualBridge } from './visualBridge'
 
 // ticket 11：Compaction——超长对话显示压缩提示（策略阈值 24 条）
-async function mockBridge(page: import('@playwright/test').Page, history: number) {
-  await page.addInitScript((h) => {
-    const bridge = {
-      version: 'test',
-      config: {
-        hasKey: async () => true,
-        getKey: async () => 'test-key',
-        getProvider: async () => 'commandcode',
-        setKey: async () => {},
-        clearKey: async () => {},
-        listProviders: async () => [],
-      },
-      workspace: {
-        openFolder: async () => '/test',
-        listDir: async () => [],
-        readFile: async () => ({ ok: true, content: '// x' }),
-      },
-      gateway: {
-        validate: async () => ({ ok: true }),
-        streamChat: async () => ({ ok: true }),
-        onStreamChunk: () => () => {},
-      },
-      demo: { compactHistory: h },
-    }
-    ;(window as unknown as { neonforge: unknown }).neonforge = bridge
-  }, history)
-}
-
 test('压缩提示（历史超阈值显示）', async ({ page }) => {
-  await mockBridge(page, 30)
+  await installVisualBridge(page, { demo: { compactHistory: 30 } })
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
@@ -40,7 +13,7 @@ test('压缩提示（历史超阈值显示）', async ({ page }) => {
 })
 
 test('压缩提示（历史未超阈值不显示）', async ({ page }) => {
-  await mockBridge(page, 10)
+  await installVisualBridge(page, { demo: { compactHistory: 10 } })
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()

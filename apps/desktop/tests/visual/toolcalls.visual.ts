@@ -11,58 +11,13 @@ import {
 } from '../interaction/scenarios'
 
 // 工具卡片（真实执行 V1）：mock SSE 发 tool-call → 卡片渲染（read 自动✅ / bash 需授权🔒）
-async function mockBridge(page: import('@playwright/test').Page) {
-  await page.addInitScript(() => {
-    window.__emit = null
-    window.neonforge = {
-      version: 'test',
-      config: {
-        hasKey: async () => true,
-        getKey: async () => 'test-key',
-        getProvider: async () => 'commandcode',
-        setKey: async () => {},
-        clearKey: async () => {},
-        listProviders: async () => [],
-      },
-      workspace: {
-        openFolder: async () => '/test',
-        listDir: async () => [],
-        readFile: async () => ({ ok: true, content: '// x' }),
-        updateProjectTitle: async () => ({ ok: true }),
-      },
-      gateway: {
-        validate: async () => ({ ok: true }),
-        streamChat: async () => ({ ok: true }),
-        onStreamChunk: (cb: (c: unknown) => void) => {
-          window.__emit = cb
-          return () => {}
-        },
-      },
-      tools: {
-        list: async () => [],
-        execute: async (
-          name: string,
-          args: Record<string, unknown>,
-          opts?: { approved?: boolean },
-        ) => {
-          if (name === 'read')
-            return { ok: true, data: '{"name":"neonforge-desktop","version":"0.1.0"}' }
-          if (name === 'write' && opts?.approved)
-            return { ok: true, data: { file: '/test/notes.txt', snapshot: true } }
-          return {
-            ok: false,
-            needApproval: true,
-            error: `「${name}」需要授权（L3）——approved=true 后执行`,
-          }
-        },
-        revert: async () => ({ ok: true }),
-      },
-    }
-  })
-}
-
 test('工具卡片（read 自动执行 ✅）', async ({ page }) => {
-  await mockBridge(page)
+  await installMockBridge(page, {
+    manualEmit: true,
+    executeResults: {
+      read: { ok: true, data: '{"name":"neonforge-desktop","version":"0.1.0"}' },
+    },
+  })
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
@@ -70,12 +25,13 @@ test('工具卡片（read 自动执行 ✅）', async ({ page }) => {
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
   await page.waitForTimeout(300)
   await page.evaluate(() => {
-    window.__emit({ type: 'reasoning', text: '需要读取 package.json' })
-    window.__emit({
+    const emit = (window as unknown as { __emit: (c: unknown) => void }).__emit
+    emit({ type: 'reasoning', text: '需要读取 package.json' })
+    emit({
       type: 'tool-call',
       toolCall: { name: 'read', args: { path: '/test/package.json' } },
     })
-    window.__emit({ type: 'done' })
+    emit({ type: 'done' })
   })
   await page.waitForTimeout(800)
   await expect(page.locator('.nf-toolcall')).toHaveCount(1)

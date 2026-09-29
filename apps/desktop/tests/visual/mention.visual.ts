@@ -1,36 +1,12 @@
 import { test, expect } from '@playwright/test'
+import { installMockBridge } from '../interaction/mockBridge'
+import { installVisualBridge } from './visualBridge'
 
 // ticket 08b：@引用——输入 @ 弹出最近文件浮层 → 点击插入标签
-async function mockBridge(page: import('@playwright/test').Page) {
-  await page.addInitScript(() => {
-    const bridge = {
-      version: 'test',
-      config: {
-        hasKey: async () => true,
-        getKey: async () => 'test-key',
-        getProvider: async () => 'commandcode',
-        setKey: async () => {},
-        clearKey: async () => {},
-        listProviders: async () => [],
-      },
-      workspace: {
-        openFolder: async () => '/test',
-        listDir: async () => [],
-        readFile: async () => ({ ok: true, content: '// x' }),
-      },
-      gateway: {
-        validate: async () => ({ ok: true }),
-        streamChat: async () => ({ ok: true }),
-        onStreamChunk: () => () => {},
-      },
-      demo: { recentFiles: ['src/main/gateway.ts', 'src/renderer/App.tsx', 'package.json'] },
-    }
-    ;(window as unknown as { neonforge: unknown }).neonforge = bridge
-  })
-}
-
 test('@ 引用（输入 @ → 浮层 → 点击插入）', async ({ page }) => {
-  await mockBridge(page)
+  await installVisualBridge(page, {
+    demo: { recentFiles: ['src/main/gateway.ts', 'src/renderer/App.tsx', 'package.json'] },
+  })
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
@@ -51,39 +27,15 @@ test('@ 引用（输入 @ → 浮层 → 点击插入）', async ({ page }) => {
 })
 
 test('@引用注入（ContextEngine：@文件 → 精准上下文注入 streamChat）', async ({ page }) => {
-  await page.addInitScript(() => {
-    window.__lastMsgs = null
-    window.neonforge = {
-      version: 'test',
-      config: {
-        hasKey: async () => true,
-        getKey: async () => 'test-key',
-        getProvider: async () => 'commandcode',
-        setKey: async () => {},
-        clearKey: async () => {},
-        listProviders: async () => [],
-      },
-      workspace: {
-        openFolder: async () => '/test',
-        listDir: async () => [],
-        readFile: async () => ({ ok: true, content: '// x' }),
-      },
-      gateway: {
-        validate: async () => ({ ok: true }),
-        streamChat: async (opts: { messages: Array<{ role: string; content: string | null }> }) => {
-          window.__lastMsgs = opts.messages
-          return { ok: true }
-        },
-        onStreamChunk: () => () => {},
-      },
-      context: {
-        resolve: async (files: string[]) => ({
-          fragments: [
-            { path: '/test/' + files[0], content: 'export const x = 1', truncated: false },
-          ],
-        }),
-      },
-    }
+  const handle = await installMockBridge(page, {
+    capture: { sentMsgs: true },
+    extraInit: `
+      bridge.context.resolve = async (files) => ({
+        fragments: [
+          { path: '/test/' + files[0], content: 'export const x = 1', truncated: false },
+        ],
+      })
+    `,
   })
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
@@ -93,11 +45,7 @@ test('@引用注入（ContextEngine：@文件 → 精准上下文注入 streamCh
   await textarea.press('Meta+Enter')
   await page.waitForTimeout(500)
   // streamChat 收到的 messages 含注入 system 消息（零 token 确定性上下文）
-  const msgs = await page.evaluate(
-    () =>
-      (window as unknown as { __lastMsgs: Array<{ role: string; content: string | null }> | null })
-        .__lastMsgs,
-  )
+  const msgs = await handle.sentMessages()
   const injected = msgs?.find(
     (m) => m.role === 'system' && String(m.content).includes('已注入文件上下文'),
   )

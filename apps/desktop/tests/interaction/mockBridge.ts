@@ -114,6 +114,8 @@ export interface MockBridgeOptions {
   executeSource?: string
   /** 附加 bridge 字段（如 timeline/rag 特化——纯数据） */
   extra?: Record<string, unknown>
+  /** config.hasKey（默认 true；config-page 视觉用 false） */
+  hasKey?: boolean
 }
 
 export interface MockBridgeHandle {
@@ -153,6 +155,7 @@ interface Spec {
     titleCalls: boolean
     planConfirmedCalls: boolean
   }
+  hasKey: boolean
 }
 
 export async function installMockBridge(
@@ -179,6 +182,7 @@ export async function installMockBridge(
       titleCalls: opts.capture?.titleCalls ?? false,
       planConfirmedCalls: opts.capture?.planConfirmedCalls ?? false,
     },
+    hasKey: opts.hasKey ?? true,
   }
 
   const source = buildInitSource(spec, opts)
@@ -247,9 +251,10 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
   const bridge = {
     version: 'test',
     config: {
-      hasKey: async () => true,
-      getKey: async () => 'test-key',
+      hasKey: async () => ${json(spec.hasKey)},
+      getKey: async () => ${json(spec.hasKey ? 'test-key' : null)},
       getProvider: async () => 'commandcode',
+      getModel: async () => null,
       setKey: async () => {},
       clearKey: async () => {},
       listProviders: async () => [
@@ -258,6 +263,29 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
         { id: 'opencode-zen', label: 'OpenCode Zen', howToGetKey: { zh: '', en: '' } },
         { id: 'opencode-go', label: 'OpenCode Go', howToGetKey: { zh: '', en: '' } },
       ],
+      getWebAccess: async () => ({
+        enabled: false,
+        probeOk: false,
+        searchUrl: null,
+        searchKey: null,
+        keenableApiKey: null,
+        hasKeenableKey: false,
+        keenablePublicTrial: false,
+        builtinProvider: null,
+      }),
+      setWebAccess: async () => ({
+        ok: true,
+        config: {
+          enabled: false,
+          probeOk: false,
+          searchUrl: null,
+          searchKey: null,
+          keenableApiKey: null,
+          hasKeenableKey: false,
+          keenablePublicTrial: false,
+          builtinProvider: null,
+        },
+      }),
     },
     workspace: {
       openFolder: async () => ${json(spec.project === 'none' ? null : '/test')},

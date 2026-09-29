@@ -1,65 +1,38 @@
 import { test, expect } from '@playwright/test'
+import { installVisualBridge } from './visualBridge'
 
-// ticket 06：问题台账视觉基线——mock 注入问题列表 → 渲染 + 选中交互
-async function mockBridge(page: import('@playwright/test').Page, withProblems: boolean) {
-  await page.addInitScript((hasProblems) => {
-    const bridge = {
-      version: 'test',
-      config: {
-        hasKey: async () => true,
-        getKey: async () => 'test-key',
-        getProvider: async () => 'commandcode',
-        setKey: async () => {},
-        clearKey: async () => {},
-        listProviders: async () => [],
-      },
-      workspace: {
-        openFolder: async () => '/test',
-        listDir: async () => [],
-        readFile: async () => ({ ok: true, content: '// x' }),
-      },
-      gateway: {
-        validate: async () => ({ ok: true }),
-        streamChat: async () => ({ ok: true }),
-        onStreamChunk: () => () => {},
-      },
-      demo: hasProblems
-        ? {
-            problems: [
-              {
-                id: 'p1',
-                title: '整理 Downloads 里的发票和合同',
-                status: 'closed',
-                updatedAt: '10:20',
-              },
-              {
-                id: 'p2',
-                title: '做一个能发给朋友的旅行手册网页',
-                status: 'awaiting-plan',
-                updatedAt: '11:05',
-              },
-              {
-                id: 'p3',
-                title: '把销售表合并出月度图表',
-                status: 'executing',
-                updatedAt: '11:12',
-              },
-              {
-                id: 'p4',
-                title: '网站打不开了，帮我看看',
-                status: 'failed-recoverable',
-                updatedAt: '11:30',
-              },
-            ],
-          }
-        : null,
-    }
-    ;(window as unknown as { neonforge: unknown }).neonforge = bridge
-  }, withProblems)
+const problemsDemo = {
+  problems: [
+    {
+      id: 'p1',
+      title: '整理 Downloads 里的发票和合同',
+      status: 'closed',
+      updatedAt: '10:20',
+    },
+    {
+      id: 'p2',
+      title: '做一个能发给朋友的旅行手册网页',
+      status: 'awaiting-plan',
+      updatedAt: '11:05',
+    },
+    {
+      id: 'p3',
+      title: '把销售表合并出月度图表',
+      status: 'executing',
+      updatedAt: '11:12',
+    },
+    {
+      id: 'p4',
+      title: '网站打不开了，帮我看看',
+      status: 'failed-recoverable',
+      updatedAt: '11:30',
+    },
+  ],
 }
 
+// ticket 06：问题台账视觉基线——mock 注入问题列表 → 渲染 + 选中交互
 test('问题台账（多状态渲染）', async ({ page }) => {
-  await mockBridge(page, true)
+  await installVisualBridge(page, { demo: problemsDemo })
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
@@ -71,7 +44,7 @@ test('问题台账（多状态渲染）', async ({ page }) => {
 })
 
 test('选中问题高亮', async ({ page }) => {
-  await mockBridge(page, true)
+  await installVisualBridge(page, { demo: problemsDemo })
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
@@ -81,7 +54,7 @@ test('选中问题高亮', async ({ page }) => {
 })
 
 test('台账空态（无问题）', async ({ page }) => {
-  await mockBridge(page, false)
+  await installVisualBridge(page)
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
@@ -90,7 +63,7 @@ test('台账空态（无问题）', async ({ page }) => {
 })
 
 test('发送问题 → 台账创建实例（问题 = 一等公民）', async ({ page }) => {
-  await mockBridge(page, false)
+  await installVisualBridge(page)
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
@@ -105,7 +78,7 @@ test('发送问题 → 台账创建实例（问题 = 一等公民）', async ({ 
 })
 
 test('closed 问题复开 → 复跑（上次那个再跑一遍）', async ({ page }) => {
-  await mockBridge(page, true)
+  await installVisualBridge(page, { demo: problemsDemo })
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()

@@ -1,36 +1,9 @@
 import { test, expect } from '@playwright/test'
+import { installVisualBridge } from './visualBridge'
 
 // ticket 13：数字产物交付视觉基线——mock digitalDelivery → 文件清单 + 任务选择 + 变更预览 + 交付
-async function mockBridge(page: import('@playwright/test').Page) {
-  await page.addInitScript(() => {
-    const bridge = {
-      version: 'test',
-      config: {
-        hasKey: async () => true,
-        getKey: async () => 'test-key',
-        getProvider: async () => 'commandcode',
-        setKey: async () => {},
-        clearKey: async () => {},
-        listProviders: async () => [],
-      },
-      workspace: {
-        openFolder: async () => '/test',
-        listDir: async () => [],
-        readFile: async () => ({ ok: true, content: '// x' }),
-      },
-      gateway: {
-        validate: async () => ({ ok: true }),
-        streamChat: async () => ({ ok: true }),
-        onStreamChunk: () => () => {},
-      },
-      demo: { digitalDelivery: true, onDeliver: () => {} },
-    }
-    ;(window as unknown as { neonforge: unknown }).neonforge = bridge
-  })
-}
-
 test('数字交付（文件清单 + 任务选择 + 变更预览）', async ({ page }) => {
-  await mockBridge(page)
+  await installVisualBridge(page, { demo: { digitalDelivery: true } })
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()

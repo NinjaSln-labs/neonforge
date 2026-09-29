@@ -1,59 +1,10 @@
 import { test, expect } from '@playwright/test'
+import { installVisualBridge } from './visualBridge'
 
 // ticket 08a：设置面板——打开 → 插件列表（真实 IPC）+ 快捷键表
 // 2026-08-03 A1 审计修复：移除不生效的假设置（语言/默认视图/主动提醒）——设置面板只含真实内容
-async function mockBridge(page: import('@playwright/test').Page) {
-  await page.addInitScript(() => {
-    const bridge = {
-      version: 'test',
-      config: {
-        hasKey: async () => true,
-        getKey: async () => 'test-key',
-        getProvider: async () => 'commandcode',
-        setKey: async () => {},
-        clearKey: async () => {},
-        listProviders: async () => [],
-        getWebAccess: async () => ({
-          enabled: false,
-          probeOk: false,
-          searchUrl: null,
-          searchKey: null,
-          keenableApiKey: null,
-          hasKeenableKey: false,
-          keenablePublicTrial: false,
-          builtinProvider: null,
-        }),
-        setWebAccess: async () => ({
-          ok: true,
-          config: {
-            enabled: false,
-            probeOk: false,
-            searchUrl: null,
-            searchKey: null,
-            keenableApiKey: null,
-            hasKeenableKey: false,
-            keenablePublicTrial: false,
-            builtinProvider: null,
-          },
-        }),
-      },
-      workspace: {
-        openFolder: async () => '/test',
-        listDir: async () => [],
-        readFile: async () => ({ ok: true, content: '// x' }),
-      },
-      gateway: {
-        validate: async () => ({ ok: true }),
-        streamChat: async () => ({ ok: true }),
-        onStreamChunk: () => () => {},
-      },
-    }
-    ;(window as unknown as { neonforge: unknown }).neonforge = bridge
-  })
-}
-
 test('设置面板（打开 + 插件列表 + 快捷键表）', async ({ page }) => {
-  await mockBridge(page)
+  await installVisualBridge(page)
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
@@ -68,7 +19,7 @@ test('设置面板（打开 + 插件列表 + 快捷键表）', async ({ page }) 
 })
 
 test('快捷键 ⌘, 打开/关闭设置（D0 §6）', async ({ page }) => {
-  await mockBridge(page)
+  await installVisualBridge(page)
   await page.goto('http://localhost:5175/')
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
@@ -82,7 +33,7 @@ test('快捷键 ⌘, 打开/关闭设置（D0 §6）', async ({ page }) => {
 })
 
 test('快捷键表完整（D0 §6——只列已实现：⌘, / Enter / ⌘N / ⌘E）', async ({ page }) => {
-  await mockBridge(page)
+  await installVisualBridge(page)
   await page.goto('http://localhost:5175/')
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.getByRole('button', { name: '设置' }).click()
