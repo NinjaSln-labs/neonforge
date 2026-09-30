@@ -20,8 +20,6 @@ import {
   isDoneLike,
   parseExecutionPlan,
   summarizeCapability,
-  // V1.5-S4 退役——goalFallbackTrigger 仅剩兜底探测（text_fallback 路径），见 ADR-009
-  goalFallbackTrigger,
   shouldNudgeProposeAfterResearch,
   shouldNudgeProposeGoalAfterClarifyIdle,
   shouldNudgeProposeAfterPlanReject,
@@ -2912,86 +2910,38 @@ export default function ConversationPanel({
               (() => {
                 // A-005：转换计数引用——stateVersion 变化触发重渲染（ref 非响应式——reject/confirm 后卡即时消失）
                 void stateVersion
-                // A-004（S3 补跑复审）：触发判定从文本探测改为领域状态派生——
-                // 弹卡唯一依据 = pending + decisionContent.kind（卡内容亦来自快照——无快照不弹卡）
-                // 文本探测仅保留为**信号消息定位**（卡挂哪条消息——lastSignalIdx 防连发漂移），不参与触发判定
+                // P1-A / ADR-009：弹卡唯一依据 = pending + decisionContent.kind（无文本兜底充分条件）
+                // 卡挂信号消息（lastSignalIdx——防连发 isLastAssistant 漂移），不参与触发判定
                 const dc = stateRef.current.decisionContent
+                const pending = stateRef.current.pending
                 const dcKind = dc?.kind ?? null
-                // V1.5 S2：信号判定识别协议工具调用（协议工具消息 content 为空——决策经 decisionContent
-                // 承载；文本探测只认标记——协议路径消息无标记 → 卡信号缺失）。hasPlan/achievedMatch/
-                // execSignal 三处统一「文本标记 或 协议工具调用」
-                const hasPlan = m.content.includes('【执行方案') || hasProtoCall(m, 'propose_plan')
-                const achievedMatch =
-                  m.content.includes('【已达成') || hasProtoCall(m, 'report_completion')
-                // 2026-08-07 目标确认兜底（死锁修复延续——模型无【目标确认】标记时用户仍可确认）：
-                // 卡不依赖标记——目标未确认时「最后一条 assistant done」消息下也显示（显示 initialPrompt 暂存目标——
-                // 结构化按钮替代原确认词兜底；对齐行业：确认=显式动作，不依赖模型标记）
-                // 2026-08-14 S2b（缝隙 1/5）：确认卡挂在「最后一条 assistant 消息」上——用户消息（确认词 send）插入后
-                // 卡仍在模型消息位置显示，不必等模型下一条回复（旧实现 isLastAssistant 依赖 working 悬挂使 send 排队——缺陷耦合）
-                const isLastAssistant =
-                  m.role === 'assistant' &&
-                  m === [...messages].reverse().find((x) => x.role === 'assistant')
-                // 2026-08-08 候选与确认卡互斥修复（用户「需求澄清选项卡和确认又一起出来了」——时间线 seq 5-6）：
-                // 消息含 <candidates>（候选=澄清决策点，等用户选方向）时不显示兜底确认卡——一个决策点走完再进下一个
-                // （此前 goalFallback「目标未确认+最后一条 done」导致候选与兜底确认卡同时显示）
-                const hasCandidates = m.content.includes('<candidates>')
-                // 2026-08-14 用户实测修复（「重新描述后一直弹确认」——timeline a44cce80）：goalFallback 无条件兜底过宽——
-                // 模型在澄清提问（「敌人什么样？一关还是波次？」）时每条消息都弹确认卡 → 用户被卡轰炸 → 点「重新描述」
-                // → 模型重新问 → 又弹 → 循环。收窄：只在模型**征询确认/总结目标**时弹；问句澄清期不弹（决策点互斥——
-                // 候选块/开放问题都是澄清决策点，确认卡不插队）
-                // 2026-08-15 D6：词表收敛——askingConfirm/goalStated 内联正则上移领域层（agentLoop.goalFallbackTrigger）——词表单源
-                // 征询确认（含问句形式「行不行？」）→ 直接弹——确认征询就是要用户决策；目标总结陈述需非问句
-                // （「你的需求是 X，你想做成什么样？」目标+后续提问 = 澄清中，不弹）
-                const goalFallback =
-                  !goalConfirmed &&
-                  isLastAssistant &&
-                  !hasCandidates &&
-                  // V1.5-S4 退役标注——消息列表渲染兜底探测，见 ADR-009
-                  goalFallbackTrigger(m.content)
-                // 2026-08-14 S2b（缝隙 4/5）：触发统一走状态机派生 pendingCardToShow（渲染与 maybeContinue 停模型同源）——
-                // 「等确认」语义命中即弹 + 停；探索期（只读 bash/无等确认语义）不弹（冒烟实证：探索期弹卡 → 模型困惑）
-                const sideEffectAttempted = (m.toolCalls ?? []).some((c) =>
-                  isSideEffectAction(c.name, String(c.args?.command ?? '')),
-                )
-                // 2026-08-14 用户实测卡死修复（timeline 0219a516）：模型连发消息时确认卡漂移消失——
-                // write 被拦（exec-confirm 卡弹出）→ 模型继续输出 approve-files/说明消息 → isLastAssistant 漂移 → 卡消失
-                // → 模型等确认、用户找不到卡 → 死锁。**信号消息（方案标记/副作用工具卡）的卡不依赖 isLastAssistant**——
-                // 卡固定挂在信号消息上直到确认；多信号消息只显示「最后一条信号消息」（卡唯一——索引由
-                // useMemo lastSignalIdx O(n) 预计算，此处 O(1) 比较）；兜底卡（无信号）仍限最后一条
-                const execSignal = hasPlan || sideEffectAttempted
-                // 文本征询兜底（pendingCardToShow——「等你确认」类方案征询；与 done 分支 cardToShow 同源）
-                const execFallback =
-                  pendingCardToShow(
-                    !!goalConfirmed,
-                    !!planConfirmed,
-                    false,
-                    m.content,
-                    sideEffectAttempted,
-                  ) === 'plan'
-                // A-004（补跑复审修正）：触发 = 领域状态（dcKind）或信号兜底（execFallback/execSignal——旧场景兼容）；
-                // 拒绝后由 rejectedCardIdx 抑制（A-005 平衡——结构化卡走 dcKind 快照自然消失，信号兜底卡走索引）
-                // 提前 return：无决策点且无兜底信号 → 不渲染任何卡
-                if (!dcKind && !goalFallback && !execFallback && !execSignal) return null
+                const showGoalCard =
+                  pending === 'goal' &&
+                  dcKind === 'goal' &&
+                  i === lastSignalIdx.goal &&
+                  i !== rejectedCardIdx.goal
+                const showPlanCard =
+                  pending === 'plan' &&
+                  dcKind === 'plan' &&
+                  i === lastSignalIdx.exec &&
+                  i !== rejectedCardIdx.execution
+                const showResolutionCard =
+                  pending === 'resolution' &&
+                  dcKind === 'resolution' &&
+                  i === lastSignalIdx.achieve &&
+                  i !== rejectedCardIdx.achievement
+                if (!showGoalCard && !showPlanCard && !showResolutionCard) return null
                 return (
                   <>
-                    {/* #7（ADR-006）：dcKind==='goal' 渲染去掉 !goalConfirmed——换目标提议（goal 已确认后新【目标确认】）
-                        也渲染目标卡（决策点由领域层派生——setPending 已置 decisionContent；再确认=新任务边界）*/}
-                    {((dcKind === 'goal' && i === lastSignalIdx.goal) ||
-                      (lastSignalIdx.goal === -1 && goalFallback && !dcKind)) &&
-                    i !== rejectedCardIdx.goal ? (
+                    {showGoalCard ? (
                       <div className="nf-confirmcard" role="group" aria-label="确认目标">
                         <div className="nf-confirmcard__head">目标确认——需要你确认</div>
                         <div className="nf-confirmcard__goal">
-                          {/* A-004：内容从决策点快照取（无快照时兜底 initialPrompt——goalFallback 路径） */}
-                          {stateRef.current.decisionContent?.kind === 'goal'
-                            ? (stateRef.current.decisionContent.proposal as GoalProposal).statement
-                            : initialPrompt || '你描述的目标'}
+                          {(dc!.proposal as GoalProposal).statement}
                         </div>
                         {/* S3：目标提议关键假设（⑬ 契约——A-008 共享 AssumptionList 渲染） */}
                         {(() => {
-                          const dc = stateRef.current.decisionContent
-                          if (!dc || dc.kind !== 'goal') return null
-                          const goal = dc.proposal as GoalProposal
+                          const goal = dc!.proposal as GoalProposal
                           if (!goal.assumptions || goal.assumptions.length === 0) return null
                           return <AssumptionList items={goal.assumptions} />
                         })()}
@@ -3001,11 +2951,7 @@ export default function ConversationPanel({
                             className="nf-confirmcard__btn nf-confirmcard__btn--ok"
                             onClick={() => {
                               // 先取快照 statement 再 confirm（confirm 清 decisionContent——时序）
-                              const confirmedGoal =
-                                stateRef.current.decisionContent?.kind === 'goal'
-                                  ? (stateRef.current.decisionContent.proposal as GoalProposal)
-                                      .statement
-                                  : initialPrompt || '目标已确认'
+                              const confirmedGoal = (dc!.proposal as GoalProposal).statement
                               confirm('goal')
                               tlog('card.resolved', { card: 'goal', action: 'confirm' }, 'system')
                               onGoalConfirmed?.(confirmedGoal)
@@ -3035,25 +2981,13 @@ export default function ConversationPanel({
                         </div>
                       </div>
                     ) : null}
-                    {/* 触发：领域状态（dcKind==='plan'）或信号兜底（execFallback/execSignal——旧场景：方案征询文本/write 拦截；
-                        拒绝后由 rejectedCardIdx 抑制（无快照卡）——结构化卡（dcKind）拒绝后经领域状态自然消失 */}
-                    {(dcKind === 'plan' || execFallback || execSignal) &&
-                    !!goalConfirmed &&
-                    !planConfirmed &&
-                    stateRef.current.pending !== 'none' &&
-                    ((execSignal && i === lastSignalIdx.exec) ||
-                      (lastSignalIdx.exec === -1 && isLastAssistant && !hasCandidates)) &&
-                    (dcKind === 'plan' || i !== rejectedCardIdx.execution) ? (
+                    {showPlanCard ? (
                       <div className="nf-confirmcard" role="group" aria-label="确认执行方案">
                         <div className="nf-confirmcard__head">执行方案——需要你确认后动手</div>
-                        {/* S3：方案卡三要素（文件清单含原因/关键假设/验证计划——decisionContent.proposal 渲染）——
-                        S7 修复（P1-1 接线暴露）：占位卡（无 proposal——write 拦截/征询「等你确认」路径）不渲染三要素——
-                        A-004「卡占位——内容区不渲染三要素」的渲染层防御（dc.proposal undefined 曾致 React 崩溃） */}
+                        {/* S3：方案卡三要素（文件清单含原因/关键假设/验证计划——decisionContent.proposal 渲染） */}
                         {(() => {
-                          const dc = stateRef.current.decisionContent
-                          if (!dc || dc.kind !== 'plan') return null
-                          const proposal = dc.proposal as PlanProposal
-                          if (!proposal) return null // 占位卡——无结构化内容
+                          const proposal = dc!.proposal as PlanProposal
+                          if (!proposal) return null
                           return (
                             <div className="nf-confirmcard__plan">
                               {proposal.files.length > 0 && (
@@ -3124,18 +3058,11 @@ export default function ConversationPanel({
                         </div>
                       </div>
                     ) : null}
-                    {dcKind === 'resolution' &&
-                    achievedMatch &&
-                    stateRef.current.producedFiles.size > 0 &&
-                    !stateRef.current.resolutionConfirmed &&
-                    i === lastSignalIdx.achieve &&
-                    i !== rejectedCardIdx.achievement ? (
+                    {showResolutionCard ? (
                       <div className="nf-confirmcard" role="group" aria-label="确认达成">
                         <div className="nf-confirmcard__head">搭档已完成——你确认解决了没有</div>
-                        {/* ADR-008：遗留问题不阻塞对账——呈现在解决卡上供用户知情决策（真实机取证：
-                            阻塞语义使诚实列遗留的模型永不可达已解决） */}
+                        {/* ADR-008：遗留问题不阻塞对账——呈现在解决卡上供用户知情决策 */}
                         {(() => {
-                          const dc = stateRef.current.decisionContent
                           const claim = dc?.proposal as CompletionClaim | undefined
                           const qs = claim?.evidence?.pendingQuestions ?? []
                           return qs.length > 0 ? (
