@@ -4,6 +4,7 @@ import {
   isServerCommand,
   isServerLikeCommand,
   isInstallCommand,
+  startServerRejectReason,
 } from '../../src/main/serviceManager'
 // 2026-08-06 环境单源（d4c6e2c）：normalizeServerCommand/HOST_RESERVED_PORTS 移到 envManager（显式端口替换 --port 0——坑 77 vite 忽略 0）
 import { normalizeServerCommand, HOST_RESERVED_PORTS } from '../../src/main/envManager'
@@ -30,6 +31,17 @@ describe('ServiceManager 服务管理（2026-08-06 设计层升级）', () => {
     expect(isServerCommand('rm -rf /')).toBe(false) // 非服务命令拒绝
     expect(isServerCommand('curl http://x.com')).toBe(false)
     expect(isServerCommand('')).toBe(false)
+  })
+
+  it('python http.server 仍非 isServerCommand', () => {
+    expect(isServerCommand('python3 -m http.server 8080')).toBe(false)
+  })
+
+  it('startServerRejectReason 含 open 与 vite/npm', () => {
+    const err = startServerRejectReason('python3 -m http.server')
+    expect(err).toMatch(/open/)
+    expect(err).toMatch(/vite|npm run dev/)
+    expect(err).toContain('python3 -m http.server')
   })
 
   // 2026-08-07 T3（regex-todo）：DEV_SERVER_RE/INSTALL_RE 从 tools.ts 移入——命令类型识别单源（服务命令判定一处）

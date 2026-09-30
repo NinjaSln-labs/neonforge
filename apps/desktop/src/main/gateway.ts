@@ -379,7 +379,7 @@ export const TOOL_DEFS = [
     function: {
       name: 'start-server',
       description:
-        '启动开发服务器（NeonForge 管理进程——自动分配端口并记住地址）。**起服务/打开网页前用它**（用 bash 起服务会端口冲突/进程残留）；参数 dir=项目目录绝对路径，command 可选（npm run dev / npx vite 等，默认 vite）',
+        '启动开发服务器（NeonForge 管理进程——自动分配端口并记住地址）。仅用于 Node/Vite 类命令（npx vite / npm run dev / pnpm dev / yarn dev 等）。静态 HTML 不要用本工具——用 open（项目内路径如 index.html）。勿传 python -m http.server / php -S。',
       parameters: {
         type: 'object',
         properties: {

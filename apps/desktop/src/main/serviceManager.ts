@@ -105,6 +105,13 @@ export function isServerCommand(cmd: string): boolean {
   return SERVER_COMMAND_WHITELIST.some((s) => s.test(cmd.trim()))
 }
 
+export function startServerRejectReason(rawCmd: string): string {
+  return (
+    `start-server 只支持开发服务器命令（npx vite / npm run dev 等）——不支持「${rawCmd}」。` +
+    `静态 HTML 请用 open（如 index.html）；需要 HTTP 开发服请用 vite / npm run dev`
+  )
+}
+
 // 2026-08-07 T3（regex-todo）：DEV_SERVER_RE/INSTALL_RE 从 tools.ts 移入——命令类型识别单源（服务命令判定一处）
 // 分工：isServerCommand = 严格白名单（start-server 工具命令选择——锚定开头）；isServerLikeCommand = 宽松检测
 // （bash 超时/端口保护/ServiceState——命令可能在 shell 复合串中，非锚定——行为与原 DEV_SERVER_RE 完全一致）
@@ -133,7 +140,7 @@ export async function startServer(
   if (!isServerCommand(rawCmd)) {
     return {
       ok: false,
-      error: `start-server 只支持服务类命令（npx vite / npm run dev 等）——不支持「${rawCmd}」`,
+      error: startServerRejectReason(rawCmd),
     }
   }
   // 2026-08-06 环境单源：分配显式端口（避开宿主保留 + 已用）→ normalize 注入（--port 0 替换为显式——坑 77 vite 忽略 0）
