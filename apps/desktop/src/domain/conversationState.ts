@@ -814,6 +814,9 @@ export function buildEvidenceBackfill(v: {
     lines.push(
       '禁止在 verification 里使用重定向（>、>>）或写临时文件；请改用只读命令（如 ls、grep、cat、curl -I localhost）并重新提交 report_completion。',
     )
+    lines.push(
+      '禁止把中文叙述或未真实执行的伪命令（如 node -e "读某文件…"）当作 verification；command 必须是已跑过的只读 shell，并附带真实 stdout。',
+    )
   }
   // 可执行下一步（UAT P1：抽象「补充证据」不够——模型在 force 下空转 write/read）
   lines.push(

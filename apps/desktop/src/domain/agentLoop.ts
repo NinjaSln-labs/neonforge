@@ -51,6 +51,19 @@ export function isQuestionLike(t: string): boolean {
 // S7（C2 完善——e2e-0to1 场景 B 暴露）：确认语义判定（pending 期用户确认文本 → 自动确认当前决策点——
 // 确认卡时代只处理按钮确认遗漏了文本确认——真实用户打字「行/按这个方案」等价点确认按钮；
 // 与新意图文本（隐式 reject）分流——坑 79 结构判定：有限确认词表，不匹配措辞）
+/** 确认卡按钮合成回声（ConversationPanel 点确认后 send 的固定文案）。
+ * 迟到时不得走 C2 隐式拒/确认另一决策点（UAT G-impatient：目标回声撞方案卡 → 误拒）。 */
+export const DECISION_CARD_ECHO = [
+  '确认，目标清楚了',
+  '确认，按方案执行',
+  '目标需要重新描述一下',
+] as const
+
+export function isDecisionCardEcho(t: string): boolean {
+  const s = String(t ?? '').trim()
+  return (DECISION_CARD_ECHO as readonly string[]).includes(s)
+}
+
 export function isConfirmIntent(t: string): boolean {
   const s = String(t ?? '').trim()
   if (!s) return false
@@ -339,28 +352,47 @@ export function shouldNudgeProposeAfterPlanReject(input: {
   }
 }
 
-/** 证据门曾拒完成声明后：纯文本收尾（含「做好了」类）→ 催再调 report_completion（每会话最多 1 次；不 force）。
- * G-picky leaf C：evidence_missing×1 后模型只文字声称完成 → StuckDetector 视 isDoneLike 为进展而不催工具。 */
+/** 证据门曾拒完成声明后：纯文本收尾（含「做好了」类）→ 催再调 report_completion。
+ * G-picky leaf C：evidence_missing×1 后模型只文字声称完成 → StuckDetector 视 isDoneLike 为进展而不催工具。
+ * UAT G-contradictory：首次催后 bash 补证已跑通，再出纯文字要授权 → 允许第二次催（默认 maxNudges=2）。 */
 export function shouldNudgeReportAfterEvidenceMissing(input: {
   planConfirmed: boolean
   pending: string
   evidenceWasMissing: boolean
-  alreadyNudged: boolean
+  /** @deprecated 用 nudgeCount；true 等价 nudgeCount>=1 且无二次路径 */
+  alreadyNudged?: boolean
+  nudgeCount?: number
+  maxNudges?: number
+  /** evidence_missing 后曾成功执行只读 bash/read */
+  readonlyVerifyDoneSinceMissing?: boolean
   toolNamesThisTurn: string[]
 }): { nudge: false } | { nudge: true; message: string } {
+  const maxNudges = input.maxNudges ?? 2
+  const nudgeCount = input.nudgeCount ?? (input.alreadyNudged ? 1 : 0)
   if (
     !input.planConfirmed ||
     input.pending !== 'none' ||
     !input.evidenceWasMissing ||
-    input.alreadyNudged
+    nudgeCount >= maxNudges
   )
     return { nudge: false }
   if (input.toolNamesThisTurn.includes('report_completion')) return { nudge: false }
+  // 首次：仅纯文本收尾
+  if (nudgeCount === 0) {
+    if (input.toolNamesThisTurn.length > 0) return { nudge: false }
+    return {
+      nudge: true,
+      message:
+        '【系统提示·非用户发言】完成声明已被证据门拒绝。请立即调用 report_completion 重新提交（用只读 shell 命令填 verification，修正上次 missing）；不要只用文字声称已完成。',
+    }
+  }
+  // 第二次：补证只读已跑通后仍未 report → 再催（纯文本；有其它工具则等收尾）
+  if (!input.readonlyVerifyDoneSinceMissing) return { nudge: false }
   if (input.toolNamesThisTurn.length > 0) return { nudge: false }
   return {
     nudge: true,
     message:
-      '【系统提示·非用户发言】完成声明已被证据门拒绝。请立即调用 report_completion 重新提交（用只读 shell 命令填 verification，修正上次 missing）；不要只用文字声称已完成。',
+      '【系统提示·非用户发言】只读核验命令已执行。请立即调用 report_completion，把该 command 与真实 stdout 填进 verification；不要再用文字要用户点授权卡或声称已完成。',
   }
 }
 

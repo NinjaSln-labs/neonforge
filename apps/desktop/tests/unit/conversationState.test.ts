@@ -1081,7 +1081,7 @@ describe('buildEvidenceBackfill（S4——完成声明被拒的回填引导文�
     expect(text).toContain('diff:planned-not-produced')
   })
 
-  it('unverifiable 清单 → 引导文本显式提示「未经系统核验」+ 禁止重定向（无 node -e）', () => {
+  it('unverifiable 清单 → 引导文本显式提示「未经系统核验」+ 禁止重定向 + 禁止伪命令', () => {
     const text = buildEvidenceBackfill({
       ok: false,
       missing: [],
@@ -1091,7 +1091,8 @@ describe('buildEvidenceBackfill（S4——完成声明被拒的回填引导文�
     expect(text).toContain('未经系统核验')
     expect(text).toContain('禁止')
     expect(text).toContain('重定向')
-    expect(text).not.toContain('node -e')
+    expect(text).toContain('伪命令')
+    expect(text).toContain('node -e')
     expect(text).toMatch(/ls|grep|cat|curl -I localhost/)
   })
 
