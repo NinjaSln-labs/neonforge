@@ -248,7 +248,7 @@ id / title / status / updatedAt
 | **decision.requested**（2026-08-16 新增）                                                         | 决策点出现（kind + decisionContent 快照——呈现内容完整审计）                   | 决策点内容                 |
 | **decision.resolved**（2026-08-16 新增）                                                          | 用户决策（confirm / reject + RejectReason）                                   | 决策 + 原因                |
 | **completion.evidence_missing**（2026-08-16 新增）                                                | 完成声明证据不足（回填引导补证据）                                            | missing 清单               |
-| **gate.denied**（2026-08-16 新增）                                                                | ActionGate deny（高风险动作被机制拦——非 ask）                                 | 动作属性                   |
+| **tool.blocked**（ActionGate deny 路径；历史文稿曾写 gate.denied）                                | ActionGate deny（高风险动作被机制拦——非 ask）                                 | 动作属性                   |
 
 ## 7. 命令清单（Commands——用户/搭档/系统动作）
 

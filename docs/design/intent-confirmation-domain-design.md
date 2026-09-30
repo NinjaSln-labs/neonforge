@@ -219,7 +219,7 @@ approvalDecided(state, request, decision: { confirm: true } | { confirm: false, 
 //   - 允许：pending 清除（执行继续）
 //   - 拒绝 + reason（必填——不变量 8）：pending 清除 + reason 回填模型（防重试——「不要绕过」）
 //   - 机制层防绕过（2026-08-16 第三轮审计 C6 修正——prompt 纪律不够）：拒绝的 ApprovalRequest（toolName+命令类）
-//     登记拒绝记忆——actionGate 对**同轮内同类动作**直接 deny（gate.denied 事件）——「不要绕过」落到
+//     登记拒绝记忆——actionGate 对**同轮内同类动作**直接 deny（tool.blocked 事件；历史文稿曾写 gate.denied）——「不要绕过」落到
 //     reason 回填 + actionGate 短封两层
 applyToolResult(...)  // 继承（producedFiles/lastToolFailed）
 ```
@@ -234,7 +234,7 @@ applyToolResult(...)  // 继承（producedFiles/lastToolFailed）
 | `decision.requested`          | 决策点出现（kind + decisionContent 快照——含呈现内容的完整审计）                    |
 | `decision.resolved`           | 确认/拒绝（confirm/reject + RejectReason）——现有 card.resolved 增强                |
 | `completion.evidence_missing` | 完成声明被拒原因（missing 清单——新诊断事件）                                       |
-| `gate.denied`                 | ActionGate deny（高风险动作被机制拦——非 ask）                                      |
+| `tool.blocked`                | ActionGate deny（高风险动作被机制拦——非 ask；历史文稿曾写 `gate.denied`——复用既有 tool.blocked，非另立） |
 
 现有事件保持（session.pending_set/cleared、tool.blocked、execution.forced/released 等）。
 
@@ -346,7 +346,7 @@ applyToolResult(...)  // 继承（producedFiles/lastToolFailed）
 
 **D. 事件体系（`timeline.ts` 注册表 + `docs/domain/06-domain-events.md`）**
 
-- 新增事件登记：proposal.goal / proposal.plan / proposal.completion / decision.requested / decision.resolved（增强）/ completion.evidence_missing / gate.denied（§3.5）。
+- 新增事件登记：proposal.goal / proposal.plan / proposal.completion / decision.requested / decision.resolved（增强）/ completion.evidence_missing；ActionGate deny 复用既有 `tool.blocked`（§3.5；历史文稿曾写 gate.denied）。
 - 现有事件语义更新：task.goal_proposed 等保留（兼容审计），新事件带完整结构化 detail（决策内容快照——run4「确认了什么无法追溯」问题的解法）。
 - 阶段：S1-S4 随各阶段登记（事件与状态转换同 commit）。
 

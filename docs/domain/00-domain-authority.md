@@ -154,7 +154,9 @@ ActionAttribute {
 }
 ```
 
-**优先级**：会话冻结（pending）优先于 ActionGate（§3.5 不变）——pending 时任何动作无效，不进入属性判定；ActionGate 的 deny 为机制拦截（`gate.denied` 事件），ask 才产生授权请求（ApprovalRequest：toolName+subject+reason+risk——2026-08-16 第 13 轮审计 #8 补 toolName 字段，对齐 04 §2.3b）。
+**优先级**：会话冻结（pending）优先于 ActionGate（§3.5 不变）——pending 时任何动作无效，不进入属性判定；ActionGate 的 deny 为机制拦截（`tool.blocked` 事件[^gate-denied-rename]），ask 才产生授权请求（ApprovalRequest：toolName+subject+reason+risk——2026-08-16 第 13 轮审计 #8 补 toolName 字段，对齐 04 §2.3b）。
+
+[^gate-denied-rename]: 历史文稿曾写 `gate.denied`；注册表与实现事件名为 `tool.blocked`。
 
 ---
 

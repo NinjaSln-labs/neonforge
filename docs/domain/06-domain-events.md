@@ -185,6 +185,6 @@
 | `decision.requested` | 决策点出现（kind + decisionContent 快照——呈现内容完整审计）| deriveDecisionPoint 命中 |
 | `decision.resolved` | 确认/拒绝（confirm \| reject + RejectReason）——原 card.resolved 增强 | 用户决策 |
 | `completion.evidence_missing` | 完成声明被拒（missing 清单——回填引导补证据）| verifyCompletion 失败 |
-| `gate.denied` | ActionGate deny（高风险动作被机制拦——非 ask）| 动作属性判定 |
+| `tool.blocked` | ActionGate deny（高风险动作被机制拦——非 ask；历史文稿曾写 `gate.denied`——与 §1.3 既有 `tool.blocked` 同名，非另立事件）| 动作属性判定 |
 
-现有事件保持（task.*_proposed 兼容保留——proposal.* 为结构化替代；card.shown/resolved 与 decision.requested/resolved **两层并存、语义对齐**（card.* = UI 卡生命周期视图事件——保留——消费方/dedupe 依赖；decision.* = 领域决策点事件——2026-08-16 第 13 轮审计 #8 措辞修正：非「并入」非合并——设计 §3.5 注记）；session.pending_set/cleared、tool.blocked 不变）。
+现有事件保持（task.*_proposed 兼容保留——proposal.* 为结构化替代；card.shown/resolved 与 decision.requested/resolved **两层并存、语义对齐**（card.* = UI 卡生命周期视图事件——保留——消费方/dedupe 依赖；decision.* = 领域决策点事件——2026-08-16 第 13 轮审计 #8 措辞修正：非「并入」非合并——设计 §3.5 注记）；session.pending_set/cleared 不变；ActionGate deny 复用既有 `tool.blocked`）。

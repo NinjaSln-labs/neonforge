@@ -478,7 +478,7 @@ interface IntentConfirmationServices {
 | proposal.goal / proposal.plan / proposal.completion（2026-08-16 新增）                                          | 模型输出结构化提议（完整内容快照）                              | Task（解析层）                   |
 | decision.requested / decision.resolved（2026-08-16 新增）                                                       | 决策点出现（内容快照）/ 用户决策（confirm/reject+RejectReason） | Conversation                     |
 | completion.evidence_missing（2026-08-16 新增）                                                                  | 完成声明证据不足（回填引导）                                    | Conversation（verifyCompletion） |
-| gate.denied（2026-08-16 新增）                                                                                  | ActionGate deny（机制拦截）                                     | ActionGate                       |
+| tool.blocked（ActionGate deny 路径；历史文稿曾写 gate.denied）                                                  | ActionGate deny（机制拦截）                                     | ActionGate                       |
 
 ## 5. 仓库接口（Repository Ports）
 
