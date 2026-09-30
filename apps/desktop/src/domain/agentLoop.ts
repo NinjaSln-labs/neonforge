@@ -324,6 +324,50 @@ export function shouldNudgeReportAfterEvidenceMissing(input: {
   }
 }
 
+/** 已有产出且方案已确认，模型收尾未 report_completion → 催报告（每会话最多 2 次）。
+ * UAT 池 stuck_after_plan：write/bash 已跑通却停在纯文字，evidence_missing 路径未触发。
+ * 二次：产出后 bash 已执行仍未 report → 更硬催（对齐 L3 p091）。 */
+export function shouldNudgeReportAfterDeliverables(input: {
+  planConfirmed: boolean
+  pending: string
+  producedCount: number
+  /** @deprecated 用 nudgeCount；true 等价 nudgeCount>=1 且无二次路径 */
+  alreadyNudged?: boolean
+  nudgeCount?: number
+  maxNudges?: number
+  /** 产出后曾成功执行 bash（核验） */
+  bashExecutedSinceProduce?: boolean
+  toolNamesThisTurn: string[]
+}): { nudge: false } | { nudge: true; message: string } {
+  const maxNudges = input.maxNudges ?? 2
+  const nudgeCount = input.nudgeCount ?? (input.alreadyNudged ? 1 : 0)
+  if (
+    !input.planConfirmed ||
+    input.pending !== 'none' ||
+    input.producedCount < 1 ||
+    nudgeCount >= maxNudges
+  )
+    return { nudge: false }
+  if (input.toolNamesThisTurn.includes('report_completion')) return { nudge: false }
+  if (input.toolNamesThisTurn.some((n) => n === 'write' || n === 'edit')) return { nudge: false }
+  if (nudgeCount === 0) {
+    return {
+      nudge: true,
+      message:
+        '【系统提示·非用户发言】规划文件已写入。请立即调用 report_completion（verification 用已执行的只读 shell 命令与真实 stdout）；不要只用文字声称完成或再要用户点授权。',
+    }
+  }
+  if (!input.bashExecutedSinceProduce) return { nudge: false }
+  if (input.toolNamesThisTurn.length > 0 && !input.toolNamesThisTurn.every((n) => n === 'bash'))
+    return { nudge: false }
+  if (input.toolNamesThisTurn.length > 0) return { nudge: false }
+  return {
+    nudge: true,
+    message:
+      '【系统提示·非用户发言】文件已写入且核验命令已执行。请立即调用 report_completion，把该 command 与真实 stdout 填进 verification；不要再用文字拖延或要授权。',
+  }
+}
+
 // === 2026-08-08 O2 处理（用户「check-capability 默认不向用户展示，只有检测后需要用户实质确认的时候展示」） ===
 // 能力检测结果判定：缺失/异常（missing/failed）→ 需要用户实质决策（装依赖/换方案）——工具卡展示；
 // 全部就绪（ready）→ 无需用户决策——工具卡默认隐藏（结果仍回填模型上下文，仅 UI 静默）

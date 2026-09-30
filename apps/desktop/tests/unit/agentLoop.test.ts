@@ -11,6 +11,7 @@ import {
   shouldNudgeProposeAfterResearch,
   shouldNudgeProposeAfterPlanReject,
   shouldNudgeReportAfterEvidenceMissing,
+  shouldNudgeReportAfterDeliverables,
 } from '../../src/domain/agentLoop'
 
 // 领域层：progress-aware 卡住检测（2026-08-06 DDD 落地——行业调研 tavily+serper 双源：activity≠progress + 连续无进展升级 + needs-human）
@@ -580,5 +581,68 @@ describe('shouldNudgeReportAfterEvidenceMissing（证据门拒后催再 report�
     expect(shouldNudgeReportAfterEvidenceMissing({ ...base, alreadyNudged: true }).nudge).toBe(
       false,
     )
+  })
+})
+
+describe('shouldNudgeReportAfterDeliverables（有产出未 report → 催）', () => {
+  const base = {
+    planConfirmed: true,
+    pending: 'none',
+    producedCount: 1,
+    alreadyNudged: false,
+    toolNamesThisTurn: [] as string[],
+  }
+  it('有产出 + 纯文本收尾 → 催 report_completion', () => {
+    const r = shouldNudgeReportAfterDeliverables(base)
+    expect(r.nudge).toBe(true)
+    if (r.nudge) expect(r.message).toMatch(/report_completion/)
+  })
+  it('无产出 → 不催', () => {
+    expect(shouldNudgeReportAfterDeliverables({ ...base, producedCount: 0 }).nudge).toBe(false)
+  })
+  it('本轮仍在 write → 不催', () => {
+    expect(
+      shouldNudgeReportAfterDeliverables({ ...base, toolNamesThisTurn: ['write'] }).nudge,
+    ).toBe(false)
+  })
+  it('本轮 bash（核验）+ 有产出 → 催', () => {
+    expect(shouldNudgeReportAfterDeliverables({ ...base, toolNamesThisTurn: ['bash'] }).nudge).toBe(
+      true,
+    )
+  })
+  it('已催过 → 不催', () => {
+    expect(shouldNudgeReportAfterDeliverables({ ...base, alreadyNudged: true }).nudge).toBe(false)
+  })
+  it('本轮已 report_completion → 不催', () => {
+    expect(
+      shouldNudgeReportAfterDeliverables({
+        ...base,
+        toolNamesThisTurn: ['report_completion'],
+      }).nudge,
+    ).toBe(false)
+  })
+  it('nudgeCount=1 + bashExecutedSinceProduce + 纯文本 → 二次催', () => {
+    const r = shouldNudgeReportAfterDeliverables({
+      ...base,
+      nudgeCount: 1,
+      bashExecutedSinceProduce: true,
+    })
+    expect(r.nudge).toBe(true)
+    if (r.nudge) {
+      expect(r.message).toContain('report_completion')
+      expect(r.message).toMatch(/已执行|核验/)
+    }
+  })
+  it('nudgeCount=2 → 不催', () => {
+    expect(
+      shouldNudgeReportAfterDeliverables({
+        ...base,
+        nudgeCount: 2,
+        bashExecutedSinceProduce: true,
+      }).nudge,
+    ).toBe(false)
+  })
+  it('兼容 alreadyNudged=true（无 nudgeCount）→ 不走首次', () => {
+    expect(shouldNudgeReportAfterDeliverables({ ...base, alreadyNudged: true }).nudge).toBe(false)
   })
 })

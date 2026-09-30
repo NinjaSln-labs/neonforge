@@ -25,6 +25,7 @@ import {
   shouldNudgeProposeAfterResearch,
   shouldNudgeProposeAfterPlanReject,
   shouldNudgeReportAfterEvidenceMissing,
+  shouldNudgeReportAfterDeliverables,
 } from '../domain/agentLoop'
 // 2026-08-14 会话状态机（Task 聚合——A0 §2/§3/§4/§5）：状态单一来源 + 转换唯一入口（session-state-machine.md S2）
 import {
@@ -726,6 +727,9 @@ export default function ConversationPanel({
   const evidenceGuideCountRef = useRef(0)
   // evidence_missing 后纯文本收尾 → 再催 report_completion（每会话最多 1 次；对齐 planReject nudge）
   const evidenceReportNudgedRef = useRef(false)
+  // 已有产出却未 report_completion → 催报告（每会话最多 2 次；bash 核验后再催一次）
+  const deliverablesReportNudgeCountRef = useRef(0)
+  const bashExecutedSinceProduceRef = useRef(false)
   // 计划确认后 service/network：整会话最多自动续跑 1 次（与「重试」按钮同路径）
   const autoRetriedServiceRef = useRef(false)
   // 排队衔接（输入≠打断）——提前声明：verifyThenResolve 对账引导在 working 时写入此 ref
@@ -754,6 +758,8 @@ export default function ConversationPanel({
     const v = verifyCompletion(claim, systemState)
     if (v.ok) {
       evidenceGuideCountRef.current = 0 // 证据通过 → 计数重置
+      deliverablesReportNudgeCountRef.current = 0
+      bashExecutedSinceProduceRef.current = false
       // 核验期间可能已有其它决策点置位（竞态防护——pending 非 none 不覆盖）。
       // A-022（S5 真机 2026-09-06）：直接丢弃 = resolution 不可达死锁（真机实证：核验通过瞬间
       // 残留授权卡 pending 占用 → return → 之后再无重试，forceTool 循环不止）。修正：等 pending
@@ -1244,40 +1250,63 @@ export default function ConversationPanel({
             )
             void sendRef.current?.({ silent: true, text: evNudge.message })
           } else {
-            // 2026-08-06 任务完成度：write/edit 成功标记产出（approve-files 规划文件 vs 已产出——deepcode unimplemented_files 借鉴）
-            // 2026-08-14 S2：产出记录走状态机转换（applyToolResult——不可变更新）
+            // 先落产出再判定 deliverables nudge（本轮 write 仍由 toolNames 挡住）
             streamingRef.current.toolCalls.forEach((c) => {
               if ((c.name === 'write' || c.name === 'edit') && c.status === 'done' && c.file)
                 applyTool({ name: c.name, ok: true, file: c.file })
             })
-            const turn = evaluateTurnProgress({
-              toolCalls: streamingRef.current.toolCalls.map((c) => ({
-                name: c.name,
-                status: c.status,
-                file: c.file,
-                command: String(c.args?.command ?? ''),
-              })),
-              content,
-              prevReadFiles: prevReadFilesRef.current,
-              plannedFiles: stateRef.current.plannedFiles,
-              producedFiles: stateRef.current.producedFiles,
-              // 2026-08-06 补充（用户「清单来源不只 approve-files」——③ projectFiles 项目文件树）：产出校验（规划文件出现在文件树=已产出）
-              // 2026-08-15 坑 102 修复：projectFiles 统一绝对基准（MainWorkspace listDir 返回 basename——与 planned/produced 绝对基准分裂
-              // → projectFiles.has(f) 恒 false → 文件树权威分支失效 → plannedComplete 只靠 produced 记录）；trustPath 归一
-              projectFiles: new Set((recentFilesExternal ?? []).map((f) => trustPath(f))),
+            const delNudge = shouldNudgeReportAfterDeliverables({
+              planConfirmed: stateRef.current.planConfirmed,
+              pending: stateRef.current.pending,
+              producedCount: stateRef.current.producedFiles.size,
+              nudgeCount: deliverablesReportNudgeCountRef.current,
+              bashExecutedSinceProduce: bashExecutedSinceProduceRef.current,
+              toolNamesThisTurn: toolNamesDone,
             })
-            streamingRef.current.toolCalls.forEach((c) => {
-              if (c.name === 'read' && c.file) prevReadFilesRef.current.add(c.file)
-            })
-            const { state, event } = detectStuck({ turn, prev: stuckStateRef.current })
-            stuckStateRef.current = state
-            if (event?.type === 'escalate') {
-              tlog('stuck.escalated', { message: event.message }, 'system') // 2026-08-08 卡住升级打点
-              onActionPromiseHint?.(null)
-              void sendRef.current?.({ silent: true, text: event.message })
-            } else if (event?.type === 'needs-human') {
-              tlog('stuck.needs_human', { message: event.message }, 'system') // 2026-08-08 升级达上限转用户
-              onActionPromiseHint?.(event.message)
+            if (delNudge.nudge) {
+              deliverablesReportNudgeCountRef.current += 1
+              tlog(
+                'conversation.system_nudge',
+                { kind: 'protocol', content: delNudge.message.slice(0, 200) },
+                'system',
+              )
+              void sendRef.current?.({ silent: true, text: delNudge.message })
+            } else {
+              // 2026-08-06 任务完成度：write/edit 成功标记产出（approve-files 规划文件 vs 已产出——deepcode unimplemented_files 借鉴）
+              // 2026-08-14 S2：产出记录走状态机转换（applyToolResult——不可变更新）
+              streamingRef.current.toolCalls.forEach((c) => {
+                if ((c.name === 'write' || c.name === 'edit') && c.status === 'done' && c.file)
+                  applyTool({ name: c.name, ok: true, file: c.file })
+              })
+              const turn = evaluateTurnProgress({
+                toolCalls: streamingRef.current.toolCalls.map((c) => ({
+                  name: c.name,
+                  status: c.status,
+                  file: c.file,
+                  command: String(c.args?.command ?? ''),
+                })),
+                content,
+                prevReadFiles: prevReadFilesRef.current,
+                plannedFiles: stateRef.current.plannedFiles,
+                producedFiles: stateRef.current.producedFiles,
+                // 2026-08-06 补充（用户「清单来源不只 approve-files」——③ projectFiles 项目文件树）：产出校验（规划文件出现在文件树=已产出）
+                // 2026-08-15 坑 102 修复：projectFiles 统一绝对基准（MainWorkspace listDir 返回 basename——与 planned/produced 绝对基准分裂
+                // → projectFiles.has(f) 恒 false → 文件树权威分支失效 → plannedComplete 只靠 produced 记录）；trustPath 归一
+                projectFiles: new Set((recentFilesExternal ?? []).map((f) => trustPath(f))),
+              })
+              streamingRef.current.toolCalls.forEach((c) => {
+                if (c.name === 'read' && c.file) prevReadFilesRef.current.add(c.file)
+              })
+              const { state, event } = detectStuck({ turn, prev: stuckStateRef.current })
+              stuckStateRef.current = state
+              if (event?.type === 'escalate') {
+                tlog('stuck.escalated', { message: event.message }, 'system') // 2026-08-08 卡住升级打点
+                onActionPromiseHint?.(null)
+                void sendRef.current?.({ silent: true, text: event.message })
+              } else if (event?.type === 'needs-human') {
+                tlog('stuck.needs_human', { message: event.message }, 'system') // 2026-08-08 升级达上限转用户
+                onActionPromiseHint?.(event.message)
+              }
             }
           }
         }
@@ -1599,6 +1628,10 @@ export default function ConversationPanel({
           policy: r.policy,
           file: data?.file,
         })
+        // L3：有产出后 bash 成功 → 允许二次催 report_completion
+        if (r.ok && tc.name === 'bash' && stateRef.current.producedFiles.size > 0) {
+          bashExecutedSinceProduceRef.current = true
+        }
         tlog(
           r.ok ? 'tool.executed' : 'tool.failed',
           { name: tc.name, needApproval: r.needApproval, error: r.error },
@@ -2187,6 +2220,8 @@ export default function ConversationPanel({
     planRejectNudgedRef.current = false
     evidenceGuideCountRef.current = 0
     evidenceReportNudgedRef.current = false
+    deliverablesReportNudgeCountRef.current = 0
+    bashExecutedSinceProduceRef.current = false
     // 2026-08-05：阶段推进 = 任务边界；2026-08-07 无阶段重构 S4/S5：目标确认（goalSeq）= 任务边界——approve-files 幂等标记同步重置（新任务需重新规划授权）
     // 2026-08-14 S2：状态机字段（完整任务边界重置由 userConfirmed('goal') 承担——此处仅即时清幂等标记）
     setFilesApproved(false)
@@ -2468,6 +2503,11 @@ export default function ConversationPanel({
     setWorking,
     onWorkingChange,
     setWorkingStage,
+    onToolExecutedOk: (name) => {
+      if (name === 'bash' && stateRef.current.producedFiles.size > 0) {
+        bashExecutedSinceProduceRef.current = true
+      }
+    },
   })
   const finishError = (err: string, errorTypeHint?: ChatErrorType) => {
     // 2026-08-04 体验修复：错误分类 + 日志记录在 updater 外（坑 32——StrictMode updater 双调；原仅 done 记录错误无法追溯）
