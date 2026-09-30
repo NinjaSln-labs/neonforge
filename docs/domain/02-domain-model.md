@@ -143,9 +143,20 @@ Task = Goal → Plan → Resolution（2026-08-16 更名——原 Goal → Execut
 
 ### 4.12 用户输入衔接（Input Queue——输入 ≠ 打断）
 
-- **排队衔接**：模型产出中（流式+工具链）用户发送 → 存入 pending 队列——**当前轮完成后自动发送**（不打断当前流/工具链）
-- **打断 = 显式动作**：停止按钮（.nf-chat__stop）——用户显式打断（对齐竞品：Claude Code Esc / Cursor 停止按钮）
-- **silent 例外**：系统自动消息（StuckDetector escalate 等）直接打断（内部机制干预——非用户输入）
+> 语义补全：**ADR-013**（2026-10-01——Busy 边界 + silent 通道；调研见 `docs/audits/research-busy-scope-interrupt-vs-queue-2026-10-01.md`）。
+
+**Partner busy（搭档忙碌）**＝存在未收口的在飞 agent 回合：
+
+| 计入 busy | 不计 busy |
+|-----------|-----------|
+| 思考 / 流式输出 / 工具 pending·执行中 / `maybeContinue` 续链未停 | 授权卡·确认卡·强制澄清已呈现且续聊已停（decision-pending——等人）；idle / ready |
+
+UI `working` 与 UAT `modelBusy` **与上表同源**——禁止为「快速确认推进」在工具链未收口时提前释放 busy。
+
+- **排队衔接**：busy 时用户普通发送 → 存入 pending 队列——**当前回合收口后自动发送**（不打断当前流/工具链）
+- **打断 = 显式动作**：停止按钮（`.nf-chat__stop`）——用户显式打断（对齐竞品：Claude Code Esc / Cursor 停止 / Goose 点 Send-as-interrupt）
+- **待授权例外**（保留）：模型停住等批准时用户发送可直接处理（排队会卡在授权等待——非 busy 的 decision-pending）
+- **silent＝非用户通道，≠默认打断**（ADR-013）：不进气泡/`message_sent`；busy 时 **与用户相同——排队**；废除「silent 默认可 `stopGeneration`」。确需硬恢复（如 escalate）→ **显式恢复打断**（复用停止语义 + 时间线 `conversation.interrupted`），不得冒充普通 silent send
 
 ### 4.10 服务管理（Service Management）
 

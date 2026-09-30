@@ -21,3 +21,4 @@
 | 010 | 多源 Provider 注册表 + DeepSeek 模型 Catalog（Zen/Go/官方/Command Code）         | accepted | 2026-09-28 |
 | 011 | 成功＝领域命题成立（非外壳返回）                                                 | accepted | 2026-09-29 |
 | 012 | 测完再修（测试轮禁止临修 · 硬闸）                                               | accepted | 2026-09-30 |
+| 013 | 搭档 Busy 边界与 silent 通道（输入≠打断补全）                                 | accepted | 2026-10-01 |

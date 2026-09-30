@@ -1,5 +1,5 @@
 ---
-description: 流程类规则须落 AGENTS/ADR，禁止只写成 Cursor 私货
+description: 流程类规则须落 AGENTS/ADR；ADR-012 最高优先级
 alwaysApply: true
 ---
 
@@ -9,4 +9,6 @@ alwaysApply: true
 
 写流程或硬闸时：全文进 docs/decisions/；AGENTS.md 只留引用；本目录只留一行指针到 AGENTS.md。
 
-判定：关掉 Cursor 后约定消失 → 落位错了。见 AGENTS.md 通用规则第 6 条与内容落位第 5 条。测完再修 = ADR-012。
+判定：关掉 Cursor 后约定消失 → 落位错了。见 AGENTS.md 通用规则第 0/6 条与内容落位第 5 条。
+
+**ADR-012（测完再修）优先级最高**：压过 todo/关单绿；测批与关单复测未获用户裁决前禁改码。正文 `docs/decisions/012-test-batch-then-fix.md`；入口 `AGENTS.md` 第 0 条。
