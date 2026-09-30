@@ -423,12 +423,26 @@ export async function ensureCommandCodeConfigured(page, key) {
  * 合规禁止静默 /public；UAT 显式试用＝基线可搜。
  */
 export async function ensureWebAccessEnabled(page) {
-  const settingsBtn = page.getByRole('button', { name: '设置' })
-  if (!(await settingsBtn.count())) {
-    console.log('ensureWebAccess: no 设置 button')
-    return false
+  // 等待工作区铬条（设置在 MainWorkspace header）
+  try {
+    await page.getByRole('button', { name: '设置' }).waitFor({ state: 'visible', timeout: 15000 })
+  } catch {
+    console.log('ensureWebAccess: 设置 button not visible in 15s')
   }
-  await settingsBtn.click()
+  let settingsBtn = page.getByRole('button', { name: '设置' })
+  if (!(await settingsBtn.count())) {
+    settingsBtn = page.getByRole('button', { name: /设置|Settings/i })
+  }
+  if (!(await settingsBtn.count())) {
+    const byAttr = page.locator('[aria-label*="设置"], [title*="设置"]')
+    if (await byAttr.count()) await byAttr.first().click()
+    else {
+      console.log('ensureWebAccess: no 设置 button')
+      return false
+    }
+  } else {
+    await settingsBtn.first().click()
+  }
   await page.waitForTimeout(600)
   const toggle = page.getByLabel('允许外网检索')
   if (!(await toggle.count())) {
