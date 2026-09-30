@@ -46,6 +46,19 @@ export function domainPlanConfirmedSince(sinceSeq) {
   return readLatestTimeline().some((e) => e.seq > sinceSeq && e.type === 'task.execution_confirmed')
 }
 
+/** 方案卡指纹：仅确认相关钮；无则 ''（禁止用 has(确认执行) 单独当新卡） */
+function planCardFp(labels) {
+  return ['确认执行', '修改方案']
+    .filter((t) => labels.includes(t))
+    .sort()
+    .join('|')
+}
+
+/** miss 后是否已有新 proposal.plan（seq > sinceSeq） */
+function domainNewPlanSince(sinceSeq) {
+  return readLatestTimeline().some((e) => e.seq > sinceSeq && e.type === 'proposal.plan')
+}
+
 // —— 红线断言（输入：场景水位之后的事件切片；输出：violation 描述数组，空 = 通过） ——
 const SIDE_EFFECTS = ['edit', 'write']
 // bash 写操作启发式：命中写模式才要求审批痕迹（readonly 命令自动放行是合法行为）
@@ -602,6 +615,9 @@ export async function autopilot(
   let clarifyAnswerCount = 0
   const startSeq = timelineWatermark()
   let planConfirmed = false
+  let deadConfirmLock = false
+  let frozenPlanCardFp = ''
+  let missSeq = 0
   let stuckIdle = 0
   for (let r = 0; r < maxRounds; r++) {
     await page.waitForTimeout(pollMs)
@@ -621,7 +637,22 @@ export async function autopilot(
       continue
     }
     const has = (t) => labels.includes(t)
+    // 死卡锁：仅 planConfirmed / 新指纹 / miss 后新 proposal.plan 解锁（禁止 has(确认执行) 单独解锁）
+    if (deadConfirmLock) {
+      if (planConfirmed) {
+        deadConfirmLock = false
+        frozenPlanCardFp = ''
+      } else {
+        const fp = planCardFp(labels)
+        if ((fp && fp !== frozenPlanCardFp) || (missSeq && domainNewPlanSince(missSeq))) {
+          deadConfirmLock = false
+          frozenPlanCardFp = ''
+          console.log(`  r${r}: deadConfirmLock cleared (new plan card/fp)`)
+        }
+      }
+    }
     let acted = null
+    let fpBeforeConfirm = ''
     // 服务错误卡「重试」（G-boundary fetch failed / 空回复后）——先恢复再决策
     if (has('重试') && (await clickButton(page, '重试'))) acted = 'button:重试'
     // goal 已确认后优先点方案卡（getByRole 兜底——labels 偶发漏扫）
@@ -638,10 +669,13 @@ export async function autopilot(
         (persona.rejectPlan || 0) > 0 && (persona.__planRejects || 0) < (persona.rejectPlan || 0)
       if (stillRejecting) {
         acted = await personaAct(page, persona, 'plan')
+      } else if (deadConfirmLock) {
+        // skip 确认执行 while dead card lock held
       } else {
         const execBtn = page.getByRole('button', { name: '确认执行' })
         const modBtn = page.getByRole('button', { name: '修改方案' })
         if (await execBtn.count()) {
+          fpBeforeConfirm = planCardFp(labels)
           await execBtn.click()
           acted = 'button:确认执行'
         } else if (await modBtn.count()) {
@@ -658,7 +692,14 @@ export async function autopilot(
       acted = await personaAct(page, persona, 'goal')
       if (acted) sentTexts.add('__goal_done__')
     } else if (!acted && (has('确认执行') || has('修改方案'))) {
-      acted = await personaAct(page, persona, 'plan')
+      const stillRejectingPlan =
+        (persona.rejectPlan || 0) > 0 && (persona.__planRejects || 0) < (persona.rejectPlan || 0)
+      if (deadConfirmLock && !stillRejectingPlan && has('确认执行')) {
+        // skip 确认执行 while dead card lock held
+      } else {
+        if (has('确认执行') && !stillRejectingPlan) fpBeforeConfirm = planCardFp(labels)
+        acted = await personaAct(page, persona, 'plan')
+      }
     } else if (!acted) {
       // candidate 多轮：只点 .nf-candidates 容器内按钮（ask_user / <candidates>）
       // 指纹 = 可见文案排序 join；每指纹 1 次；全局 ≤clarifyCap；禁止全局 button index（candidate#N 误点）
@@ -712,7 +753,20 @@ export async function autopilot(
       await page.waitForTimeout(800)
       planConfirmed = domainPlanConfirmedSince(startSeq)
       if (!planConfirmed) {
-        console.log(`  r${r}: click-confirm-exec but no task.execution_confirmed yet`)
+        deadConfirmLock = true
+        frozenPlanCardFp = fpBeforeConfirm || planCardFp(labels)
+        missSeq = timelineWatermark()
+        console.log(`  r${r}: confirm miss → lock fp=${frozenPlanCardFp}`)
+        // 立即 after-miss：不等 idle=3；不要求卡消失；独立于 __nudge_repropose__
+        if (!sentTexts.has('__nudge_repropose_after_miss__')) {
+          await typeAndSend(
+            page,
+            '系统提示：刚才的「确认执行」未生效（方案可能已失效）。请立即调用 propose_plan 重新提交可确认的最终方案；不要 ask_user。',
+          )
+          sentTexts.add('__nudge_repropose_after_miss__')
+          actions.push(`r${r}:nudge-repropose-after-miss`)
+          console.log(`  r${r}: nudge-repropose-after-miss sent`)
+        }
       }
     }
     // boundary：方案确认后用口语补刀（好奇/顺手折腾——非测试探针腔）
