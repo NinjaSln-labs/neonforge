@@ -459,6 +459,33 @@ export function shouldNudgeAfterApprovalReject(input: {
   }
 }
 
+/** 授权卡允许后纯文本收尾 → 催 write/edit（每会话最多 1 次；不 force）。
+ * UAT L7 p106：ask_what→允许后空转。主路径为回调当场 silent；本函数仅辅：
+ * immediate 已发则 alreadyNudged=true 防双发。 */
+export function shouldNudgeAfterApprovalAllow(input: {
+  planConfirmed: boolean
+  pending: string
+  approvalWasAllowed: boolean
+  producedCount: number
+  alreadyNudged: boolean
+  toolNamesThisTurn: string[]
+}): { nudge: false } | { nudge: true; message: string } {
+  if (
+    !input.planConfirmed ||
+    input.pending !== 'none' ||
+    !input.approvalWasAllowed ||
+    input.producedCount > 0 ||
+    input.alreadyNudged ||
+    input.toolNamesThisTurn.length > 0
+  )
+    return { nudge: false }
+  return {
+    nudge: true,
+    message:
+      '【系统提示·非用户发言】用户已允许执行且方案已确认。请立即 write/edit 写入规划文件；完成后调用 report_completion——不要停在文字说明。',
+  }
+}
+
 // === 2026-08-08 O2 处理（用户「check-capability 默认不向用户展示，只有检测后需要用户实质确认的时候展示」） ===
 // 能力检测结果判定：缺失/异常（missing/failed）→ 需要用户实质决策（装依赖/换方案）——工具卡展示；
 // 全部就绪（ready）→ 无需用户决策——工具卡默认隐藏（结果仍回填模型上下文，仅 UI 静默）

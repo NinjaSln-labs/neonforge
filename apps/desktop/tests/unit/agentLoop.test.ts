@@ -14,6 +14,7 @@ import {
   shouldNudgeReportAfterDeliverables,
   shouldNudgeWriteAfterPlanConfirm,
   shouldNudgeAfterApprovalReject,
+  shouldNudgeAfterApprovalAllow,
 } from '../../src/domain/agentLoop'
 
 // 领域层：progress-aware 卡住检测（2026-08-06 DDD 落地——行业调研 tavily+serper 双源：activity≠progress + 连续无进展升级 + needs-human）
@@ -703,6 +704,32 @@ describe('shouldNudgeAfterApprovalReject', () => {
         toolNamesThisTurn: [],
       }).nudge,
     ).toBe(true)
+  })
+})
+
+describe('shouldNudgeAfterApprovalAllow（允许后催 write）', () => {
+  const base = {
+    planConfirmed: true,
+    pending: 'none',
+    approvalWasAllowed: true,
+    producedCount: 0,
+    alreadyNudged: false,
+    toolNamesThisTurn: [] as string[],
+  }
+  it('允许过 + produced=0 + 纯文本 → 催 write', () => {
+    const r = shouldNudgeAfterApprovalAllow(base)
+    expect(r.nudge).toBe(true)
+    if (r.nudge) {
+      expect(r.message).toContain('write')
+      expect(r.message).toContain('允许执行')
+      expect(r.message).toContain('report_completion')
+    }
+  })
+  it('produced>0 → 不催', () => {
+    expect(shouldNudgeAfterApprovalAllow({ ...base, producedCount: 1 }).nudge).toBe(false)
+  })
+  it('未允许过 → 不催', () => {
+    expect(shouldNudgeAfterApprovalAllow({ ...base, approvalWasAllowed: false }).nudge).toBe(false)
   })
 })
 

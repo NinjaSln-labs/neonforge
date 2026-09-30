@@ -46,6 +46,10 @@ export interface UseToolApprovalDeps {
   setWorking: (v: boolean) => void
   onWorkingChange?: (v: boolean) => void
   setWorkingStage: (s: string) => void
+  /** 工具执行成功回调（有产出后 bash 等打标） */
+  onToolExecutedOk?: (name: string) => void
+  /** L7：允许/批准成功入口（approveToolCall / approvePlan；允许并记住经 approveToolCall） */
+  onApprovalAllow?: () => void
 }
 
 export function useToolApproval(deps: UseToolApprovalDeps) {
@@ -70,6 +74,8 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
     setWorking,
     onWorkingChange,
     setWorkingStage,
+    onToolExecutedOk,
+    onApprovalAllow,
   } = deps
 
   // 按消息定位工具卡更新（同工具不同实例可区分——args 相同匹配；2026-08-14 冒烟修复）
@@ -113,6 +119,7 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
   }
 
   const approveToolCall = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg): void => {
+    onApprovalAllow?.()
     tlog('tool.approved', { name: tc.name }, 'system')
     tlog('card.resolved', { card: 'approval', action: 'approve', name: tc.name }, 'system')
     // #6 真机 2026-08-30（P1-5——用户点名设计违背）：write/edit 批准即文件级绑定（任务边界内同文件免重复授权）——
@@ -133,6 +140,7 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
           policy: r.policy,
           file: data?.file,
         })
+        if (r.ok) onToolExecutedOk?.(tc.name)
         tlog(
           r.ok ? 'tool.executed' : 'tool.failed',
           { name: tc.name, needApproval: r.needApproval, error: r.error },
@@ -220,6 +228,7 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
 
   // 批准计划文件清单（追加语义 + 幂等标记 + 通知 main）
   const approvePlan = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg): void => {
+    onApprovalAllow?.()
     tlog(
       'tool.approved',
       {
