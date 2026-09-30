@@ -616,6 +616,23 @@ export async function personaAct(page, persona, kind) {
   return null
 }
 
+async function isModelBusy(page) {
+  try {
+    const uiBusy = await dump(page)
+    return /搭档处理中|处理中|思考中|生成中|正在回复|Streaming/i.test(uiBusy)
+  } catch {
+    return false
+  }
+}
+
+async function forcedCardVisible(page) {
+  try {
+    return (await page.locator('.nf-forcedcard').count()) > 0
+  } catch {
+    return false
+  }
+}
+
 // —— autopilot：从当前状态驱动到 resolution 或超时 ——
 // 返回 { terminal, actions, screenshots }
 export async function autopilot(
@@ -665,12 +682,42 @@ export async function autopilot(
         }
       }
     }
+    // ADR-013 / P0 C-uat：busy 时不点决策、不发 nudge（半门闩禁止——须 continue）
+    const busy = await isModelBusy(page)
+    if (busy) {
+      console.log(`  r${r}: skip-act+nudge modelBusy`)
+      stuckIdle = 0
+      continue
+    }
+
     let acted = null
     let fpBeforeConfirm = ''
+    const forced = await forcedCardVisible(page)
+
+    if (forced) {
+      const stillRejecting =
+        (persona.rejectPlan || 0) > 0 && (persona.__planRejects || 0) < (persona.rejectPlan || 0)
+      if (stillRejecting) {
+        const no = page.locator('.nf-forcedcard .nf-forcedcard__btn', { hasText: '我要重新描述' })
+        if (await no.count()) {
+          await no.click()
+          acted = 'button:forced-reject'
+          persona.__planRejects = (persona.__planRejects || 0) + 1
+        }
+      } else {
+        const ok = page.locator('.nf-forcedcard .nf-forcedcard__btn--ok')
+        if (await ok.count()) {
+          await ok.click()
+          acted = 'button:forced-confirm'
+        }
+      }
+    }
+
     // 服务错误卡「重试」（G-boundary fetch failed / 空回复后）——先恢复再决策
-    if (has('重试') && (await clickButton(page, '重试'))) acted = 'button:重试'
-    // goal 已确认后优先点方案卡（getByRole 兜底——labels 偶发漏扫）
+    if (!forced && has('重试') && (await clickButton(page, '重试'))) acted = 'button:重试'
+    // goal 已确认后优先点方案卡（getByRole 兜底——labels 偶发漏扫）；forcedcard 时不点「确认执行」
     if (
+      !forced &&
       !acted &&
       sentTexts.has('__goal_done__') &&
       !planConfirmed &&
@@ -705,7 +752,7 @@ export async function autopilot(
     } else if (!acted && has('确认目标')) {
       acted = await personaAct(page, persona, 'goal')
       if (acted) sentTexts.add('__goal_done__')
-    } else if (!acted && (has('确认执行') || has('修改方案'))) {
+    } else if (!forced && !acted && (has('确认执行') || has('修改方案'))) {
       const stillRejectingPlan =
         (persona.rejectPlan || 0) > 0 && (persona.__planRejects || 0) < (persona.rejectPlan || 0)
       if (deadConfirmLock && !stillRejectingPlan && has('确认执行')) {
