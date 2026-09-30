@@ -851,7 +851,7 @@ export async function autopilot(
       // L2 Required：点拒绝/不允许 → 标记需 harness 兜底催（产品当场 silent 失败时）
       if (/button:(拒绝|不允许)/.test(acted)) persona.__needApprovalRejectNudge = true
     }
-    // 停滞恢复：连续 3 轮无动作 + 完成声明已提交 → 证据引导（全场景最多 1 次，防空转刷屏）
+    // 停滞恢复：连续 3 轮无动作 + 完成声明已提交 → 证据引导（最多 2 次：__nudge_evidence__ → __nudge_evidence_2__）
     if (!acted) {
       idleRounds = (idleRounds || 0) + 1
       // L2 Required：拒授权后 idle≥2 兜底催（不依赖 idle===3）
@@ -870,19 +870,25 @@ export async function autopilot(
         console.log(`  r${r}: nudge-approval-reject sent`)
       } else if (idleRounds === 3) {
         const ui = await dump(page)
-        if (
-          ui.includes('完成声明已提交') &&
-          !ui.includes('已解决，谢谢') &&
-          !sentTexts.has('__nudge_evidence__')
-        ) {
-          await typeAndSend(
-            page,
-            // 产品侧 isSystemNudgeText → silent：不进用户气泡（仍注入模型上下文）
-            '系统提示：verification 证据只能是只读 shell 命令（如 ls、curl），不能写 read/open/write 等工具调用。请把实际执行过的只读命令作为 verification 重新提交完成声明。',
-          )
-          sentTexts.add('__nudge_evidence__')
-          actions.push(`r${r}:nudge-evidence`)
-          console.log(`  r${r}: nudge-evidence sent`)
+        if (ui.includes('完成声明已提交') && !ui.includes('已解决，谢谢')) {
+          if (!sentTexts.has('__nudge_evidence__')) {
+            await typeAndSend(
+              page,
+              // 产品侧 isSystemNudgeText → silent：不进用户气泡（仍注入模型上下文）
+              '系统提示：verification 证据只能是只读 shell 命令（如 ls、curl），不能写 read/open/write 等工具调用。请把实际执行过的只读命令作为 verification 重新提交完成声明。',
+            )
+            sentTexts.add('__nudge_evidence__')
+            actions.push(`r${r}:nudge-evidence`)
+            console.log(`  r${r}: nudge-evidence sent`)
+          } else if (!sentTexts.has('__nudge_evidence_2__')) {
+            await typeAndSend(
+              page,
+              '系统提示：完成声明仍未通过证据门。请立刻用只读 shell（ls/curl）的真实 command+stdout 再次 report_completion；不要 web_search 代替核验。',
+            )
+            sentTexts.add('__nudge_evidence_2__')
+            actions.push(`r${r}:nudge-evidence-2`)
+            console.log(`  r${r}: nudge-evidence-2 sent`)
+          }
         } else if (
           !planConfirmed &&
           !has('确认执行') &&
