@@ -12,6 +12,7 @@ import {
   shouldNudgeProposeAfterPlanReject,
   shouldNudgeReportAfterEvidenceMissing,
   shouldNudgeReportAfterDeliverables,
+  shouldNudgeAfterApprovalReject,
 } from '../../src/domain/agentLoop'
 
 // 领域层：progress-aware 卡住检测（2026-08-06 DDD 落地——行业调研 tavily+serper 双源：activity≠progress + 连续无进展升级 + needs-human）
@@ -562,6 +563,37 @@ describe('shouldNudgeProposeAfterPlanReject（拒方案后催重提）', () => {
         nudgeCount: 2,
       }).nudge,
     ).toBe(false)
+  })
+})
+
+describe('shouldNudgeAfterApprovalReject', () => {
+  const base = {
+    planConfirmed: true,
+    pending: 'none',
+    approvalWasRejected: true,
+    alreadyNudged: false,
+    toolNamesThisTurn: [] as string[],
+  }
+  it('拒过授权 + 纯文本 → 催再调工具或 report', () => {
+    const r = shouldNudgeAfterApprovalReject(base)
+    expect(r.nudge).toBe(true)
+    if (r.nudge) {
+      expect(r.message).toMatch(/授权|approval|允许/)
+      expect(r.message).toContain('report_completion')
+    }
+  })
+  it('未拒过 → 不催', () => {
+    expect(shouldNudgeAfterApprovalReject({ ...base, approvalWasRejected: false }).nudge).toBe(
+      false,
+    )
+  })
+  it('本轮已有工具 → 不催', () => {
+    expect(shouldNudgeAfterApprovalReject({ ...base, toolNamesThisTurn: ['bash'] }).nudge).toBe(
+      false,
+    )
+  })
+  it('已催 → 不催', () => {
+    expect(shouldNudgeAfterApprovalReject({ ...base, alreadyNudged: true }).nudge).toBe(false)
   })
 })
 

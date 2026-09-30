@@ -383,6 +383,30 @@ export function shouldNudgeReportAfterDeliverables(input: {
   }
 }
 
+/** 授权卡拒绝后纯文本收尾 → 催再调工具/改道 report（每会话最多 1 次；不 force）。
+ * UAT L2 p087：refuse_once 拒 bash 后无再申请/无改道 report。 */
+export function shouldNudgeAfterApprovalReject(input: {
+  planConfirmed: boolean
+  pending: string
+  approvalWasRejected: boolean
+  alreadyNudged: boolean
+  toolNamesThisTurn: string[]
+}): { nudge: false } | { nudge: true; message: string } {
+  if (
+    !input.planConfirmed ||
+    input.pending !== 'none' ||
+    !input.approvalWasRejected ||
+    input.alreadyNudged ||
+    input.toolNamesThisTurn.length > 0
+  )
+    return { nudge: false }
+  return {
+    nudge: true,
+    message:
+      '【系统提示·非用户发言】上一工具授权已被拒绝。请改用无需高风险授权的只读核验，或再次请求授权后继续；有产出则立即调用 report_completion——不要停在文字说明。',
+  }
+}
+
 // === 2026-08-08 O2 处理（用户「check-capability 默认不向用户展示，只有检测后需要用户实质确认的时候展示」） ===
 // 能力检测结果判定：缺失/异常（missing/failed）→ 需要用户实质决策（装依赖/换方案）——工具卡展示；
 // 全部就绪（ready）→ 无需用户决策——工具卡默认隐藏（结果仍回填模型上下文，仅 UI 静默）
