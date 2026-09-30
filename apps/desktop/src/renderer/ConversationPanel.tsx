@@ -26,6 +26,7 @@ import {
   shouldNudgeProposeAfterPlanReject,
   shouldNudgeReportAfterEvidenceMissing,
   shouldNudgeReportAfterDeliverables,
+  shouldNudgeWriteAfterPlanConfirm,
   shouldNudgeAfterApprovalReject,
 } from '../domain/agentLoop'
 // 2026-08-14 会话状态机（Task 聚合——A0 §2/§3/§4/§5）：状态单一来源 + 转换唯一入口（session-state-machine.md S2）
@@ -465,6 +466,10 @@ export default function ConversationPanel({
   /** 授权卡拒绝后催再批/改道 report（每会话 1 次） */
   const approvalWasRejectedRef = useRef(false)
   const approvalRejectNudgedRef = useRef(false)
+  // 方案已确认后仍催点「确认执行」/再 propose_plan → 催 write（每会话 1 次）
+  const planConfirmWriteNudgedRef = useRef(false)
+  /** 确认后本轮（或紧邻上一工具轮）曾再 propose_plan → write nudge 输入 */
+  const reproposedPlanAfterConfirmRef = useRef(false)
   const prevReadFilesRef = useRef<Set<string>>(new Set())
   // S5：toolsAvailable 能力快照（require-advance 前提——工具不可用时逼「推进」不逼调工具；
   // 由 check-capability 结果更新；无检测记录默认 true——工具总是可用）
@@ -1187,6 +1192,10 @@ export default function ConversationPanel({
       // research→propose（分析期窄恢复——不改 StuckDetector 门控）：连续纯 web≥2 → 催 propose_goal 一次
       {
         const toolNames = streamingRef.current.toolCalls.map((c) => c.name)
+        // L4：确认后再 propose_plan → 记 ref，供随后纯文本窗 write nudge
+        if (stateRef.current.planConfirmed && toolNames.includes('propose_plan')) {
+          reproposedPlanAfterConfirmRef.current = true
+        }
         const onlyWeb =
           toolNames.length > 0 && toolNames.every((n) => n === 'web_search' || n === 'web_fetch')
         if (onlyWeb) webOnlyStreakRef.current += 1
@@ -1239,97 +1248,117 @@ export default function ConversationPanel({
             void sendRef.current?.({ silent: true, text: rp.message })
           }
         } else {
-          // G-picky leaf C：evidence_missing 后纯文本「做好了」→ StuckDetector 视 isDoneLike 不催工具；先催再 report
+          // L4：方案已确认仍催点卡或再 propose_plan → 先催 write
           const toolNamesDone = streamingRef.current.toolCalls.map((c) => c.name)
-          const evNudge = shouldNudgeReportAfterEvidenceMissing({
+          const writeNudge = shouldNudgeWriteAfterPlanConfirm({
             planConfirmed: stateRef.current.planConfirmed,
             pending: stateRef.current.pending,
-            evidenceWasMissing: evidenceGuideCountRef.current > 0,
-            alreadyNudged: evidenceReportNudgedRef.current,
+            alreadyNudged: planConfirmWriteNudgedRef.current,
             toolNamesThisTurn: toolNamesDone,
+            assistantContent: content,
+            reproposedPlanThisTurn: reproposedPlanAfterConfirmRef.current,
           })
-          if (evNudge.nudge) {
-            evidenceReportNudgedRef.current = true
+          if (writeNudge.nudge) {
+            planConfirmWriteNudgedRef.current = true
+            reproposedPlanAfterConfirmRef.current = false
             tlog(
               'conversation.system_nudge',
-              { kind: 'protocol', content: evNudge.message.slice(0, 200) },
+              { kind: 'protocol', content: writeNudge.message.slice(0, 200) },
               'system',
             )
-            void sendRef.current?.({ silent: true, text: evNudge.message })
+            void sendRef.current?.({ silent: true, text: writeNudge.message })
           } else {
-            // 先落产出再判定 deliverables nudge（本轮 write 仍由 toolNames 挡住）
-            streamingRef.current.toolCalls.forEach((c) => {
-              if ((c.name === 'write' || c.name === 'edit') && c.status === 'done' && c.file)
-                applyTool({ name: c.name, ok: true, file: c.file })
-            })
-            const delNudge = shouldNudgeReportAfterDeliverables({
+            // G-picky leaf C：evidence_missing 后纯文本「做好了」→ StuckDetector 视 isDoneLike 不催工具；先催再 report
+            const evNudge = shouldNudgeReportAfterEvidenceMissing({
               planConfirmed: stateRef.current.planConfirmed,
               pending: stateRef.current.pending,
-              producedCount: stateRef.current.producedFiles.size,
-              nudgeCount: deliverablesReportNudgeCountRef.current,
-              bashExecutedSinceProduce: bashExecutedSinceProduceRef.current,
+              evidenceWasMissing: evidenceGuideCountRef.current > 0,
+              alreadyNudged: evidenceReportNudgedRef.current,
               toolNamesThisTurn: toolNamesDone,
             })
-            if (delNudge.nudge) {
-              deliverablesReportNudgeCountRef.current += 1
+            if (evNudge.nudge) {
+              evidenceReportNudgedRef.current = true
               tlog(
                 'conversation.system_nudge',
-                { kind: 'protocol', content: delNudge.message.slice(0, 200) },
+                { kind: 'protocol', content: evNudge.message.slice(0, 200) },
                 'system',
               )
-              void sendRef.current?.({ silent: true, text: delNudge.message })
+              void sendRef.current?.({ silent: true, text: evNudge.message })
             } else {
-              // L2：授权拒绝后纯文本收尾 → 催再批/改道 report（evidence/deliverables 之后、StuckDetector 之前）
-              const apNudge = shouldNudgeAfterApprovalReject({
+              // 先落产出再判定 deliverables nudge（本轮 write 仍由 toolNames 挡住）
+              streamingRef.current.toolCalls.forEach((c) => {
+                if ((c.name === 'write' || c.name === 'edit') && c.status === 'done' && c.file)
+                  applyTool({ name: c.name, ok: true, file: c.file })
+              })
+              const delNudge = shouldNudgeReportAfterDeliverables({
                 planConfirmed: stateRef.current.planConfirmed,
                 pending: stateRef.current.pending,
-                approvalWasRejected: approvalWasRejectedRef.current,
-                alreadyNudged: approvalRejectNudgedRef.current,
+                producedCount: stateRef.current.producedFiles.size,
+                nudgeCount: deliverablesReportNudgeCountRef.current,
+                bashExecutedSinceProduce: bashExecutedSinceProduceRef.current,
                 toolNamesThisTurn: toolNamesDone,
               })
-              if (apNudge.nudge) {
-                approvalRejectNudgedRef.current = true
+              if (delNudge.nudge) {
+                deliverablesReportNudgeCountRef.current += 1
                 tlog(
                   'conversation.system_nudge',
-                  { kind: 'protocol', content: apNudge.message.slice(0, 200) },
+                  { kind: 'protocol', content: delNudge.message.slice(0, 200) },
                   'system',
                 )
-                void sendRef.current?.({ silent: true, text: apNudge.message })
+                void sendRef.current?.({ silent: true, text: delNudge.message })
               } else {
-                // 2026-08-06 任务完成度：write/edit 成功标记产出（approve-files 规划文件 vs 已产出——deepcode unimplemented_files 借鉴）
-                // 2026-08-14 S2：产出记录走状态机转换（applyToolResult——不可变更新）
-                streamingRef.current.toolCalls.forEach((c) => {
-                  if ((c.name === 'write' || c.name === 'edit') && c.status === 'done' && c.file)
-                    applyTool({ name: c.name, ok: true, file: c.file })
+                // L2：授权拒绝后纯文本收尾 → 催再批/改道 report（evidence/deliverables 之后、StuckDetector 之前）
+                const apNudge = shouldNudgeAfterApprovalReject({
+                  planConfirmed: stateRef.current.planConfirmed,
+                  pending: stateRef.current.pending,
+                  approvalWasRejected: approvalWasRejectedRef.current,
+                  alreadyNudged: approvalRejectNudgedRef.current,
+                  toolNamesThisTurn: toolNamesDone,
                 })
-                const turn = evaluateTurnProgress({
-                  toolCalls: streamingRef.current.toolCalls.map((c) => ({
-                    name: c.name,
-                    status: c.status,
-                    file: c.file,
-                    command: String(c.args?.command ?? ''),
-                  })),
-                  content,
-                  prevReadFiles: prevReadFilesRef.current,
-                  plannedFiles: stateRef.current.plannedFiles,
-                  producedFiles: stateRef.current.producedFiles,
-                  // 2026-08-06 补充（用户「清单来源不只 approve-files」——③ projectFiles 项目文件树）：产出校验（规划文件出现在文件树=已产出）
-                  // 2026-08-15 坑 102 修复：projectFiles 统一绝对基准（MainWorkspace listDir 返回 basename——与 planned/produced 绝对基准分裂
-                  // → projectFiles.has(f) 恒 false → 文件树权威分支失效 → plannedComplete 只靠 produced 记录）；trustPath 归一
-                  projectFiles: new Set((recentFilesExternal ?? []).map((f) => trustPath(f))),
-                })
-                streamingRef.current.toolCalls.forEach((c) => {
-                  if (c.name === 'read' && c.file) prevReadFilesRef.current.add(c.file)
-                })
-                const { state, event } = detectStuck({ turn, prev: stuckStateRef.current })
-                stuckStateRef.current = state
-                if (event?.type === 'escalate') {
-                  tlog('stuck.escalated', { message: event.message }, 'system') // 2026-08-08 卡住升级打点
-                  onActionPromiseHint?.(null)
-                  void sendRef.current?.({ silent: true, text: event.message })
-                } else if (event?.type === 'needs-human') {
-                  tlog('stuck.needs_human', { message: event.message }, 'system') // 2026-08-08 升级达上限转用户
-                  onActionPromiseHint?.(event.message)
+                if (apNudge.nudge) {
+                  approvalRejectNudgedRef.current = true
+                  tlog(
+                    'conversation.system_nudge',
+                    { kind: 'protocol', content: apNudge.message.slice(0, 200) },
+                    'system',
+                  )
+                  void sendRef.current?.({ silent: true, text: apNudge.message })
+                } else {
+                  // 2026-08-06 任务完成度：write/edit 成功标记产出（approve-files 规划文件 vs 已产出——deepcode unimplemented_files 借鉴）
+                  // 2026-08-14 S2：产出记录走状态机转换（applyToolResult——不可变更新）
+                  streamingRef.current.toolCalls.forEach((c) => {
+                    if ((c.name === 'write' || c.name === 'edit') && c.status === 'done' && c.file)
+                      applyTool({ name: c.name, ok: true, file: c.file })
+                  })
+                  const turn = evaluateTurnProgress({
+                    toolCalls: streamingRef.current.toolCalls.map((c) => ({
+                      name: c.name,
+                      status: c.status,
+                      file: c.file,
+                      command: String(c.args?.command ?? ''),
+                    })),
+                    content,
+                    prevReadFiles: prevReadFilesRef.current,
+                    plannedFiles: stateRef.current.plannedFiles,
+                    producedFiles: stateRef.current.producedFiles,
+                    // 2026-08-06 补充（用户「清单来源不只 approve-files」——③ projectFiles 项目文件树）：产出校验（规划文件出现在文件树=已产出）
+                    // 2026-08-15 坑 102 修复：projectFiles 统一绝对基准（MainWorkspace listDir 返回 basename——与 planned/produced 绝对基准分裂
+                    // → projectFiles.has(f) 恒 false → 文件树权威分支失效 → plannedComplete 只靠 produced 记录）；trustPath 归一
+                    projectFiles: new Set((recentFilesExternal ?? []).map((f) => trustPath(f))),
+                  })
+                  streamingRef.current.toolCalls.forEach((c) => {
+                    if (c.name === 'read' && c.file) prevReadFilesRef.current.add(c.file)
+                  })
+                  const { state, event } = detectStuck({ turn, prev: stuckStateRef.current })
+                  stuckStateRef.current = state
+                  if (event?.type === 'escalate') {
+                    tlog('stuck.escalated', { message: event.message }, 'system') // 2026-08-08 卡住升级打点
+                    onActionPromiseHint?.(null)
+                    void sendRef.current?.({ silent: true, text: event.message })
+                  } else if (event?.type === 'needs-human') {
+                    tlog('stuck.needs_human', { message: event.message }, 'system') // 2026-08-08 升级达上限转用户
+                    onActionPromiseHint?.(event.message)
+                  }
                 }
               }
             }
@@ -2248,6 +2277,8 @@ export default function ConversationPanel({
     approvalRejectNudgedRef.current = false
     evidenceGuideCountRef.current = 0
     evidenceReportNudgedRef.current = false
+    planConfirmWriteNudgedRef.current = false
+    reproposedPlanAfterConfirmRef.current = false
     deliverablesReportNudgeCountRef.current = 0
     bashExecutedSinceProduceRef.current = false
     // 2026-08-05：阶段推进 = 任务边界；2026-08-07 无阶段重构 S4/S5：目标确认（goalSeq）= 任务边界——approve-files 幂等标记同步重置（新任务需重新规划授权）

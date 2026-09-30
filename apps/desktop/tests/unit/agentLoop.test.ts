@@ -12,6 +12,7 @@ import {
   shouldNudgeProposeAfterPlanReject,
   shouldNudgeReportAfterEvidenceMissing,
   shouldNudgeReportAfterDeliverables,
+  shouldNudgeWriteAfterPlanConfirm,
   shouldNudgeAfterApprovalReject,
 } from '../../src/domain/agentLoop'
 
@@ -561,6 +562,63 @@ describe('shouldNudgeProposeAfterPlanReject（拒方案后催重提）', () => {
         ...base,
         planRejectCount: 2,
         nudgeCount: 2,
+      }).nudge,
+    ).toBe(false)
+  })
+})
+
+describe('shouldNudgeWriteAfterPlanConfirm（确认后仍催点卡 → 催 write）', () => {
+  const asking =
+    '执行方案卡已经在你界面上了，就等你在卡片上点一下「确认执行」这个按钮。文字回复我这边不算数。'
+  const base = {
+    planConfirmed: true,
+    pending: 'none',
+    alreadyNudged: false,
+    toolNamesThisTurn: [] as string[],
+    assistantContent: asking,
+  }
+  it('方案已确认 + 催点确认执行纯文字 → nudge 含 write', () => {
+    const r = shouldNudgeWriteAfterPlanConfirm(base)
+    expect(r.nudge).toBe(true)
+    if (r.nudge) {
+      expect(r.message).toContain('write')
+      expect(r.message).toContain('已确认')
+    }
+  })
+  it('方案未确认 → 不触发', () => {
+    expect(shouldNudgeWriteAfterPlanConfirm({ ...base, planConfirmed: false }).nudge).toBe(false)
+  })
+  it('本轮有工具 → 不触发', () => {
+    expect(shouldNudgeWriteAfterPlanConfirm({ ...base, toolNamesThisTurn: ['write'] }).nudge).toBe(
+      false,
+    )
+  })
+  it('已 nudge → 不触发', () => {
+    expect(shouldNudgeWriteAfterPlanConfirm({ ...base, alreadyNudged: true }).nudge).toBe(false)
+  })
+  it('普通分析文本（不催点卡）→ 不触发', () => {
+    expect(
+      shouldNudgeWriteAfterPlanConfirm({
+        ...base,
+        assistantContent: '我先看一下目录结构再动手。',
+      }).nudge,
+    ).toBe(false)
+  })
+  it('方案已确认 + 本轮曾 propose_plan + 随后纯文本 → 催 write', () => {
+    const r = shouldNudgeWriteAfterPlanConfirm({
+      ...base,
+      assistantContent: '我再规划一下文件清单。',
+      reproposedPlanThisTurn: true,
+    })
+    expect(r.nudge).toBe(true)
+    if (r.nudge) expect(r.message).toContain('write')
+  })
+  it('方案已确认 + 普通分析 + 未再 propose → 仍不催', () => {
+    expect(
+      shouldNudgeWriteAfterPlanConfirm({
+        ...base,
+        assistantContent: '我先看一下目录结构再动手。',
+        reproposedPlanThisTurn: false,
       }).nudge,
     ).toBe(false)
   })

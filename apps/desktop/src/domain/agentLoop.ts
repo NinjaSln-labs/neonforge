@@ -383,6 +383,45 @@ export function shouldNudgeReportAfterDeliverables(input: {
   }
 }
 
+/** 方案已确认后模型仍催点卡或再 propose_plan → 催 write（每会话最多 1 次；不 force）。
+ * UAT G-impatient / L4 T3：forceTool 不进 API；确认后再规划需 silent 打断催写。 */
+export function shouldNudgeWriteAfterPlanConfirm(input: {
+  planConfirmed: boolean
+  pending: string
+  alreadyNudged: boolean
+  toolNamesThisTurn: string[]
+  assistantContent: string
+  /** 本轮（或紧邻上一工具轮）在已确认后再次 propose_plan */
+  reproposedPlanThisTurn?: boolean
+}): { nudge: false } | { nudge: true; message: string } {
+  if (
+    !input.planConfirmed ||
+    input.pending !== 'none' ||
+    input.alreadyNudged ||
+    input.toolNamesThisTurn.some((n) => n === 'write' || n === 'edit')
+  )
+    return { nudge: false }
+  const t = String(input.assistantContent ?? '')
+  const asksClickConfirm =
+    /点[^。\n]{0,24}确认执行|确认执行[^。\n]{0,12}按钮|文字回复[^。\n]{0,20}不算|只有[^。\n]{0,16}按钮[^。\n]{0,16}授权|就等你[^。\n]{0,12}点/.test(
+      t,
+    )
+  const reproposed = !!input.reproposedPlanThisTurn
+  if (!asksClickConfirm && !reproposed) return { nudge: false }
+  // 本轮仅剩 propose_plan 也视为需打断（done 时 toolNames 可能仍含 propose_plan）
+  if (
+    input.toolNamesThisTurn.length > 0 &&
+    !reproposed &&
+    !input.toolNamesThisTurn.every((n) => n === 'propose_plan')
+  )
+    return { nudge: false }
+  return {
+    nudge: true,
+    message:
+      '【系统提示·非用户发言】执行方案已确认，无需再 propose_plan 或催点「确认执行」。请立即调用 write/edit 写入规划文件；不要重新规划。',
+  }
+}
+
 /** 授权卡拒绝后纯文本收尾 → 催再调工具/改道 report（每会话最多 1 次；不 force）。
  * UAT L2 p087：refuse_once 拒 bash 后无再申请/无改道 report。 */
 export function shouldNudgeAfterApprovalReject(input: {
