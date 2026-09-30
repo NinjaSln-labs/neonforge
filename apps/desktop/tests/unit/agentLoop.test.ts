@@ -506,6 +506,7 @@ describe('shouldNudgeProposeAfterPlanReject（拒方案后催重提）', () => {
     planConfirmed: false,
     pending: 'none',
     planWasRejected: true,
+    planRejectCount: 1,
     alreadyNudged: false,
     toolNamesThisTurn: [] as string[],
   }
@@ -535,6 +536,32 @@ describe('shouldNudgeProposeAfterPlanReject（拒方案后催重提）', () => {
   })
   it('已 nudge → 不触发', () => {
     expect(shouldNudgeProposeAfterPlanReject({ ...base, alreadyNudged: true }).nudge).toBe(false)
+  })
+  it('planRejectCount>=2 + nudgeCount=1 + 纯文本 → 二次收敛催（禁 ask_user）', () => {
+    const r = shouldNudgeProposeAfterPlanReject({
+      ...base,
+      planRejectCount: 2,
+      nudgeCount: 1,
+    })
+    expect(r.nudge).toBe(true)
+    if (r.nudge) {
+      expect(r.message).toContain('propose_plan')
+      expect(r.message).toMatch(/不要再|ask_user|澄清/)
+    }
+  })
+  it('planRejectCount=1 + nudgeCount=1 → 不二次（未满双拒）', () => {
+    expect(
+      shouldNudgeProposeAfterPlanReject({ ...base, planRejectCount: 1, nudgeCount: 1 }).nudge,
+    ).toBe(false)
+  })
+  it('nudgeCount=2 → 不催', () => {
+    expect(
+      shouldNudgeProposeAfterPlanReject({
+        ...base,
+        planRejectCount: 2,
+        nudgeCount: 2,
+      }).nudge,
+    ).toBe(false)
   })
 })
 

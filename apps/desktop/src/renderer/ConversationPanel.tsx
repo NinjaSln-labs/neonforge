@@ -458,7 +458,9 @@ export default function ConversationPanel({
   const webOnlyStreakRef = useRef(0)
   const researchProposeNudgedRef = useRef(false)
   const planWasRejectedRef = useRef(false)
-  const planRejectNudgedRef = useRef(false)
+  /** pendingKind==='plan' 拒绝 /「修改方案」累计（二次收敛 nudge 门槛） */
+  const planRejectCountRef = useRef(0)
+  const planRejectNudgeCountRef = useRef(0)
   const prevReadFilesRef = useRef<Set<string>>(new Set())
   // S5：toolsAvailable 能力快照（require-advance 前提——工具不可用时逼「推进」不逼调工具；
   // 由 check-capability 结果更新；无检测记录默认 true——工具总是可用）
@@ -1219,11 +1221,12 @@ export default function ConversationPanel({
             planConfirmed: stateRef.current.planConfirmed,
             pending: stateRef.current.pending,
             planWasRejected: planWasRejectedRef.current,
-            alreadyNudged: planRejectNudgedRef.current,
+            planRejectCount: planRejectCountRef.current,
+            nudgeCount: planRejectNudgeCountRef.current,
             toolNamesThisTurn: toolNames,
           })
           if (rp.nudge) {
-            planRejectNudgedRef.current = true
+            planRejectNudgeCountRef.current += 1
             tlog(
               'conversation.system_nudge',
               { kind: 'protocol', content: rp.message.slice(0, 200) },
@@ -2217,7 +2220,8 @@ export default function ConversationPanel({
     webOnlyStreakRef.current = 0
     researchProposeNudgedRef.current = false
     planWasRejectedRef.current = false
-    planRejectNudgedRef.current = false
+    planRejectCountRef.current = 0
+    planRejectNudgeCountRef.current = 0
     evidenceGuideCountRef.current = 0
     evidenceReportNudgedRef.current = false
     deliverablesReportNudgeCountRef.current = 0
@@ -2315,6 +2319,10 @@ export default function ConversationPanel({
           confirm(pendingKind)
         } else {
           reject(pendingKind, { kind: 'direction', text })
+          if (pendingKind === 'plan') {
+            planWasRejectedRef.current = true
+            planRejectCountRef.current += 1
+          }
         }
       } else if (
         pendingKind === 'approval' &&
@@ -2913,7 +2921,7 @@ export default function ConversationPanel({
                             onClick={() => {
                               confirm('plan')
                               planWasRejectedRef.current = false
-                              planRejectNudgedRef.current = false
+                              planRejectNudgeCountRef.current = 0
                               tlog(
                                 'card.resolved',
                                 { card: 'execution', action: 'confirm' },
@@ -2932,6 +2940,7 @@ export default function ConversationPanel({
                               // S3：拒绝带原因（不变量 8——RejectKind；「修改方案」= scope 调整方向）
                               reject('plan', { kind: 'scope', target: 'plan' })
                               planWasRejectedRef.current = true
+                              planRejectCountRef.current += 1
                               setRejectedCardIdx((p) => ({ ...p, execution: i }))
                               tlog(
                                 'card.rejected',
@@ -3294,7 +3303,7 @@ export default function ConversationPanel({
                     if (u === 'goal') onGoalConfirmed?.(prop?.statement ?? '目标已确认')
                     else if (u === 'plan') {
                       planWasRejectedRef.current = false
-                      planRejectNudgedRef.current = false
+                      planRejectNudgeCountRef.current = 0
                       onPlanConfirmed?.()
                     }
                     void sendRef.current({ text: confirmText })
@@ -3310,7 +3319,10 @@ export default function ConversationPanel({
                     // 点卡 = 明确新一轮协商 → rejectStreak 重置（打字拒绝不重置——C2 循环形态）
                     reject('system_clarify', { kind: 'direction' })
                     resetRejectStreak()
-                    if (prop?.underlying === 'plan') planWasRejectedRef.current = true
+                    if (prop?.underlying === 'plan') {
+                      planWasRejectedRef.current = true
+                      planRejectCountRef.current += 1
+                    }
                     tlog(
                       'card.rejected',
                       { card: 'system_clarify', action: 'reject', reason: 'direction' },
@@ -3341,7 +3353,7 @@ export default function ConversationPanel({
                     if (u === 'goal') onGoalConfirmed?.(prop?.statement ?? '目标已确认')
                     else if (u === 'plan') {
                       planWasRejectedRef.current = false
-                      planRejectNudgedRef.current = false
+                      planRejectNudgeCountRef.current = 0
                       onPlanConfirmed?.()
                     }
                     void sendRef.current({ text: confirmText })

@@ -272,30 +272,45 @@ export function shouldNudgeProposeAfterResearch(input: {
   }
 }
 
-/** 方案曾被拒绝且尚未确认：纯文本收尾 → 催 propose_plan（每会话最多 1 次；不 force 工具）。
- * G-picky leaf C：plan reject 后无 report_completion 直至超时——缺重提方案文本 nudge。 */
+/** 方案曾被拒绝且尚未确认：纯文本收尾 → 催 propose_plan（每会话最多 2 次；不 force 工具）。
+ * G-picky leaf C：plan reject 后无 report_completion 直至超时——缺重提方案文本 nudge。
+ * 二次仅在 planRejectCount>=2：禁 ask_user/澄清，收敛到 propose_plan。 */
 export function shouldNudgeProposeAfterPlanReject(input: {
   goalConfirmed: boolean
   planConfirmed: boolean
   pending: string
   planWasRejected: boolean
-  alreadyNudged: boolean
+  planRejectCount: number
+  alreadyNudged?: boolean
+  nudgeCount?: number
+  maxNudges?: number
   toolNamesThisTurn: string[]
 }): { nudge: false } | { nudge: true; message: string } {
+  const maxNudges = input.maxNudges ?? 2
+  const nudgeCount = input.nudgeCount ?? (input.alreadyNudged ? 1 : 0)
   if (
     !input.goalConfirmed ||
     input.planConfirmed ||
     input.pending !== 'none' ||
     !input.planWasRejected ||
-    input.alreadyNudged
+    nudgeCount >= maxNudges
   )
     return { nudge: false }
   if (input.toolNamesThisTurn.includes('propose_plan')) return { nudge: false }
   if (input.toolNamesThisTurn.length > 0) return { nudge: false }
+  if (nudgeCount === 0) {
+    return {
+      nudge: true,
+      message:
+        '【系统提示·非用户发言】方案已被拒绝且尚未确认。请立即调用 propose_plan 提交修订后的执行方案（吸收用户反馈）；用户确认执行并完成后调用 report_completion——不要只用文字描述方案。',
+    }
+  }
+  // 二次：至少拒满 2 次仍未确认 → 收敛（禁止再开澄清）
+  if (input.planRejectCount < 2) return { nudge: false }
   return {
     nudge: true,
     message:
-      '【系统提示·非用户发言】方案已被拒绝且尚未确认。请立即调用 propose_plan 提交修订后的执行方案（吸收用户反馈）；用户确认执行并完成后调用 report_completion——不要只用文字描述方案。',
+      '【系统提示·非用户发言】方案已被拒绝两次仍未确认。请立即调用 propose_plan 提交可执行的最终方案（files+summary）；不要再调用 ask_user 或文字澄清——等用户点「确认执行」。',
   }
 }
 
