@@ -121,6 +121,24 @@ test('S3-3b：无 decisionContent 不弹卡——纯文本含标记但解析失�
   await expect(page.getByRole('button', { name: '确认执行' })).toHaveCount(0)
 })
 
+// P1-A：纯文本征询不再作弹卡充分条件——须 pending + decisionContent
+test('P1-A：纯文本「等你确认」无 decisionContent → 不见确认卡；propose_goal 仍弹', async ({
+  page,
+}) => {
+  const h = await installMockBridge(page, { project: 'none', manualEmit: true })
+  await startFromScratch(page, '做个待办应用')
+  await h.emit([chunk.content('你的需求是做一个待办应用，就按这个来，等你确认。'), chunk.done()])
+  await page.waitForTimeout(1500)
+  await expect(page.locator('.nf-confirmcard')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '确认目标' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '确认执行' })).toHaveCount(0)
+
+  await sendChat(page, '继续')
+  await h.emit([toolCall.proposeGoal('做一个待办应用', ['用 React 实现']), chunk.done()])
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await expectText(page.locator('.nf-confirmcard'), '做一个待办应用', 5000)
+})
+
 // ADR-010 阈值覆盖（9f70c0b）：rejectStreak 1 → loop-guard 注入、2 → 强制澄清卡——
 // 旧 §4.1「3 连拒 → .nf-reject-overflow」被强制卡先行截断（overflow 提示保留为更深层兜底：
 // 拒绝 system_clarify 卡等路径 streak 仍可到 3）
@@ -424,7 +442,7 @@ test('S5-2：纯文本承诺不算推进——确认执行后模型连续 2 轮�
 }) => {
   await installMockBridge(page, {
     project: 'none',
-    // escalate 走 silent send（消息不渲染到对话）——断言用 timeline stuck.escalated 打点
+    // escalate 走 recoverInterrupt（silent 注入不渲染对话）——断言 timeline stuck.escalated + interrupted source=recovery
     extraInit: `
       const tlogs5 = []
       window.__tlogs5 = tlogs5
@@ -461,6 +479,16 @@ test('S5-2：纯文本承诺不算推进——确认执行后模型连续 2 轮�
       { timeout: 10000 },
     )
     .toBe(1)
+  // ADR-013：硬恢复标 recovery（非旧 silent 打断路径）；且仅一条 interrupted
+  const interrupted = await page.evaluate(() =>
+    (
+      window as unknown as {
+        __tlogs5: Array<{ type: string; detail?: { source?: string } }>
+      }
+    ).__tlogs5.filter((l) => l.type === 'conversation.interrupted'),
+  )
+  expect(interrupted).toHaveLength(1)
+  expect(interrupted[0]?.detail?.source).toBe('recovery')
 })
 
 // S6 门控双维场景（设计 §6 S6 + 拍板 3——curl localhost 自动放行/外网 ask；main preApproval 同步放行）

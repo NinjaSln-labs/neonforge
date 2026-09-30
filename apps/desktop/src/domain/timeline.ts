@@ -23,7 +23,7 @@ export type TimelineEventType =
   | 'conversation.system_nudge' // 系统引导/提示注入（非用户通道——时间线取证）
   | 'conversation.assistant_start' // 模型轮开始（载荷：forceTool 判定）
   | 'conversation.assistant_done' // 模型轮完成（载荷：content/error）
-  | 'conversation.interrupted' // 打断（停止按钮/silent）
+  | 'conversation.interrupted' // 打断（停止按钮 / recovery 显式恢复——ADR-013；废除 silent 默认打断）
   // —— Task 聚合：确认点（06 §1.1）——
   | 'task.goal_proposed' // 模型提议目标（【目标确认】标记）
   | 'task.goal_confirmed' // 用户确认目标
@@ -130,7 +130,12 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
     role: 'assistant',
     detailKeys: ['content'],
   },
-  'conversation.interrupted': { domain: 'conversation', role: 'system', detailKeys: ['source'] },
+  'conversation.interrupted': {
+    domain: 'conversation',
+    role: 'system',
+    // source: button | recovery（ADR-013）；?reason 可选（如 stuck.escalate）
+    detailKeys: ['source', '?reason'],
+  },
   'task.goal_proposed': { domain: 'task', role: 'assistant', detailKeys: ['goalText'] },
   'task.goal_confirmed': { domain: 'task', role: 'system', detailKeys: ['point'] },
   'task.goal_rejected': { domain: 'task', role: 'system', detailKeys: ['point'] },

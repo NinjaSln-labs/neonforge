@@ -90,6 +90,7 @@ import { SCENES } from './scenes'
 // 根因补强：ipc 已返回结构化 errorType（gateway 源头分类）——classifyChatError 降级为兜底（字面量/未知格式）
 import { classifyChatError, type ChatErrorType } from './errorClassify'
 import { isSystemNudgeText, systemNudgeKind } from './systemNudge'
+import { shouldQueueWhileBusy } from './busyGate'
 // 2026-08-15 Q6：系统提示词外置（原内嵌 sysHint 模板）
 import { buildSysHint } from './sysPrompt'
 // 2026-08-15 Q10：demo 注入通道类型化单例
@@ -1409,7 +1410,8 @@ export default function ConversationPanel({
                     if (event?.type === 'escalate') {
                       tlog('stuck.escalated', { message: event.message }, 'system') // 2026-08-08 卡住升级打点
                       onActionPromiseHint?.(null)
-                      void sendRef.current?.({ silent: true, text: event.message })
+                      // ADR-013：escalate 硬恢复须经 recoverInterrupt（显式停止 + recovery 来源）——禁止冒充普通 silent send
+                      void recoverInterrupt({ text: event.message, reason: 'stuck.escalate' })
                     } else if (event?.type === 'needs-human') {
                       tlog('stuck.needs_human', { message: event.message }, 'system') // 2026-08-08 升级达上限转用户
                       onActionPromiseHint?.(event.message)
@@ -1476,7 +1478,7 @@ export default function ConversationPanel({
         if (!next.content && !(next.toolCalls && next.toolCalls.length > 0)) {
           next.error = 'empty-response'
         }
-        // 2026-08-04 体验修复：流式完成 → 通知 runChat 尾部立即返回（working 及时释放——用户快速「确认推进」不被拦截）
+        // ADR-013：流式 done → 仅解除 runChat「等首包」等待，进入 maybeContinue；不得在此清 busy
         doneNotifierRef.current?.()
       }
       if (chunk.type === 'tool-call' && chunk.toolCall) {
@@ -2201,7 +2203,7 @@ export default function ConversationPanel({
 
     // 记录本轮上下文 → 由 maybeContinue 轮询工具完成（自动执行）→ 续聊
     chatRef.current = { msgs, depth }
-    // 2026-08-04 体验修复：等流式 done（模型回复完成 → working 立即释放——原固定等 1000ms+轮询，用户快速「确认推进」被 working 守卫拦截）；
+    // ADR-013：等流式 done 仅解锁进入 maybeContinue（busy 覆盖工具链/续聊；decision-pending 才 releaseWorking）
     // 800ms 超时兜底（流式异常未发 done 时防挂起）
     await new Promise<void>((r) => {
       const t = setTimeout(() => {
@@ -2290,7 +2292,7 @@ export default function ConversationPanel({
   useEffect(() => {
     workingRef.current = working
   }, [working])
-  // 2026-08-04 体验修复：流式 done 通知——runChat 尾部等 done（working 及时释放，用户快速「确认推进」不被拦）
+  // ADR-013：流式 done 通知——runChat 尾部等 done 解锁进入 maybeContinue（不在此清 busy）
   const doneNotifierRef = useRef<(() => void) | null>(null)
   // 2026-08-07 无阶段重构 S4：pendingAdvanceRef（阶段推进排队）删除——advanceChat 随阶段体系移除
   // 2026-08-04 重构：工具链死循环检测——同工具（name+args）连续 3 次停止（跨 maybeContinue 调用累积——原局部变量每轮重置失效）
@@ -2367,8 +2369,17 @@ export default function ConversationPanel({
 
   // 2026-08-05 用户反馈 4：打断能力（对齐 Claude Code Esc / Cursor Stop）——停止当前流 + 杀当前 bash + 释放状态
   // 停止后旧流 chunk / maybeContinue 续聊全部失效（sessionRef++ 隔离）；用户可继续输入新指令
-  const stopGeneration = async (source: 'button' | 'silent' = 'button') => {
-    tlog('conversation.interrupted', { source }, 'system') // 2026-08-08 打断打点（停止按钮 / silent 自动干预）
+  // ADR-013：source=button（显式停止）| recovery（StuckDetector escalate 等硬恢复——废除 silent 默认打断）
+  const stopGeneration = async (
+    source: 'button' | 'recovery' = 'button',
+    detail?: { reason?: string },
+  ) => {
+    // 唯一 interrupted 打点（recoverInterrupt 不另打——审计 nit：勿双 log）
+    tlog(
+      'conversation.interrupted',
+      detail?.reason ? { source, reason: detail.reason } : { source },
+      'system',
+    )
     sessionRef.current++ // 旧会话失效——旧流 chunk（streamingSidRef 检查）、maybeContinue 续聊（sessionRef 检查）全失效
     streamingSidRef.current = sessionRef.current
     onActionPromiseHint?.(null)
@@ -2377,9 +2388,16 @@ export default function ConversationPanel({
     } catch {
       /* 无活动命令 */
     }
+    workingRef.current = false // 同步清——effect 滞后会让 recoverInterrupt 后续 silent send 再入队
     setWorking(false)
     onWorkingChange?.(false)
     setWorkingStage('已停止')
+  }
+
+  // ADR-013：显式恢复打断——停当前回合后 silent 注入（timeline source=recovery）；escalate 必须经此路径
+  const recoverInterrupt = async (opts: { text: string; reason: string }) => {
+    await stopGeneration('recovery', { reason: opts.reason })
+    void sendRef.current?.({ silent: true, text: opts.text })
   }
 
   // 2026-08-07 无阶段修复（用户「输入≠打断」）：排队衔接机制——模型产出中用户发送 → 存 pending，
@@ -2405,23 +2423,22 @@ export default function ConversationPanel({
       inputRef.current = ''
       setInput('')
     }
-    // 2026-08-07 无阶段修复（用户「输入≠打断」——竞品共识：Claude Code Esc / Cursor 停止按钮 / Devin 中断都是显式动作）：
-    // 模型产出中发送 = 排队衔接（不打断当前流式/工具链，当前轮完成后自动发送）；打断 = 显式停止按钮（.nf-chat__stop）
-    // 待授权（模型停住等批准）时发送 = 直接处理（用户未批准给新指令——排队会卡在授权等待）
+    // ADR-013：busy 时 silent 与用户同排队（废除 silent→stopGeneration）；打断=显式停止；
+    // 待授权时仅非 silent 用户直送（shouldQueueWhileBusy）
     if (workingRef.current) {
-      if (silent) {
-        // 系统自动消息（StuckDetector escalate/执行确认触发——非用户输入）：直接处理（打断当前——内部机制干预卡住，
-        // 不受「输入≠打断」约束；排队会让修正消息延迟到当前轮完成——卡住时正是要立即干预）
-        console.log('[conversation] 处理中 silent 发送——打断当前（系统自动续聊/修正）')
-        await stopGeneration('silent')
-      } else if (stateRef.current.pending !== 'approval') {
-        // 用户输入：排队衔接（不打断当前流式/工具链——输入≠打断，竞品共识：打断=显式停止按钮）
-        // 只存 pending——消息显示/onUserMessage（确认词处理）由 flush 后 send 统一执行一次
-        // （原排队时 push + flush 后 send 再 push = 重复用户消息——398 实测两条「可以」）
-        console.log('[conversation] 处理中发送——排队衔接（当前轮完成后自动发送；要停请点停止按钮）')
+      if (
+        shouldQueueWhileBusy({
+          working: true,
+          silent,
+          pending: stateRef.current.pending,
+        })
+      ) {
+        console.log('[conversation] busy——排队衔接（ADR-013；要停请点停止）')
         pendingSendRef.current = text
+        // silent：不在此处 push 用户气泡；flush 后 send 再走 silent 系统通道
         return
       }
+      // 未排队：仅「working + 非 silent + pending===approval」落入既有直送逻辑
       console.log('[conversation] 待授权中发送——新指令直接处理（未批准给新指令）')
     }
     if (!silent) {
