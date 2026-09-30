@@ -9,6 +9,7 @@ import {
   isQuestionLike,
   isConfirmIntent,
   shouldNudgeProposeAfterResearch,
+  shouldNudgeProposeGoalAfterClarifyIdle,
   shouldNudgeProposeAfterPlanReject,
   shouldNudgeReportAfterEvidenceMissing,
   shouldNudgeReportAfterDeliverables,
@@ -500,6 +501,46 @@ describe('shouldNudgeProposeAfterResearch（分析期 research→propose）', ()
   })
   it('本轮无工具 → 不触发', () => {
     expect(shouldNudgeProposeAfterResearch({ ...base, toolNamesThisTurn: [] }).nudge).toBe(false)
+  })
+})
+
+describe('shouldNudgeProposeGoalAfterClarifyIdle（澄清空转催 propose_goal）', () => {
+  const base = {
+    goalConfirmed: false,
+    pending: 'none',
+    clarifyIdleTurns: 2,
+    alreadyNudged: false,
+    toolNamesThisTurn: [] as string[],
+  }
+  it('pending=none + idle≥2 + 纯文本 → nudge 含 propose_goal', () => {
+    const r = shouldNudgeProposeGoalAfterClarifyIdle(base)
+    expect(r.nudge).toBe(true)
+    if (r.nudge) expect(r.message).toContain('propose_goal')
+  })
+  it('pending=ask_user → 不触发（靠 harness）', () => {
+    expect(shouldNudgeProposeGoalAfterClarifyIdle({ ...base, pending: 'ask_user' }).nudge).toBe(
+      false,
+    )
+  })
+  it('idle<2 → 不触发', () => {
+    expect(shouldNudgeProposeGoalAfterClarifyIdle({ ...base, clarifyIdleTurns: 1 }).nudge).toBe(
+      false,
+    )
+  })
+  it('已 nudge → 不触发', () => {
+    expect(shouldNudgeProposeGoalAfterClarifyIdle({ ...base, alreadyNudged: true }).nudge).toBe(
+      false,
+    )
+  })
+  it('本轮有工具 → 不触发', () => {
+    expect(
+      shouldNudgeProposeGoalAfterClarifyIdle({ ...base, toolNamesThisTurn: ['read'] }).nudge,
+    ).toBe(false)
+  })
+  it('已确认目标 → 不触发', () => {
+    expect(shouldNudgeProposeGoalAfterClarifyIdle({ ...base, goalConfirmed: true }).nudge).toBe(
+      false,
+    )
   })
 })
 

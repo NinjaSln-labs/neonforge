@@ -925,7 +925,39 @@ export async function autopilot(
           sentTexts.add('__nudge_propose_plan__')
           actions.push(`r${r}:nudge-propose-plan`)
           console.log(`  r${r}: nudge-propose-plan sent`)
+        } else if (
+          !sentTexts.has('__goal_done__') &&
+          !has('确认目标') &&
+          !has('确认执行') &&
+          !has('修改方案') &&
+          (idleRounds >= 3 || clarifyAnswerCount >= clarifyCap) &&
+          !sentTexts.has('__nudge_propose_goal_early__')
+        ) {
+          // L5 Required：无目标卡时催 propose_goal（优先级：evidence → approval-reject → after-miss 即时 → repropose → propose-plan → 本分支）
+          await typeAndSend(
+            page,
+            '系统提示：请调用 propose_goal 提交目标，否则不会出现「确认目标」卡。不要只用文字追问。',
+          )
+          sentTexts.add('__nudge_propose_goal_early__')
+          actions.push(`r${r}:nudge-propose-goal-early`)
+          console.log(`  r${r}: nudge-propose-goal-early sent`)
         }
+      } else if (
+        // L5：clarify 达 cap 时不要求 idle===3（pending=ask_user 时常靠 harness）
+        clarifyAnswerCount >= clarifyCap &&
+        !sentTexts.has('__goal_done__') &&
+        !has('确认目标') &&
+        !has('确认执行') &&
+        !has('修改方案') &&
+        !sentTexts.has('__nudge_propose_goal_early__')
+      ) {
+        await typeAndSend(
+          page,
+          '系统提示：请调用 propose_goal 提交目标，否则不会出现「确认目标」卡。不要只用文字追问。',
+        )
+        sentTexts.add('__nudge_propose_goal_early__')
+        actions.push(`r${r}:nudge-propose-goal-early`)
+        console.log(`  r${r}: nudge-propose-goal-early sent (clarifyCap)`)
       }
       // 卡住早停：无决策卡、且非「搭档处理中」才累计 stuckIdle（防模型思考误杀）
       const decisionLabels = [

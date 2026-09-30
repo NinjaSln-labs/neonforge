@@ -272,6 +272,31 @@ export function shouldNudgeProposeAfterResearch(input: {
   }
 }
 
+/** 目标未确认且澄清空转（纯文本）→ 催 propose_goal（每会话最多 1 次）。
+ * UAT L5 p091：vague/ask_what 开局无目标卡。仅 pending==='none' 时咬合；
+ * pending=ask_user 时产品门控恒假——靠 harness `__nudge_propose_goal_early__` Required。 */
+export function shouldNudgeProposeGoalAfterClarifyIdle(input: {
+  goalConfirmed: boolean
+  pending: string
+  clarifyIdleTurns: number
+  alreadyNudged: boolean
+  toolNamesThisTurn: string[]
+}): { nudge: false } | { nudge: true; message: string } {
+  if (
+    input.goalConfirmed ||
+    input.pending !== 'none' ||
+    input.alreadyNudged ||
+    input.clarifyIdleTurns < 2 ||
+    input.toolNamesThisTurn.length > 0
+  )
+    return { nudge: false }
+  return {
+    nudge: true,
+    message:
+      '【系统提示·非用户发言】目标尚未确认且会话停在澄清。请立即调用 propose_goal 提交可确认目标；不要只用文字追问。',
+  }
+}
+
 /** 方案曾被拒绝且尚未确认：纯文本收尾 → 催 propose_plan（每会话最多 2 次；不 force 工具）。
  * G-picky leaf C：plan reject 后无 report_completion 直至超时——缺重提方案文本 nudge。
  * 二次仅在 planRejectCount>=2：禁 ask_user/澄清，收敛到 propose_plan。 */

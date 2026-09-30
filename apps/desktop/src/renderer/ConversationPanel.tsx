@@ -23,6 +23,7 @@ import {
   // V1.5-S4 退役——goalFallbackTrigger 仅剩兜底探测（text_fallback 路径），见 ADR-009
   goalFallbackTrigger,
   shouldNudgeProposeAfterResearch,
+  shouldNudgeProposeGoalAfterClarifyIdle,
   shouldNudgeProposeAfterPlanReject,
   shouldNudgeReportAfterEvidenceMissing,
   shouldNudgeReportAfterDeliverables,
@@ -460,6 +461,9 @@ export default function ConversationPanel({
   // research→propose：分析期连续纯 web 轮 streak（与 StuckDetector 分立；确认后清零）
   const webOnlyStreakRef = useRef(0)
   const researchProposeNudgedRef = useRef(false)
+  /** L5 辅：!goalConfirmed && pending==='none' 纯文本澄清空转计数 */
+  const clarifyIdleTurnsRef = useRef(0)
+  const proposeGoalClarifyNudgedRef = useRef(false)
   const planWasRejectedRef = useRef(false)
   /** pendingKind==='plan' 拒绝 /「修改方案」累计（二次收敛 nudge 门槛） */
   const planRejectCountRef = useRef(0)
@@ -1207,6 +1211,7 @@ export default function ConversationPanel({
         else webOnlyStreakRef.current = 0
         if (stateRef.current.goalConfirmed) {
           webOnlyStreakRef.current = 0
+          clarifyIdleTurnsRef.current = 0
         } else {
           const rp = shouldNudgeProposeAfterResearch({
             goalConfirmed: stateRef.current.goalConfirmed,
@@ -1223,6 +1228,28 @@ export default function ConversationPanel({
               'system',
             )
             void sendRef.current?.({ silent: true, text: rp.message })
+          } else if (stateRef.current.pending === 'none') {
+            // L5 辅：仅 pending==='none' 累加；ask_user 等靠 harness Required
+            if (toolNames.length === 0) clarifyIdleTurnsRef.current += 1
+            else clarifyIdleTurnsRef.current = 0
+            const cg = shouldNudgeProposeGoalAfterClarifyIdle({
+              goalConfirmed: stateRef.current.goalConfirmed,
+              pending: stateRef.current.pending,
+              clarifyIdleTurns: clarifyIdleTurnsRef.current,
+              alreadyNudged: proposeGoalClarifyNudgedRef.current,
+              toolNamesThisTurn: toolNames,
+            })
+            if (cg.nudge) {
+              proposeGoalClarifyNudgedRef.current = true
+              tlog(
+                'conversation.system_nudge',
+                { kind: 'protocol', content: cg.message.slice(0, 200) },
+                'system',
+              )
+              void sendRef.current?.({ silent: true, text: cg.message })
+            }
+          } else {
+            clarifyIdleTurnsRef.current = 0
           }
         }
       }
@@ -2299,6 +2326,8 @@ export default function ConversationPanel({
     setTaskTrust([])
     webOnlyStreakRef.current = 0
     researchProposeNudgedRef.current = false
+    clarifyIdleTurnsRef.current = 0
+    proposeGoalClarifyNudgedRef.current = false
     planWasRejectedRef.current = false
     planRejectCountRef.current = 0
     planRejectNudgeCountRef.current = 0
