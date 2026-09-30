@@ -466,8 +466,8 @@ export default function ConversationPanel({
   /** 授权卡拒绝后催再批/改道 report（每会话 1 次） */
   const approvalWasRejectedRef = useRef(false)
   const approvalRejectNudgedRef = useRef(false)
-  // 方案已确认后仍催点「确认执行」/再 propose_plan → 催 write（每会话 1 次）
-  const planConfirmWriteNudgedRef = useRef(false)
+  // 方案已确认后 produced=0 仍空转/催点卡/再 propose → 催 write（每会话最多 2 次）
+  const planConfirmWriteNudgeCountRef = useRef(0)
   /** 确认后本轮（或紧邻上一工具轮）曾再 propose_plan → write nudge 输入 */
   const reproposedPlanAfterConfirmRef = useRef(false)
   const prevReadFilesRef = useRef<Set<string>>(new Set())
@@ -1248,18 +1248,19 @@ export default function ConversationPanel({
             void sendRef.current?.({ silent: true, text: rp.message })
           }
         } else {
-          // L4：方案已确认仍催点卡或再 propose_plan → 先催 write
+          // L1b / L4：方案已确认且 produced=0 仍空转/催点卡/再 propose → 催 write
           const toolNamesDone = streamingRef.current.toolCalls.map((c) => c.name)
           const writeNudge = shouldNudgeWriteAfterPlanConfirm({
             planConfirmed: stateRef.current.planConfirmed,
             pending: stateRef.current.pending,
-            alreadyNudged: planConfirmWriteNudgedRef.current,
+            nudgeCount: planConfirmWriteNudgeCountRef.current,
+            producedCount: stateRef.current.producedFiles.size,
             toolNamesThisTurn: toolNamesDone,
             assistantContent: content,
             reproposedPlanThisTurn: reproposedPlanAfterConfirmRef.current,
           })
           if (writeNudge.nudge) {
-            planConfirmWriteNudgedRef.current = true
+            planConfirmWriteNudgeCountRef.current += 1
             reproposedPlanAfterConfirmRef.current = false
             tlog(
               'conversation.system_nudge',
@@ -2277,7 +2278,7 @@ export default function ConversationPanel({
     approvalRejectNudgedRef.current = false
     evidenceGuideCountRef.current = 0
     evidenceReportNudgedRef.current = false
-    planConfirmWriteNudgedRef.current = false
+    planConfirmWriteNudgeCountRef.current = 0
     reproposedPlanAfterConfirmRef.current = false
     deliverablesReportNudgeCountRef.current = 0
     bashExecutedSinceProduceRef.current = false

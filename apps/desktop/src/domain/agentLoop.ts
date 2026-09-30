@@ -383,21 +383,28 @@ export function shouldNudgeReportAfterDeliverables(input: {
   }
 }
 
-/** 方案已确认后模型仍催点卡或再 propose_plan → 催 write（每会话最多 1 次；不 force）。
- * UAT G-impatient / L4 T3：forceTool 不进 API；确认后再规划需 silent 打断催写。 */
+/** 方案已确认后 produced=0 仍空转/催点卡/再 propose → 催 write（每会话最多 2 次；不 force）。
+ * UAT L1b p002：confirm 后 idle 无产出；G-impatient / L4 T3：forceTool 不进 API。 */
 export function shouldNudgeWriteAfterPlanConfirm(input: {
   planConfirmed: boolean
   pending: string
-  alreadyNudged: boolean
+  alreadyNudged?: boolean
+  nudgeCount?: number
+  maxNudges?: number
   toolNamesThisTurn: string[]
   assistantContent: string
   /** 本轮（或紧邻上一工具轮）在已确认后再次 propose_plan */
   reproposedPlanThisTurn?: boolean
+  producedCount?: number
 }): { nudge: false } | { nudge: true; message: string } {
+  const maxNudges = input.maxNudges ?? 2
+  const nudgeCount = input.nudgeCount ?? (input.alreadyNudged ? 1 : 0)
+  const producedCount = input.producedCount ?? 0
   if (
     !input.planConfirmed ||
     input.pending !== 'none' ||
-    input.alreadyNudged ||
+    nudgeCount >= maxNudges ||
+    producedCount > 0 ||
     input.toolNamesThisTurn.some((n) => n === 'write' || n === 'edit')
   )
     return { nudge: false }
@@ -407,8 +414,8 @@ export function shouldNudgeWriteAfterPlanConfirm(input: {
       t,
     )
   const reproposed = !!input.reproposedPlanThisTurn
-  if (!asksClickConfirm && !reproposed) return { nudge: false }
-  // 本轮仅剩 propose_plan 也视为需打断（done 时 toolNames 可能仍含 propose_plan）
+  const idleNoWrite = input.toolNamesThisTurn.length === 0
+  if (!asksClickConfirm && !reproposed && !idleNoWrite) return { nudge: false }
   if (
     input.toolNamesThisTurn.length > 0 &&
     !reproposed &&
@@ -418,7 +425,7 @@ export function shouldNudgeWriteAfterPlanConfirm(input: {
   return {
     nudge: true,
     message:
-      '【系统提示·非用户发言】执行方案已确认，无需再 propose_plan 或催点「确认执行」。请立即调用 write/edit 写入规划文件；不要重新规划。',
+      '【系统提示·非用户发言】执行方案已确认且尚未写入规划文件。请立即调用 write/edit；不要再 propose_plan、催点卡或纯文字分析。',
   }
 }
 
