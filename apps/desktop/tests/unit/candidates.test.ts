@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { parseCandidates, stripCandidates, stripTags } from '../../src/renderer/candidates'
+import {
+  parseCandidates,
+  stripCandidates,
+  stripTags,
+  hasUserReplyAfter,
+} from '../../src/renderer/candidates'
 
 // 2026-08-05 方案 3：结构化候选按钮——模型候选 <candidates> 块解析/剥离纯函数
 // 核心：候选从「序号解析」改为「文本点选」——消除模型对「序号→选项」的映射漂移（实测：选 1=射击被理解成建造）
@@ -108,5 +113,18 @@ describe('stripTags（通用去标签——展示层兜底）', () => {
     const c =
       '选一个：\n<candidates>\n- 射击\n</candidates>\n<one-question>\n确认一下：是射击吗？\n</one-question>'
     expect(stripTags(stripCandidates(c))).toBe('选一个：\n确认一下：是射击吗？')
+  })
+})
+
+describe('hasUserReplyAfter', () => {
+  const msgs = [{ role: 'user' }, { role: 'assistant' }, { role: 'user' }, { role: 'assistant' }]
+  it('后发消息下标 3：其后无 user → false', () => {
+    expect(hasUserReplyAfter(msgs, 3)).toBe(false)
+  })
+  it('旧 bug：用 toolCall 下标 0 slice messages → 假阳性', () => {
+    expect(msgs.slice(0 + 1).some((m) => m.role === 'user')).toBe(true)
+  })
+  it('下标 3 之后出现 user → true', () => {
+    expect(hasUserReplyAfter([...msgs, { role: 'user' }], 3)).toBe(true)
   })
 })

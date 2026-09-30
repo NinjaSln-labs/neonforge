@@ -67,7 +67,7 @@ import { useToolApproval } from './useToolApproval'
 // S5：turnPolicy.ts 已移除（decideTurnPolicy 语义并入 decideProgressGuarantee——§6 S5 唯一推进判定器）
 // 2026-08-07 无阶段重构 S4：buildAdvanceInstruction/stageFlow import 删除（advanceChat 随阶段体系移除）
 // 2026-08-05 方案 3：结构化候选按钮——<candidates> 块解析/剥离（点选文本替代序号，消除模型序号解析漂移）
-import { parseCandidates, stripCandidates, stripTags } from './candidates'
+import { parseCandidates, stripCandidates, stripTags, hasUserReplyAfter } from './candidates'
 // A-019（S4-St-1）：候选按钮共享组件——candidates 降级通道 + ask_user 选项按钮单源
 import { CandidateButtons, type CandidateOption } from './CandidateButtons'
 // 2026-08-03 视觉审计 P1-6：内联 SVG 图标（替换 emoji 图标）
@@ -2868,7 +2868,7 @@ export default function ConversationPanel({
                 // 2026-08-08 候选例外（用户「输入内容也可以解除 pending——本来就是支持选或输入」）：
                 // 候选之后出现用户消息（无论点选还是打字）= 用户已回应决策点 → 候选完成
                 // 点选路径：chosen 标记已选；输入路径：replied 标记已回复（两条路径都解除 pending）
-                const replied = messages.slice(i + 1).some((mm) => mm.role === 'user')
+                const replied = hasUserReplyAfter(messages, i)
                 return (
                   <CandidateButtons
                     options={opts.map((o) => ({ label: o }))}
@@ -3206,13 +3206,13 @@ export default function ConversationPanel({
                     </button>
                   </div>
                 )}
-                {m.toolCalls.map((tc, i) => {
-                  // 2026-08-08 O2：check-capability 能力齐备 → hidden（不展示；保持原始索引——revert/patch 定位用 i）
+                {m.toolCalls.map((tc, _ti) => {
+                  // 2026-08-08 O2：check-capability 能力齐备 → hidden（不展示；保持原始索引——revert/patch 定位用 _ti）
                   if (tc.hidden) return null
                   // ticket 14：授权卡风险明示——等级 + 影响（写哪个文件/执行什么命令）+ 快照提示
                   const hint = buildAuthHint(tc.name, tc.args)
                   return (
-                    <div key={tc.id ?? i} className={`nf-toolcall nf-toolcall--${tc.status}`}>
+                    <div key={tc.id ?? _ti} className={`nf-toolcall nf-toolcall--${tc.status}`}>
                       <span className="nf-toolcall__icon">
                         {tc.status === 'done' ? (
                           <IconCheck size={11} />
@@ -3242,7 +3242,7 @@ export default function ConversationPanel({
                             (o) => o && typeof o.label === 'string',
                           )
                           if (opts.length === 0) return null
-                          const replied = messages.slice(i + 1).some((mm) => mm.role === 'user')
+                          const replied = hasUserReplyAfter(messages, i) // i = 消息下标，非 _ti
                           return (
                             <CandidateButtons
                               options={opts}
@@ -3267,7 +3267,7 @@ export default function ConversationPanel({
                         <button
                           type="button"
                           className="nf-toolcall__revert"
-                          onClick={() => revertToolCall(m.toolCalls ?? [], i, tc)}
+                          onClick={() => revertToolCall(m.toolCalls ?? [], _ti, tc)}
                         >
                           <IconRotateCcw size={12} /> 回滚
                         </button>
@@ -3297,14 +3297,14 @@ export default function ConversationPanel({
                             <button
                               type="button"
                               className="nf-toolcall__approve"
-                              onClick={() => approvePlan(m.toolCalls ?? [], i, tc)}
+                              onClick={() => approvePlan(m.toolCalls ?? [], _ti, tc)}
                             >
                               批准这批文件
                             </button>
                             <button
                               type="button"
                               className="nf-toolcall__reject"
-                              onClick={() => rejectToolCall(m.toolCalls ?? [], i)}
+                              onClick={() => rejectToolCall(m.toolCalls ?? [], _ti)}
                             >
                               拒绝
                             </button>
@@ -3346,7 +3346,7 @@ export default function ConversationPanel({
                             <button
                               type="button"
                               className="nf-toolcall__approve"
-                              onClick={() => approveToolCall(m.toolCalls ?? [], i, tc)}
+                              onClick={() => approveToolCall(m.toolCalls ?? [], _ti, tc)}
                             >
                               允许执行
                             </button>
@@ -3357,7 +3357,7 @@ export default function ConversationPanel({
                               <button
                                 type="button"
                                 className="nf-toolcall__remember"
-                                onClick={() => rememberAndApprove(m.toolCalls ?? [], i, tc)}
+                                onClick={() => rememberAndApprove(m.toolCalls ?? [], _ti, tc)}
                               >
                                 允许并记住
                               </button>
@@ -3365,7 +3365,7 @@ export default function ConversationPanel({
                             <button
                               type="button"
                               className="nf-toolcall__reject"
-                              onClick={() => rejectToolCall(m.toolCalls ?? [], i)}
+                              onClick={() => rejectToolCall(m.toolCalls ?? [], _ti)}
                             >
                               拒绝
                             </button>
@@ -3376,7 +3376,7 @@ export default function ConversationPanel({
                         <button
                           type="button"
                           className="nf-toolcall__stop"
-                          onClick={() => stopToolCall(m.toolCalls ?? [], i)}
+                          onClick={() => stopToolCall(m.toolCalls ?? [], _ti)}
                         >
                           <IconSquare size={12} /> 停止
                         </button>

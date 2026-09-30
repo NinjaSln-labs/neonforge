@@ -95,3 +95,12 @@ export function stripTags(content: string): string {
     .replace(/\n{2,}/g, '\n')
     .trim()
 }
+
+/** 本消息之后是否已有用户消息——ask_user / <candidates> 共用「已回应」判定 */
+export function hasUserReplyAfter(
+  messages: ReadonlyArray<{ role: string }>,
+  messageIndex: number,
+): boolean {
+  if (messageIndex < 0 || messageIndex >= messages.length) return false
+  return messages.slice(messageIndex + 1).some((m) => m.role === 'user')
+}

@@ -1169,6 +1169,27 @@ test('S3-4：ask_user 选项按钮化——点选发送 + 已回应禁用（输�
   await expectText(page.locator('.nf-msg--user').last(), '就待办清单吧', 10000)
 })
 
+test('ask_user：后发澄清不被早先用户消息标成已回复', async ({ page }) => {
+  const h = await installMockBridge(page, { project: 'open', manualEmit: true })
+  await enterWorkspace(page)
+  await sendChat(page, '先聊一句')
+  await h.emit([chunk.content('收到'), chunk.done()])
+  await sendChat(page, '再问选型')
+  await h.emit([
+    toolCall.askUser('选哪边？', 'approach_choice', [
+      { label: '方案甲', description: 'a' },
+      { label: '方案乙', description: 'b' },
+    ]),
+    chunk.done(),
+  ])
+  const btn = page.locator('.nf-candidates__btn', { hasText: '方案甲' })
+  await expectVisible(btn, 10000)
+  await expect(btn).not.toContainText('已回复')
+  await expect(btn).toBeEnabled()
+  await btn.click()
+  await expectText(page.locator('.nf-msg--user').last(), '方案甲', 10000)
+})
+
 // A-015（V1.5-S4）：对账失败防死循环上限（≥2 次停止自动引导）→ 状态栏用户可见提示
 // （引导注入消息不存在——用户不知道对账未通过；状态栏非侵入提示对齐 needs-human 模式）
 test('S4-3b：对账持续失败达引导上限 → 状态栏提示可见（A-015 用户侧提示）', async ({ page }) => {
