@@ -1,18 +1,24 @@
 #!/usr/bin/env bash
-# LEGACY：固定 3×4 多样性人格 UAT（12 种互不重复）。推荐入口见 run-uat-persona-pool.sh
-# 用法：bash scripts-cdp/run-uat-persona-rounds.sh 1|2|3
-# Key：NEONFORGE_COMMANDCODE 或 /tmp/nf-uat-key-keep；可选 NF_UAT_APP、NF_UAT_KEENABLE_KEY
+# 多样性人格池：分层抽 12 → 串行 e2e。推荐入口（legacy 见 run-uat-persona-rounds.sh）
+# cwd: apps/desktop
+# 用法：
+#   NF_UAT_SEED=pilot30 bash scripts-cdp/run-uat-persona-pool.sh
+#   NF_UAT_DRY=1 bash scripts-cdp/run-uat-persona-pool.sh   # 只抽签打印
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-ROUND="${1:-}"
-if [[ ! "$ROUND" =~ ^[123]$ ]]; then
-  echo "usage: $0 1|2|3  (LEGACY — prefer run-uat-persona-pool.sh)" >&2
-  echo "  R1: impatient picky boundary webcurious" >&2
-  echo "  R2: novice contradictory silent neutral" >&2
-  echo "  R3: scopecreep terse expert anxious" >&2
-  exit 2
+# nvm / homebrew node（非交互 ssh 常无 PATH）
+if [ -z "${NODE:-}" ] || ! command -v node >/dev/null 2>&1; then
+  if [ -s "${HOME}/.nvm/nvm.sh" ]; then
+    # shellcheck disable=SC1091
+    . "${HOME}/.nvm/nvm.sh"
+  fi
+  export PATH="/opt/homebrew/bin:/usr/local/bin:${PATH}"
 fi
+command -v node >/dev/null || {
+  echo "node not found in PATH" >&2
+  exit 1
+}
 
 if [ -s /tmp/nf-uat-key-keep ]; then
   if grep -q '^export ' /tmp/nf-uat-key-keep 2>/dev/null; then
@@ -24,53 +30,51 @@ if [ -s /tmp/nf-uat-key-keep ]; then
     export NEONFORGE_COMMANDCODE="$(cat /tmp/nf-uat-key-keep)"
   fi
 fi
+
+DRAW="/tmp/nf-uat-draw.json"
+RESULTS="/tmp/nf-uat-pool-results.txt"
+SEED="${NF_UAT_SEED:-}"
+export NF_UAT_SEED="${SEED}"
+export NF_UAT_LOCAL=1
+
+node scripts-cdp/draw-persona-batch.mjs --out "$DRAW"
+
+if [ "${NF_UAT_DRY:-}" = "1" ]; then
+  echo "NF_UAT_DRY=1 — skip e2e"
+  cat "$DRAW"
+  exit 0
+fi
+
 if [ -z "${NEONFORGE_COMMANDCODE:-}" ]; then
-  echo "missing NEONFORGE_COMMANDCODE" >&2
+  echo "missing NEONFORGE_COMMANDCODE (or dry with NF_UAT_DRY=1)" >&2
   exit 1
 fi
-export NF_UAT_LOCAL=1
 
 APP="${NF_UAT_APP:-${HOME}/Documents/ninjasin-labs/neonforge/apps/desktop/release/mac/NeonForge.app}"
 if [ ! -x "$APP/Contents/MacOS/NeonForge" ]; then
   echo "APP missing: $APP" >&2
+  echo "hint: set NF_UAT_APP or run on Mac after dist; use NF_UAT_DRY=1 for draw-only" >&2
   exit 1
 fi
 
-# 每项：结果名|脚本调用（相对 scripts-cdp）
-case "$ROUND" in
-  1)
-    JOBS=(
-      "G-impatient|node uat-G-impatient.mjs"
-      "G-picky|node uat-G-picky.mjs"
-      "G-boundary|node uat-G-boundary.mjs"
-      "G-web|node uat-G-web.mjs"
-    )
-    ;;
-  2)
-    JOBS=(
-      "G-novice|NF_UAT_PERSONA=novice node uat-G-persona.mjs"
-      "G-contradictory|NF_UAT_PERSONA=contradictory node uat-G-persona.mjs"
-      "G-silent|NF_UAT_PERSONA=silent node uat-G-persona.mjs"
-      "G-neutral|NF_UAT_PERSONA=neutral node uat-G-persona.mjs"
-    )
-    ;;
-  3)
-    JOBS=(
-      "G-scopecreep|NF_UAT_PERSONA=scopecreep node uat-G-persona.mjs"
-      "G-terse|NF_UAT_PERSONA=terse node uat-G-persona.mjs"
-      "G-expert|NF_UAT_PERSONA=expert node uat-G-persona.mjs"
-      "G-anxious|NF_UAT_PERSONA=anxious node uat-G-persona.mjs"
-    )
-    ;;
-esac
-
-RESULTS="/tmp/nf-uat-r${ROUND}-results.txt"
 rm -f "$RESULTS"
-echo "==== ROUND $ROUND APP=$APP ===="
+echo "==== POOL DRAW seed=${NF_UAT_SEED:-(date)} APP=$APP ===="
 stat -f "%Sm %N" -t "%Y-%m-%d %H:%M" "$APP/Contents/Resources/app.asar" 2>/dev/null || true
 
+IDS_FILE="/tmp/nf-uat-draw-ids.txt"
+node -e "
+const d=require('fs').readFileSync('$DRAW','utf8');
+const j=JSON.parse(d);
+require('fs').writeFileSync('$IDS_FILE', j.personas.map(p=>p.id).join('\n')+'\n');
+"
+IDS=()
+while IFS= read -r id; do
+  [ -n "$id" ] && IDS+=("$id")
+done <"$IDS_FILE"
+
 run_one() {
-  local name="$1" cmd="$2"
+  local id="$1"
+  local name="G-pool-${id}"
   echo ""
   echo "======== START $name $(date -u +%H:%M:%S) ========"
   pkill -f "NeonForge.app/Contents/MacOS/NeonForge" 2>/dev/null || true
@@ -100,15 +104,10 @@ run_one() {
     head -20 /tmp/nf-live.log >&2 || true
     return 1
   fi
-  if [ ! -d "${UD}/Cache" ] && [ ! -f "${UD}/DevToolsActivePort" ]; then
-    echo "ERROR: userData not isolated to ${UD}" >&2
-    return 1
-  fi
   set +e
   (
     cd scripts-cdp
-    # shellcheck disable=SC2086
-    eval $cmd
+    node uat-G-persona.mjs --from-pool "$id"
   )
   local rc=$?
   set -e
@@ -119,12 +118,10 @@ run_one() {
   sleep 2
 }
 
-for job in "${JOBS[@]}"; do
-  name="${job%%|*}"
-  cmd="${job#*|}"
-  run_one "$name" "$cmd"
+for id in "${IDS[@]}"; do
+  run_one "$id"
 done
 
 echo ""
-echo "==== ROUND $ROUND SUMMARY ===="
+echo "==== POOL SUMMARY ===="
 cat "$RESULTS"
