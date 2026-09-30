@@ -463,9 +463,10 @@ export default function ConversationPanel({
   /** pendingKind==='plan' 拒绝 /「修改方案」累计（二次收敛 nudge 门槛） */
   const planRejectCountRef = useRef(0)
   const planRejectNudgeCountRef = useRef(0)
-  /** 授权卡拒绝后催再批/改道 report（每会话 1 次） */
+  /** 授权卡拒绝后催再批/改道 report（当场 silent + 纯文本，合计最多 2 次） */
   const approvalWasRejectedRef = useRef(false)
-  const approvalRejectNudgedRef = useRef(false)
+  const approvalRejectImmediateNudgedRef = useRef(false)
+  const approvalRejectNudgeCountRef = useRef(0)
   // 方案已确认后 produced=0 仍空转/催点卡/再 propose → 催 write（每会话最多 2 次）
   const planConfirmWriteNudgeCountRef = useRef(0)
   /** 确认后本轮（或紧邻上一工具轮）曾再 propose_plan → write nudge 输入 */
@@ -1308,16 +1309,16 @@ export default function ConversationPanel({
                 )
                 void sendRef.current?.({ silent: true, text: delNudge.message })
               } else {
-                // L2：授权拒绝后纯文本收尾 → 催再批/改道 report（evidence/deliverables 之后、StuckDetector 之前）
+                // L2：授权拒绝后纯文本收尾 → 催再批/改道 report（当场 silent 已计 1；evidence/deliverables 之后、StuckDetector 之前）
                 const apNudge = shouldNudgeAfterApprovalReject({
                   planConfirmed: stateRef.current.planConfirmed,
                   pending: stateRef.current.pending,
                   approvalWasRejected: approvalWasRejectedRef.current,
-                  alreadyNudged: approvalRejectNudgedRef.current,
+                  nudgeCount: approvalRejectNudgeCountRef.current,
                   toolNamesThisTurn: toolNamesDone,
                 })
                 if (apNudge.nudge) {
-                  approvalRejectNudgedRef.current = true
+                  approvalRejectNudgeCountRef.current += 1
                   tlog(
                     'conversation.system_nudge',
                     { kind: 'protocol', content: apNudge.message.slice(0, 200) },
@@ -2275,7 +2276,8 @@ export default function ConversationPanel({
     planRejectCountRef.current = 0
     planRejectNudgeCountRef.current = 0
     approvalWasRejectedRef.current = false
-    approvalRejectNudgedRef.current = false
+    approvalRejectImmediateNudgedRef.current = false
+    approvalRejectNudgeCountRef.current = 0
     evidenceGuideCountRef.current = 0
     evidenceReportNudgedRef.current = false
     planConfirmWriteNudgeCountRef.current = 0
@@ -2558,6 +2560,19 @@ export default function ConversationPanel({
     grantPlan,
     rejectApproval: (request, reason) => {
       approvalWasRejectedRef.current = true
+      // L2：拒授权回调当场 silent（不等纯文本窗）；计 1 次，纯文本路径可再催一次
+      if (stateRef.current.planConfirmed && !approvalRejectImmediateNudgedRef.current) {
+        approvalRejectImmediateNudgedRef.current = true
+        approvalRejectNudgeCountRef.current = Math.max(1, approvalRejectNudgeCountRef.current)
+        const msg =
+          '【系统提示·非用户发言】上一工具授权已被拒绝。请改用无需高风险授权的只读核验，或再次请求授权后继续；有产出则立即调用 report_completion——不要停在文字说明。'
+        tlog(
+          'conversation.system_nudge',
+          { kind: 'protocol', content: msg.slice(0, 200) },
+          'system',
+        )
+        void sendRef.current?.({ silent: true, text: msg })
+      }
       rejectApproval(request, reason)
     },
     addTrust,

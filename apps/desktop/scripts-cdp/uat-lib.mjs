@@ -848,11 +848,27 @@ export async function autopilot(
     if (acted) {
       actions.push(`r${r}:${acted.slice(0, 40)}`)
       console.log(`  r${r}: ${acted.slice(0, 40)}`)
+      // L2 Required：点拒绝/不允许 → 标记需 harness 兜底催（产品当场 silent 失败时）
+      if (/button:(拒绝|不允许)/.test(acted)) persona.__needApprovalRejectNudge = true
     }
     // 停滞恢复：连续 3 轮无动作 + 完成声明已提交 → 证据引导（全场景最多 1 次，防空转刷屏）
     if (!acted) {
       idleRounds = (idleRounds || 0) + 1
-      if (idleRounds === 3) {
+      // L2 Required：拒授权后 idle≥2 兜底催（不依赖 idle===3）
+      if (
+        persona.__needApprovalRejectNudge &&
+        idleRounds >= 2 &&
+        !sentTexts.has('__nudge_approval_reject__')
+      ) {
+        await typeAndSend(
+          page,
+          '系统提示：授权已被拒绝。请改用只读核验或再次请求授权，有产出则 report_completion。',
+        )
+        sentTexts.add('__nudge_approval_reject__')
+        persona.__needApprovalRejectNudge = false
+        actions.push(`r${r}:nudge-approval-reject`)
+        console.log(`  r${r}: nudge-approval-reject sent`)
+      } else if (idleRounds === 3) {
         const ui = await dump(page)
         if (
           ui.includes('完成声明已提交') &&

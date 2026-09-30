@@ -429,20 +429,26 @@ export function shouldNudgeWriteAfterPlanConfirm(input: {
   }
 }
 
-/** 授权卡拒绝后纯文本收尾 → 催再调工具/改道 report（每会话最多 1 次；不 force）。
- * UAT L2 p087：refuse_once 拒 bash 后无再申请/无改道 report。 */
+/** 授权卡拒绝后纯文本收尾 → 催再调工具/改道 report（默认最多 2 次；不 force）。
+ * UAT L2 p087：refuse_once 拒 bash 后无再申请/无改道 report。
+ * 回调当场 silent 已计 1 次时，纯文本路径从 nudgeCount=1 起算，仍可再催一次。 */
 export function shouldNudgeAfterApprovalReject(input: {
   planConfirmed: boolean
   pending: string
   approvalWasRejected: boolean
-  alreadyNudged: boolean
+  /** @deprecated 用 nudgeCount；true 等价 nudgeCount>=1 */
+  alreadyNudged?: boolean
+  nudgeCount?: number
+  maxNudges?: number
   toolNamesThisTurn: string[]
 }): { nudge: false } | { nudge: true; message: string } {
+  const maxNudges = input.maxNudges ?? 2
+  const nudgeCount = input.nudgeCount ?? (input.alreadyNudged ? 1 : 0)
   if (
     !input.planConfirmed ||
     input.pending !== 'none' ||
     !input.approvalWasRejected ||
-    input.alreadyNudged ||
+    nudgeCount >= maxNudges ||
     input.toolNamesThisTurn.length > 0
   )
     return { nudge: false }

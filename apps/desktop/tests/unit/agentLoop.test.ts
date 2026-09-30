@@ -662,7 +662,7 @@ describe('shouldNudgeAfterApprovalReject', () => {
     planConfirmed: true,
     pending: 'none',
     approvalWasRejected: true,
-    alreadyNudged: false,
+    nudgeCount: 0,
     toolNamesThisTurn: [] as string[],
   }
   it('拒过授权 + 纯文本 → 催再调工具或 report', () => {
@@ -683,8 +683,26 @@ describe('shouldNudgeAfterApprovalReject', () => {
       false,
     )
   })
-  it('已催 → 不催', () => {
-    expect(shouldNudgeAfterApprovalReject({ ...base, alreadyNudged: true }).nudge).toBe(false)
+  it('当场 silent 已计 1 + 纯文本 → 二次催', () => {
+    const r = shouldNudgeAfterApprovalReject({ ...base, nudgeCount: 1 })
+    expect(r.nudge).toBe(true)
+    if (r.nudge) {
+      expect(r.message).toContain('report_completion')
+    }
+  })
+  it('nudgeCount>=2 → 不催', () => {
+    expect(shouldNudgeAfterApprovalReject({ ...base, nudgeCount: 2 }).nudge).toBe(false)
+  })
+  it('兼容 alreadyNudged=true（无 nudgeCount）→ 等价 count=1 仍可二次', () => {
+    expect(
+      shouldNudgeAfterApprovalReject({
+        planConfirmed: true,
+        pending: 'none',
+        approvalWasRejected: true,
+        alreadyNudged: true,
+        toolNamesThisTurn: [],
+      }).nudge,
+    ).toBe(true)
   })
 })
 
