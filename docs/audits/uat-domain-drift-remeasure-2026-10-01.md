@@ -43,7 +43,7 @@
 
 ## 失败簇（新，非本批漂移回归）
 
-### 簇 1 · working 悬挂（回合以等待决策收尾时状态栏谎报 busy）— 5 条
+### 簇 1 · ~~working 悬挂~~（**已被文末 RCA 翻案**：真根因＝forced-clarify 幽灵占位气泡 × harness 全文正则）— 5 条
 
 p063 p065 p066 p060（forcedcard + `status:ready` 后 spinner「搭档处理中…」仍挂 → busy 门闩锁死 → timeout）
 + p110（收口卡 achievement 弹出后同形态 → 点不到「已解决」→ resolved-but-FAIL）。
@@ -72,16 +72,53 @@ p119：`assistant_done`（纯文字）→ `system_nudge(protocol 催 report_comp
 ## 与上批（pool-testbatch 09-30）对照
 
 - 上批 7 条收口失败 → 本批 8 条；但**构成完全变了**：上批主簇「确认执行后空转」本轮仅 p119 一例（且形态变为 nudge 吞失）；
-  本批 5/8 死于新暴露的 working 悬挂——Task 2 full-turn working 引入的回归族（spinner 覆盖到等决策窗口）。
+  本批 5/8 死于簇 1——**RCA 修正：非 Task 2 working 回归，而是 forced-clarify 幽灵占位 × harness 全文正则**（排队路径为触发器）。
 - T3 由 stuck_after_plan → **转绿**；ask_user 提前已回复、busy 双确认、silent 打断三漂移 **0 复现**。
-- 结论：漂移修批本身（叶因 A/B/C）达成；**新回归簇 1 是关单阻塞项**，簇 2 属测批纪律与设计张力，簇 3 待复现定位。
+- 结论：漂移修批本身（叶因 A/B/C）达成；**簇 1（RC1a+RC1b）是关单阻塞项**，簇 2 属方案口径问题，簇 3 根因已定位（RC3）。
 
-## 裁决请求（ADR-012）
+## 裁决请求（ADR-012 · 已按文末 RCA 修正）
 
 建议开修批范围（仅方向）：
-1. **P0 产品**：回合以 pending_set/card.shown 收尾时释放 working（或状态栏改「等待你选择」态）——簇 1 根
-2. **P1 harness**：busy∧decisionPending 放行卡点选；busy 中放行「人格脚本预排的插话/探针」typeAndSend（走产品排队路径，顺带覆盖观察 1）——簇 2 根
-3. **P1 产品**：silent nudge 在 yield 窗口的送达性排查——簇 3
-4. P2 排队气泡/已选高亮/单槽覆盖（观察类）
+1. **P0 产品 RC1a**：forced-clarify 分支 `return` 前 finalize 流式占位（转 done+引导文案或移除）——幽灵气泡是簇 1 真根
+2. **P1 harness RC1b**：`isModelBusy` 改只读状态栏元素/暴露 test hook，禁全文正则；同时放行「决策卡点选」与「预排插话/探针」（簇 2，需方案改口径）
+3. **P1 产品 RC3**：`pendingSendRef` 排队槽加 idle watcher（或 nudge 不入槽、等 idle 自送）+ 单槽改数组——簇 3 与观察 1-③同根
+4. P2 观察 1 剩余：排队即显气泡（排队态标记）、ask_user 卡已选高亮
 
-**未裁决前不改码。** 现场证据：pool/tiers 日志、探针快照、截图 `/tmp/nf-cdp/uat/G-pool-p035/99-final.png` 等均在 Mac /tmp。
+**未裁决前不改码。** 现场证据：pool/tiers 日志、探针快照、截图 `/tmp/nf-cdp/uat/G-pool-p035/99-final.png`、
+RCA 复现件 `/tmp/nf-rca-p063-*.log` + DOM 探针输出，均在 Mac /tmp。
+
+---
+
+## 原始根因追溯（RCA · 2026-10-01 补 · p063 单跑复现 + CDP DOM 探针坐实）
+
+### 簇 1 真根因（翻案：非状态栏 working 悬挂）
+
+复现现场（p063 单跑停滞时）：状态栏=**「就绪」**、全部工具卡=done、forcedcard 挂着；
+但聊天流有 **2 条幽灵气泡**——`用户文本(已发送) → 「搭档处理中…」` 永久 streaming 态。
+harness 正则命中的是幽灵气泡文本，不是状态栏。
+
+- **RC1a（产品·根）**：`send()` push 空内容 streaming 占位（ConversationPanel L2496；渲染「搭档处理中…」L2847）
+  → `runChat` forced-clarify 分支 **L2183 `return` 不清理占位** → 幽灵永久残留。
+  触发链＝排队 flush 的用户文本撞 ADR-010 二级强制卡；loop-guard/finishError 路径均有收尾，唯此分支裸退。
+- **RC1b（harness·共犯）**：`isModelBusy` 整页文本正则（处理中|思考中|生成中|…）无法区分活动态/幽灵/模型正文
+  ——plan-audit Nits 原话预言「modelBusy 与产品 busy 同源仍差一步（UI 正则）」。
+  幽灵 + 全文正则 = 永久假 busy → skip-act 死锁 → 4×timeout + p110 收口 FAIL。
+- 两修齐备才根治（单修 RC1a 消除本批触发器；单修 RC1b 幽灵仍误导真实用户）。
+
+### 簇 3 真根因（p119 nudge 吞失）
+
+nudge＝`void sendRef({silent:true,text})`（L1225–1329 多处）→ 链 unwind 期 workingRef=true → 入**单槽**
+`pendingSendRef` → return。唯一 flush 点在 send#1 finally（L2599，**同步读槽**+50ms 重发）。
+stream-done 回调与 unwind 并发：nudge 晚入槽一瞬间 → 死信（无链在跑、无 watcher、无重试）。
+与 RC1a 同族：排队机制只有一条 flush 责任路径。
+
+### 簇 2 根因（确认）
+
+= 方案 Task 3/6 硬闸「busy → acted 与全部 typeAndSend 同禁」字面执行（半门闩被方案明令禁止）。
+根在设计决议：未区分「决策卡点选（不经 send 排队，busy 合法可点）」与「新文本注入」。
+RC1a 修掉后命中率大降（慢回合仍可能吞探针）；彻底解需方案改口径。
+
+### 与「卡弹出时 spinner 同屏」旧探针记录的关系
+
+p110 探针同时抓到状态栏「搭档处理中：工具执行中…」——那是链 unwind 中的**瞬时真 busy**（≤150s 窗口）；
+使其**永久化**的是幽灵气泡（RC1a）。旧记录不作废，但归因以本节为准。
