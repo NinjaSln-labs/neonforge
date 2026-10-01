@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { installMockBridge, chunk, toolCall } from './mockBridge'
 import { compose, goalConfirm, startFromScratch, sendChat } from './scenarios'
+import { expectChatReady } from '../helpers/assertions'
 
 // ADR-010：强制澄清卡——无进展对话二级介入（UAT-Sim A-024/A-025）
 // 触发：T2 pending 期间用户连续文本回复 ≥3（「你看着定吧」式文字确认不被认 → 用户反复尝试）
@@ -63,5 +64,23 @@ test.describe('ADR-010 强制澄清卡', () => {
     await expect(page.locator('.nf-forcedcard')).toHaveCount(0)
     // 点卡 = 新一轮协商（rejectStreak 重置）+ 重述引导自动 send——模型收到反馈重新提交提议
     await expect(page.locator('body')).toContainText('目标需要重新描述一下', { timeout: 10000 })
+  })
+
+  // RC1a（关单复测簇1）：强制卡裸退前必须收尾本轮流式占位——否则「搭档处理中…」幽灵永久残留，
+  // 而状态栏已「就绪」→ 用户看到假忙、UAT busy 判定（读 DOM）被毒化死锁。
+  test('T-FORCE-4：强制卡弹出后不得残留流式占位（RC1a 幽灵）', async ({ page }) => {
+    installMockBridge(page, { project: 'none', script: loopScript() })
+    await startFromScratch(page, '做一个番茄钟页面')
+    await expect(page.getByRole('button', { name: '确认目标' })).toBeVisible({ timeout: 10000 })
+    await sendChat(page, '就按你想的做')
+    await page.waitForTimeout(2500)
+    await sendChat(page, '你看着定吧')
+    await page.waitForTimeout(2500)
+    await sendChat(page, '行行行，快做吧')
+    await expect(page.locator('.nf-forcedcard')).toBeVisible({ timeout: 15000 })
+    await expectChatReady(page) // 状态栏「就绪」（helpers L74-76）
+    // 收尾断言：不得残留空 streaming 占位（幽灵）——body--thinking（L2840）+ 呼吸点（L2837）双清
+    await expect(page.locator('.nf-msg--assistant .nf-msg__body--thinking')).toHaveCount(0)
+    await expect(page.locator('.nf-msg--assistant .nf-breath')).toHaveCount(0)
   })
 })

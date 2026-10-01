@@ -370,6 +370,9 @@ export default function ConversationPanel({
   } | null>(null)
   const sessionRef = useRef(0) // 会话隔离：每次发送递增——旧会话事件/续聊失效
   const streamingSidRef = useRef(0) // 2026-08-04：当前活跃流 sid——停止（sid++）后旧流 chunk 忽略（applyChunk 只处理活跃流）
+  // RC1a（2026-10-01 关单复测簇1）：本轮流式占位 anchor——{sid,id} 配对（D3：单存 id 会被
+  // approval 期并发直送的别链占位顶掉 → 裸退时误删他链活占位）。三处 push 点各自记录，裸退收尾用。
+  const roundStreamRef = useRef<{ sid: number; id: string } | null>(null)
   // V1.5 S2 A-017：同轮并存挂起标记——本轮流中出现协议工具后，同轮后续普通工具一律挂起
   // （Spike-4 实证「同响应混合协议+普通工具」：协议工具置 pending 等用户决策 → 普通工具无意义
   // ——挂起不执行，结果引导模型等确认后重试；deriveDecisionPoint 单决策点互斥语义的流式承载）
@@ -1968,9 +1971,11 @@ export default function ConversationPanel({
       })),
     ]
     chatRef.current = { msgs: toolMsgs, depth: depth + 1 }
+    const contStreamId = nextMsgId()
+    roundStreamRef.current = { sid, id: contStreamId } // RC1a push②：续聊轮占位 anchor（外层同 sid）
     setMessages((p) => [
       ...p,
-      { role: 'assistant', content: '', reasoning: '', status: 'streaming', id: nextMsgId() },
+      { role: 'assistant', content: '', reasoning: '', status: 'streaming', id: contStreamId },
     ])
     await new Promise((r) => setTimeout(r, 50))
     await runChat(toolMsgs, depth + 1, sid)
@@ -1996,6 +2001,7 @@ export default function ConversationPanel({
     // 2026-08-04 重构（用户：「定多少才不卡」根因——原 `depth > 4` 硬上限，开发工具链 5+ 轮必断）：40 轮总兜底（防死循环由 maybeContinue 重复检测承担）
     if (depth > 40) {
       // 2026-08-05：提前 return 释放 working（不经过 maybeContinue/finishError——防卡「搭档处理中」）
+      finalizeOrphanStream(sid) // RC1a：占位同样要收尾（否则本轮留幽灵——与 forced-clarify 同族裸退）
       setWorking(false)
       onWorkingChange?.(false)
       setWorkingStage('就绪')
@@ -2176,6 +2182,12 @@ export default function ConversationPanel({
         })
         tlog('dialogue.forced_clarify', { underlying }, 'system')
         console.log('[adr010] forced clarify card set, underlying=' + underlying)
+        // RC1a（关单复测簇1）：卡已弹出＝decision-pending（非 busy，ADR-013.1）→ 本分支自己收尾
+        // 占位并释放 busy。不在此处理则依赖调用方兜底——retryFailedTurn 无 send 的 finally → 真悬挂。
+        finalizeOrphanStream(sid)
+        setWorking(false)
+        onWorkingChange?.(false)
+        setWorkingStage('就绪')
         return // 等待用户在强制卡上做出选择——不进入模型回合
       }
       const res = await window.neonforge.gateway.streamChat({
@@ -2491,9 +2503,11 @@ export default function ConversationPanel({
     onWorkingChange?.(true)
     const sid = ++sessionRef.current // 新会话——旧会话事件/续聊失效
     const history = buildHistory(messages)
+    const sendStreamId = nextMsgId()
+    roundStreamRef.current = { sid, id: sendStreamId } // RC1a push①：send 轮占位 anchor
     setMessages((p) => [
       ...p,
-      { role: 'assistant', content: '', reasoning: '', status: 'streaming', id: nextMsgId() },
+      { role: 'assistant', content: '', reasoning: '', status: 'streaming', id: sendStreamId },
     ])
     setWorkingStage(silent ? '系统引导中…' : '已发送，等待搭档…')
 
@@ -2683,6 +2697,32 @@ export default function ConversationPanel({
       }
     },
   })
+  // RC1a（2026-10-01 关单复测簇1 根因）：runChat 裸 return 前收尾本轮流式占位并释放 busy。
+  // 空占位不收尾 → 永久渲染「搭档处理中…」（L2846）而状态栏已「就绪」→ 用户看到假忙、
+  // UAT busy 判定（读 DOM 状态栏）被毒化 → skip-act 死锁；不释放 busy → 重试链
+  // （retryFailedTurn 无 send 的 finally 兜底）撞裸退时真·悬挂。
+  // 范围＝本轮 anchor 及其更早的孤儿（不变量 I1：更早的 streaming 必为孤儿——chunk updater
+  // 从尾向前只认最后一条，永远回不到它们——p063 的 ×2 即两轮各留一条）；anchor 之后不碰（并发别链活占位）。
+  const finalizeOrphanStream = (sid: number): void => {
+    const round = roundStreamRef.current
+    if (streamingSidRef.current !== sid || round?.sid !== sid) return // 已被 stop/新会话接管 或 anchor 属别链
+    const prev = messagesRef.current
+    const anchor = prev.findIndex((m) => m.id === round?.id)
+    if (anchor < 0) return // anchor 不在表内——不猜范围
+    const isStreaming = (m: Msg): boolean => m.role === 'assistant' && m.status === 'streaming'
+    if (!isStreaming(prev[anchor])) return // 本轮已被 done chunk 收尾——无事可做
+    const isGhost = (m: Msg): boolean =>
+      isStreaming(m) && !m.content.trim() && (m.toolCalls?.length ?? 0) === 0
+    let changed = false
+    const head = prev.slice(0, anchor + 1).map((m) => {
+      if (!isStreaming(m)) return m
+      changed = true
+      return isGhost(m) ? null : { ...m, status: 'done' as const } // 有内容/有卡→转 done；空且无卡→丢弃
+    })
+    if (!changed) return
+    messagesRef.current = [...head.filter((m): m is Msg => m !== null), ...prev.slice(anchor + 1)]
+    setMessages(messagesRef.current)
+  }
   const finishError = (err: string, errorTypeHint?: ChatErrorType) => {
     // 2026-08-04 体验修复：错误分类 + 日志记录在 updater 外（坑 32——StrictMode updater 双调；原仅 done 记录错误无法追溯）
     // 2026-08-05 用户反馈（第二轮候选点选后卡住）：runChat 提前 return（gateway 错误/网络错误/key 失效）走 finishError 不经过 maybeContinue——
@@ -2741,6 +2781,9 @@ export default function ConversationPanel({
       reasoning: '',
       toolCalls: last.toolCalls ?? [],
     }
+    const sid = ++sessionRef.current // 先于 setMessages 取——RC1a push③ anchor 需配对 sid
+    const retryStreamId = nextMsgId()
+    roundStreamRef.current = { sid, id: retryStreamId } // RC1a push③：重试轮占位 anchor
     setMessages([
       ...prev,
       {
@@ -2748,14 +2791,13 @@ export default function ConversationPanel({
         content: '',
         reasoning: '',
         status: 'streaming',
-        id: nextMsgId(),
+        id: retryStreamId,
         toolCalls: last.toolCalls,
       },
     ])
     setWorking(true)
     onWorkingChange?.(true)
     setWorkingStage('重试中…')
-    const sid = ++sessionRef.current
     const hist = chatRef.current?.msgs ?? buildHistory(prev)
     const depth = chatRef.current?.depth ?? 0
     await runChat(hist, depth, sid)
