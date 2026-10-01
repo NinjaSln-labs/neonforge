@@ -91,6 +91,17 @@ p063 solo 复跑 **3 把，全部 `terminal=resolved`**——**未复现**池跑
 - 结果**在已成功的收口上又起额外模型回合**：`chatCount 5→7`，卡后 `evidence`+`protocol` 引导各 1 条。
 **确定性通过（非运气）**，正是池内 p063 的 `310 卡→313 system_nudge→318 assistant_start` 形态。
 **⇒ RC3 判定**：该复现**跑在未装 RC3 的单槽 `pendingSendRef` 代码上即重现**，且 evidence 引导走 `else` 直发/silent 重入，**与排队槽大小、flush 时机无关** ⇒ **`pendingSendRef 单槽死信`（RC3 所押根因）被排除**，不必也不应为此改 RC3。
+
+**稳定性 + 双发射器（多轮·边界扫描）**：`beta-stable` 一次性件（跑完删）——1500ms 连跑 **5 次结果完全一致**（extraRounds=2 / lateEvidence=1 / lateProtocol=1，零抖动）；变延迟扫描 `0/200/500/800/1200/1500/2500ms`：
+
+| 慢失败延迟 | 卡后额外回合 | 发射器 |
+|-----------|------------|--------|
+| 0 / 200 / 500 / 800ms | +1 | evidence 引导 ×1 |
+| 1200ms | +2 | protocol nudge ×2（evidence 0）|
+| 1500ms | +2 | evidence ×1 + protocol ×1 |
+| 2500ms | +3 | 两者都有 |
+
+⇒ **β 现象（成功收口卡后又被 nudge 起额外回合、冲卡）在 0–2500ms 全程确定性浮现**（1200ms 那次「failed」仅是断言写死要 evidence，现象照旧 `extraRounds=2`）。**根因是两个发射器**：① `verifyThenResolve` 失败分支 evidence 引导（短延迟主导，不判 pending）；② `shouldNudgeReportAfterEvidenceMissing` protocol nudge（中长延迟，**带** `pending!=='none'` 守卫却仍在卡后发 ⇒ 坐实 `stateRef.current.pending` **读滞后**竞态）。修法须**两处分别治理**。
 **修法候选（待裁·另开修批）**：① evidence 引导发送前判 `pending!=='none'` 即作废；② `verifyThenResolve` 加 generation 令牌，成功收口令在途失败引导失效。复现中卡后还见一条 `protocol` nudge（疑 `stateRef.pending` 读滞后），修批定位。
 
 ### 归因汇总（取代前文）
