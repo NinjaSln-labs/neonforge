@@ -1,5 +1,5 @@
-// 打字回复：填入输入框并点发送，等待模型回合结束（状态回到 就绪）后再 dump
-import { connect, snap, dump, ensureOut } from './cdp-lib.mjs'
+// 打字回复：填入输入框并点发送，等待模型回合结束（状态栏回到 就绪）后再 dump
+import { connect, snap, dump, statusText, ensureOut } from './cdp-lib.mjs'
 
 await ensureOut()
 const text = process.argv[2]
@@ -13,11 +13,11 @@ const start = Date.now()
 let ui = ''
 while ((Date.now() - start) / 1000 < waitSec) {
   ui = await dump(page)
-  // 就绪且不出现「搭档处理中」视为回合结束
-  if (!ui.includes('搭档处理中') && ui.includes('已发送')) {
-    const tail = ui.slice(-400)
-    if (tail.includes('就绪')) break
-  }
+  // RC1b：回合结束＝状态栏不再「搭档处理中」（同源；勿整页扫——幽灵占位会伪装成忙让本工具空等到超时）
+  const busy = await statusText(page)
+    .then((t) => /搭档处理中/.test(t))
+    .catch(() => false)
+  if (!busy) break
   await page.waitForTimeout(3000)
 }
 console.log('--- UI tail ---')

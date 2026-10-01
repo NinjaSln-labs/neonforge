@@ -2,7 +2,7 @@
 // 依赖：cdp-lib.mjs 同目录（connect/snap/dump/ensureOut）
 import { execSync } from 'child_process'
 import { mkdirSync } from 'fs'
-import { connect, snap, dump, ensureOut } from './cdp-lib.mjs'
+import { connect, snap, dump, statusText, ensureOut } from './cdp-lib.mjs'
 
 let idleRounds = 0
 export const UAT_DIR = '/tmp/nf-cdp/uat'
@@ -616,12 +616,17 @@ export async function personaAct(page, persona, kind) {
   return null
 }
 
+// RC1b（关单复测簇1 共犯）：busy 只读状态栏（ADR-013.1 同源）。原实现 dump() 整页文本 +
+// 宽正则，会把「幽灵占位残留的搭档处理中」和模型正文里的「正在生成中」都判成 busy →
+// skip-act 永久死锁（p063/p065/p066/p060 timeout + p110 收口 FAIL）。
+// 状态栏三态与 ADR-013 busy 表一致：「搭档处理中…」＝在飞（含工具执行/续链，maybeContinue
+// 期间 working 保持 true）；「有操作待你批准」/卡常驻的 decision-pending＝非 busy；「就绪」＝idle。
 async function isModelBusy(page) {
   try {
-    const uiBusy = await dump(page)
-    return /搭档处理中|处理中|思考中|生成中|正在回复|Streaming/i.test(uiBusy)
+    return /搭档处理中/.test(await statusText(page))
   } catch {
-    return false
+    console.log('  WARN busy-source-missing → 保守判 busy（勿在源不可读时放行动作）')
+    return true
   }
 }
 
@@ -668,6 +673,21 @@ export async function autopilot(
       continue
     }
     const has = (t) => labels.includes(t)
+    // RC1b 同源哨兵（观测件，不改判定）：首轮比对「状态栏 busy」与产品时间线最近一条
+    // conversation.status_change（同一 working 派生）。若状态栏文案被改到 harness 正则匹配不上，
+    // 这里会长期 busy=false 而时间线仍 working → 打 WARN，避免「文案改动静默致盲」（见方案 R7）。
+    if (r === 0) {
+      try {
+        const bar = /搭档处理中/.test(await statusText(page))
+        const evs = readLatestTimeline().filter((e) => e.seq > startSeq)
+        const last = [...evs].reverse().find((e) => e.type === 'conversation.status_change')
+        const tl = last ? last.detail?.status === 'working' : null
+        if (tl !== null && tl !== bar)
+          console.log(`  WARN busy-source-drift statusbar=${bar} timeline.status_change=${tl}`)
+      } catch {
+        console.log('  WARN busy-source-drift: 状态栏或时间线不可读')
+      }
+    }
     // 死卡锁：仅 planConfirmed / 新指纹 / miss 后新 proposal.plan 解锁（禁止 has(确认执行) 单独解锁）
     if (deadConfirmLock) {
       if (planConfirmed) {
@@ -888,8 +908,12 @@ export async function autopilot(
       !acted &&
       (persona.__interrupts || 0) < persona.interrupt
     ) {
-      const ui = await dump(page)
-      if (ui.includes('搭档处理中')) {
+      // RC1b：急躁插话门的「是否处理中」也走状态栏同源（gate 之后 personaAct 可能让模型转入忙）。
+      // 读不到状态栏 → 保守当作「不忙」跳过插话（此路是机会性触发，宁可漏插不误插；勿回落整页文本）
+      const busyNow = await statusText(page)
+        .then((t) => /搭档处理中/.test(t))
+        .catch(() => false)
+      if (busyNow) {
         const room = persona.interrupt - (persona.__interrupts || 0)
         const burst = Math.min(2, room)
         const lines = persona.interruptLines || ['还没好吗', '能不能快点']
@@ -1038,13 +1062,9 @@ export async function autopilot(
         nfCandPending = false
       }
       const decisionPending = decisionLabels.some((t) => has(t)) || nfCandPending
-      let modelBusy = false
-      try {
-        const uiBusy = await dump(page)
-        modelBusy = /搭档处理中|处理中|思考中|生成中|正在回复|Streaming/i.test(uiBusy)
-      } catch {
-        modelBusy = false
-      }
+      // RC1b：与主循环同源（复用 isModelBusy——去重原整页正则复制体）。
+      // isModelBusy 在状态栏不可读时保守判 busy → stuckIdle 不累计（宁可不早停，勿凭假 idle 误杀）
+      const modelBusy = await isModelBusy(page)
       if (!decisionPending && !modelBusy) stuckIdle += 1
       else stuckIdle = 0
       if (planConfirmed && stuckIdle >= 8) {
