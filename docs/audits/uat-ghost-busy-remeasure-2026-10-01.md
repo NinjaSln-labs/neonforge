@@ -27,10 +27,11 @@
 - 上批「forcedcard+幽灵→busy 假死→timeout」5 条中：**p065→通过、p060→resolved(仅探针被吞)、p110→resolved(仅探针被吞)、p119→通过**；仅 p063 仍 timeout 但**换因**（见簇2/审批）。
 - 唯一「上批簇1 → 本轮仍失败且非纯簇2」的遗留＝p063（approve-files 卡挂起 + write 被拦 + 模型持续在飞＝真 busy，autopilot 撞 working `skip-act` → 从不点批准卡）。属 **harness 审批覆盖 + 产品审批循环**，非 RC1a 失效。
 
-## 簇2（busy 门闩吞插话/探针）：本轮不动，果然仍是主残留
+## 簇2（busy 门闩吞插话/探针）：本轮不动，仍是主要残留
 
-6 条失败**全部落此域**（用户裁「本轮不动」，符合预期）：
-- 探针/插话被吞（`interruptCount=0` 或 `boundaryProbeSent=false`）：p110、p060、p035、p098。
+> **订正**：本节原写「6 条失败全部落此域」——逐条 timeline 取证后**不准确**。实际仅 4 条（探针/插话被吞）属此；p063/p066 各另有产品侧原始根因。完整归因见文末「原始根因追溯（RCA）」节。
+
+- **p110、p060、p035、p098**：探针/插话被吞（`interruptCount=0` 或 `boundaryProbeSent=false`）。
 - 审批卡挂起处理缺失：p066（末 decision=approval、ready、stuckIdle=8）、p063（同上形态）。
 - 关键：本轮 **RC1b 未制造假阳性**——状态栏同源后 `modelBusy` 与时间线 `conversation.status_change` 全程一致（哨兵 0 报警）；skip-act 处均为**真 busy**（末条 status=working + start>done），不是被幽灵/文案骗的假 busy。
 
@@ -47,11 +48,44 @@ p119 `terminal=resolved`、`system_nudge×2 其后均有 assistant_start（死�
 - 测批全程**未改产品/harness/断言**；观察记录落 `.scratch/neonforge-v1/audit-items/regression-rc1-observations.md`（本机草稿）。
 - 硬闸未达标 → 本审计完成态＝**汇总 + 等待裁决**，非「修到绿」。
 
+## 原始根因追溯（RCA · 2026-10-01 补 · **修正本审计前文「6 失败全落簇2」的粗判**）
+
+前文按症状把 6 条失败都记为「簇2」。逐条拉 timeline + autopilot actions 后，实际是 **3 类不同原始根因**：
+
+### 簇2 真身＝harness 结构根因（p110 · p060 · p035 · p098 — 探针/插话被吞）
+`uat-lib.mjs:706-711` 外层 busy 门 `if (busy) continue` 位于**所有**插话块（L885）/边界探针块（L835）/审批点选**之前**——上批 Task6「busy→acted 与全部 typeAndSend 同禁」的字面落地。
+⇒ 插话/探针只能在「该 6s tick 恰为 非busy ∧ 未acted ∧ 无卡挂起」时触发；真实模型快收敛时该窗口不出现 → `interruptCount=0` / `boundaryProbeSent=false`。
+**属测试脚本结构，非产品缺陷，且正是用户裁「本轮不动」的簇2**。（RC1b 把 busy 读状态栏后，此结构性吞没依旧——因为是真 busy，不是假阳性。）
+
+### 新叶因 α＝产品模型授权循环不收敛（p066 stuck_after_plan）
+timeline：`decision.requested approval` × 多次（seq 186/196/321/341/385）；autopilot：r38/r40/r44 连点 3 次「允许执行」，夹真 busy 轮。
+末态：最后一次授权执行完，模型**既不 report_completion 也无卡挂起** → `status=ready` 连 8 轮 → stuckIdle=8 → stuck_after_plan。
+**原始根因＝产品侧模型「要授权→执行→再要授权」不发完成声明的不收敛循环**，与预存在红 `core.interaction.ts:1859`（问题 A：approve-files 卡悬挂→模型续轮被拦后停续聊）**同族**。
+
+### 新叶因 β＝产品 verifyThenResolve 并发改核验竞态（p063 timeout）★关键
+收口已达成：seq 306 `tool.requested report_completion`（带 pendingQuestions）→ 307 `proposal.completion ok` → 310 `decision.requested resolution` → 311 `card.shown achieve-confirm` → **312 `status=ready`（RC1a 正确：decision-pending 非 busy）**。
+**但 313 `conversation.system_nudge`「完成声明已被证据门拒绝，请重新提交 report_completion」迟到注入** → 314 `working` → 318 `assistant_start` 起新回合 → busy 锁死 autopilot 从 r56 起一路 `skip-act+nudge modelBusy`（r63 偶点允许执行）→ maxRounds 耗尽 → timeout。
+**原始根因**：上一轮（早于 306 的某次 report_completion）证据门失败的**回填引导 nudge** 与本轮成功的 verifyThenResolve **并行竞态**——失败的引导在成功卡已弹出之后才发出，把成功收口冲掉。即 p000125「void verifyThenResolve 与 runChat 并行」问题的**新表现形态**（p119 那次表现为「nudge 吞失」，这次表现为「nudge 迟到冲掉成功卡」）。
+
+### 对 RC3 归因的影响（回应用户裁「RC3 先不处理」）
+上批 RCA 把簇3（p119）压在 `pendingSendRef 单槽死信` 上。本轮 **p063 新叶因 β 指向更上游**：问题在 **`verifyThenResolve` 证据引导与 runChat 的并行时序**（引导 nudge 该不该发、何时发、能否被成功收口作废），**未必是排队槽**。
+⇒ **进一步支持维持 RC3 deferred**：应先按 β 立独立叶因取证（多样本 p119/p063 的 verify 时序），再定 `pendingSendRef` 是不是真根——**不要在归因未清时改码**（正是 ADR-012 停等裁决的意义）。
+
+### 归因汇总（取代前文）
+| 失败项 | 原始根因 | 域 | RC1a/RC1b 责任 |
+|--------|----------|----|----|
+| p110 p060 p035 p098 | harness busy-门结构吞插话/探针（簇2 真身） | 测试脚本 | 无 |
+| p066 | 产品模型授权循环不收敛（同族 core:1859） | 产品 | 无（新发现，非回归） |
+| p063 | 产品 verifyThenResolve 证据引导并行竞态 | 产品 | 无（新发现；且反证 RC3 归因存疑） |
+
+**关键结论不变**：RC1a（幽灵 0 复现）、RC1b（同源哨兵 0 drift、skip-act 全真 busy）**本身零回归**；p110 从「幽灵堵门」变「卡能点、仅探针被吞」即其正证。
+
 ## 裁决请求（下一步方向，仅提不实施）
 
-1. **簇2 门闩放行口径**（上批遗留、本轮主残留）：busy 期是否放行「决策卡/审批卡点选」与「预排插话/边界探针」？——这是 pass 从 6→≥10 的主要缺口，且**需先改方案口径**（Task6 全禁 vs 选择性放行）。
-2. **审批卡挂起处理**（p063/p066）：autopilot 遇 approve-files/授权卡 `pending + working` 反复时的兜底（可能与簇2 合并裁）。
-3. **RC3**：保持 deferred / 换更外科死信修法 / 多样本坐实 p119 现状后再判（§14 三选）。
-4. **预存在红 t000069**（L3 3 红）：按 `d000008` 本批后另开修批——现可启动。
+1. **簇2 门闩放行口径**（4/6 失败）：busy 期是否放行「预排插话/边界探针/审批卡点选」——需**先改方案 Task6 全禁口径**（harness 侧：把插话/探针移到 busy 门外，或给 busy 期一条「排队注入」通道）。这是 pass 6→≥10 的主要缺口。
+2. **新叶因 α · 产品授权循环不收敛**（p066）：与预存在红 `t000069 / core:1859` 合并立独立叶因修批（模型侧 force-tool 收敛 / 卡挂起兜底）。
+3. **新叶因 β · verifyThenResolve 竞态**（p063）：证据引导 nudge 须在「本轮已成功收口」时作废，防迟到冲卡。立为簇3/RC3 的**候选真根因**，先取证再改。
+4. **RC3**：维持 deferred——β 的发现**加强**了「不要在归因未清时改 pendingSendRef」的判断。
+5. **预存在红 t000069**：按 d000008 可启动另批（与 α 同族，宜并案）。
 
-**未裁决前不改码。** 现场证据（pool/tiers 日志、userData timeline、探针输出）均在 Mac `/tmp`；worktree `/tmp/nf-uat-rc1` 暂留（清理与 push 待用户指令）。
+**未裁决前不改码。** 现场证据（pool/tiers 日志、userData timeline、探针输出）均在 Mac `/tmp`；worktree `/tmp/nf-uat-rc1`、Mac `refs/uat/rc1`、备份 tar、`/tmp/nf-uat-key-keep`（含 key）暂留，清理与 push 待用户指令。
