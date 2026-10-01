@@ -1,5 +1,6 @@
 # 幽灵占位 / busy 同源 / 排队死信 修批方案 v2.1（Task7 裁决落地 · 已审计修订）
 
+> **实施进度（2026-10-01）**：Task 1(RC1a) ✅ 提交 `d402e4f` 全绿 · Task 2(RC1b) ✅ 提交 `d8e6f17` 全绿 · **Task 3(RC3) ⛔ 暂停**——边缘 flush 实测破 `retry:187`（见 §5 实施发现 + §14 转裁决 5）。Task 0/4/5 未开始（Task 5 需先解 Task 3）。
 > **For agentic workers:** REQUIRED WORKFLOW: implement **one task at a time**，每 Task 结束过 review gate。Steps 用 checkbox（`- [ ]`）。
 > **版本链：** v1 骨架（作废）→ v2 详尽版 → **v2.1（本版，吸收双份审计 F1-F11/B1-B4/C1-C7/D1/E 后重写，见 §15 审计修订记录）**
 > **审计记录：** [`docs/audits/plan-review-ghost-busy-deadletter-2026-10-01.md`](../../audits/plan-review-ghost-busy-deadletter-2026-10-01.md)
@@ -79,7 +80,7 @@
 | D3 anchor 身份 | `roundStreamRef = useRef<{sid:number; id:string} \| null>(null)`——**id 与 sid 配对** | 单存 id（v2 初稿）不够：approval 期非 silent 直送（`busyGate.ts:12`）让 B 链在 A 链持锁期间覆盖 anchor → A 在 B 裸退时拿 B 的占位当锚点 → 误删活占位（审计 B2 实路径）。加 `roundStreamRef.current?.sid !== sid` 早退即封死 |
 | D4 busy 同源 | harness 只读 `.nf-statusbar__left`（失败回退 `[role=status]`），**读不到时 fail-closed 判 busy** | ① 产品暴露 `window.__nfBusy`：为测试改产品面，未获授权，且状态栏已是 `role=status` 权威；② 静默 `''`→判 idle（v2 初稿）：选择器失效时会在真 busy 期放行动作、污染取证（审计 F3）→ 改 fail-closed + WARN |
 | D5 排队触发点 | flush 只在 **`working` true→false 边缘**（`[working]` effect 内，先同步 ref 再 flush） | ① 保留 `send` finally 的同步读点（v2 初稿「两触发点都留」）：commit 前读＝死信本源，留着只是重复；② 轮询 watcher：新语义且更费；③ 一次全部出队：见 §5.1 自愈论证（不需要，但也不会出事） |
-| D6 写入路径 | **删 L806 直写槽特例**，一律 `void sendRef.current({silent:true,text:nudge})` | L806 的存在理由是 p000125「勿 silent-interrupt 打断核验轮」——ADR-013.3 已把「busy 时 silent＝排队」做进 `send`（L2426-2438），特例退化成**第二写入口**。⚠ 审计 F2：严格字面看超出「单槽改数组＋唯一 flush 点」，已列为**可否决项**（§14 转裁决） |
+| D6 写入路径 | **删 L806 直写槽特例**，一律 `void sendRef.current({silent:true,text:nudge})` | L806 的存在理由是 p000125「勿 silent-interrupt 打断核验轮」——ADR-013.3 已把「busy 时 silent＝排队」做进 `send`（L2426-2438），特例退化成**第二写入口**。审计 F2 曾列为可否决项 → **2026-10-01 用户已裁接受**（`d000008`） |
 | D7 簇 3 归因 | **先取证再改**（Task 0 三假设判别表） | RCA 原文自带「疑…」；且 `system_nudge` tlog 位于入队 return **之后**（L2486 vs L2437），与「入槽死信」并不自洽——不改清楚就动手＝修错因风险 |
 
 ---
@@ -202,6 +203,19 @@
 ---
 
 ## 5. Task 3 · RC3 —— 排队多槽 + idle 边缘 flush
+
+> **⚠ 实施发现（2026-10-01，Task 3 实测后回写）：D5「idle 边缘 flush」论证被证伪，Task 3 暂停待裁决。**
+> 实装「flush 触发点从 send-finally 移到 `[working]` 边缘」后，全量 L3 出现**新回归**：
+> `retry.interaction.ts:187`（计划确认后 service 自动续跑一次，A-029）由**绿转红**——「自动续跑成功」计数 1→2（数组版 1→4）。
+> CDP/window 打点取到真实派发序：`enqueue 目标 → enqueue 执行(覆盖) → flushPOP 执行 → enqueue 执行 → flushPOP 执行`
+> ⇒ 边缘触发在 **confirm-card + auto-retry 的多回合链**上会**多次 false 边缘**，每次重派同一条确认文本、各起一个模型回合。
+> 旧 send-finally flush 只在整链收口时 flush 一次，故无此问题。**这不是测试脆，是边缘 flush 的真行为回归。**
+>
+> **连带发现**：数组化（多槽）会把预存在红 `core.interaction.ts:685`（根因3 同事件 send）**修绿**——但数组化＝`t000068`（P2 排队可见性·静默覆盖），本轮用户未批。
+> ⇒ `t000067` 的「死信」与 `t000068` 的「覆盖」在实现上**解不开**：真正修死信要么用边缘 flush（破 retry），要么用数组（触 t000068）。
+>
+> **当前处置**：Task 1(RC1a) + Task 2(RC1b) 已各自独立提交、全绿（L1 703 / 双 tsc 0 / L3 失败集合＝基线 3 红，无新增）。
+> Task 3 工作树改动**已回退**（保留旧 send-finally flush，retry:187 复绿）。死信修法等裁决（见 §14 转裁决 5 + handoff）。
 
 **独占区**：`pendingSendRef` L755、写入点 L806 / L2435、`flushPendingSend` L2403-2409、working effect L2289-2292、`send` finally L2596-2601。
 **前置**：Task 0 Gate 判 H3a/H3b（H3c 停）。
@@ -381,11 +395,16 @@
 
 ## 14. 待办转裁决 / 取证结论表（执行时填，勿预填）
 
-**转裁决（本批不自行决定）**
-1. **D6 删 L806 特例** 是否接受（审计 F2：严格字面略超「单槽改数组＋唯一 flush 点」）。
-2. **状态栏文案子串成为 harness 契约** → 是否后续以 `data-nf-status` 锚定（R7/F11）。
-3. **`t000069` 预存在 3 红 L3** 是否另开修批（与本批同域，建议紧随其后）。
-4. 簇 2 门闩放行口径（依回归轮 busy 真/假比例）。
+**转裁决（2026-10-01 用户裁定，见 handoff `d000008`）**
+1. ~~D6 删 L806 特例~~ → **已裁：接受**。统一走 `send` 的 busy 排队门，本批执行。
+2. 状态栏**文案子串**成为 harness 契约 → 是否后续以 `data-nf-status` 锚定（R7/F11）。**仍待裁**。
+3. ~~`t000069` 预存在 3 红 L3~~ → **已裁：本批后紧接另开修批**。本批回归轮先采集这 3 例是否意外转绿以据以拆单；**本批不得顺手改/关这 3 例**。
+4. 簇 2 门闩放行口径（依回归轮 busy 真/假比例）。**仍待裁**。
+5. **【实施新增·阻塞 Task 3】RC3 死信修法**：边缘 flush 破 `retry:187`（实测多派发一回合），数组化触 `t000068`（未批）。三选一：
+   (a) **换更外科的死信修法**——保留 send-finally flush，仅补「最终 idle 且未在途」的去重边缘 flush（仍需回归验证不破 retry）；
+   (b) **并入 t000068**——批准数组化（顺带修绿 core:685），接受 retry:187 断言需随新 flush 语义调整（**改测试须你点头**）；
+   (c) **本批不做 RC3**——死信留 p119 单独取证后再定（RC1a 修好簇1后，p119 形态可能已变，先复测再判）。
+   **建议 (c)**：簇1 已修，p119 是否仍复现未证实（Task 0 取证被 Mac `/tmp` 清理风险挡住）；先跑回归轮看 p119 现状再决定不为一条未证实死信引入 flush 回归。
 
 **取证结论**
 
