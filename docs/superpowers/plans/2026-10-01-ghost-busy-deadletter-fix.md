@@ -1,5 +1,8 @@
 # 幽灵占位 / busy 同源 / 排队死信 修批方案（Task7 裁决落地）
 
+> **Status: superseded**（2026-10-01）——本版为骨架草稿：占位 id 追踪、busy 同族调用点清点、簇 3 取证判别均缺失。
+> **实施以 [`2026-10-01-ghost-busy-deadletter-fix-v2.md`](./2026-10-01-ghost-busy-deadletter-fix-v2.md) 为准**；本文件保留作对照，勿据以开码。
+
 > **For agentic workers:** REQUIRED WORKFLOW: implement **one task at a time** with review gates. Steps use checkbox (`- [ ]`).
 > **来源裁决（2026-10-01，用户）**：批准 **RC1a（产品 P0）+ RC1b（harness P1，仅同源）+ RC3（产品 P1）** 同批开修；
 > **簇 2 busy 门闩放行口径**（决策卡点选 / 预排插话 / 探针）**本轮不动**，待 RC1a 落地复测后再裁；
