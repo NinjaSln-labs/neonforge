@@ -45,7 +45,7 @@
 | B6 | arXiv **2608.03836** *Resume Means Resume: A Machine-Checked Conformance Contract…* | 逐实现：LangGraph **fork violation + silent validity**（"#6663 is not a slip but the shadow of a design choice"）、CrewAI 重跑已完成工作、LlamaIndex at-least-once 重放、Pydantic-graph 不可恢复 | 「静默把无效输入当有效」是**设计选择的影子**，不是偶发——正合我们对 RC1b「静默判 busy」的处置哲学 |
 | B7 | Horvitz, *Principles of Mixed-Initiative User Interfaces* (CHI 1999) | "If the system is uncertain... **it should ask for clarification**"；询问仅在期望值超过打断成本时才发起 | 学理锚：不确定 ⇒ 再问，不是猜成拒绝（也不是无限追问） |
 
-## 3. 头部竞品的官方设计（文档层；源码层由另路取证，见 §6）
+## 3. 头部竞品的官方设计（文档层；源码层见 §7）
 
 - **C1 Claude Code（官方 interactive-mode 文档）**："if you queue a message while Claude is running tool calls, Claude Code **passes it to Claude** as soon as those tool calls finish, **within the same turn**." ⇒ 排队文本的目的地是**模型上下文**，不是「当前挂起提示的答案」；权限批准走**显式按键**，不靠文本语义识别。
 - **C2 agentpatterns.ai · Steering Running Agents**："Typed messages **queue until the next turn boundary**"；打断的目的是 "prevent **stale input** from being treated as valid model context during a tool call" ⇒ 业界把「stale input 被当有效」直接列为需要防的事故类。
