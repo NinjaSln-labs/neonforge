@@ -410,11 +410,13 @@
 
 | 项 | 结论 | 证据 |
 |----|------|------|
-| p119 命中假设（H3a/H3b/H3c） | | |
-| 裸退 I2 自检逐条归属（Task 1 Step 5） | | |
-| visual 是否受占位移除影响 | | |
-| 簇 2 busy 真/假比例 | | |
-| 预存在 3 红是否因本批转绿 | | |
+| p119 命中假设（H3a/H3b/H3c） | **未取证**（Mac `/tmp` 已清，key-keep/worktree/日志全没；重建需 bundle 传输 + `npm run dist` + 真实模型花费 → 待授权）。仅代码侧排除 **H3c**：`assistant_start`(L2132) 先于 `forced-clarify` 判据(L2142)，p119 记录为「无 assistant_start」⇒ 非 H3c | `ssh mac ls /tmp/nf-*` → no matches |
+| 裸退 I2 自检逐条归属（Task 1 Step 5） | `runChat` 内 5 处 return：depth>40 ✅自收尾；forced-clarify ✅自收尾+释放 busy；`!key` / `!res.ok` / catch → 均走 `finishError`（末条转 error，非空占位，不产幽灵） | 本机 awk 逐行核 + 上述 diff |
+| T-QUEUE-1/2 先红性 | **测不到本批修复点**：死信（H3a/H3b）无法在 L3 mock 下确定性复现（trigger 在飞期入队旧 send-finally 同样能 flush），审计 C4 的「busy 窗撑开」构造对**单槽旧代码**不成立 | 实验：仅 stash 产品改动跑 → 2 passed |
+| interaction 基线（最终提交态） | **71 passed / 3 failed**；失败集合 **恰等于**预存在 3 红 ⇒ A10 达成（无新增失败，新增 T-FORCE-4 绿）。L1 703/47、双 tsc 0 错、eslint 0 error（6 既有 warning） | 本机串行跑（坑 p000114） |
+| visual 是否受占位移除影响 | **未测**（L5 基线宿主＝macOS，坑 p000136/K8，WSL 禁 update） | — |
+| 簇 2 busy 真/假比例 | **未采集**（依 Mac 回归轮） | — |
+| 预存在 3 红是否因本批转绿 | **否**（RC1a/RC1b 下仍 3 红）；曾观测到「数组化修绿 core:685」，但数组化属 t000068 未批 | 对比：单槽 3 红 vs 数组 2 红+retry 新红 |
 
 ## 15. 审计修订记录（v2 → v2.1，出处见 §16）
 
