@@ -73,10 +73,16 @@ timeline：`decision.requested approval` × 多次（seq 186/196/321/341/385）�
 - **RC3 杠杆证伪**：逐条 nudge 送达路径——p063×11、p119×2，`prevStatus=ready` 者**全部直发起回合**（send 未被 workingRef 挡，**未进 pendingSendRef 槽**）；落 working/approval-pending 者（p063 seq70/298）也恢复。**本批 0 例单槽死信** ⇒ 「单槽/flush 时机」（RC3 所押根因）**对 p063/p119 症状不适用**。
 - 坑 `p000142`：排查簇3 先分「nudge 直发(ready) vs 入槽(working)」，别默认排队槽。
 
-### 对 RC3 归因的影响（回应用户裁「RC3 先不处理」）
-上批 RCA 把簇3（p119）压在 `pendingSendRef 单槽死信` 上。本轮取证**双重削弱该假设**：① p063 β 指向 done-handler 内 resolution 异步置位 vs nudge 守卫同步读的竞态，**在排队槽上游**；② 实测本批 **0 单槽死信**，p119 两条 nudge 皆直发成功。
-⇒ **强支持维持 RC3 deferred**：应立 β 为簇3 **候选真根因**，插桩复现坐实竞态后再判 `pendingSendRef` 是否无辜——**归因未清即改码＝修错症状**（正是 ADR-012 停等的意义）。
-**下一步复现设计（非本批）**：`verifyThenResolve` 置 resolution 前后 + `shouldNudgeReportAfterEvidenceMissing` 读 pending 处各加一次性交错标记（tlog/console），solo 重跑 p063/p119 各 3（同 seed），看 resolution 卡与 nudge 发射的微任务顺序；候选修＝nudge 守卫改判「本轮 report 是否已 verify 在飞/已成功」而非仅 `pending`，或给引导加 generation 令牌使迟到失败引导可在成功收口时作废。
+### β 插桩复现结论（2026-10-01 · 一次性 worktree 插桩 `window.__betaTrace`，**不入库**）
+p063 solo 复跑 **3 把，全部 `terminal=resolved`**——**未复现**池跑那一次致命 timeout。逐把 trace 顺序：
+- 成功路径恒为 `verifyEnter → verdict ok:true → evidenceReset → pendingSetResolution`，**resolution 之后不再出现任何 protocol nudge**（成功时 `evidenceReset` 把 `evidenceGuideCountRef` 归零，守卫 `evGuideCount>0` 不再成立）。
+- 较早一把捕获到「证据门拒 → 稍后纯文本回合 → `nudgeGuardRead(pending=none, evGuideCount=1)` → `nudgeSent` → **`sendQueued`**」：nudge **经 `send()` 进了 `pendingSendRef` 单槽**。
+
+**据此修正本审计前文两处过强结论（诚实记）：**
+1. ~~「done-handler 内 resolution 异步 vs nudge 守卫同步的微任务竞态」~~ → **未观察到**（成功路径干净）。致命那次需「一次 report 失败(arm evGuide) + 一次 report 成功(靠 evidenceReset) + 其间纯文本回合触发守卫」的**特定两-report 交错**，3 样本未撞上 ⇒ β 是**低概率竞态**（解释 p035 恢复、p063 偶致命），**尚未被复现确认**。
+2. ~~「nudge 全直发、`pendingSendRef` 槽对 p063 不适用 ⇒ RC3 押错杠杆」~~ → **过头**。`sendQueued` 证明证据拒绝 nudge 会进单槽；前文据 timeline `prevStatus=ready` 判"直发"**不可靠**（`conversation.status_change` 滞后于 `workingRef.current`）。⇒ **RC3 的排队槽嫌疑未被洗清，也未证实**。
+
+**净结论**：β **维持为"候选根因、未确认"**；RC3 **维持 deferred**（既不能确认 pendingSendRef 是根，也不能排除）。要坐实需**构造性复现**（用可控 mock 让「失败→成功→文本回合」确定性交错，非真实模型撞运气）——建议列为独立取证项，不占本批模型额度硬凑。RC1a/RC1b 零回归结论不变。
 
 ### 归因汇总（取代前文）
 | 失败项 | 原始根因 | 域 | RC1a/RC1b 责任 |
