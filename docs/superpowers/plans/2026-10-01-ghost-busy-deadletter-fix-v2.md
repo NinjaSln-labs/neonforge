@@ -111,7 +111,7 @@
 
 ### 3.2 Steps
 
-- [ ] **Step 1（先红）** `tests/interaction/forcedClarify.interaction.ts` 追加 `T-FORCE-4：强制卡弹出后不得残留流式占位（RC1a 幽灵）`——**注意：该文件现仅 T-FORCE-1..3，新用例编号 4**（审计 F9/A）。复用 T-FORCE-1 的起手（`installMockBridge({project:'none', script:loopScript()})` + `startFromScratch` + 三次文本回复，同 L20-31）后：
+- [x] **Step 1（先红）** `tests/interaction/forcedClarify.interaction.ts` 追加 `T-FORCE-4：强制卡弹出后不得残留流式占位（RC1a 幽灵）`——**注意：该文件现仅 T-FORCE-1..3，新用例编号 4**（审计 F9/A）。复用 T-FORCE-1 的起手（`installMockBridge({project:'none', script:loopScript()})` + `startFromScratch` + 三次文本回复，同 L20-31）后：
   ```ts
   await expect(page.locator('.nf-forcedcard')).toBeVisible({ timeout: 15000 })
   await expectChatReady(page)                                                          // helpers/assertions L74-76
@@ -120,14 +120,14 @@
   ```
   **改前必红论证**（审计 C5 已核）：`repeated>=3 → forced-clarify`（`conversationState.ts:256`），与已通过的 T-FORCE-1 同一 mock 路径 → 确实进 B 裸退 → 占位空且 streaming、`send` finally 只释放 busy 不清占位 → 幽灵存在。
   **禁止弱化**：若实测改前即绿，视为「L3 未复现裸退形态」→ 记审计并在 Mac 回归轮用 DOM 探针兜，**不得改成弱断言放行**。
-- [ ] **Step 2** anchor 记录（三处 push 点，`Msg.id` 由 `nextMsgId()` L310 保证会话内唯一）：
+- [x] **Step 2** anchor 记录（三处 push 点，`Msg.id` 由 `nextMsgId()` L310 保证会话内唯一）：
   ```ts
   const roundStreamRef = useRef<{ sid: number; id: string } | null>(null) // RC1a：本轮占位（id 与 sid 配对——D3）
   ```
   · push①（L2492 后）：`const placeholderId = nextMsgId(); roundStreamRef.current = { sid, id: placeholderId }` 再 push 该 id。
   · push②（L1971-1974）：同样先取 id 记 `{ sid, id }`（`sid` 为 `runChat` 形参，外层链同 sid）。
   · push③（`retryFailedTurn`）：`const placeholderId = nextMsgId()` → 用于 L2746-2753 字面量 → **L2758 生成 sid 之后** `roundStreamRef.current = { sid, id: placeholderId }`。
-- [ ] **Step 3** helper（`Msg` 见 L121-129；`messagesRef` L304-307 由 commit 后 effect 同步——push②→B 之间有 L1975 的 50ms 等待兜住，注释里点破）：
+- [x] **Step 3** helper（`Msg` 见 L121-129；`messagesRef` L304-307 由 commit 后 effect 同步——push②→B 之间有 L1975 的 50ms 等待兜住，注释里点破）：
   ```ts
   // RC1a（关单复测簇1）：runChat 裸退前收尾本轮占位并释放 busy。空占位不收尾 → 永久渲染「搭档处理中…」
   // （L2846）而状态栏已就绪 → 用户看到假忙、UAT busy 判定被毒化；不释放 busy → 重试链（retryFailedTurn
@@ -149,12 +149,12 @@
   }
   ```
   语义：有内容或有工具卡 → 转 `done`（卡片不丢，`ToolCallMsg` 渲染依赖 `m.status`）；空且无卡 → 丢弃幽灵（引导文案由卡本身承载）。对照先例：挂载恢复也一律 `status:'done'`（L335-343）。
-- [ ] **Step 4** 接入两处裸退：
+- [x] **Step 4** 接入两处裸退：
   · **B（`forced-clarify` L2179 前）**：`finalizeOrphanStream(sid)` + `setWorking(false)` + `onWorkingChange?.(false)` + `setWorkingStage('就绪')` → **decision-pending 非 busy**（ADR-013.1），三调用者一次覆盖（D1）。
   · **A（`depth > 40` L1999 前）**：只补 `finalizeOrphanStream(sid)`（busy 释放该行已有）。
-- [ ] **Step 5（自证 I2）** 逐条核 `runChat` 体内所有 `return`（不只 grep 计数）：A/B 已收尾、`finishError` 路径有收尾、`streamChat` 之后交给 chunk updater；把每条的归属写进 helper 注释或本文件 §14。同族 push 点计数须与 Step 2 的三处一致（`grep -n "status: 'streaming'" src/renderer/ConversationPanel.tsx`）。
-- [ ] **Step 6** 验证：`npx vitest run`（703 基线不变，不新增单测——纯组件时序）→ `npx playwright test --project=interaction tests/interaction/forcedClarify.interaction.ts`（T-FORCE-1..4 绿）→ 双 `tsc --noEmit` → `npx eslint .`。
-- [ ] **Step 7 Commit**：`fix(renderer): release working and finalize round placeholder on forced-clarify/depth bail (RC1a)`
+- [x] **Step 5（自证 I2）** 逐条核 `runChat` 体内所有 `return`（不只 grep 计数）：A/B 已收尾、`finishError` 路径有收尾、`streamChat` 之后交给 chunk updater；把每条的归属写进 helper 注释或本文件 §14。同族 push 点计数须与 Step 2 的三处一致（`grep -n "status: 'streaming'" src/renderer/ConversationPanel.tsx`）。
+- [x] **Step 6** 验证：`npx vitest run`（703 基线不变，不新增单测——纯组件时序）→ `npx playwright test --project=interaction tests/interaction/forcedClarify.interaction.ts`（T-FORCE-1..4 绿）→ 双 `tsc --noEmit` → `npx eslint .`。
+- [x] **Step 7 Commit**：`fix(renderer): release working and finalize round placeholder on forced-clarify/depth bail (RC1a)`
 
 **Done when**：T-FORCE-4 绿；`.nf-forcedcard` 出现时状态栏「就绪」且消息流零 `--thinking`/`.nf-breath`；T-FORCE-1..3 与 `factory.self`（依赖占位存在的同步点）不回归。
 **回滚**：单 commit revert（纯追加 helper + 三处 anchor + 两处调用）。
@@ -167,7 +167,7 @@
 **独占区**：`scripts-cdp/cdp-lib.mjs`（新 helper）、`scripts-cdp/uat-lib.mjs` L619-626 / L1041-1049 / L891-892、`scripts-cdp/step-reply.mjs` L16-20。
 **不动**：L686-691 门闩本体（`busy → skip-act + nudge + continue`）、半门闩禁令、决策卡/插话/探针**放行策略**（簇 2＝下一刀）。
 
-- [ ] **Step 1** `cdp-lib.mjs`：
+- [x] **Step 1** `cdp-lib.mjs`：
   ```js
   // busy 同源（ADR-013.1）：只读状态栏。禁整页 innerText——幽灵占位与模型正文都会写出「搭档处理中/生成中」，
   // 幽灵即假 busy（RC1b 根因）。innerText 实为「搭档处理中… │ 项目名」，故取子串匹配。
@@ -183,19 +183,19 @@
     throw new Error('busy-source-missing: 状态栏不可读') // 不静默当 idle（D4 fail-closed）
   }
   ```
-- [ ] **Step 2** `uat-lib.mjs` 四处换源：
+- [x] **Step 2** `uat-lib.mjs` 四处换源：
   ① `isModelBusy` → `try { return /搭档处理中/.test(await statusText(page)) } catch { console.log('  WARN busy-source-missing → 保守判 busy'); return true }`。
   ② L1041-1047 早停内联复制体 → `const modelBusy = await isModelBusy(page)`（**去重复**）。
   ③ L891-892 插话门 → `if (/搭档处理中/.test(await statusText(page)))`。
   ④ `step-reply.mjs` L16-20 → `!(/搭档处理中/.test(await statusText(page)))`（同源化；`已发送`/`就绪` 判定保留）。
-- [ ] **Step 3** 语义注释（防后人放宽）：状态栏三态与 ADR-013 busy 表一致——`搭档处理中…`＝在飞（含工具执行/续链，`maybeContinue` 期间 working 保持 true L1835-1839）；`有操作待你批准`／卡常驻的 decision-pending＝**非 busy**；`就绪`＝idle。
-- [ ] **Step 4 同源哨兵（观测件，不改判定）** `autopilot` 首轮比对：状态栏 busy ⇔ `readLatestTimeline()` 最近一条 `conversation.status_change.status`（发射点 `ConversationPanel.tsx:661-673`）不一致 → 打印 `WARN busy-source-drift` 并计入审计，供发现「状态栏文案被改动」这类静默致盲（F11）。
-- [ ] **Step 5** 静态自检（v2 原写法是坏命令——审计 D1：`|` 在 BRE 里是字面量）：
+- [x] **Step 3** 语义注释（防后人放宽）：状态栏三态与 ADR-013 busy 表一致——`搭档处理中…`＝在飞（含工具执行/续链，`maybeContinue` 期间 working 保持 true L1835-1839）；`有操作待你批准`／卡常驻的 decision-pending＝**非 busy**；`就绪`＝idle。
+- [x] **Step 4 同源哨兵（观测件，不改判定）** `autopilot` 首轮比对：状态栏 busy ⇔ `readLatestTimeline()` 最近一条 `conversation.status_change.status`（发射点 `ConversationPanel.tsx:661-673`）不一致 → 打印 `WARN busy-source-drift` 并计入审计，供发现「状态栏文案被改动」这类静默致盲（F11）。
+- [x] **Step 5** 静态自检（v2 原写法是坏命令——审计 D1：`|` 在 BRE 里是字面量）：
   ```bash
   node --check scripts-cdp/cdp-lib.mjs && node --check scripts-cdp/uat-lib.mjs
   grep -rnE '思考中|生成中|正在回复|Streaming' scripts-cdp/*.mjs   # 期望：仅 uat-force1.mjs:41（§11 豁免）
   ```
-- [ ] **Step 6 Commit**：`test(uat): read busy from statusbar single source, drop whole-page regex (RC1b)`
+- [x] **Step 6 Commit**：`test(uat): read busy from statusbar single source, drop whole-page regex (RC1b)`
 
 **Done when**：harness 无整页 busy 正则；豁免项外 `grep` 0 命中；（加强验证，Mac）临时 revert Task 1 造出幽灵后跑一次 tier 快测——仍不误判 busy。
 **转裁决项**：状态栏**文案子串**成为 harness 契约（新跨层耦合）→ 建议后续以 `data-nf-status` 属性锚定；本批不引入（D4①）。
@@ -294,13 +294,13 @@
 
 **闸门口径（订正——审计 F5/F6/基线实测）**：改前 L3 即 **70 passed / 3 failed**（`cards-from-decision-content:440`、`core.interaction:685`、`core.interaction:1859`；CI 36782657278 同三项，非 WSL 特有，已登记 `t000069`＝预存在红，不属本批）。故 gate ＝ **不新增失败 + 新增用例绿**，不是「全量全绿」。
 
-- [ ] **Step 0** `env -u NODE_ENV npx tsc -p tsconfig.main.json --noEmit`（补基线；tsconfig 已核 0 错）
-- [ ] **Step 1** `env -u NODE_ENV npx vitest run` → **≥703 passed，0 failed**
-- [ ] **Step 2** 双 `tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit` → **0 错**
-- [ ] **Step 3** `npx playwright test --project=interaction` → **passed ≥70 且 failed 集合 ⊆ {上述 3 项}**；新增 T-FORCE-4 / T-QUEUE-1 / T-QUEUE-2 全绿
-- [ ] **Step 4** `npx eslint .` → 0 error、warning 数不增；`npx prettier --check`
-- [ ] **Step 5** `python3 "$HOME/.agents/skills/project-handoff/scripts/handoff.py" check` → OK
-- [ ] **Step 6** 记录：若那 3 项预存在红因本批**转绿**（同处 busy/排队语义）→ 写进 §14 并在汇报里说明，**不得顺手 close**（裁决权在用户）
+- [x] **Step 0** `env -u NODE_ENV npx tsc -p tsconfig.main.json --noEmit`（补基线；tsconfig 已核 0 错）
+- [x] **Step 1** `env -u NODE_ENV npx vitest run` → **≥703 passed，0 failed**
+- [x] **Step 2** 双 `tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit` → **0 错**
+- [x] **Step 3** `npx playwright test --project=interaction` → **passed ≥70 且 failed 集合 ⊆ {上述 3 项}**；新增 T-FORCE-4 / T-QUEUE-1 / T-QUEUE-2 全绿
+- [x] **Step 4** `npx eslint .` → 0 error、warning 数不增；`npx prettier --check`
+- [x] **Step 5** `python3 "$HOME/.agents/skills/project-handoff/scripts/handoff.py" check` → OK
+- [x] **Step 6** 记录：若那 3 项预存在红因本批**转绿**（同处 busy/排队语义）→ 写进 §14 并在汇报里说明，**不得顺手 close**（裁决权在用户）
 - **L5 视觉**：本批**不跑 `--update-snapshots`**（坑 p000136/K8——基线宿主只允许 macOS）。若占位移除触到 visual 断言 → 记 §14 留 Mac 处理。
 
 ## 7. Task 5 · Mac 回归轮（另开，**只记不改**——ADR-012）
