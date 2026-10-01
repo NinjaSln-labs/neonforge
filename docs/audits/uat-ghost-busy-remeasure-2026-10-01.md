@@ -82,7 +82,16 @@ p063 solo 复跑 **3 把，全部 `terminal=resolved`**——**未复现**池跑
 1. ~~「done-handler 内 resolution 异步 vs nudge 守卫同步的微任务竞态」~~ → **未观察到**（成功路径干净）。致命那次需「一次 report 失败(arm evGuide) + 一次 report 成功(靠 evidenceReset) + 其间纯文本回合触发守卫」的**特定两-report 交错**，3 样本未撞上 ⇒ β 是**低概率竞态**（解释 p035 恢复、p063 偶致命），**尚未被复现确认**。
 2. ~~「nudge 全直发、`pendingSendRef` 槽对 p063 不适用 ⇒ RC3 押错杠杆」~~ → **过头**。`sendQueued` 证明证据拒绝 nudge 会进单槽；前文据 timeline `prevStatus=ready` 判"直发"**不可靠**（`conversation.status_change` 滞后于 `workingRef.current`）。⇒ **RC3 的排队槽嫌疑未被洗清，也未证实**。
 
-**净结论**：β **维持为"候选根因、未确认"**；RC3 **维持 deferred**（既不能确认 pendingSendRef 是根，也不能排除）。要坐实需**构造性复现**（用可控 mock 让「失败→成功→文本回合」确定性交错，非真实模型撞运气）——建议列为独立取证项，不占本批模型额度硬凑。RC1a/RC1b 零回归结论不变。
+**净结论（更新：β 已由构造性 mock 复现坐实）**：见下「β 构造性复现」节——**β 确认为 p063 真根因，RC3（`pendingSendRef` 单槽）被排除为此路径之因**；上文 3 把真实模型 p063 solo 未撞致命交错＝低概率，故改由 mock 确定性重放。RC1a/RC1b 零回归结论不变。
+
+### β 构造性复现（2026-10-01 · `beta-repro` 一次性 mock 件·跑完即删·未入库·不花模型额度）
+令 `completion.verify` 首次**慢失败**(1500ms)、二次**快成功**：
+- `已解决` 卡先弹出（`decision.requested`@cardTs）；
+- 随后 verify#1 的 **evidence 引导迟到**——`verifyThenResolve` 失败分支（`ConversationPanel:801-810`）**只判 `workingRef`、不判 `pending`** → 成功收口后仍无条件 `send`；
+- 结果**在已成功的收口上又起额外模型回合**：`chatCount 5→7`，卡后 `evidence`+`protocol` 引导各 1 条。
+**确定性通过（非运气）**，正是池内 p063 的 `310 卡→313 system_nudge→318 assistant_start` 形态。
+**⇒ RC3 判定**：该复现**跑在未装 RC3 的单槽 `pendingSendRef` 代码上即重现**，且 evidence 引导走 `else` 直发/silent 重入，**与排队槽大小、flush 时机无关** ⇒ **`pendingSendRef 单槽死信`（RC3 所押根因）被排除**，不必也不应为此改 RC3。
+**修法候选（待裁·另开修批）**：① evidence 引导发送前判 `pending!=='none'` 即作废；② `verifyThenResolve` 加 generation 令牌，成功收口令在途失败引导失效。复现中卡后还见一条 `protocol` nudge（疑 `stateRef.pending` 读滞后），修批定位。
 
 ### 归因汇总（取代前文）
 | 失败项 | 原始根因 | 域 | RC1a/RC1b 责任 |
