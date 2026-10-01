@@ -101,8 +101,26 @@ p063 solo 复跑 **3 把，全部 `terminal=resolved`**——**未复现**池跑
 | 1500ms | +2 | evidence ×1 + protocol ×1 |
 | 2500ms | +3 | 两者都有 |
 
-⇒ **β 现象（成功收口卡后又被 nudge 起额外回合、冲卡）在 0–2500ms 全程确定性浮现**（1200ms 那次「failed」仅是断言写死要 evidence，现象照旧 `extraRounds=2`）。**根因是两个发射器**：① `verifyThenResolve` 失败分支 evidence 引导（短延迟主导，不判 pending）；② `shouldNudgeReportAfterEvidenceMissing` protocol nudge（中长延迟，**带** `pending!=='none'` 守卫却仍在卡后发 ⇒ 坐实 `stateRef.current.pending` **读滞后**竞态）。修法须**两处分别治理**。
-**修法候选（待裁·另开修批）**：① evidence 引导发送前判 `pending!=='none'` 即作废；② `verifyThenResolve` 加 generation 令牌，成功收口令在途失败引导失效。复现中卡后还见一条 `protocol` nudge（疑 `stateRef.pending` 读滞后），修批定位。
+### ★ 原始根因（最终层 · pending-transition 全链路探针坐实）
+`useConversationState.transition()` 是状态写唯一入口（L40-50，**同步**改 `stateRef.current`）；在其上打「pending 变迁」标记 + `window.__bt2` 逐步探针（一次性、**已 revert**，主仓 L1 703/双 tsc 0 复验干净），1500ms 实测：
+
+```
+n6  t=1882 sendQueued   qlen=8      ← busy 期把「确认，按方案执行」写入单槽（且已覆盖掉 n3 的「确认，目标清楚了」）
+n9  t=3368 resolutionSet → n10 none->resolution   ← verify#2 快成功，「已解决」卡弹出
+n11 t=3924 resolution->none                        ← ★迟到的那条 stale 确认文本 flush 到达并清掉刚成功的卡
+n12 t=3976 protocolGuardRead pending=none          ← 守卫看到 none（是真 none，非读滞后）→ 合法放行
+n14 t=4262 evidenceGuideSend working=true         ← verify#1 慢失败(2762+1500)落地，引导发出
+```
+
+**原始根因**：`send()` 的 pending 路由（L2447-2470）按**当前** `pending` 解释**任何到达**的文本——而排队文本是在**旧决策点**（plan 卡）时代写下的。`isConfirmIntent('确认，按方案执行')` **判 false**（L90 需连续子串 `确认执行`；实际为「确认，按方案」+「执行」），于是落入 **`reject(..., {kind:'direction'})` ＝ C2 隐式拒绝** → **把刚弹出的 `resolution` 卡当"用户改方向"拒绝掉** → pending 归 none → 后续 protocol 守卫与慢失败 evidence 引导都**合法**放行 → 额外模型回合 → 收口被毁 → harness 撞 busy 点不到卡 → timeout。
+⇒ 缺的是**「消息 ↔ 决策点代次」绑定**（一条文本只能对它被写就时的那个决策点生效），不是 pending 读得不准。
+
+### ⚠ 对 RC3/t000068 的**方向性反转**（重要）
+- 当前**单槽的"静默覆盖"丢掉了第一条确认文本，反而偶然掩盖了这个 bug**；
+- ⇒ 若按 RC3（"顺带修单槽覆盖"）/ `t000068` 改成**多槽**让每条都送达，**会加剧 β**：更多 stale 文本活到 flush、更多卡被 C2 误拒。
+- 即「多槽 + idle flush」不只是"没对着因"，**方向是反的**。上批把簇3 押在 `pendingSendRef` 属误判，但"排队机制有锅"这点方向没错——锅在**无代次绑定**，不在槽宽窄。
+- 修法候选（待裁）：① **入队即绑定 `pendingKind` + 代次令牌**，flush 时若当前 pending 代次不符则丢弃/降级为普通文本（不再走 C2 隐式拒）；② `send()` pending 路由对"迟到 flush 来源"禁用 C2 方向性拒绝；③ evidence 引导发前判 `pending!=='none'` 作废（治第二个发射器，独立）。
+**修法候选**：见下「★ 原始根因」节的三条（本行初稿曾疑「`stateRef.pending` 读滞后」，**已被 transition 同步写 + 全链路探针证伪**——守卫看到的是真 `none`，成因是 stale 文本被 C2 误拒，非读得不准）。
 
 ### 归因汇总（取代前文）
 | 失败项 | 原始根因 | 域 | RC1a/RC1b 责任 |
