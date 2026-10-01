@@ -18,6 +18,8 @@
 
 ⇒ 建议：① 保留且升格为**唯一正统解**（含确认侧与拒绝侧都要校验代次）；②/⓪ 从「给迟到来源打豁免标记」改为**取消 C2 的文本拒绝分支**（打字确认白名单留下，打字拒绝去掉）；③ 保留。
 
+**竞品源码两路独立取证已到位（§7），与上判定一致并加了一条**：~20 个 harness 里审批一律按 `requestId/approvalId/correlationId + turnId/epoch` 键控，代次不符即**报错/忽略（NotFound / stale）**；待批期文本一律走 **steer / followUp 队列注入模型**或**重问**，**结构上不允许**回答当前卡；「非确认文本＝隐式拒绝」**零命中**。附带发现：我们的 C2 还会**吞掉用户文本**（外部在拒绝路径上把文本回喂模型，不作丢弃）。
+
 ---
 
 ## 1. 并发控制／协议标准（机制与命名的权威来源）
@@ -80,5 +82,56 @@
 
 - 所有引文经 WebFetch 的**摘要模型**返回，非逐字对照原文 PDF；arXiv 编号/标题为检索所得。**任何写进代码注释或 ADR 的引文需回原文复核**。
 - B3 的首轮摘要有**误读**（已定向复查订正），说明二手摘要不可全信——本文只采用可定向复核到的表述。
-- 竞品**源码级**证据（批准是否带 id、pending 期输入如何处置、有无 epoch/stale 字段）由并行取证照独立产出，将另附 §7；本文 §3 仅为官方文档层。
+- 竞品**源码级**证据见 **§7**（并行取证已完成，`文件:行` 逐条标注【源码事实】）。
 - Horvitz 引文取自 UW 课程镜像 PDF，非 ACM 原版；仅作学理锚点。
+- §7 由并行 agent 读码产出；本文引用时按【源码事实】采信其行号，**未逐行二次复核**——落地实现前建议对 `reasonix/prompt_identity.go` 与 `cline/sdk-interaction-coordinator.ts` 两处范本做一次直读确认。
+
+## 7. 竞品源码取证（两路独立扫描，结论一致）
+
+两路 agent 分别扫 `/mnt/f/neonforge-competitors/`（互不通气），**独立收敛到同一判定**：代次/id 绑定是主流正统，且**两边都报「C2 隐式拒绝零命中」**。以下合并（路径相对 `<repo>/`；均为【源码事实】）。
+
+### 7.1 审批身份：主流一律「应答必须引用请求实例」
+
+| harness | 键控方式 | 不符时的处置 | 证据 |
+|---|---|---|---|
+| reasonix | `PromptIdentity{PromptID, ToolCallID, TurnID, RuntimeEpoch, Kind}`；注释："Turn and runtime fences prevent a delayed UI action crossing a controller replacement" | `ResolvePromptExact` 逐字段精确比对 → `ErrPromptStaleTurn` / `ErrPromptStaleRuntime` | `internal/control/prompt_identity.go:445-454,550-597` |
+| codex | `call_id` + `approval_id`（`Op::ExecApproval{id, turn_id, decision}`），注释 "keyed by call_id + approval_id so matching responses are delivered to the correct in-flight turn" | 查不到 → `warn!("No pending approval found")` **丢弃，不影响别处**；"cleared before a response arrives → treat as abort" | `core/src/session/mod.rs:2851-2898,3210-3257`；`protocol/src/protocol.rs:672-679`；`handlers.rs:173-201,527-549` |
+| opencode | 服务端 `pending: Map<ID,Pending>`，reply 带 `requestID` | 未知 id → `NotFoundError`；另有 TTL + id 去重表 | `src/permission/index.ts:24,110-125`；`app/src/context/permission.tsx:246-256` |
+| crush | `pendingRequests Map[uuid, chan bool]` | 重复/迟到 resolve → false（"already been resolved or is unknown"）＝**one-shot 消费** | `internal/permission/permission.go:96-120` |
+| goose | `submit_tool_confirmation(session_id, request_id)` | 查不到 → **"unknown or stale tool confirmation request {request_id}"**（stale 是正式用词） | `crates/goose/src/agents/agent.rs:1517-1593` |
+| gemini-cli / qwen-code | MessageBus `correlationId = randomUUID()`，响应必须回带同 id | 错 id 被静默忽略（不 resolve）；60s 超时 | `packages/core/src/confirmation-bus/message-bus.ts:225-261` |
+| openclaw / cline / zcode | `approvalId+toolCallId+runId` / `toolCallId` / `interactionId`（草稿按 interactionId **消费一次**） | 按 id 送达 | `ui/src/pages/chat/tool-stream-contract.ts:74-77` 等 |
+| deepseek-harness | `ApprovalRequestId` + `callId`；abort → `'cancelled'`，**迟到答案按构造丢弃** | remote-stream 每 item 带 `generation`；generation/revision 变更时 `accept()` 变 no-op ＝ **fencing token** | `packages/interaction/user-approval/src/index.ts:121-123,260-293`；`api/gateway/src/client/remote-stream.ts:109-124` |
+| 例外（位置式） | aider / deepcode-hkuds：阻塞式单提示 stdin，y/n 即答当前提示 | **无异步竞态窗口**（我们没有这个条件） | `aider/aider/io.py:869-885` |
+
+### 7.2 待批期到达的其它用户输入：三形态，无「喂给当前卡」
+
+- **S1 封闭词表答复 + 未命中即不作决策**：aider 非词表输入 → 报错**重问** "Please answer with one of…"，永不成为决策〔`io.py:896-898`〕；deepcode-hkuds 文本先过 `y/yes/a/always/n/no` 白名单，**不匹配则原样作为新 turn 发送（queued/steered），审批不动**〔`cli/tui/app.py:799-815,946-950`〕。
+- **S2 槽位物理分离**：cline "Leaving pending tool approval open and routing user message as queued follow-up" —— 审批槽与提问槽分离，文本**结构上无法应答审批**，只有 yes/no 控件能 resolve〔`apps/vscode/src/sdk/sdk-interaction-coordinator.ts:166-172`〕；openclaw 审批快捷键**强制 Ctrl/Cmd 组合键**，注释明言防止"composer 里随手敲的裸字母批准了没读过的命令"〔`components/exec-approval.ts:74-85`〕。
+- **S3 steer/followUp 队列，在 turn 边界注入模型**：codex turn-local `TurnInputQueue`〔`input_queue.rs:74-121`〕；pi `steer()`/`followUp()` 双队列 drain 注入〔`packages/agent/src/agent.ts:176-297`〕；goose `SteerQueue`；gemini-cli 运行中输入 → `user_steering` 或 `messageQueue`；reasonix sessioninbox `IntentFollowup|IntentSteer` 持久队列**与审批 id 通道分列**〔`sessioninbox/types.go:20-52`〕。
+- **丢弃（a 类）：无**——除显式 cancel 外没有 harness 吃掉用户文本。
+- ⇒ 我们的 β 恰好落在**这些设计结构上不允许的位置**：文本既能确认又能拒绝，且没有 id/代次可配。
+
+### 7.3 C2 隐式拒绝：两路一致「零命中」
+
+**没有任何主流 harness 实现「非确认文本＝对挂起决策的隐式方向性拒绝」**。反向证据：codex 决策是**封闭枚举** `ReviewDecision`，`Abort` 是显式动作〔`handlers.rs:197-200`〕；opencode 拒绝必须显式，且拒绝附带的文本作为 `user_feedback`/correction **回喂模型而非丢弃**；cline 拒绝时同理〔`sdk-interaction-coordinator.ts:186-199`〕。⇒ **候选 ⓪ 从「可取」升为「业界唯一形态」**；且注意 C2 现在还会**吃掉用户文本**（外部实践在拒绝路径上把文本回喂，不是丢弃）。
+
+### 7.4 代次/作废在途工作（①③ 的直接范本）
+
+- reasonix `RuntimeEpoch` 全链路透传（turnevent ledger / transcript / session），session 提交有 `ErrStaleGeneration`；`CancelTurn(turnID)` 只终结本 turn 的 prompts——注释："cannot close prompts registered by a successor"〔`prompt_identity.go:355-359`〕。
+- kilocode 迟到异步回调的标准写法：capture `myGeneration` … `if (myGeneration !== generation) return`〔`packages/opencode/src/kilo-sessions/attached-state.ts:133-254`〕——**这就是候选 ③ 的形态**（evidence 引导发前判代次，不符即 return）。
+- pi harness 事件流 `epoch`，resnapshot 时 `++epoch`，投递时 `epoch !== this.epoch` → 事件不交付；nanobot `runGenerationByChatId` + `canReconcileCanonicalCompletion(chatId, expectedRunGeneration,…)` 不等则不覆盖活状态。
+- codex `reserve_user_input_order()` 给答复盖单调 `acceptance_order`；zcode `expectedGeneration` 校验；deepcode 审批状态机含 `expired` / `already resolved` 终态。
+
+### 7.5 命名（源码里真实出现的类型名）
+
+主流：**`correlationId` / `requestId`**（gemini、opencode、DSH `ApprovalRequestId`）、**`approvalId`**、**`toolCallId`**、**`turnId` / `runId`**、**`epoch` / `generation` / `revision`**；输入侧统一叫 **`steer` / `followUp` / `queue`**；「**stale**」是官方错误用词（goose、reasonix）。`fencing token / lease` 只零星出现在注释里，**不是类型名**。
+⇒ 我们的字段命名采纳：**队列条目冻结 `(epoch, turnId, decisionId)`**；错误/事件命名采纳 **stale**（`conversation.stale_input_discarded` 与此同谱，前文 §5 命名保留）。
+
+### 7.6 对既有待裁项的补充裁定
+
+- **one-shot 消费**（§5 开放项）→ 外部已有实现范式（crush「already been resolved or is unknown」、opencode TTL+id 去重、zcode 按 interactionId 消费一次）⇒ **建议纳入 ① 的实现范围**，并顺带解决我们「同一卡被重复 confirm」的潜在面。
+- **实现范本优先级**：`reasonix/prompt_identity.go`（精确多字段校验 + 明确 stale 错误）与 `codex` TurnState 作用域（turn 一换、旧卡自然死）是两份最贴近的参考；**codex 的「approval 存活于 TurnState」尤其值得注意**——它用**作用域**而非**比较**达成隐式过期，可能比显式 epoch 比对更小的 diff。
+- **只做 ① 不做 ⓪ 仍是半对**（两路一致）：代次校验防「错挂」，但当代次相符时，任意一句非确认文本仍会无谓杀卡——而没有任何外部实践这么做。
+- **覆盖率缺口**（如实标注）：claude-code 核心 CLI 闭源（仅类型声明/CHANGELOG）；continue 未见交互审批实现（仅数据面 toolCallId）；swe-agent / nanobot(agent 侧) / deer-flow 未见审批卡。
+
