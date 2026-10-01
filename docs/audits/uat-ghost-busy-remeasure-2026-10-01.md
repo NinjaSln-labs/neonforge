@@ -62,14 +62,21 @@ timeline：`decision.requested approval` × 多次（seq 186/196/321/341/385）�
 末态：最后一次授权执行完，模型**既不 report_completion 也无卡挂起** → `status=ready` 连 8 轮 → stuckIdle=8 → stuck_after_plan。
 **原始根因＝产品侧模型「要授权→执行→再要授权」不发完成声明的不收敛循环**，与预存在红 `core.interaction.ts:1859`（问题 A：approve-files 卡悬挂→模型续轮被拦后停续聊）**同族**。
 
-### 新叶因 β＝产品 verifyThenResolve 并发改核验竞态（p063 timeout）★关键
+### 新叶因 β＝产品「成功收口被协议 nudge 冲掉」（p063 timeout）★关键 · 已零成本多样本取证
 收口已达成：seq 306 `tool.requested report_completion`（带 pendingQuestions）→ 307 `proposal.completion ok` → 310 `decision.requested resolution` → 311 `card.shown achieve-confirm` → **312 `status=ready`（RC1a 正确：decision-pending 非 busy）**。
 **但 313 `conversation.system_nudge`「完成声明已被证据门拒绝，请重新提交 report_completion」迟到注入** → 314 `working` → 318 `assistant_start` 起新回合 → busy 锁死 autopilot 从 r56 起一路 `skip-act+nudge modelBusy`（r63 偶点允许执行）→ maxRounds 耗尽 → timeout。
-**原始根因**：上一轮（早于 306 的某次 report_completion）证据门失败的**回填引导 nudge** 与本轮成功的 verifyThenResolve **并行竞态**——失败的引导在成功卡已弹出之后才发出，把成功收口冲掉。即 p000125「void verifyThenResolve 与 runChat 并行」问题的**新表现形态**（p119 那次表现为「nudge 吞失」，这次表现为「nudge 迟到冲掉成功卡」）。
+
+**发射点（校正——非 `verifyThenResolve` 证据回填）**：`shouldNudgeReportAfterEvidenceMissing`（`agentLoop.ts:386`，接线 `ConversationPanel:1307-1321`）。守卫 `pending!=='none'→不催`（L374）却在卡已弹后仍发 ⇒ 疑真根＝**done handler 内 `verifyThenResolve`（异步 await `bridge.verify` 才置 resolution L767/793）与 nudge 守卫（同步读 `stateRef.current.pending`，此刻仍 none）微任务竞态**。
+
+**零成本多样本取证（扫 12 条已有 timeline，不跑新模型）**：
+- **签名频率 2/12**：`resolution 卡后 protocol nudge 又起回合`＝p035(131→153/155)、p063(310→313→318)；**p035 自行恢复 resolved，仅 p063 致命** ⇒ β 真实复发，非必死（取决后续能否再收口）。
+- **RC3 杠杆证伪**：逐条 nudge 送达路径——p063×11、p119×2，`prevStatus=ready` 者**全部直发起回合**（send 未被 workingRef 挡，**未进 pendingSendRef 槽**）；落 working/approval-pending 者（p063 seq70/298）也恢复。**本批 0 例单槽死信** ⇒ 「单槽/flush 时机」（RC3 所押根因）**对 p063/p119 症状不适用**。
+- 坑 `p000142`：排查簇3 先分「nudge 直发(ready) vs 入槽(working)」，别默认排队槽。
 
 ### 对 RC3 归因的影响（回应用户裁「RC3 先不处理」）
-上批 RCA 把簇3（p119）压在 `pendingSendRef 单槽死信` 上。本轮 **p063 新叶因 β 指向更上游**：问题在 **`verifyThenResolve` 证据引导与 runChat 的并行时序**（引导 nudge 该不该发、何时发、能否被成功收口作废），**未必是排队槽**。
-⇒ **进一步支持维持 RC3 deferred**：应先按 β 立独立叶因取证（多样本 p119/p063 的 verify 时序），再定 `pendingSendRef` 是不是真根——**不要在归因未清时改码**（正是 ADR-012 停等裁决的意义）。
+上批 RCA 把簇3（p119）压在 `pendingSendRef 单槽死信` 上。本轮取证**双重削弱该假设**：① p063 β 指向 done-handler 内 resolution 异步置位 vs nudge 守卫同步读的竞态，**在排队槽上游**；② 实测本批 **0 单槽死信**，p119 两条 nudge 皆直发成功。
+⇒ **强支持维持 RC3 deferred**：应立 β 为簇3 **候选真根因**，插桩复现坐实竞态后再判 `pendingSendRef` 是否无辜——**归因未清即改码＝修错症状**（正是 ADR-012 停等的意义）。
+**下一步复现设计（非本批）**：`verifyThenResolve` 置 resolution 前后 + `shouldNudgeReportAfterEvidenceMissing` 读 pending 处各加一次性交错标记（tlog/console），solo 重跑 p063/p119 各 3（同 seed），看 resolution 卡与 nudge 发射的微任务顺序；候选修＝nudge 守卫改判「本轮 report 是否已 verify 在飞/已成功」而非仅 `pending`，或给引导加 generation 令牌使迟到失败引导可在成功收口时作废。
 
 ### 归因汇总（取代前文）
 | 失败项 | 原始根因 | 域 | RC1a/RC1b 责任 |
