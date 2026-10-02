@@ -188,13 +188,35 @@ class ToolRegistry {
         }
       }
     }
+    // ADR-017 A3：批复执行走 journal 阶段链（只记不判——started 无 done＝恢复判 C 唯一数据源）
+    const journalId = opts.requestId
+    const jfp = fingerprintArgs(name, args)
+    if (journalId) {
+      const j = getApprovalJournal()
+      if (j.phaseOf(journalId) === 'issued')
+        j.append({ requestId: journalId, toolName: name, argsFingerprint: jfp, phase: 'approved' })
+      j.append({ requestId: journalId, toolName: name, argsFingerprint: jfp, phase: 'started' })
+    }
+    // done＝执行已定局：纯 ok 与 ADR-011 内层透传失败都记（工具跑了、副作用存在——failed 属领域语义非 journal）；
+    // 执行抛错走 catch 不记（已 started 未 done——恢复判 C 依赖此形态）
+    const journalDone = (): void => {
+      if (journalId)
+        getApprovalJournal().append({
+          requestId: journalId,
+          toolName: name,
+          argsFingerprint: jfp,
+          phase: 'done',
+        })
+    }
     try {
       const data = await tool.execute(args, { rootPath: opts.rootPath, sessionId: opts.sessionId })
       // ADR-011：内层 {ok:false} 透传为外层失败（原恒 ok:true 吞掉工具命题失败）
       if (data !== null && typeof data === 'object' && (data as { ok?: unknown }).ok === false) {
         const err = (data as { error?: unknown }).error
+        journalDone()
         return { ok: false, error: err != null ? String(err) : 'tool failed', data }
       }
+      journalDone()
       return { ok: true, data }
     } catch (e) {
       // 2026-08-04：ENOENT 友好化——原始报错（含完整路径）透传给非技术用户不可读（talk.txt 实测）；提示用相对路径或先看工程文件

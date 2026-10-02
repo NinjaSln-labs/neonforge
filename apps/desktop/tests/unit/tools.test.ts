@@ -14,6 +14,7 @@ import {
 } from '../../src/main/tools'
 import { getPlannedFilesStore } from '../../src/main/plannedFilesStore.instance'
 import { getApprovalJournal } from '../../src/main/approvalJournal.instance'
+import { fingerprintArgs } from '../../src/main/approvalJournal'
 
 // 2026-08-06 open 工具（用户「帮我打开」）：mock electron shell——vitest node 环境无 electron
 const { openExternalMock } = vi.hoisted(() => ({ openExternalMock: vi.fn(async () => {}) }))
@@ -326,6 +327,44 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
       expect(r.ok).toBe(true)
       expect(r.approvalRequestId).toBeUndefined()
       toolRegistry.setRules([])
+    })
+  })
+
+  // ADR-017 A3：批复执行的 journal 阶段链（只记不判——恢复判 C 数据源：started∧¬done）
+  describe('ADR-017 A3 执行阶段 journal 落账', () => {
+    it('ADR-017 A3：携 requestId 的批复执行走 journal approved→started→done', async () => {
+      const file = path.join(TMP, 'b.txt')
+      const j = getApprovalJournal()
+      const id = j.issueId()
+      const fp = fingerprintArgs('write', { path: file, content: 'z' })
+      j.append({ requestId: id, toolName: 'write', argsFingerprint: fp, phase: 'issued' })
+      const r = await toolRegistry.execute(
+        'write',
+        { path: file, content: 'z' },
+        { approved: true, requestId: id, rootPath: TMP },
+      )
+      expect(r.ok).toBe(true)
+      expect(j.phaseOf(id)).toBe('done')
+    })
+    // 防回归锁定 catch 语义：执行抛错＝已 started 未 done（恢复判 C 依赖此状态，不记 done）
+    it('执行抛错：journal 止于 started（不记 done——恢复判 C 数据源）', async () => {
+      toolRegistry.register({
+        name: 'boom',
+        source: 'core',
+        requiresApproval: false,
+        risk: 'none',
+        execute: () => {
+          throw new Error('x')
+        },
+      })
+      const j = getApprovalJournal()
+      const id = j.issueId()
+      const fp = fingerprintArgs('boom', {})
+      j.append({ requestId: id, toolName: 'boom', argsFingerprint: fp, phase: 'issued' })
+      j.append({ requestId: id, toolName: 'boom', argsFingerprint: fp, phase: 'approved' })
+      const r = await toolRegistry.execute('boom', {}, { approved: true, requestId: id })
+      expect(r.ok).toBe(false)
+      expect(j.phaseOf(id)).toBe('started')
     })
   })
 })
