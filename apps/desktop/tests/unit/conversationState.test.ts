@@ -35,7 +35,9 @@ import {
   pendingCardToShow,
   shouldStopContinuation,
   actionNeedsApproval,
+  decidableRequests,
   type ConversationState,
+  type ApprovalWindow,
   type GoalProposal,
   type PlanProposal,
   type CompletionClaim,
@@ -1591,5 +1593,38 @@ describe('ADR-015 决策点实例身份与身份门（β 根因领域解）', ()
     expect(s.pending).toBe('goal')
     const s2 = setPending(s, 'goal', { since: 't2', proposal: goal('g2') })
     expect(s2.decisionInstanceSeq).toBe(5) // 从补水实例继续单调（不与落盘 decision.requested 撞号）
+  })
+})
+
+// ============================================================================
+// ADR-017 B1 授权窗口值对象（类型面冒烟——零行为）
+// ============================================================================
+describe('ADR-017 B1 授权窗口值对象与状态字段', () => {
+  it('initialState 含空窗（领域真相源常驻）', () => {
+    expect(initialState().approvalWindow).toEqual({ requests: [] })
+  })
+
+  it('decidableRequests 只认 queued/pending（§2 术语单源）', () => {
+    const mk = (
+      id: string,
+      state: ApprovalWindow['requests'][number]['state'],
+    ): ApprovalWindow['requests'][number] => ({
+      requestId: id,
+      kind: 'tool',
+      toolName: 'bash',
+      subject: 'ls',
+      argsFingerprint: 'fp',
+      request: approvalReq(),
+      state,
+    })
+    const w: ApprovalWindow = {
+      requests: [
+        mk('x1', 'queued'),
+        mk('x2', 'pending'),
+        mk('x3', 'approved'),
+        mk('x4', 'uncertain'),
+      ],
+    }
+    expect(decidableRequests(w).map((r) => r.requestId)).toEqual(['x1', 'x2'])
   })
 })

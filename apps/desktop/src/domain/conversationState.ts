@@ -62,6 +62,35 @@ export interface ApprovalRequest {
   risk: 'low' | 'medium' | 'high'
 }
 
+/** 授权请求记录（ADR-017——ApprovalWindow.requests 成员；身份＝requestId，不透明） */
+export interface ApprovalRecord {
+  requestId: string
+  kind: 'tool' | 'plan-batch' // plan-batch＝approve-files 合并卡（执行链仍走 approvalGranted＋planConfirmed——G2）
+  toolName: string
+  subject: string
+  argsFingerprint: string
+  request: ApprovalRequest // 呈现内容（reason/risk——卡展示视图）
+  state: 'queued' | 'pending' | 'approved' | 'denied' | 'failed' | 'expired' | 'uncertain'
+  decidedBy?: 'user' | 'rule' // rule＝预先裁决（00 §3.2 规则 2 骑注）
+  decidedAt?: string // 审计时间戳，非身份
+}
+
+/** 授权窗口（领域真相源——无序号无代次；排序归时间线日志域） */
+export interface ApprovalWindow {
+  requests: ApprovalRecord[]
+}
+
+/** 授权答复凭据（对应确认卡族 DecisionAnswers 的窗口版） */
+export interface ApprovalAnswers {
+  requestId: string
+}
+
+export type DecidableApprovalState = 'queued' | 'pending'
+/** 可决记录（§2 术语一处定义） */
+export function decidableRequests(w: ApprovalWindow): ApprovalRecord[] {
+  return w.requests.filter((r) => r.state === 'queued' || r.state === 'pending')
+}
+
 /** 拒绝原因类型（§2 Decision 三型之一——modify=修改决策） */
 export type RejectKind = 'direction' | 'scope' | 'complexity' | 'missing-info' | 'modify' | 'other'
 
@@ -131,6 +160,7 @@ export interface ConversationState {
   deniedApprovals: Array<{ toolName: string; subject: string }> // 拒绝记忆（§3.4 C6——同轮同类动作短封，S6 actionGate 消费；任务边界重置）
   rejectStreak: number // 同一决策点连续拒绝计数（§4.1 C8——上限 3 超限回退澄清/人工接管；随确认/新提议重置；S3 消费）
   lastRejectReason?: RejectReason // S7（A0 审校 P1-4）：最近一次拒绝的原因（诊断——decision.resolved 载荷；confirm/其他转换清除）
+  approvalWindow: ApprovalWindow // ADR-017——需批准事实的领域真相源；pending='approval' 为其单向派生呈现
   pendingRepeatCount: number // ADR-010 T1：同 kind 决策点连续 pending_set 次数（换 kind/决策清零）
   unresolvedTextReplies: number // ADR-010 T2：pending 存在期间用户连续文本回复数（决策清零）
 }
@@ -147,6 +177,7 @@ export const initialState = (): ConversationState => ({
   decisionInstanceSeq: 0,
   deniedApprovals: [],
   rejectStreak: 0,
+  approvalWindow: { requests: [] },
   pendingRepeatCount: 0,
   unresolvedTextReplies: 0,
 })
