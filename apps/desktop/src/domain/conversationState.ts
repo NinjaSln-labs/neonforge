@@ -410,6 +410,14 @@ export function restorePending(s: ConversationState, dc: DecisionContent): Conve
   }
 }
 
+// ADR-015 旧会话补水（§8.2E 兼容）：存量快照无 instanceId → 视作新实例续号（拒 undefined/NaN 静默杀全门）
+export function hydrateDecisionContent(
+  dc: Omit<DecisionContent, 'instanceId'> & { instanceId?: number },
+  fallbackSeq: number,
+): DecisionContent {
+  return { ...dc, instanceId: dc.instanceId ?? fallbackSeq + 1 }
+}
+
 // approve-files 批准 → 计划清单追加（A0 §5 追加语义——不覆盖前批）+ 幂等标记（坑 95）
 // 兼容壳（S3 起由「plan 确认携带 PlanProposal」取代；approve-files 批量授权路径保留）
 export function approvalGranted(s: ConversationState, files: string[]): ConversationState {

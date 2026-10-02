@@ -24,6 +24,7 @@ export type TimelineEventType =
   | 'conversation.assistant_start' // 模型轮开始（载荷：forceTool 判定）
   | 'conversation.assistant_done' // 模型轮完成（载荷：content/error）
   | 'conversation.interrupted' // 打断（停止按钮 / recovery 显式恢复——ADR-013；废除 silent 默认打断）
+  | 'conversation.stale_input_discarded' // ADR-015：stale 答复作废（针对已终结决策点实例——不吞不回喂，可见重提示）
   // —— Task 聚合：确认点（06 §1.1）——
   | 'task.goal_proposed' // 模型提议目标（【目标确认】标记）
   | 'task.goal_confirmed' // 用户确认目标
@@ -135,6 +136,12 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
     role: 'system',
     // source: button | recovery（ADR-013）；?reason 可选（如 stuck.escalate）
     detailKeys: ['source', '?reason'],
+  },
+  'conversation.stale_input_discarded': {
+    domain: 'conversation',
+    role: 'user',
+    // ADR-015：被拒 answers{kind,instanceId} × 当前{pending,decisionInstanceSeq}
+    detailKeys: ['answers', 'pending', 'decisionInstanceSeq'],
   },
   'task.goal_proposed': { domain: 'task', role: 'assistant', detailKeys: ['goalText'] },
   'task.goal_confirmed': { domain: 'task', role: 'system', detailKeys: ['point'] },
@@ -283,9 +290,17 @@ export function deriveStateEvents(
   // —— 决策点（领域视图——设计 §3.5；与 card.* 并存：card=UI 卡生命周期，decision=领域决策点）——
   if (prev.pending === 'none' && next.pending !== 'none') {
     events.push({ type: 'session.pending_set', detail: { kind: next.pending } })
+  }
+  // ADR-015：decision.requested＝新实例呈现的唯一记录——随 decisionInstanceSeq 推进发射
+  // （原仅 none→pending 沿——漏掉同 kind 续提议换实例＝β 命门呈现面；重显卡/恢复不推号故不重发）
+  if (next.pending !== 'none' && next.decisionInstanceSeq > prev.decisionInstanceSeq) {
     events.push({
       type: 'decision.requested',
-      detail: { kind: next.pending, since: next.decisionContent?.since ?? '' },
+      detail: {
+        kind: next.pending,
+        instanceId: next.decisionInstanceSeq,
+        since: next.decisionContent?.since ?? '',
+      },
     })
   }
   if (prev.pending !== 'none' && next.pending === 'none') {
@@ -298,11 +313,19 @@ export function deriveStateEvents(
         detail: {
           point: 'approval',
           action: 'reject',
+          answeredInstanceId: prev.decisionContent?.instanceId, // ADR-015：被应答实例（审计回放键）
           ...(next.lastRejectReason ? { reason: next.lastRejectReason } : {}),
         },
       })
     } else if (prev.pending === 'approval') {
-      events.push({ type: 'decision.resolved', detail: { point: 'approval', action: 'confirm' } })
+      events.push({
+        type: 'decision.resolved',
+        detail: {
+          point: 'approval',
+          action: 'confirm',
+          answeredInstanceId: prev.decisionContent?.instanceId,
+        },
+      })
     } else {
       // ADR-010 UAT 二轮修复：system_clarify 的确认/拒绝按 underlying 确认位推断——
       // 原逻辑落 resolutionConfirmed 兜底，委派确认 goal 时被误记为 reject（真机 seq 97 实证）
@@ -324,6 +347,7 @@ export function deriveStateEvents(
         detail: {
           point,
           action: confirmed ? 'confirm' : 'reject',
+          answeredInstanceId: prev.decisionContent?.instanceId, // ADR-015：被应答实例
           ...(!confirmed && next.lastRejectReason ? { reason: next.lastRejectReason } : {}),
         },
       })

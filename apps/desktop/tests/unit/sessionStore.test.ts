@@ -7,6 +7,7 @@ import {
   SESSION_KEY,
   SESSION_MAX,
 } from '../../src/renderer/sessionStore'
+import type { DecisionContent } from '../../src/domain/conversationState'
 
 function stubLocalStorage(): void {
   const store = new Map<string, string>()
@@ -167,5 +168,24 @@ describe('sessionStore decisionContent 序列化（S3——§8.2 E）', () => {
     const stripped = msgs.map((m) => ({ ...m, decisionContent: undefined }))
     const out = serializeMessages(stripped)
     expect(out[0].decisionContent).toBeUndefined()
+  })
+
+  // ADR-015：归属轴 seq 序列化（恢复续号不回 0——旧档缺字段 undefined 兼容由面板 hydrate 补水）
+  it('serializeMessages：透传 decisionInstanceSeq；旧档无此字段 → undefined 兼容', () => {
+    const out = serializeMessages([
+      {
+        role: 'assistant',
+        content: 'x',
+        status: 'done',
+        decisionContent: { ...PLAN_CONTENT, instanceId: 3 } as DecisionContent,
+        decisionInstanceSeq: 3,
+      },
+    ])
+    expect(out[0].decisionInstanceSeq).toBe(3)
+    expect(out[0].decisionContent?.instanceId).toBe(3)
+    const legacy = serializeMessages([{ role: 'assistant', content: 'x', status: 'done' }])
+    expect(legacy[0].decisionInstanceSeq).toBeUndefined()
+    saveSession(legacy)
+    expect(loadSession()?.[0].decisionInstanceSeq).toBeUndefined() // 旧档往返不报错
   })
 })

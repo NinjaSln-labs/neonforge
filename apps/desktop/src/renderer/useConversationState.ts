@@ -16,6 +16,7 @@ import {
   approvalDecided,
   applyToolResult,
   setPending,
+  restorePending as restorePendingDomain,
   type ConversationState,
   type DecisionContent,
   type PendingKind,
@@ -102,6 +103,12 @@ export function useConversationState(opts?: UseConversationStateOpts) {
         plannedFiles: new Set(files),
         filesApproved: approved,
       }
+      setVersion((v) => v + 1)
+    },
+    // ADR-015（§8.2E）：会话恢复决策点——直置 pending/快照/seq（续号）。
+    // 不走 transition（不 emit——重显卡＝同实例不得重发 decision.requested；不推号）
+    restorePending: (dc: DecisionContent) => {
+      stateRef.current = restorePendingDomain(stateRef.current, dc)
       setVersion((v) => v + 1)
     },
   }

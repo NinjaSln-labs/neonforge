@@ -159,7 +159,11 @@ describe('deriveStateEvents（decision.* 领域决策点事件——设计 §3.5
     })
     const next = userConfirmed(s, 'plan')
     const evt = deriveStateEvents(s, next).find((e) => e.type === 'decision.resolved')
-    expect(evt?.detail).toEqual({ point: 'plan', action: 'confirm' })
+    expect(evt?.detail).toEqual({
+      point: 'plan',
+      action: 'confirm',
+      answeredInstanceId: 1, // ADR-015：被应答实例回放键
+    })
   })
 
   it('plan 拒绝 → decision.resolved（point: plan, action: reject + reason——S7 P1-4）', () => {
@@ -173,6 +177,7 @@ describe('deriveStateEvents（decision.* 领域决策点事件——设计 §3.5
       point: 'plan',
       action: 'reject',
       reason: { kind: 'scope', target: 'plan' },
+      answeredInstanceId: 1, // ADR-015
     })
   })
 
@@ -186,6 +191,7 @@ describe('deriveStateEvents（decision.* 领域决策点事件——设计 §3.5
     expect(allow.find((e) => e.type === 'decision.resolved')?.detail).toEqual({
       point: 'approval',
       action: 'confirm',
+      answeredInstanceId: 1, // ADR-015
     })
     const deny = deriveStateEvents(
       s,
@@ -195,6 +201,7 @@ describe('deriveStateEvents（decision.* 领域决策点事件——设计 §3.5
       point: 'approval',
       action: 'reject',
       reason: { kind: 'direction' }, // S7 P1-4：拒绝原因入载荷
+      answeredInstanceId: 1, // ADR-015
     })
   })
 })
@@ -304,5 +311,42 @@ describe('execution.forced/released（S5——mode/reason 事件语义）', () =
   it('validateTimelineEvent：缺 reason（必选）→ warn（schema 有校验价值）', () => {
     const warns = validateTimelineEvent('execution.forced', { mode: 'require-action' })
     expect(warns.some((w) => w.includes('reason'))).toBe(true)
+  })
+})
+
+// ADR-015：decision.requested 随实例推进（β 命门呈现面补记录）＋ resolved 回放键 ＋ stale 事件登记
+describe('ADR-015 决策点实例事件（requested 随 seq 推进/answeredInstanceId/stale 登记）', () => {
+  const planP = (files: string[]) => ({
+    proposal: {
+      summary: 'p',
+      files: files.map((f) => ({ path: f, reason: 'r' })),
+      assumptions: [],
+      verificationPlan: [],
+    },
+    since: 't',
+  })
+  it('同 kind 续提议新实例 → 重发 decision.requested(instanceId=2) 且无 session.pending_set；等值重提议不重发', () => {
+    const s = setPending(initialState(), 'plan', planP(['a']))
+    expect(deriveStateEvents(initialState(), s).map((e) => e.type)).toContain('decision.requested')
+    const same = setPending(s, 'plan', planP(['a'])) // 等值重提议＝同实例
+    expect(deriveStateEvents(s, same).map((e) => e.type)).not.toContain('decision.requested')
+    const b = setPending(same, 'plan', planP(['a', 'b'])) // 实质变＝新实例（pending 未翻转）
+    const evts = deriveStateEvents(same, b).map((e) => e.type)
+    expect(evts).toContain('decision.requested')
+    expect(evts).not.toContain('session.pending_set')
+    const req = deriveStateEvents(same, b).find((e) => e.type === 'decision.requested')
+    expect(req?.detail.instanceId).toBe(2)
+  })
+  it('decision.resolved 携 answeredInstanceId（被应答实例回放键）', () => {
+    const s = setPending(initialState(), 'plan', planP(['a']))
+    const after = userRejected(s, 'plan', { kind: 'scope' })
+    const evt = deriveStateEvents(s, after).find((e) => e.type === 'decision.resolved')
+    expect(evt?.detail.answeredInstanceId).toBe(1)
+  })
+  it('conversation.stale_input_discarded 已登记（domain=conversation——Record 双写编译强制）', () => {
+    expect(TIMELINE_EVENT_SPECS['conversation.stale_input_discarded'].domain).toBe('conversation')
+    expect(TIMELINE_EVENT_SPECS['conversation.stale_input_discarded'].detailKeys).toContain(
+      'answers',
+    )
   })
 })

@@ -15,6 +15,7 @@ export interface StoredMsg {
   toolCalls?: ToolCallMsg[]
   id?: string // 2026-08-15 Q5：稳定 id 跨会话保留（断点恢复后 React key 稳定）
   decisionContent?: DecisionContent // S3：决策点内容快照（恢复后卡内容不丢——§8.2 E）
+  decisionInstanceSeq?: number // ADR-015：归属轴序号随会话序列化（恢复续号不回 0——旧档无此字段按 0 补水）
 }
 
 // messages → 可存子集（assistant 仅 status done/error；toolCalls 仅完整状态）
@@ -27,6 +28,7 @@ export function serializeMessages(
     toolCalls?: ToolCallMsg[]
     id?: string
     decisionContent?: DecisionContent
+    decisionInstanceSeq?: number
   }>,
 ): StoredMsg[] {
   const out: StoredMsg[] = []
@@ -45,6 +47,7 @@ export function serializeMessages(
         ),
         id: m.id,
         decisionContent: m.decisionContent, // S3：决策点快照随完整消息持久化
+        decisionInstanceSeq: m.decisionInstanceSeq, // ADR-015：seq 序列化（恢复续号基准）
       })
     }
   }

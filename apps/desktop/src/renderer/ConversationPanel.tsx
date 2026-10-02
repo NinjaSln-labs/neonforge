@@ -42,6 +42,7 @@ import {
   shouldStopContinuation,
   inPlannedFiles as inPlannedFilesDomain,
   verifyCompletion,
+  hydrateDecisionContent,
   buildEvidenceBackfill,
   evidenceGuideMaxAttempts,
   deriveDiffs,
@@ -343,13 +344,12 @@ export default function ConversationPanel({
         })),
       )
       // 恢复决策点冻结：最新消息携带 decisionContent → 恢复 pending（goal/plan/resolution——卡重显）
+      // ADR-015：走 restorePending 旁路（原经 setPending＝seq 复位重发 decision.requested+丢 dc.approval）；
+      // 旧档无 instanceId → hydrate 按持久 seq 续号补水（视作新实例——拒 NaN 杀全门）
       for (let i = stored.length - 1; i >= 0; i--) {
         const dc = stored[i].decisionContent
         if (dc) {
-          setPendingState(dc.kind, {
-            since: dc.since,
-            ...(dc.proposal ? { proposal: dc.proposal } : {}),
-          })
+          restorePending(hydrateDecisionContent(dc, stored[i].decisionInstanceSeq ?? 0))
           break
         }
       }
@@ -504,6 +504,7 @@ export default function ConversationPanel({
     addPlannedFiles,
     setFilesApproved,
     restorePlanned,
+    restorePending,
   } = useConversationState({
     emit: (type, detail) => tlog(type, detail, 'system'),
   })
@@ -528,14 +529,20 @@ export default function ConversationPanel({
   // S3（§8.2 E）：决策点内容快照随最近 assistant 消息持久化（恢复后卡内容不丢——pending 冻结语义）
   useEffect(() => {
     const dc = stateRef.current.decisionContent
+    // ADR-015：归属轴 seq 随会话序列化（恢复续号基准——不回 0 不与落盘 decision.requested.instanceId 撞号）
+    const seqNow = stateRef.current.decisionInstanceSeq
+    const isSnapRow = (m: (typeof messages)[number], i: number) =>
+      i === messages.length - 1 && m.role === 'assistant' && m.status === 'done'
     const withSnapshot = dc
       ? messages.map((m, i) =>
-          i === messages.length - 1 && m.role === 'assistant' && m.status === 'done'
-            ? { ...m, decisionContent: dc }
-            : m,
+          isSnapRow(m, i) ? { ...m, decisionContent: dc, decisionInstanceSeq: seqNow } : m,
         )
       : // A-009：决策点已清除（确认/拒绝后）→ 剥离历史消息上的过期快照（防恢复时命中旧卡）
-        messages.map((m) => ({ ...m, decisionContent: undefined }))
+        messages.map((m, i) => ({
+          ...m,
+          decisionContent: undefined,
+          ...(isSnapRow(m, i) ? { decisionInstanceSeq: seqNow } : {}),
+        }))
     const serialized = serializeMessages(withSnapshot)
     if (serialized.length > 0) saveSession(serialized)
     // eslint-disable-next-line react-hooks/exhaustive-deps

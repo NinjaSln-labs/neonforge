@@ -13,6 +13,7 @@ import {
   setPending,
   descriptorOf,
   restorePending,
+  hydrateDecisionContent,
   approvalGranted,
   applyToolResult,
   deriveDecisionPoint,
@@ -1569,5 +1570,17 @@ describe('ADR-015 决策点实例身份与身份门（β 根因领域解）', ()
       ),
     ).toBe(s)
     expect(approvalDecided(s, approvalReq(), { confirm: true }).pending).toBe('none') // allow 旁路
+  })
+
+  it('hydrateDecisionContent 旧档补水：已有 instanceId 保留；缺失按 fallbackSeq+1（存量卡＝新实例，恢复续号不撞）', () => {
+    const base = { kind: 'goal' as const, since: 't', proposal: goal('g') }
+    expect(hydrateDecisionContent({ ...base, instanceId: 7 }, 3).instanceId).toBe(7)
+    const hydrated = hydrateDecisionContent(base, 3)
+    expect(hydrated.instanceId).toBe(4)
+    const s = restorePending(initialState(), hydrated)
+    expect(s.decisionInstanceSeq).toBe(4)
+    expect(s.pending).toBe('goal')
+    const s2 = setPending(s, 'goal', { since: 't2', proposal: goal('g2') })
+    expect(s2.decisionInstanceSeq).toBe(5) // 从补水实例继续单调（不与落盘 decision.requested 撞号）
   })
 })
