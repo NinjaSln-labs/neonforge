@@ -52,6 +52,7 @@ import {
   type GoalProposal,
   type PlanProposal,
   type CompletionClaim,
+  type DecisionAnswers,
 } from '../domain/conversationState'
 // S2 提议解析（S3 接线：done 分支结构化解析 → decisionContent 快照——卡渲染唯一来源）
 // V1.5-S4 退役——parsePlanProposal/parseCompletionClaim 仅剩兜底调用；extractAssumptionsSection 为假设提取（非解析），见 ADR-009
@@ -321,7 +322,25 @@ export default function ConversationPanel({
         m.toolCalls?.some((c) => c.status === 'need-approval' || c.status === 'file-approval'),
       ) ?? false
     if (hasApproval && stateRef.current.pending === 'none') {
-      setPendingState('approval')
+      // ADR-015 X2：approval 置位携 ApprovalRequest（描述符载体 toolName+subject——授权卡才有实例身份；
+      // best-effort 取自当前待批卡——allow 通道接线仍 t000073 另批）
+      const last = messages[messages.length - 1]
+      const t = last?.toolCalls?.find(
+        (c) => c.status === 'need-approval' || c.status === 'file-approval',
+      )
+      setPendingState('approval', {
+        since: new Date().toISOString(),
+        ...(t
+          ? {
+              approval: {
+                toolName: t.name,
+                subject: String(t.args?.command ?? t.args?.path ?? t.args?.url ?? t.name),
+                reason: '',
+                risk: 'low' as const,
+              },
+            }
+          : {}),
+      })
     } else if (!hasApproval && stateRef.current.pending === 'approval') {
       clearPending()
     }
@@ -411,6 +430,8 @@ export default function ConversationPanel({
   const [input, setInput] = useState('')
   const [working, setWorking] = useState(false)
   const [workingStage, setWorkingStage] = useState('等待回复…')
+  // ADR-015 §6-D2：stale 作废可见重确认提示（独立通道——不寄生 working 条，空闲时也可见；6s 自隐）
+  const [staleNotice, setStaleNotice] = useState('')
   // 2026-08-08 B 修复（feedback.log「候选+确认卡不能同时出来」）：候选点击后标记已选（消息索引 → 选项索引）——
   // 跨消息视觉：旧候选消息不再显示可点按钮（已选态），确认卡接管决策（决策点互斥）
   const [chosenCandidates, setChosenCandidates] = useState<Record<number, number>>({})
@@ -455,9 +476,14 @@ export default function ConversationPanel({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   // 2026-08-04 体验修复（用户实测：启动页输入句预填多余）：initialPrompt 进入工作区自动发送——说了就直接开始
   // （区别于 externalRequest「预填+自动发送」复跑语义；initialPrompt 只用于启动页首句）
-  const sendRef = useRef<(opts?: { silent?: boolean; text?: string }) => Promise<void>>(
-    async () => {},
-  )
+  const sendRef = useRef<
+    (opts?: {
+      silent?: boolean
+      text?: string
+      echo?: boolean
+      answers?: DecisionAnswers
+    }) => Promise<void>
+  >(async () => {})
   // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层状态）：连续无进展计数 + 升级次数（不可变 StuckState）+ 已读文件集合
   const stuckStateRef = useRef(initialStuckState)
   // research→propose：分析期连续纯 web 轮 streak（与 StuckDetector 分立；确认后清零）
@@ -762,7 +788,11 @@ export default function ConversationPanel({
   // 计划确认后 service/network：整会话最多自动续跑 1 次（与「重试」按钮同路径）
   const autoRetriedServiceRef = useRef(false)
   // 排队衔接（输入≠打断）——提前声明：verifyThenResolve 对账引导在 working 时写入此 ref
-  const pendingSendRef = useRef('')
+  // E-685 根因修复（第十三轴后取证坐实）：单槽覆盖（后写吞前写）＝回声/nudge 互杀丢文——改 FIFO 数组。
+  // 每轮 finally flush 出队一条、其轮结束后再 flush 下一条（自然串流，不并发）。
+  const pendingSendRef = useRef<Array<{ text: string; answers?: DecisionAnswers; echo?: boolean }>>(
+    [],
+  )
   const verifyThenResolve = async (claim: CompletionClaim): Promise<void> => {
     const bridge = window.neonforge?.completion
     let systemState: SystemVerifier | undefined
@@ -813,7 +843,7 @@ export default function ConversationPanel({
         // 当前核验轮（void verifyThenResolve 与 runChat 并行——中途 stopGeneration 会打乱
         // mock/续聊轮次，S4-3 实证「已解决」卡不出）。working 中写入 pending，等本轮 finally flush。
         const nudge = `【系统对账·非用户发言】${guide}`
-        if (workingRef.current) pendingSendRef.current = nudge
+        if (workingRef.current) pendingSendRef.current.push({ text: nudge })
         else void sendRef.current({ silent: true, text: nudge })
       } else {
         // A-015（V1.5-S4）：对账失败用户侧可见提示——无回填引导（或达防死循环上限停止自动 send）时，
@@ -1850,6 +1880,8 @@ export default function ConversationPanel({
     const releaseWorking = () => {
       setWorking(false)
       onWorkingChange?.(false)
+      // 注：此处刻意不 flush——decision-pending 的滞留队列由后续 send 轮 finally 排空（基线时序；
+      // S7 组取证：拦停即排会改续跑次序引入回归）。1859 悬挂滞留问题归其独立计划处置。
     }
     // 等待自动执行（pending）完成——最多 150s（2026-08-05 根因修复：原 8s 窗口 < 长任务工具超时
     // （bash 30s / npm install 120s——坑 61）→ 工具未完成就续聊 → 回填「执行失败」→ 模型停住/重试；
@@ -2420,16 +2452,30 @@ export default function ConversationPanel({
   // 2026-08-07 无阶段修复（用户「输入≠打断」）：排队衔接机制——模型产出中用户发送 → 存 pending，
   // 当前轮（流式+工具链）完成后自动发送（不打断）；打断 = 显式停止按钮（.nf-chat__stop）
   const flushPendingSend = () => {
-    const pending = pendingSendRef.current
+    const queue = pendingSendRef.current
+    const pending = queue.shift() // FIFO：一条轮毕（finally 再 flush）自然轮到下一条——不再互相覆盖
     if (!pending) return
-    pendingSendRef.current = ''
     // 直送——不经输入框（避免 pending 文案闪进 textarea）
-    setTimeout(() => void sendRef.current({ text: pending }), 50)
+    // ADR-015：answers＝入队时刻冻结值原样回传（绝不在 flush 按当时 pending 重冻——第十轴 B 承重）
+    setTimeout(
+      () =>
+        void sendRef.current({
+          text: pending.text,
+          answers: pending.answers,
+          echo: pending.echo,
+        }),
+      50,
+    )
   }
 
   // 2026-08-06 只说不做第 5 次升级：send 支持 silent（自动续聊——不显示用户气泡）
   // 2026-09-28：系统提示/对账前缀强制 silent；opts.text 直送——不经输入框（防系统文案停在 textarea）
-  const send = async (opts?: { silent?: boolean; text?: string }) => {
+  const send = async (opts?: {
+    silent?: boolean
+    text?: string
+    echo?: boolean
+    answers?: DecisionAnswers
+  }) => {
     const fromBox = opts?.text === undefined
     const text = (fromBox ? inputRef.current : opts.text!).trim()
     if (!text) return
@@ -2451,54 +2497,105 @@ export default function ConversationPanel({
         })
       ) {
         console.log('[conversation] busy——排队衔接（ADR-013；要停请点停止）')
-        pendingSendRef.current = text
+        // ADR-015：仅【确认语义文本】在入队时刻冻结归属（β 的 stale 形态＝迟到确认语误击新卡）；
+        // 新意图文本不冻结——flush 时按当时决策点走 C2（ADR-014 #1 现场语义不变）。echo 自带 answers。
+        pendingSendRef.current.push({
+          text,
+          echo: opts?.echo,
+          answers:
+            opts?.answers ??
+            (silent || stateRef.current.pending === 'none' || !isConfirmIntent(text)
+              ? undefined
+              : {
+                  kind: stateRef.current.pending,
+                  instanceId: stateRef.current.decisionInstanceSeq,
+                }),
+        })
         // silent：不在此处 push 用户气泡；flush 后 send 再走 silent 系统通道
         return
       }
       // 未排队：仅「working + 非 silent + pending===approval」落入既有直送逻辑
       console.log('[conversation] 待授权中发送——新指令直接处理（未批准给新指令）')
     }
+    // ADR-015 §6-D2：stale 答复前置探测（第十二轴 B#4——应用层义务，域门为兜底防线）——
+    // 冻结 answers 与当前实例不符 ⇒ 作废：气泡保留可见＋状态栏重确认提示＋stale 事件；
+    // 不发起模型轮、不吞文本、不回喂 C2（β 根因"迟到确认语误击新卡"的正解）。
+    // echo 文本豁免：其决策已在按钮当场过门——回声仅作上下文续跑，无从属实例语义。
+    if (opts?.answers && !opts.echo) {
+      const cur = stateRef.current
+      if (!(
+        cur.pending === opts.answers.kind && cur.decisionInstanceSeq === opts.answers.instanceId
+      )) {
+        tlog(
+          'conversation.stale_input_discarded',
+          {
+            answers: opts.answers,
+            pending: cur.pending,
+            decisionInstanceSeq: cur.decisionInstanceSeq,
+          },
+          'system',
+        )
+        setStaleNotice('决策点已更新——请在当前卡片重新确认（上一条答复已作废）')
+        window.setTimeout(() => setStaleNotice(''), 6000)
+        if (!silent) {
+          setMessages((p) => [
+            ...p,
+            { role: 'user', content: text, status: 'done', id: nextMsgId() },
+          ])
+        }
+        return
+      }
+    }
     if (!silent) {
-      // S7（A0 审校 P1-5 + C2 完善——e2e-0to1 场景 B 暴露）：pending 期用户文本分流——
-      // 确认语义（isConfirmIntent——「行/按这个方案」）→ 自动确认当前决策点（等价点按钮——确认卡时代
-      // 遗漏文本确认——真实用户打字确认）；新意图文本 → 隐式拒绝（C2——reason.direction + text——
-      // 卡消失 + 模型重提议）；approval 期确认文本 → 触发当前授权卡批准（下方 approveToolCall 路径）
-      const pendingKind = stateRef.current.pending
-      if (pendingKind !== 'none' && pendingKind !== 'approval') {
-        if (isConfirmIntent(text)) {
-          confirm(pendingKind)
-        } else {
-          reject(pendingKind, { kind: 'direction', text })
-          if (pendingKind === 'plan') {
-            planWasRejectedRef.current = true
-            planRejectCountRef.current += 1
+      // ADR-014 #2：按钮回声文本（opts.echo）退出用户决策通道——不进 C2/计数/打点，只渲染气泡＋驱动续跑
+      if (!opts?.echo) {
+        // S7（A0 审校 P1-5 + C2 完善——e2e-0to1 场景 B 暴露）：pending 期用户文本分流——
+        // 确认语义（isConfirmIntent——「行/按这个方案」）→ 自动确认当前决策点（等价点按钮——确认卡时代
+        // 遗漏文本确认——真实用户打字确认）；新意图文本 → 隐式拒绝（C2——reason.direction + text——
+        // 卡消失 + 模型重提议）；approval 期确认文本 → 触发当前授权卡批准（下方 approveToolCall 路径）
+        const pendingKind = stateRef.current.pending
+        // ADR-015：即时路径（未被排队）文本＝针对当前实例作答——answers 现场冻结（进门必配平；
+        // 排队文本的归属冻结/过期作废见上方 stale 前置探测）
+        const ansNow =
+          pendingKind === 'none'
+            ? undefined
+            : { kind: pendingKind, instanceId: stateRef.current.decisionInstanceSeq }
+        if (pendingKind !== 'none' && pendingKind !== 'approval') {
+          if (isConfirmIntent(text)) {
+            confirm(pendingKind, ansNow)
+          } else {
+            reject(pendingKind, { kind: 'direction', text }, ansNow)
+            if (pendingKind === 'plan') {
+              planWasRejectedRef.current = true
+              planRejectCountRef.current += 1
+            }
+          }
+        } else if (
+          pendingKind === 'approval' &&
+          // 收紧（T0-3/P2 回归修正）：approval 期只认**明确批准词**（「批准/可以/行/同意」——
+          // 「继续」等非批准语义不自动批——手动按卡测试与真实「让模型继续」路径保持手动）
+          /^(行|好|可以|批准|同意|没问题|确认|就这么办)[。！!~～]?$|批准|同意/.test(text)
+        ) {
+          // S7（C2 完善——e2e-0to1 场景 B）：approval 期确认文本 → 自动批准当前待批授权卡
+          // （真实用户打字「行/批准」——确认卡时代只处理按钮批准遗漏文本批准）
+          const lastMsg = messagesRef.current[messagesRef.current.length - 1]
+          if (lastMsg?.role === 'assistant' && lastMsg.toolCalls?.length) {
+            approveAllToolCalls(lastMsg.toolCalls)
           }
         }
-      } else if (
-        pendingKind === 'approval' &&
-        // 收紧（T0-3/P2 回归修正）：approval 期只认**明确批准词**（「批准/可以/行/同意」——
-        // 「继续」等非批准语义不自动批——手动按卡测试与真实「让模型继续」路径保持手动）
-        /^(行|好|可以|批准|同意|没问题|确认|就这么办)[。！!~～]?$|批准|同意/.test(text)
-      ) {
-        // S7（C2 完善——e2e-0to1 场景 B）：approval 期确认文本 → 自动批准当前待批授权卡
-        // （真实用户打字「行/批准」——确认卡时代只处理按钮批准遗漏文本批准）
-        const lastMsg = messagesRef.current[messagesRef.current.length - 1]
-        if (lastMsg?.role === 'assistant' && lastMsg.toolCalls?.length) {
-          approveAllToolCalls(lastMsg.toolCalls)
-        }
+        // 13 复跑入口：上报用户输入（真实交付包 rerunPrompt 用）
+        onUserMessage?.(text)
+        // 2026-08-04：对话日志（自动记录用户消息——与 assistant done 互补成完整对话）；2026-08-08 会话归属
+        tlog('conversation.message_sent', { content: text }, 'user')
+        // ADR-010 T2：pending 存在期间的用户文本回复计数（用户在试图用文字确认——A-024 主动检测）
+        stateRef.current = noteUserTextReply(stateRef.current)
+        window.neonforge.chatLog?.log?.({
+          ts: new Date().toISOString(),
+          role: 'user',
+          content: text,
+          session: sessionId,
+        })
       }
-      // 13 复跑入口：上报用户输入（真实交付包 rerunPrompt 用）
-      onUserMessage?.(text)
-      // 2026-08-04：对话日志（自动记录用户消息——与 assistant done 互补成完整对话）；2026-08-08 会话归属
-      tlog('conversation.message_sent', { content: text }, 'user')
-      // ADR-010 T2：pending 存在期间的用户文本回复计数（用户在试图用文字确认——A-024 主动检测）
-      stateRef.current = noteUserTextReply(stateRef.current)
-      window.neonforge.chatLog?.log?.({
-        ts: new Date().toISOString(),
-        role: 'user',
-        content: text,
-        session: sessionId,
-      })
       setMessages((p) => [...p, { role: 'user', content: text, status: 'done', id: nextMsgId() }])
     } else {
       // 系统引导/提示：不经用户通道（气泡/输入框/message_sent/chatLog）；时间线记一条便于事后查
@@ -2653,6 +2750,14 @@ export default function ConversationPanel({
     applyTool,
     grantPlan,
     rejectApproval: (request, reason) => {
+      // ADR-015：授权拒绝携当前 approval 实例 answers 进门（approval 卡组件跨渲染帧定位精度＝t000073 议题）
+      const ans =
+        stateRef.current.pending === 'approval'
+          ? { kind: 'approval' as const, instanceId: stateRef.current.decisionInstanceSeq }
+          : undefined
+      // ADR-015：进门在副作用之前——stale 点击（域门兜底 no-op）不复写拒绝标志/不注 nudge
+      const eff = rejectApproval(request, reason, ans)
+      if (!eff && ans) return
       approvalWasRejectedRef.current = true
       // L2：拒授权回调当场 silent（不等纯文本窗）；计 1 次，纯文本路径可再催一次
       if (stateRef.current.planConfirmed && !approvalRejectImmediateNudgedRef.current) {
@@ -2667,7 +2772,6 @@ export default function ConversationPanel({
         )
         void sendRef.current?.({ silent: true, text: msg })
       }
-      rejectApproval(request, reason)
     },
     addTrust,
     acquireChain,
@@ -3000,11 +3104,17 @@ export default function ConversationPanel({
                             className="nf-confirmcard__btn nf-confirmcard__btn--ok"
                             onClick={() => {
                               // 先取快照 statement 再 confirm（confirm 清 decisionContent——时序）
+                              // ADR-015：answers＝渲染帧 dc 冻结——stale 点击（内容已换）门 no-op ⇒ 不复写台账/不回声
+                              const ans = { kind: dc!.kind, instanceId: dc!.instanceId }
                               const confirmedGoal = (dc!.proposal as GoalProposal).statement
-                              confirm('goal')
+                              if (!confirm('goal', ans)) return
                               tlog('card.resolved', { card: 'goal', action: 'confirm' }, 'system')
                               onGoalConfirmed?.(confirmedGoal)
-                              void sendRef.current({ text: '确认，目标清楚了' })
+                              void sendRef.current({
+                                text: '确认，目标清楚了',
+                                echo: true,
+                                answers: ans,
+                              })
                             }}
                           >
                             确认目标
@@ -3014,7 +3124,9 @@ export default function ConversationPanel({
                             className="nf-confirmcard__btn nf-confirmcard__btn--no"
                             onClick={() => {
                               // A-006：拒绝带具体原因（不变量 8——「重新描述」= direction 调整）
-                              reject('goal', { kind: 'direction' })
+                              // ADR-015：渲染帧 answers 冻结（stale 点击＝no-op 不起回声）
+                              const ans = { kind: dc!.kind, instanceId: dc!.instanceId }
+                              if (!reject('goal', { kind: 'direction' }, ans)) return
                               setRejectedCardIdx((p) => ({ ...p, goal: i }))
                               tlog(
                                 'card.rejected',
@@ -3022,7 +3134,11 @@ export default function ConversationPanel({
                                 'system',
                               )
                               onGoalRejected?.()
-                              void sendRef.current({ text: '目标需要重新描述一下' })
+                              void sendRef.current({
+                                text: '目标需要重新描述一下',
+                                echo: true,
+                                answers: ans,
+                              })
                             }}
                           >
                             重新描述
@@ -3070,7 +3186,11 @@ export default function ConversationPanel({
                             type="button"
                             className="nf-confirmcard__btn nf-confirmcard__btn--ok"
                             onClick={() => {
-                              confirm('plan')
+                              // ADR-015：渲染帧 answers 冻结（stale 点击＝no-op——不复写台账/不起回声）
+                              const ans = dc
+                                ? { kind: dc.kind, instanceId: dc.instanceId }
+                                : undefined
+                              if (!confirm('plan', ans)) return
                               planWasRejectedRef.current = false
                               planRejectNudgeCountRef.current = 0
                               tlog(
@@ -3079,7 +3199,11 @@ export default function ConversationPanel({
                                 'system',
                               )
                               onPlanConfirmed?.()
-                              void sendRef.current({ text: '确认，按方案执行' })
+                              void sendRef.current({
+                                text: '确认，按方案执行',
+                                echo: true,
+                                answers: ans,
+                              })
                             }}
                           >
                             确认执行
@@ -3089,7 +3213,11 @@ export default function ConversationPanel({
                             className="nf-confirmcard__btn nf-confirmcard__btn--no"
                             onClick={() => {
                               // S3：拒绝带原因（不变量 8——RejectKind；「修改方案」= scope 调整方向）
-                              reject('plan', { kind: 'scope', target: 'plan' })
+                              // ADR-015：渲染帧 answers 冻结（stale 点击＝no-op）
+                              const ans = dc
+                                ? { kind: dc.kind, instanceId: dc.instanceId }
+                                : undefined
+                              if (!reject('plan', { kind: 'scope', target: 'plan' }, ans)) return
                               planWasRejectedRef.current = true
                               planRejectCountRef.current += 1
                               setRejectedCardIdx((p) => ({ ...p, execution: i }))
@@ -3099,7 +3227,11 @@ export default function ConversationPanel({
                                 'system',
                               )
                               onPlanRejected?.()
-                              void sendRef.current({ text: '方案需要调整一下' })
+                              void sendRef.current({
+                                text: '方案需要调整一下',
+                                echo: true,
+                                answers: ans,
+                              })
                             }}
                           >
                             修改方案
@@ -3132,13 +3264,21 @@ export default function ConversationPanel({
                             type="button"
                             className="nf-confirmcard__btn nf-confirmcard__btn--ok"
                             onClick={() => {
-                              confirm('resolution')
+                              // ADR-015：渲染帧 answers 冻结（stale 点击＝no-op）
+                              const ans = dc
+                                ? { kind: dc.kind, instanceId: dc.instanceId }
+                                : undefined
+                              if (!confirm('resolution', ans)) return
                               tlog(
                                 'card.resolved',
                                 { card: 'achievement', action: 'confirm' },
                                 'system',
                               )
-                              void sendRef.current({ text: '已解决，谢谢' })
+                              void sendRef.current({
+                                text: '已解决，谢谢',
+                                echo: true,
+                                answers: ans,
+                              })
                             }}
                           >
                             已解决
@@ -3148,7 +3288,11 @@ export default function ConversationPanel({
                             className="nf-confirmcard__btn nf-confirmcard__btn--no"
                             onClick={() => {
                               // A-006：拒绝带具体原因（不变量 8——「还要改」= scope 调整）
-                              reject('resolution', { kind: 'scope' })
+                              // ADR-015：渲染帧 answers 冻结（stale 点击＝no-op）
+                              const ans = dc
+                                ? { kind: dc.kind, instanceId: dc.instanceId }
+                                : undefined
+                              if (!reject('resolution', { kind: 'scope' }, ans)) return
                               setRejectedCardIdx((p) => ({ ...p, achievement: i }))
                               tlog(
                                 'card.rejected',
@@ -3403,6 +3547,22 @@ export default function ConversationPanel({
       </div>
 
       {/* 2026-08-04 授权架构 v4：授权记录条——固定在输入框上方（用户随时可见/清除；原在消息列表顶部——会话长滚出视野看不到） */}
+      {staleNotice && (
+        <div
+          className="nf-stalenotice"
+          role="status"
+          style={{
+            margin: '6px 12px',
+            padding: '6px 10px',
+            borderRadius: 8,
+            background: 'rgba(250,200,80,0.12)',
+            border: '1px solid rgba(250,200,80,0.45)',
+            fontSize: 13,
+          }}
+        >
+          {staleNotice}
+        </div>
+      )}
       {taskTrust.length > 0 && (
         <div className="nf-trustbar">
           <IconShield size={12} />
@@ -3435,7 +3595,9 @@ export default function ConversationPanel({
                   onClick={() => {
                     // UAT 二轮真机（2026-09-07）：强制卡确认后必须续转——仅 confirm 不 send 会让
                     // 流程停滞（用户点完卡无反馈，模型回合不再触发）。按 underlying 对齐普通卡续转。
-                    confirm('system_clarify')
+                    // ADR-015：渲染帧 fdc 冻结 answers——underlying 轮转后的旧卡点击＝门 no-op
+                    const ans = { kind: fdc!.kind, instanceId: fdc!.instanceId }
+                    if (!confirm('system_clarify', ans)) return
                     tlog('card.resolved', { card: 'system_clarify', action: 'confirm' }, 'system')
                     const u = prop?.underlying
                     const confirmText =
@@ -3450,7 +3612,7 @@ export default function ConversationPanel({
                       planRejectNudgeCountRef.current = 0
                       onPlanConfirmed?.()
                     }
-                    void sendRef.current({ text: confirmText })
+                    void sendRef.current({ text: confirmText, echo: true, answers: ans })
                   }}
                 >
                   确认执行
@@ -3461,7 +3623,9 @@ export default function ConversationPanel({
                   onClick={() => {
                     // 拒绝委派 underlying + 续转引导（A-026 同源——拒绝后模型必须收到反馈并重提议）；
                     // 点卡 = 明确新一轮协商 → rejectStreak 重置（打字拒绝不重置——C2 循环形态）
-                    reject('system_clarify', { kind: 'direction' })
+                    // ADR-015：渲染帧 fdc 冻结 answers（stale 点击＝no-op）
+                    const ans = { kind: fdc!.kind, instanceId: fdc!.instanceId }
+                    if (!reject('system_clarify', { kind: 'direction' }, ans)) return
                     resetRejectStreak()
                     if (prop?.underlying === 'plan') {
                       planWasRejectedRef.current = true
@@ -3474,6 +3638,8 @@ export default function ConversationPanel({
                     )
                     void sendRef.current({
                       text: prop?.underlying === 'plan' ? '方案需要调整' : '目标需要重新描述一下',
+                      echo: true,
+                      answers: ans,
                     })
                   }}
                 >
@@ -3483,7 +3649,9 @@ export default function ConversationPanel({
                   type="button"
                   className="nf-forcedcard__btn"
                   onClick={() => {
-                    confirm('system_clarify')
+                    // ADR-015：渲染帧 fdc 冻结 answers（stale 点击＝no-op——不越权放行/不回声）
+                    const ans = { kind: fdc!.kind, instanceId: fdc!.instanceId }
+                    if (!confirm('system_clarify', ans)) return
                     tlog('card.resolved', { card: 'system_clarify', action: 'confirm' }, 'system')
                     if (lastAssistant?.toolCalls?.length)
                       approveAllToolCalls(lastAssistant.toolCalls)
@@ -3500,7 +3668,7 @@ export default function ConversationPanel({
                       planRejectNudgeCountRef.current = 0
                       onPlanConfirmed?.()
                     }
-                    void sendRef.current({ text: confirmText })
+                    void sendRef.current({ text: confirmText, echo: true, answers: ans })
                   }}
                 >
                   由搭档全权决定

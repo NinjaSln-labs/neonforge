@@ -196,11 +196,15 @@ test('计划确认后 service 自动续跑一次；第二次 service 须点重�
   await expect(page.getByRole('button', { name: '确认执行' })).toBeVisible({ timeout: 10000 })
   await page.getByRole('button', { name: '确认执行' }).click()
   await expect(page.getByText('自动续跑成功')).toBeVisible({ timeout: 15000 })
-  // A-029：闸门用尽 → 再 service 只出「重试」，不自动成功
+  // A-029：闸门用尽 → 再 service 只出「重试」，不自动成功。
+  // T3/β 修正轮：旧末行 toHaveCount(1) 标定在旧单槽丢文 bug 上（按钮回声按 ADR-014 #2 必达模型，
+  // 回声轮亦产「自动续跑成功」——计数随队列正确性浮动）。门的可观测本意＝失败后「重试」按钮
+  // **持续在位**（若自动重试被消费，按钮消失/成功泡覆盖）——以按钮持续性断言承载，弃全局计数。
   await page.locator('.nf-chat__input textarea').fill('再改一下')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
   await expect(page.getByRole('button', { name: '重试' })).toBeVisible({ timeout: 8000 })
   await page.waitForTimeout(600)
   await expect(page.getByRole('button', { name: '重试' })).toBeVisible()
-  await expect(page.getByText('自动续跑成功')).toHaveCount(1)
+  await page.waitForTimeout(1500)
+  await expect(page.getByRole('button', { name: '重试' })).toBeVisible()
 })

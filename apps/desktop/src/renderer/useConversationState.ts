@@ -18,6 +18,7 @@ import {
   setPending,
   restorePending as restorePendingDomain,
   type ConversationState,
+  type DecisionAnswers,
   type DecisionContent,
   type PendingKind,
   type RejectReason,
@@ -38,16 +39,19 @@ export function useConversationState(opts?: UseConversationStateOpts) {
   // A-005：转换后强制重渲染计数（ref 变化不触发渲染——卡隐藏/内容切换依赖响应式；
   // rejectedCardIdx 移除后由 version 驱动；读 stateRef 的渲染点消费 `version`）
   const [version, setVersion] = useState(0)
-  const transition = (fn: (s: ConversationState) => ConversationState): void => {
+  const transition = (fn: (s: ConversationState) => ConversationState): boolean => {
     const prev = stateRef.current
     stateRef.current = fn(prev)
-    // DDD：转换后 diff 派生领域事件（状态机可回放——G1 缺口闭环）
+    // ADR-015：身份门 no-op 时 fn 返回同一引用——eff＝转换真生效位（main 镜像联动判据 T3.6）
+    const eff = stateRef.current !== prev
+    // DDD：转换后 diff 派生领域事件（状态机可回放——G1 缺口闭环；no-op ⇒ 零事件）
     if (emit) {
       for (const evt of deriveStateEvents(prev, stateRef.current)) {
         emit(evt.type, evt.detail)
       }
     }
     setVersion((v) => v + 1)
+    return eff
   }
   return {
     stateRef,
@@ -56,23 +60,25 @@ export function useConversationState(opts?: UseConversationStateOpts) {
     // 用户确认/拒绝（确认卡按钮——pending 清除 + 状态推进/回退）
     // S3：拒绝带原因（不变量 8——userDecided 签名强制；A-006：reason 必传——缺省会静默掩盖调用方漏传）
     // #6 真机 2026-08-31（复验轮）：plan 确认镜像到 main（approve-files 硬序门）；goal 确认=任务边界 → 复位
-    confirm: (point: ConfirmPoint) => {
-      const r = transition((s) => userConfirmed(s, point))
-      if (point === 'plan') void window.neonforge?.session?.setPlanConfirmed?.(true)
-      else if (point === 'goal') void window.neonforge?.session?.setPlanConfirmed?.(false)
-      return r
+    confirm: (point: ConfirmPoint, answers?: DecisionAnswers) => {
+      const eff = transition((s) => userConfirmed(s, point, answers))
+      // T3.6（第十二轴 P2）：main 镜像仅随转换真生效——门 no-op 不得翻硬序门
+      if (eff && point === 'plan') void window.neonforge?.session?.setPlanConfirmed?.(true)
+      else if (eff && point === 'goal') void window.neonforge?.session?.setPlanConfirmed?.(false)
+      return eff
     },
-    reject: (point: ConfirmPoint, reason: RejectReason) => {
-      const r = transition((s) => userRejected(s, point, reason))
+    reject: (point: ConfirmPoint, reason: RejectReason, answers?: DecisionAnswers) => {
+      const eff = transition((s) => userRejected(s, point, reason, answers))
       // 审计修正（stage-review-2026-08-31 Spec-3）：plan 拒绝 → main 镜像复位（否则硬序门仍开）
-      if (point === 'plan') void window.neonforge?.session?.setPlanConfirmed?.(false)
-      return r
+      if (eff && point === 'plan') void window.neonforge?.session?.setPlanConfirmed?.(false)
+      return eff
     },
     // approve-files 批准（追加语义——A0 §5；files 已 trustPath 规范化）
     grantPlan: (files: string[]) => transition((s) => approvalGranted(s, files)),
     // S7（A0 审校 P1-2 接线）：授权拒绝——approvalDecided（§3.4 C6——拒绝记忆登记——同轮同类短封）
-    rejectApproval: (request: ApprovalRequest, reason: RejectReason) =>
-      transition((s) => approvalDecided(s, request, { confirm: false, reason })),
+    // ADR-015：拒绝按钮携 answers（进门）；allow 族不经此门（t000073 另批）
+    rejectApproval: (request: ApprovalRequest, reason: RejectReason, answers?: DecisionAnswers) =>
+      transition((s) => approvalDecided(s, request, { confirm: false, reason }, answers)),
     // 工具结果汇入（进度/失败标记——坑 93 ② policy 不置失败）
     applyTool: (r: {
       name: string
@@ -86,7 +92,14 @@ export function useConversationState(opts?: UseConversationStateOpts) {
       kind: Exclude<PendingKind, 'none'>,
       content?: Omit<DecisionContent, 'kind' | 'instanceId'>,
     ) => transition((s) => setPending(s, kind, content)),
-    clearPending: () => transition((s) => ({ ...s, pending: 'none' as PendingKind })),
+    // ADR-015（第十三轴 B#6）：clearPending 同步清快照/描述符——恒铺骨架残留经持久化→恢复＝approval 幽灵循环破口封堵
+    clearPending: () =>
+      transition((s) => ({
+        ...s,
+        pending: 'none' as PendingKind,
+        decisionContent: undefined,
+        activeDescriptor: undefined,
+      })),
     // ADR-010：强制卡「我要重新描述」按钮专用——点卡 = 明确新一轮协商，rejectStreak 重置
     // （pending 期间打字拒绝不重置——C2 循环形态仍需累积触发强制卡）
     resetRejectStreak: () => transition((s) => ({ ...s, rejectStreak: 0 })),
