@@ -14,6 +14,7 @@ import {
   applyToolResult,
   setPending,
   approvalDecided,
+  approvalRequested,
 } from '../../src/domain/conversationState'
 
 // 2026-08-15 DDD 重建：领域事件派生（Event Sourcing-lite——转换 diff → 事件）
@@ -183,11 +184,24 @@ describe('deriveStateEvents（decision.* 领域决策点事件——设计 §3.5
 
   it('approval 允许 → decision.resolved（point: approval, action: confirm）；拒绝 → reject（拒绝记忆 diff 推断）', () => {
     const req = { toolName: 'bash', subject: 'rm -rf /', reason: '高危', risk: 'high' as const }
-    const s = setPending(userConfirmed(userConfirmed(initialState(), 'goal'), 'plan'), 'approval', {
-      approval: req,
-      since: 't',
-    })
-    const allow = deriveStateEvents(s, approvalDecided(s, req, { confirm: true }))
+    // ADR-017 B2 改型：窗记录入窗（approvalRequested）——dc/seq 铺现骨架供 answeredInstanceId 回放；
+    // 派生规则本体改窗 diff 属 B3（本案锁定 pending/cleared＋拒绝记忆 diff 推断面不回归）
+    const s = approvalRequested(
+      setPending(userConfirmed(userConfirmed(initialState(), 'goal'), 'plan'), 'approval', {
+        approval: req,
+        since: 't',
+      }),
+      {
+        requestId: 'tl-1',
+        kind: 'tool',
+        toolName: req.toolName,
+        subject: req.subject,
+        argsFingerprint: 'fp',
+        request: req,
+      },
+      false,
+    )
+    const allow = deriveStateEvents(s, approvalDecided(s, { requestId: 'tl-1' }, { confirm: true }))
     expect(allow.find((e) => e.type === 'decision.resolved')?.detail).toEqual({
       point: 'approval',
       action: 'confirm',
@@ -195,7 +209,7 @@ describe('deriveStateEvents（decision.* 领域决策点事件——设计 §3.5
     })
     const deny = deriveStateEvents(
       s,
-      approvalDecided(s, req, { confirm: false, reason: { kind: 'direction' } }),
+      approvalDecided(s, { requestId: 'tl-1' }, { confirm: false, reason: { kind: 'direction' } }),
     )
     expect(deny.find((e) => e.type === 'decision.resolved')?.detail).toEqual({
       point: 'approval',

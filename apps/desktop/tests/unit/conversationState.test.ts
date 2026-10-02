@@ -36,7 +36,14 @@ import {
   shouldStopContinuation,
   actionNeedsApproval,
   decidableRequests,
+  approvalRequested,
+  approvalExecutionSettled,
+  windowResolved,
+  resolveUncertain,
+  reconcileJournal,
+  expireWindow,
   type ConversationState,
+  type ApprovalRecord,
   type ApprovalWindow,
   type GoalProposal,
   type PlanProposal,
@@ -81,6 +88,20 @@ const approvalReq = (r: Partial<ApprovalRequest> = {}): ApprovalRequest => ({
   risk: 'high',
   ...r,
 })
+// ADR-017 B2 旧用例改型辅助：窗记录构造（request 复用 approvalReq 夹具）
+const winRec = (
+  id: string,
+  r: ApprovalRequest,
+  over: Partial<ApprovalRecord> = {},
+): Omit<ApprovalRecord, 'state'> => ({
+  requestId: id,
+  kind: 'tool',
+  toolName: r.toolName,
+  subject: r.subject,
+  argsFingerprint: 'fp',
+  request: r,
+  ...over,
+})
 const reason = (kind: RejectReason['kind'], text?: string): RejectReason => ({ kind, text })
 
 // 目标+方案已确认的基准态（多数门控/派生测试前置）
@@ -115,7 +136,8 @@ describe('Inv 1 决策唯一输入——无决策无推进', () => {
 
   it('目标确认 = 任务边界（进度/清单/达成/拒绝记忆清零——继承 userConfirmed goal 语义）', () => {
     let s = confirmed()
-    s = approvalDecided(s, approvalReq(), { confirm: false, reason: reason('direction') })
+    s = approvalRequested(s, winRec('inv1-1', approvalReq()), false)
+    s = approvalDecided(s, { requestId: 'inv1-1' }, { confirm: false, reason: reason('direction') })
     s = applyToolResult(s, { name: 'write', ok: true, file: '/test/a.js' })
     expect(s.deniedApprovals.length).toBe(1)
     const next = userDecided(s, 'goal', { confirm: true })
@@ -697,7 +719,7 @@ describe('Inv 8 拒绝带原因——签名强制 + 运行时校验', () => {
 
   it('approvalDecided 拒绝无原因 → throw', () => {
     expect(() =>
-      approvalDecided(initialState(), approvalReq(), { confirm: false } as never),
+      approvalDecided(initialState(), { requestId: 'inv8-0' }, { confirm: false } as never),
     ).toThrow()
   })
 
@@ -720,18 +742,22 @@ describe('Inv 8 拒绝带原因——签名强制 + 运行时校验', () => {
   })
 
   it('approvalDecided 拒绝 → pending 清除 + 拒绝记忆登记（§3.4 C6——同轮同类动作短封）', () => {
-    const s = setPending(confirmed(), 'approval', { approval: approvalReq(), since: 't' })
-    const next = approvalDecided(s, approvalReq(), {
-      confirm: false,
-      reason: reason('direction', '不要执行'),
-    })
+    const s = approvalRequested(confirmed(), winRec('inv8-1', approvalReq()), false)
+    const next = approvalDecided(
+      s,
+      { requestId: 'inv8-1' },
+      {
+        confirm: false,
+        reason: reason('direction', '不要执行'),
+      },
+    )
     expect(next.pending).toBe('none')
     expect(next.deniedApprovals).toEqual([{ toolName: 'bash', subject: 'rm -rf /' }])
   })
 
   it('approvalDecided 允许 → pending 清除 + 无拒绝记忆', () => {
-    const s = setPending(confirmed(), 'approval', { approval: approvalReq(), since: 't' })
-    const next = approvalDecided(s, approvalReq(), { confirm: true })
+    const s = approvalRequested(confirmed(), winRec('inv8-2', approvalReq()), false)
+    const next = approvalDecided(s, { requestId: 'inv8-2' }, { confirm: true })
     expect(next.pending).toBe('none')
     expect(next.deniedApprovals.length).toBe(0)
   })
@@ -1197,20 +1223,26 @@ describe('isSideEffectAction / isLocalhostCommand（S6——拍板 3 + 坑 97 �
 })
 
 // S7（A0 审校 P1-2）：拒绝记忆短封（§3.4 C6——approvalDecided 接线 + canExecute 消费 deniedApprovals）
+// ADR-017 B2 改型：先 approvalRequested 入窗，再按 requestId decided（窗寻址——旧 ApprovalRequest 形参作废）
 describe('拒绝记忆（S7 P1-2——C6 同轮同类短封接线）', () => {
-  it('approvalDecided 拒绝 → deniedApprovals 登记（toolName+subject）+ lastRejectReason', () => {
-    const s = setPending(userConfirmed(userConfirmed(initialState(), 'goal'), 'plan'), 'approval', {
-      approval: { toolName: 'bash', subject: 'rm -rf /tmp/x', reason: '高危', risk: 'high' },
-      since: 't',
-    })
-    const next = approvalDecided(
-      s,
-      { toolName: 'bash', subject: 'rm -rf /tmp/x', reason: '高危', risk: 'high' },
-      {
-        confirm: false,
-        reason: { kind: 'direction' },
-      },
+  const rmReq: ApprovalRequest = {
+    toolName: 'bash',
+    subject: 'rm -rf /tmp/x',
+    reason: '高危',
+    risk: 'high',
+  }
+  // 入窗→拒绝一步到位（各案共用——拒绝后 pending 释放回 none）
+  const rejectRm = (s: ConversationState): ConversationState => {
+    const w = approvalRequested(s, winRec('s7-rm', rmReq), false)
+    return approvalDecided(
+      w,
+      { requestId: 's7-rm' },
+      { confirm: false, reason: { kind: 'direction' } },
     )
+  }
+
+  it('approvalDecided 拒绝 → deniedApprovals 登记（toolName+subject）+ lastRejectReason', () => {
+    const next = rejectRm(userConfirmed(userConfirmed(initialState(), 'goal'), 'plan'))
     expect(next.deniedApprovals).toHaveLength(1)
     expect(next.deniedApprovals[0]).toEqual({ toolName: 'bash', subject: 'rm -rf /tmp/x' })
     expect(next.lastRejectReason).toEqual({ kind: 'direction' })
@@ -1218,34 +1250,19 @@ describe('拒绝记忆（S7 P1-2——C6 同轮同类短封接线）', () => {
   })
 
   it('canExecute：被拒同类动作（同 toolName + 同命令）→ deny（短封——不绕过）', () => {
-    let s = userConfirmed(userConfirmed(initialState(), 'goal'), 'plan')
-    s = approvalDecided(
-      s,
-      { toolName: 'bash', subject: 'rm -rf /tmp/x', reason: '高危', risk: 'high' },
-      { confirm: false, reason: { kind: 'direction' } },
-    )
+    const s = rejectRm(userConfirmed(userConfirmed(initialState(), 'goal'), 'plan'))
     const r = canExecute(s, { name: 'bash', command: 'rm -rf /tmp/x' }, false)
     expect(r.ok).toBe(false)
     expect(r.reason).toContain('拒绝记忆')
   })
 
   it('canExecute：不同命令类（拒绝 rm——ls 不受影响）→ 放行（短封只封同类）', () => {
-    let s = userConfirmed(userConfirmed(initialState(), 'goal'), 'plan')
-    s = approvalDecided(
-      s,
-      { toolName: 'bash', subject: 'rm -rf /tmp/x', reason: '高危', risk: 'high' },
-      { confirm: false, reason: { kind: 'direction' } },
-    )
+    const s = rejectRm(userConfirmed(userConfirmed(initialState(), 'goal'), 'plan'))
     expect(canExecute(s, { name: 'bash', command: 'ls -la' }, false).ok).toBe(true)
   })
 
   it('任务边界重置：goal 确认清 deniedApprovals（新任务重新授权）', () => {
-    let s = userConfirmed(userConfirmed(initialState(), 'goal'), 'plan')
-    s = approvalDecided(
-      s,
-      { toolName: 'bash', subject: 'rm -rf /tmp/x', reason: '高危', risk: 'high' },
-      { confirm: false, reason: { kind: 'direction' } },
-    )
+    let s = rejectRm(userConfirmed(userConfirmed(initialState(), 'goal'), 'plan'))
     s = userConfirmed(s, 'goal') // 新目标 = 新任务
     expect(s.deniedApprovals).toHaveLength(0)
   })
@@ -1529,7 +1546,8 @@ describe('ADR-015 决策点实例身份与身份门（β 根因领域解）', ()
     const s = setPending(initialState(), 'approval')
     expect(s.decisionContent).toBeDefined()
     expect(s.decisionContent?.instanceId).toBe(1)
-    expect(s.activeDescriptor).toBe('approval::')
+    // ADR-017：approval descriptor 退役（不推号——空串）
+    expect(s.activeDescriptor).toBe('')
   })
 
   it('h restorePending 旁路：直置续号不推不 emit（领域纯函数）；恢复后新 setPending 续增不撞号', () => {
@@ -1553,26 +1571,23 @@ describe('ADR-015 决策点实例身份与身份门（β 根因领域解）', ()
     expect(s.goalConfirmed).toBe(true)
   })
 
-  it('approval 族：拒绝携 answers 命中生效；旧实例 no-op；allow 无 answers 旁路（t000073 边界）', () => {
-    const s = setPending(initialState(), 'approval', { approval: approvalReq(), since: 't1' })
-    const cur = { kind: 'approval' as const, instanceId: s.decisionInstanceSeq }
+  it('approval 族（ADR-017 改窗断言）：id∈窗可决命中生效；id∉窗/已决引用级 no-op；allow/deny 同权进门（t000073 根治）', () => {
+    const s = approvalRequested(initialState(), winRec('t73-1', approvalReq()), false)
     const denied = approvalDecided(
       s,
-      approvalReq(),
-      { confirm: false, reason: reason('other') },
-      cur,
+      { requestId: 't73-1' },
+      {
+        confirm: false,
+        reason: reason('other'),
+      },
     )
     expect(denied.pending).toBe('none')
     expect(denied.deniedApprovals).toHaveLength(1)
+    // miss＝旧答复/幽灵 id（原 answers 身份门的窗口版等价：引用级 no-op）
     expect(
-      approvalDecided(
-        s,
-        approvalReq(),
-        { confirm: false, reason: reason('other') },
-        { kind: 'approval', instanceId: 42 },
-      ),
+      approvalDecided(s, { requestId: 'ghost-42' }, { confirm: false, reason: reason('other') }),
     ).toBe(s)
-    expect(approvalDecided(s, approvalReq(), { confirm: true }).pending).toBe('none') // allow 旁路
+    expect(approvalDecided(s, { requestId: 't73-1' }, { confirm: true }).pending).toBe('none') // allow 同权
   })
 
   it('isAnswerStale（应用层前置探测判据·纯函数）：匹配 false；换 kind/换实例/无活决策点 true', () => {
@@ -1626,5 +1641,172 @@ describe('ADR-017 B1 授权窗口值对象与状态字段', () => {
       ],
     }
     expect(decidableRequests(w).map((r) => r.requestId)).toEqual(['x1', 'x2'])
+  })
+})
+
+// ============================================================================
+// ADR-017 B2 窗口转换族（§3.4 落地——allow/deny 同权入态；无钟可撞）
+// ============================================================================
+describe('ADR-017 授权窗口转换族', () => {
+  const rec = (id: string, over: Partial<ApprovalRecord> = {}): Omit<ApprovalRecord, 'state'> => ({
+    requestId: id,
+    kind: 'tool',
+    toolName: 'bash',
+    subject: 'npm install',
+    argsFingerprint: 'fp',
+    request: { toolName: 'bash', subject: 'npm install', reason: '', risk: 'high' },
+    ...over,
+  })
+  const base = () => approvalRequested({ ...initialState(), pending: 'none' }, rec('a1'), false)
+
+  it('防线①确认卡接管：窗存续不置槽不推号（dc/seq 不动）', () => {
+    const withGoal = {
+      ...initialState(),
+      pending: 'goal' as const,
+      decisionInstanceSeq: 3,
+      decisionContent: { kind: 'goal' as const, since: '', instanceId: 3 },
+    }
+    const s = approvalRequested(withGoal, rec('a2'), true)
+    expect(s.pending).toBe('goal')
+    expect(s.approvalWindow.requests[0].state).toBe('queued')
+    expect(s.decisionInstanceSeq).toBe(3)
+  })
+  it('P-03 基数：两请求相继到达——第二者 queued（恰一呈现）', () => {
+    const s = approvalRequested(
+      approvalRequested(initialState(), rec('b1'), false),
+      rec('b2'),
+      false,
+    )
+    expect(s.approvalWindow.requests.map((r) => r.state)).toEqual(['pending', 'queued'])
+  })
+  it('同 id 幂等 no-op（引用相等——调用层据此打 duplicate 点）', () => {
+    const s1 = base()
+    expect(approvalRequested(s1, rec('a1'), false)).toBe(s1)
+  })
+  it('id∉窗/已决→no-op（引用相等，防线②）＋miss 不触 rejectStreak/槽', () => {
+    const s1 = base()
+    const after = approvalDecided(s1, { requestId: 'zz' }, { confirm: true })
+    expect(after).toBe(s1)
+  })
+  it('allow/deny 同权入态；deny 带拒绝记忆＋原因（不变量 8）', () => {
+    const s1 = base()
+    const ok = approvalDecided(s1, { requestId: 'a1' }, { confirm: true })
+    expect(ok.approvalWindow.requests[0]).toMatchObject({ state: 'approved', decidedBy: 'user' })
+    expect(ok.pending).toBe('none')
+    const no = approvalDecided(
+      s1,
+      { requestId: 'a1' },
+      { confirm: false, reason: { kind: 'other' } },
+    )
+    expect(no.approvalWindow.requests[0].state).toBe('denied')
+    expect(no.deniedApprovals).toEqual([{ toolName: 'bash', subject: 'npm install' }])
+    expect(() =>
+      approvalDecided(s1, { requestId: 'a1' }, { confirm: false, reason: undefined as never }),
+    ).toThrow(TypeError)
+  })
+  it('batch:window 逐 id 记账；reject-rest 减集；已过成员独立闸跳过（M-04）', () => {
+    let s = approvalRequested(
+      approvalRequested(approvalRequested(initialState(), rec('c1'), false), rec('c2'), false),
+      rec('c3'),
+      false,
+    )
+    s = approvalDecided(s, { requestId: 'c2' }, { confirm: true })
+    const batched = approvalDecided(
+      s,
+      { batch: 'window' },
+      { confirm: false, reason: { kind: 'scope' } },
+    )
+    expect(batched.approvalWindow.requests.map((r) => r.state)).toEqual([
+      'denied',
+      'approved',
+      'denied',
+    ])
+    const rest = approvalDecided(
+      s,
+      { batch: 'reject-rest', keep: ['c3'] },
+      { confirm: false, reason: { kind: 'scope' } },
+    )
+    expect(rest.approvalWindow.requests.map((r) => r.state)).toEqual([
+      'denied',
+      'approved',
+      'pending',
+    ])
+  })
+  it('归零释放槽＋drainQueued 推进呈现＋确认卡让位回槽（防线④双向同步）', () => {
+    let s = approvalRequested(approvalRequested(initialState(), rec('d1'), false), rec('d2'), false)
+    s = approvalDecided(s, { requestId: 'd1' }, { confirm: true })
+    expect(s.pending).toBe('approval') // d2 顶上
+    expect(s.approvalWindow.requests.map((r) => r.state)).toEqual(['approved', 'pending'])
+    s = approvalDecided(s, { requestId: 'd2' }, { confirm: true })
+    expect(s.pending).toBe('none')
+    // 确认卡接管：槽被 goal 占用→决策后释放——窗内仍有可见记录时槽须回 'approval'
+    const taken = { ...base(), pending: 'goal' as const }
+    expect(windowResolved({ ...taken, pending: 'none' }).pending).toBe('approval')
+  })
+  it('settled：批了失败→failed；done 幂等 no-op（journal 为进度权威）', () => {
+    let s = approvalDecided(base(), { requestId: 'a1' }, { confirm: true })
+    expect(approvalExecutionSettled(s, 'a1', 'done')).toBe(s)
+    s = approvalExecutionSettled(s, 'a1', 'failed')
+    expect(s.approvalWindow.requests[0].state).toBe('failed')
+    expect(approvalExecutionSettled(s, 'ghost', 'failed')).toBe(s)
+  })
+  it('防线⑤ journal 三判：done 收敛/started→uncertain/≤approved 存续/无行退化 expired+failed', () => {
+    let s = approvalRequested(
+      approvalRequested(
+        approvalRequested(approvalRequested(initialState(), rec('e1'), false), rec('e2'), false),
+        rec('e3'),
+        false,
+      ),
+      rec('e4'),
+      false,
+    )
+    s = approvalDecided(s, { batch: 'window' }, { confirm: true }) // 四条全转 approved（queued/pending 均为可决集）
+    const s2 = reconcileJournal(s, [
+      { requestId: 'e1', phase: 'done' },
+      { requestId: 'e2', phase: 'started' },
+      { requestId: 'e3', phase: 'approved' },
+    ]) // e4 无行→退化
+    expect(s2.approvalWindow.requests.map((r) => r.state)).toEqual([
+      'approved',
+      'uncertain',
+      'approved',
+      'failed',
+    ])
+    const done = approvalRequested(initialState(), rec('e9'), false)
+    expect(
+      reconcileJournal(done, [{ requestId: 'e9', phase: 'issued' }]).approvalWindow.requests[0]
+        .state,
+    ).toBe('pending') // 判 A 存续
+    expect(reconcileJournal(done, []).approvalWindow.requests[0].state).toBe('expired')
+  })
+  it('uncertain 唯一用户出口（防线⑥——无自动重放路径存在）', () => {
+    const s = {
+      ...initialState(),
+      approvalWindow: { requests: [{ ...rec('f1'), state: 'uncertain' as const }] },
+      pending: 'approval' as const,
+    }
+    expect(approvalDecided(s, { requestId: 'f1' }, { confirm: true })).toBe(s) // uncertain 不可决（闸只认 queued/pending）
+    const ok = resolveUncertain(s, 'f1', 'settled-done')
+    expect(ok.approvalWindow.requests[0].state).toBe('approved')
+    expect(ok.pending).toBe('none')
+  })
+  it('expireWindow：未决→expired、approved→failed（legacy）；ttl 不动 approved', () => {
+    const mixed = {
+      ...initialState(),
+      approvalWindow: {
+        requests: [
+          { ...rec('g1'), state: 'pending' as const },
+          { ...rec('g2'), state: 'approved' as const },
+        ],
+      },
+    }
+    expect(expireWindow(mixed, 'legacy').approvalWindow.requests.map((r) => r.state)).toEqual([
+      'expired',
+      'failed',
+    ])
+    expect(expireWindow(mixed, 'ttl').approvalWindow.requests[1].state).toBe('approved')
+  })
+  it('approval 入 descriptorOf 退役（返回空串——不推号）', () => {
+    expect(descriptorOf('approval' as PendingKind, undefined)).toBe('')
   })
 })

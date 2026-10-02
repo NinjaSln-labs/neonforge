@@ -195,7 +195,6 @@ export function descriptorOf(
   content?: Omit<DecisionContent, 'kind' | 'instanceId'>,
 ): string {
   const p = content?.proposal
-  const a = content?.approval
   switch (kind) {
     case 'goal':
       return `goal:${(p as GoalProposal | undefined)?.statement ?? ''}`
@@ -209,7 +208,8 @@ export function descriptorOf(
       return `res:${joinUniqSorted((ev?.verification ?? []).map((v) => `${v.command}=${String(v.passed)}`))}::${joinUniqSorted((ev?.diffs ?? []).map((d) => d.path))}`
     }
     case 'approval':
-      return `approval:${a?.toolName ?? ''}:${a?.subject ?? ''}`
+      // approval descriptor 退役（ADR-017）——不入推号机制
+      return ''
     case 'system_clarify': {
       const sc = p as SystemClarifyProposal | undefined
       return `clarify:${sc?.underlying ?? ''}::${sc?.statement ?? ''}`
@@ -296,7 +296,7 @@ export function userDecided(
       next.planConfirmed = false
     }
     if (point === 'approval') {
-      // 确认点不处理 approval（approval 走 approvalDecided）——防御：不推进任何确认位
+      // 确认点不处理 approval（窗口族自管——ADR-017）——防御：不推进任何确认位
     }
   } else {
     const reason = decision.reason
@@ -347,37 +347,163 @@ export function detectUnproductiveDialogue(
   return null
 }
 
-/** 授权决策（设计 §3.4 approvalDecided——允许清 pending；拒绝 + reason 登记拒绝记忆） */
+// ============================================================================
+// ADR-017：授权窗口转换族（§3.4 落地——allow/deny 同权入态；无钟可撞）
+// 槽派生不变式（00 §3.2 要点 5）：pending='approval' ⇔ 窗含 pending 呈现记录 ∧ 无确认卡占槽。
+// 幂等/闸的 stale 打点由调用层（useConversationState）凭"引用级 no-op"检测发事件——领域保持纯。
+// ============================================================================
+
+/** 同 id 已在窗→no-op（签发唯一性条款保证跨重启不撞号——A2）；slotBusy＝确认卡占槽 ∨ 窗已有 pending 呈现（P-03 基数） */
+export function approvalRequested(
+  s: ConversationState,
+  rec: Omit<ApprovalRecord, 'state'>,
+  slotBusy: boolean,
+): ConversationState {
+  if (s.approvalWindow.requests.some((r) => r.requestId === rec.requestId)) return s
+  const hasVisible = s.approvalWindow.requests.some((r) => r.state === 'pending')
+  const state: ApprovalRecord['state'] = slotBusy || hasVisible ? 'queued' : 'pending'
+  const requests = [...s.approvalWindow.requests, { ...rec, state }]
+  const pending: PendingKind = s.pending === 'none' && state === 'pending' ? 'approval' : s.pending
+  return { ...s, approvalWindow: { requests }, pending }
+}
+
+/** 槽↔窗双向同步（00 §3.2 要点 5）：有可见 pending 记录且槽空闲 → 槽回 'approval'（确认卡让位后恢复呈现）；
+ *  槽为 approval 但窗无可见记录 → 释放（dc 残值一并清——dc.approval 面退役） */
+export function windowResolved(s: ConversationState): ConversationState {
+  const visible = s.approvalWindow.requests.some((r) => r.state === 'pending')
+  if (s.pending === 'approval' && !visible)
+    return { ...s, pending: 'none', decisionContent: undefined }
+  if (s.pending === 'none' && visible) return { ...s, pending: 'approval' }
+  return s
+}
+
+/** 决定：闸＝id∈窗 ∧ 可决；miss/已决→引用级 no-op（调用层 stale 打点）；batch 逐 id 记账（一决定 N 记录） */
 export function approvalDecided(
   s: ConversationState,
-  request: ApprovalRequest,
+  target: { requestId: string } | { batch: 'window' } | { batch: 'reject-rest'; keep: string[] },
   decision: { confirm: true } | { confirm: false; reason: RejectReason },
-  answers?: DecisionAnswers,
+  by: 'user' | 'rule' = 'user', // 缺省 user；rule＝预先裁决命中（C3 drain 回写——同闸同记，decidedBy 入档）
 ): ConversationState {
   if (!decision.confirm && !decision.reason) {
     throw new TypeError('拒绝决策必须携带 RejectReason（不变量 8）')
   }
-  // ADR-015 身份门（同 userDecided——授权卡按 instanceId 寻址；allow 族天然无 answers＝旁路，t000073 另批）
-  if (
-    answers &&
-    s.pending !== 'none' &&
-    !(answers.kind === s.pending && answers.instanceId === s.decisionInstanceSeq)
-  ) {
-    return s
-  }
-  const next: ConversationState = { ...s, pending: 'none', decisionContent: undefined }
+  const decidable = decidableRequests(s.approvalWindow)
+  const hit = (r: ApprovalRecord): boolean =>
+    'requestId' in target
+      ? r.requestId === target.requestId
+      : target.batch === 'window'
+        ? true
+        : !target.keep.includes(r.requestId)
+  const affected = decidable.filter(hit)
+  if (affected.length === 0) return s
+  const now = new Date().toISOString()
+  const ids = new Set(affected.map((r) => r.requestId))
+  const requests = s.approvalWindow.requests.map((r) =>
+    ids.has(r.requestId)
+      ? {
+          ...r,
+          state: (decision.confirm ? 'approved' : 'denied') as ApprovalRecord['state'],
+          decidedBy: by,
+          decidedAt: now,
+        }
+      : r,
+  )
+  const next: ConversationState = { ...s, approvalWindow: { requests } }
   if (!decision.confirm) {
-    // 拒绝记忆（§3.4 C6——机制层防绕过：同轮同类动作 actionGate 直接 deny——S6 消费）
+    // C6 拒绝记忆（机制不变）：每条被拒记录入 deniedApprovals（actionGate 同轮同类短封——canExecute 消费）
     next.deniedApprovals = [
       ...s.deniedApprovals,
-      { toolName: request.toolName, subject: request.subject },
+      ...affected.map((r) => ({ toolName: r.toolName, subject: r.subject })),
     ]
-    // S7（P1-4）：授权拒绝原因同样入诊断字段
     next.lastRejectReason = decision.reason
   } else {
     next.lastRejectReason = undefined
   }
-  return next
+  return drainQueued(windowResolved(next))
+}
+
+/** 执行回写收敛：done→幂等 no-op（进度真相在 journal——领域不重复记账）；failed→记录置 failed（防双真相） */
+export function approvalExecutionSettled(
+  s: ConversationState,
+  requestId: string,
+  outcome: 'done' | 'failed',
+): ConversationState {
+  if (outcome === 'done') return s
+  const r = s.approvalWindow.requests.find(
+    (x) => x.requestId === requestId && x.state === 'approved',
+  )
+  if (!r) return s
+  const requests = s.approvalWindow.requests.map((x) =>
+    x === r ? { ...x, state: 'failed' as const } : x,
+  )
+  return windowResolved({ ...s, approvalWindow: { requests } })
+}
+
+/** 槽释放后 queued→pending（呈现队列推进步——仅 approval 槽空且无呈现时） */
+export function drainQueued(s: ConversationState): ConversationState {
+  if (s.pending !== 'none') return s
+  if (s.approvalWindow.requests.some((r) => r.state === 'pending')) return s
+  const idx = s.approvalWindow.requests.findIndex((r) => r.state === 'queued')
+  if (idx < 0) return s
+  const requests = s.approvalWindow.requests.map((r, i) =>
+    i === idx ? { ...r, state: 'pending' as const } : r,
+  )
+  return { ...s, approvalWindow: { requests }, pending: 'approval' }
+}
+
+/** uncertain（journal 判 C）唯一用户出口——禁自动重放；rerun＝回 approved 待调用层再 execute（journal 侧 rerun 授权由 main 判） */
+export function resolveUncertain(
+  s: ConversationState,
+  requestId: string,
+  _choice: 'settled-done' | 'authorize-rerun', // 两选项呈现态同收敛 approved；差异（是否再 execute）由调用层承接
+): ConversationState {
+  const r = s.approvalWindow.requests.find(
+    (x) => x.requestId === requestId && x.state === 'uncertain',
+  )
+  if (!r) return s
+  const requests = s.approvalWindow.requests.map((x) =>
+    x === r
+      ? {
+          ...x,
+          state: 'approved' as const,
+          decidedBy: 'user' as const,
+          decidedAt: new Date().toISOString(),
+        }
+      : x,
+  )
+  return drainQueued(windowResolved({ ...s, approvalWindow: { requests } }))
+}
+
+/** 恢复/重连三判（§5）：done→收敛（approved 幂等）；started∧¬done→uncertain；issued/approved→存续（判 A）；
+ *  窗内有、rows 无（异机/旧档退化）→未决 expired、approved failed——仅退化分支 */
+export function reconcileJournal(
+  s: ConversationState,
+  rows: Array<{ requestId: string; phase: 'issued' | 'approved' | 'started' | 'done' }>,
+): ConversationState {
+  const phase = new Map(rows.map((r) => [r.requestId, r.phase]))
+  const requests = s.approvalWindow.requests.map((r) => {
+    const p = phase.get(r.requestId)
+    if (p === undefined) {
+      if (r.state === 'queued' || r.state === 'pending') return { ...r, state: 'expired' as const }
+      if (r.state === 'approved') return { ...r, state: 'failed' as const }
+      return r
+    }
+    if (p === 'started') return { ...r, state: 'uncertain' as const }
+    return r // done/issued/approved：呈现态存续（执行进度真相在 journal）
+  })
+  return drainQueued(windowResolved({ ...s, approvalWindow: { requests } }))
+}
+
+/** ttl/legacy 过期（§5 判 C 之外的独立到期）：未决→expired；approved∧未 settled→failed（"批了没跑"＝失败可重批） */
+export function expireWindow(s: ConversationState, reason: 'ttl' | 'legacy'): ConversationState {
+  const requests = s.approvalWindow.requests.map((r) =>
+    r.state === 'queued' || r.state === 'pending'
+      ? { ...r, state: 'expired' as const, decidedBy: undefined, decidedAt: undefined }
+      : r.state === 'approved' && reason === 'legacy'
+        ? { ...r, state: 'failed' as const }
+        : r,
+  )
+  return drainQueued(windowResolved({ ...s, approvalWindow: { requests } }))
 }
 
 // 兼容壳（S3 由 userDecided 直连取代——renderer 现状消费；缺省拒绝原因仅兼容旧调用，新代码一律显式带原因）

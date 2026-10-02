@@ -76,9 +76,19 @@ export function useConversationState(opts?: UseConversationStateOpts) {
     // approve-files 批准（追加语义——A0 §5；files 已 trustPath 规范化）
     grantPlan: (files: string[]) => transition((s) => approvalGranted(s, files)),
     // S7（A0 审校 P1-2 接线）：授权拒绝——approvalDecided（§3.4 C6——拒绝记忆登记——同轮同类短封）
-    // ADR-015：拒绝按钮携 answers（进门）；allow 族不经此门（t000073 另批）
-    rejectApproval: (request: ApprovalRequest, reason: RejectReason, answers?: DecisionAnswers) =>
-      transition((s) => approvalDecided(s, request, { confirm: false, reason }, answers)),
+    // ADR-017 B2 兼容改线：allow/deny 同权进门（t000073 领域根治）——身份＝窗内最近可决记录
+    // （窗空＝{requestId:''} 闸 miss 引用级 no-op，行为等同旧"无卡可拒"）；B4 换真 requestId 寻址
+    // （旧 ADR-015 answers 身份门随 approval 族作废——request/_answers 形参保留供调用点过渡）
+    rejectApproval: (_request: ApprovalRequest, reason: RejectReason, _answers?: DecisionAnswers) =>
+      transition((s) => {
+        const last = [...s.approvalWindow.requests]
+          .reverse()
+          .find((r) => r.state === 'pending' || r.state === 'queued')
+        return approvalDecided(s, last ? { requestId: last.requestId } : { requestId: '' }, {
+          confirm: false,
+          reason,
+        })
+      }),
     // 工具结果汇入（进度/失败标记——坑 93 ② policy 不置失败）
     applyTool: (r: {
       name: string
