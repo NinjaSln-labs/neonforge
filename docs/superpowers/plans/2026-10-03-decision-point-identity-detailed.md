@@ -96,3 +96,11 @@ T1/T2/T3 各站点分 commit；`git revert` 按 commit 退；answers 缺省跳�
 - `2026-10-03-cards440-escalate-stuck.md`——S5-2 escalate 未发（stuck 链）。
 - `2026-10-03-core1859-approval-overcontinue.md`——approve-files 悬挂期过度续聊。
 执行次序建议：β T1→T2→T3→T4 为主线；两独立计划各自 E（根因取证）→修→绿后，在 T4 终回归合并验证（三例全绿 + 交集只减不增为整轮出口）。**时序耦合（第十三轴 C#6）**：两案 E 取证基线＝β T3 落地前工作树（T3 改 send/echo/flush 会改变 chatCount/气泡症状面）；T3 落地后症状未复现者须复跑 E1 重估，不得凭 T3 前结论直接出刀。commit 纪律：T3.0 插桩删除后 `git diff` 复核无残留 console.log 再提交。
+
+## §7 T4 执行记录（2026-10-03，全部完成）
+
+- **commits**：T1 `0d79ac8` → T2 `c2d828e` → T3 `df8eff0` → 独立案 core1859 `3881929` → 独立案 cards440 `27712a0` → `isAnswerStale` 判据提取（refactor）。
+- **β-1 L3 判定（记录性撤销）**：typed-stale 竞态在"轮末 finally 即时排空"下不可确定性构造——窗口被 β 修复本身消灭；语义由 L1 门用例（T1.8 a-i）＋`isAnswerStale` 四态判据用例＋685/T-FORCE/A-016 组合承载。探针实验（manualEmit）留证：pending 仅 done 时置位、flush 与打字赛跑必输。
+- **全量串行 ×3（workers=1，@refactor 前后各态）**：RUN1 1 红（S4-3b）/RUN2 3 红（S7-1＋两枚已删临时探针文件）/RUN3 2 红（S7-1、A-017-1）。**对照 T0 交集：440/685/1859 三例三轮全绿＝转绿达成；零新增稳定红**。瞬时红定性：S7-1 既有 flaky（测试自注"D3 回归暴露的既有 flaky"；bisect 率对比 pre-β 3/4 vs HEAD 3/4 等概率复现＝非 β 回归），S4-3b/A-017-1 单跑绿。
+- **门禁**：L1 719（含 isAnswerStale 4 断言并入既有例）全绿；双 tsc 零错；lint-staged/eslint 全过；coverage-matrix Inv 1/7 行已更新映射。
+- **出口**：整轮三例全绿＋只减不增＋新绿（685 类）达成；t000073（approval allow 接线）与 E-685 单槽覆盖残余（已被 FIFO 顺带修复，仅注记）留档；push 待授权。

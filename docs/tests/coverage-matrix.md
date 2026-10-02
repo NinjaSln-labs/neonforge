@@ -8,13 +8,13 @@
 
 | 不变量 | 语义 | 覆盖测试（文件::用例） | 判定 |
 |--------|------|------------------------|------|
-| Inv 1 | 决策唯一输入——无决策无推进（实例寻址后措辞源 00 §3.2·ADR-015） | conversationState.test.ts::Inv 1 决策唯一输入 | ✅ |
+| Inv 1 | 决策唯一输入——无决策无推进（实例寻址后措辞源 00 §3.2·ADR-015） | conversationState.test.ts::Inv 1 决策唯一输入 ＋ ::ADR-015 决策点实例身份与身份门（a-i＋hydrate/isAnswerStale——stale no-op/等值重提议/passed 翻转/确定性/委派轮转/骨架/续号） | ✅ |
 | Inv 2 | 决策点确定性——deriveDecisionPoint 纯函数 | conversationState.test.ts::Inv 2 决策点确定性 | ✅ |
 | Inv 3 | 门控顺序——sessionGate × actionGate 双维正交 | conversationState.test.ts::Inv 3 门控顺序 | ✅ |
 | Inv 4 | 无证据不对账——verifyCompletion 单源；≥1 条可代跑通过对账（ADR-011） | conversationState.test.ts::Inv 4 + verifyCompletionSystem.test.ts（V1a/V1b 扩展） | ✅ |
 | Inv 5 | 推进保障——decideProgressGuarantee | conversationState.test.ts::Inv 5 推进保障 | ✅ |
 | Inv 6 | 方案单一来源——derivePlannedFiles | conversationState.test.ts::Inv 6 + planProposalParser.test.ts（解析→派生链） | ✅ |
-| Inv 7 | PENDING 单一——单值 + 状态空间 | conversationState.test.ts::Inv 7 | ✅ |
+| Inv 7 | PENDING 单一——单值 + 状态空间（同 kind 可跨实例延续，答复绑被应答实例——ADR-015） | conversationState.test.ts::Inv 7 | ✅ |
 | Inv 8 | 拒绝带原因——签名强制 + 运行时校验 | conversationState.test.ts::Inv 8 | ✅ |
 | S2 新增：parsePlanProposal 失败降级 | 格式漂移 → no-block/malformed 不产生决策点 | planProposalParser.test.ts::无标记/有标记无文件行 | ✅ |
 | S2 新增：坑 102 过滤继承 | 垃圾条目不进清单 | planProposalParser.test.ts::坑 102 过滤 + 路径形态判定 | ✅ |
