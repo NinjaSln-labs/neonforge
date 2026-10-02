@@ -1,6 +1,6 @@
 # 领域模型修订定稿（干净版）：决策点一等身份与两轴分离
 
-状态: **landed（2026-10-02 已按本表整段替换落三份原稿＋D 行单源化；原稿 git diff 即落位证据）**｜ 依据: 提案 accepted `docs/design/decision-point-identity-model-proposal-2026-10-02.md` ＋ ADR-015（定稿）｜ 审计: `docs/audits/independent-audit-v8-twelfth-axis-2026-10-02.md`
+状态: **landed（2026-10-02 已按本表整段替换落三份原稿＋D 行单源化；原稿 git diff 即落位证据）｜后继勘误（2026-10-03）：本文 approval 面条款（恒铺骨架含 approval/`dc.approval` 恢复）由 ADR-017 取代（授权窗口一等化），确认卡族条款全部有效**｜ 依据: 提案 accepted `docs/design/decision-point-identity-model-proposal-2026-10-02.md` ＋ ADR-015（定稿）｜ 审计: `docs/audits/independent-audit-v8-twelfth-axis-2026-10-02.md`
 用法: 本文为**独立完整的规范文本**——按下表落位**整段替换**原稿对应节；原稿（`intent-confirmation-domain-design.md` 等）仅作对照，不在本文做逐行 diff。
 
 | 落位 | 动作 |

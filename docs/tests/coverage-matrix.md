@@ -8,13 +8,13 @@
 
 | 不变量 | 语义 | 覆盖测试（文件::用例） | 判定 |
 |--------|------|------------------------|------|
-| Inv 1 | 决策唯一输入——无决策无推进（实例寻址后措辞源 00 §3.2·ADR-015） | conversationState.test.ts::Inv 1 决策唯一输入 ＋ ::ADR-015 决策点实例身份与身份门（a-i＋hydrate/isAnswerStale——stale no-op/等值重提议/passed 翻转/确定性/委派轮转/骨架/续号） | ✅ |
+| Inv 1 | 决策唯一输入——无决策无推进（**含预先规则裁决**：命中＝decidedBy:'rule' 同门登记；确认卡 instanceId+kind、授权面 requestId 寻址——措辞源 00 §3.2 规则 2·ADR-015/ADR-017） | conversationState.test.ts::Inv 1 决策唯一输入 ＋ ::ADR-015 决策点实例身份与身份门（a-i＋hydrate/isAnswerStale——stale no-op/等值重提议/passed 翻转/确定性/委派轮转/骨架/续号）（**授权面用例随 ADR-017 施工 B7 改按窗转换族八函数重写＋§7 七防线——措辞列先行，用例指向 B7 批次同步**） | ✅（现存用例锁定旧态至 B7） |
 | Inv 2 | 决策点确定性——deriveDecisionPoint 纯函数 | conversationState.test.ts::Inv 2 决策点确定性 | ✅ |
 | Inv 3 | 门控顺序——sessionGate × actionGate 双维正交 | conversationState.test.ts::Inv 3 门控顺序 | ✅ |
 | Inv 4 | 无证据不对账——verifyCompletion 单源；≥1 条可代跑通过对账（ADR-011） | conversationState.test.ts::Inv 4 + verifyCompletionSystem.test.ts（V1a/V1b 扩展） | ✅ |
 | Inv 5 | 推进保障——decideProgressGuarantee | conversationState.test.ts::Inv 5 推进保障 | ✅ |
 | Inv 6 | 方案单一来源——derivePlannedFiles | conversationState.test.ts::Inv 6 + planProposalParser.test.ts（解析→派生链） | ✅ |
-| Inv 7 | PENDING 单一——单值 + 状态空间（同 kind 可跨实例延续，答复绑被应答实例——ADR-015） | conversationState.test.ts::Inv 7 | ✅ |
+| Inv 7 | PENDING 单一——**改述：槽单值不变 ＋ 授权面单窗 N 可寻址**（窗 requests 集合、requestId 签发跨重启唯一→同 id 幂等；同 kind 跨实例延续仅限确认卡族；答复绑被应答对象＝instanceId 或 requestId——ADR-015/ADR-017） | conversationState.test.ts::Inv 7（+B7 新增：签发唯一性/撞号吞请求封堵、槽呈现互斥（确认卡占槽→窗 queued 不置槽）、drainQueued） | ✅（同上行注） |
 | Inv 8 | 拒绝带原因——签名强制 + 运行时校验 | conversationState.test.ts::Inv 8 | ✅ |
 | S2 新增：parsePlanProposal 失败降级 | 格式漂移 → no-block/malformed 不产生决策点 | planProposalParser.test.ts::无标记/有标记无文件行 | ✅ |
 | S2 新增：坑 102 过滤继承 | 垃圾条目不进清单 | planProposalParser.test.ts::坑 102 过滤 + 路径形态判定 | ✅ |
@@ -34,12 +34,12 @@
 | task.execution_confirmed / _rejected | 执行确认/拒绝（历史） | timelineEvents.test.ts | ✅ |
 | task.achievement_proposed | 达成提议（历史） | timelineEvents.test.ts | ✅ |
 | task.achievement_confirmed / _rejected | 达成确认/拒绝（历史） | timelineEvents.test.ts | ✅ |
-| session.pending_set / _cleared | 状态机冻结/解冻 | timelineEvents.test.ts | ✅ |
+| session.pending_set / _cleared | 状态机冻结/解冻（approval 值置/清者＝窗派生——ADR-017，B5 改接） | timelineEvents.test.ts | ✅（随行注） |
 | plan.approved | 批准清单（追加语义） | timelineEvents.test.ts::计划清单追加 | ✅ |
 | plan.rejected | 清单外被拒 | timelineEvents.test.ts | ✅ |
 | tool.requested / executing / executed / failed | 工具生命周期 | timelineEvents.test.ts | ✅ |
 | tool.blocked | 拦截 gate | timelineEvents.test.ts | ✅ |
-| tool.approved / rejected / remembered | 授权三态 | timelineEvents.test.ts | ✅ |
+| tool.approved / rejected / remembered | 授权三态（载荷 +requestId/decidedBy/tier——ADR-017，B7/B8 随行） | timelineEvents.test.ts | ✅（随行注） |
 | capability.checked / ledger_updated | 能力检查/回填 | timelineEvents.test.ts | ✅ |
 | environment.injected | 环境快照 | timelineEvents.test.ts | ✅ |
 | conversation.created | 会话创建 | timelineEvents.test.ts | ✅ |
@@ -48,7 +48,7 @@
 | stuck.escalated / needs_human | 停滞升级 | timelineEvents.test.ts | ✅ |
 | problem.created / rerun / snapshot_updated / closed | 问题台账生命周期 | timelineEvents.test.ts | ✅ |
 | card.shown / resolved / rejected / dismissed | 卡 UI 生命周期 | timelineEvents.test.ts | ✅ |
-| decision.requested / resolved | 领域决策点 | timelineEvents.test.ts::deriveStateEvents（decision.*） | ✅ |
+| decision.requested / resolved | 领域决策点（按族二选一载荷——授权族 requestId+outcome+decidedBy；ADR-017 §6-1，B3 随行） | timelineEvents.test.ts::deriveStateEvents（decision.*） | ✅（随行注） |
 | **proposal.plan / proposal.completion** | **提议解析事件（S2 登记 + S3 接线）** | **timelineEvents.test.ts::proposal.*（schema/成功/失败/缺必选 4 断言）** | ✅（A-003 关闭 + A-007 两形态 schema） |
 | **completion.evidence_missing** | **完成声明被拒诊断（S4 登记 + 接线打点）** | **timelineEvents.test.ts::completion.evidence_missing（schema/载荷/缺必选 3 断言）+ L3 S4-1a/S4-3 打点断言** | ✅（S4——A-010 关闭） |
 | conversation.status_change / error | 状态/错误 | timelineEvents.test.ts | ✅ |
@@ -81,7 +81,7 @@
 | 触发权切换——goal 卡内容来自 decisionContent 快照（含关键假设） | cards-from-decision-content::S3-3 | ✅ |
 | 触发权切换——无 decisionContent 不弹卡（C3 降级） | cards-from-decision-content::S3-3b（a666459 新增） | ✅ |
 | 拒绝超限回退——rejectStreak ≥2 强制澄清卡（ADR-010 阈值覆盖旧「≥3 澄清提示」，.nf-reject-overflow 保留为更深层兜底） | cards-from-decision-content::S3-4（9f70c0b 后对齐） | ✅ |
-| 决策点持久化往返（decisionContent 序列化） | sessionStore.test.ts::decisionContent 序列化（3 用例） | ✅ |
+| 决策点持久化往返（decisionContent 序列化） | sessionStore.test.ts::decisionContent 序列化（3 用例）（授权窗快照信封字段随 ADR-017 阶段 C 扩列） | ✅ |
 
 ## 表 5：S4 完成证据对账 ↔ 测试（2026-08-16 新增）
 

@@ -70,7 +70,7 @@ Task = Goal → Plan → Resolution（2026-08-16 更名——原 Goal → Execut
 ```
 用户发起目标 ─→ 搭档确认目标(提议) ─→ 卡弹出【PENDING——等用户决策】
     ├─ 目标确认卡 / 方案确认卡 / 解决确认卡（大阶段）
-    └─ 授权卡（小阶段——但不批准则后续无法继续，影响大阶段）
+    └─ 授权卡（窗内 pending 请求的呈现——小阶段——但不批准则后续无法继续，影响大阶段）
                                         │
           pending 下模型动作全部无效（做了等于白做——不执行不生效——所有工具都不放行）
                                         │
@@ -80,8 +80,8 @@ Task = Goal → Plan → Resolution（2026-08-16 更名——原 Goal → Execut
                     状态推进 + 模型继续       状态回退 + 模型调整
 ```
 
-- **pending 只有一个**——不区分来源各自建 pending（来源只是卡类型）
-- **pending 下模型所有动作无效**——任何工具（read/search/write/edit/bash/check-capability…）都不执行（做了白做——**无害 ≠ 有用**：只读动作虽无副作用但用户决策未到——结果无意义——同样白做）——**用户决策（针对当前决策点实例——instanceId+kind 匹配，唯一措辞源 00 §3.2 规则 2·ADR-015）是下一个状态的唯一输入**
+- **pending 只有一个**——不区分来源各自建 pending（来源只是卡类型与授权窗口——授权面单窗 N 可寻址、槽为窗的派生呈现，00 §3.2 要点 1/5·ADR-017）
+- **pending 下模型所有动作无效**——任何工具（read/search/write/edit/bash/check-capability…）都不执行（做了白做——**无害 ≠ 有用**：只读动作虽无副作用但用户决策未到——结果无意义——同样白做）——**用户决策是下一个状态的唯一输入**（确认卡族 instanceId+kind、授权面 requestId 寻址，含预先规则裁决骑注——**唯一措辞源 00 §3.2 规则 2·ADR-015/ADR-017，本处只引不重述**）
 - **用户「是」→ 模型根据决策重新做**（不是恢复 pending 前的动作——决策改变状态，动作跟随状态重新生成）
 
 **设计对齐与差异说明（2026-08-07 调研交叉验证）**：
@@ -183,15 +183,16 @@ UI `working` 与 UAT `modelBusy` **与上表同源**——禁止为「快速确�
 
 ### 4.8 授权与信任（授权架构 v4——工具批准机制）
 
-**工具授权卡 = 会话级 PENDING 的来源之一**（§4.2——小阶段——不批准则后续无法继续）。授权后的信任机制：
+**授权请求住在会话级授权窗口**（ApprovalWindow——需批准的事实由 `ConversationState.approvalWindow.requests` 承载；记录含 requestId/kind(tool|plan-batch)/toolName/subject/argsFingerprint/state(queued|pending|approved|denied|failed|expired|uncertain)/decidedBy/decidedAt；requestId 由 main 签发、跨进程跨重启唯一且不透明——身份即 id，领域内无序号无代次，排序归时间线日志域 TimelineEvent.seq——ADR-017）。授权卡＝窗内 pending 请求的呈现（§4.2——小阶段——不批准则后续无法继续）；`pending='approval'` 为窗的单向派生。**三方分工（ADR-017 域归属卡，与 00 §2 判定表行同源）**：是否需批＋可执行性判定＝main（执行域——规则引擎＋持久执行日志 journal，边界 fail-closed）；决定记录＝Conversation 窗（推进域）；会话/持久规则存储＝Workspace/main 规则表（规则域）。授权后的信任机制：
 
-- **授权裁决（AuthorizationService）**：规则引擎 `deny > allow > ask`——未匹配默认 `ask`（fail-closed）——bash 只读命令自动放行（main 进程裁决——renderer 不判断——防绕过）
-- **任务级信任（TaskTrust）**：用户「允许并记住」→ 该文件路径进入任务信任集合 → 后续 write/edit 自动执行（授权疲劳解法——一次批准本任务内不再问）
+- **授权裁决（AuthorizationService）**：规则引擎显式序 **`deny > always-allow > ask`**（取代现 first-match 隐序）——未匹配默认 `ask`（fail-closed）——bash 只读命令自动放行（main 进程裁决——renderer 不判断——防绕过）；规则命中＝drain 时判定，以 `decidedBy:'rule'` 同门写入窗内记录（00 §3.2 规则 2 预先裁决骑注）；rule-decided/TTL 到期经上行对账通道（ToolResult 标记＋低频对账 IPC）回写集合；规则落库经串行队列防交错
+- **规则三档（取代单一「允许并记住→任务信任集合」——权威统一归 main，ADR-017）**：**once**＝本次决定（仅事件流/窗记录，不留规则）；**session grant**＝main 会话规则表（重启弃；**任务边界清除见下条 clearSessionGrants**）；**persistent**＝Workspace 持久规则库（setRules 接线激活，仅文件/网络类 pattern，跨任务语义不变）。「允许并记住」UI 对应 session/persistent 档选择；后续 write/edit 命中即自动放行并写窗记录（decidedBy:'rule'）——授权疲劳解法不变（一次批准本任务内不再问）
 - **信任边界**：
-  - 只信任**文件路径类**工具（write/edit 的 path）——bash 无 path 一律不进入信任（bash 高危永远单独确认）
+  - 只信任**文件路径类**工具（write/edit 的 path）——bash 无 path 一律不进入信任；**bash/高危永不进入 persistent 持久规则**（本行产品裁定压过竞品 goose 形——ADR-017 §2）
   - 只信任**沙箱内**（项目根内）——沙箱外 write/edit 永不进入信任集合（每次弹卡——安全底线）
-- **任务边界清除（clearTrust）**：新目标确认（goalSeq 递增）= 任务边界 → 信任集合清空 + 计划批准标记重置（信任不跨任务——防误信任漂移）
-- **授权记录可回溯**：授权历史（允许/拒绝/允许并记住）进会话时间线 + TrustLadder 展示（用户可查「谁批准了什么」）
+- **任务边界清除（clearSessionGrants——原 clearTrust 升格为 main 权威写操作，ADR-017 v3.3）**：新目标确认（goalSeq 递增）= 任务边界 → renderer 经 IPC 令 main 清除 **session 档规则表** + 计划批准标记重置（信任不跨任务——防误信任漂移；**persistent 档不参与边界清除**；renderer taskTrust 集合降为呈现投影，判定权回收 main——:2376 绕过事故同源治理）
+- **执行可执行性与恢复对账（ADR-017 v3.3）**：main 持久执行日志（journal：issued/approved/started/done）是"这条请求能不能跑、跑没跑过"的权威——二次 execute 校验 id∈journal ∧ phase 允许 ∧ argsFingerprint 等值；重启/重连按 requestId 对账三判（未决≤approved 存续可决／done 收敛／started∧¬done→uncertain 升格用户裁决、禁自动重放）
+- **授权记录可回溯**：授权历史（允许/拒绝/记住/rule 放行/到期 expired/执行 failed/uncertain 用户裁决）＝窗记录终态 + 会话时间线（`decision.requested` 随开窗、`decision.resolved` 带 requestId+outcome+decidedBy）+ TrustLadder 展示（用户可查「谁批准了什么」——记录级可回溯）
 
 ### 4.7 环境注入（模型开箱即知）
 
@@ -300,7 +301,7 @@ id / title / status / updatedAt
 | 完成声明（Completion Claim）     | 模型「做完了」的主张——必须附证据（§4.1 ResolutionConfirmed）                                                                               |
 | 拒绝原因（RejectReason）         | 拒绝决策的结构化原因（kind/text/target——含 modify）——回填模型调整                                                                          |
 | 动作属性（Action Attribute）     | 工具调用的客观性质（只读/网络只读/清单内/越界/高危）——actionGate 判定（§5）                                                                |
-| 授权（Approval）                 | 对「动作属性判定为需询问」的调用，向用户呈现请求（ApprovalRequest）——用户允许或拒绝（带原因）（2026-08-16 第 15 轮审计 #2 补——A0 §9 同源） |
+| 授权（Approval）                 | 对「动作属性判定为需询问」的调用，main 签发**授权请求记录**入会话级**授权窗口**（ApprovalWindow；记录携 requestId+state）并向用户呈现（tool 卡/plan-batch 合并卡）——用户允许（一次/会话/永久三档）或拒绝（带原因），四入口与规则命中经 `approvalDecided` 收敛（00 §9/§3.2 同源——ADR-017；2026-08-16 第 15 轮审计 #2——A0 §9 同源） |
 
 > 2026-08-16 第 13 轮审计 #9：术语表补齐意图确认重设计新增术语（对齐 A0 §9——原表缺 10 项）。
 

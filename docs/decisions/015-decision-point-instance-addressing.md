@@ -3,7 +3,7 @@
 - 状态: **accepted（2026-10-02 定稿）**——权威文本＝提案 `docs/design/decision-point-identity-model-proposal-2026-10-02.md`（accepted，§7 三问已裁：resolution descriptor **含 passed**；instanceId **会话内单调 int、恢复续号、不设溢出防护**；落地序 原稿 diff→新实现计划→基线重取→修批）。本文件 v1–v3 Decision 条目中 `signature/structuralSignature` 术语统一改 `descriptor/DecisionDescriptor`，其余结论有效；与提案冲突处以提案为准。
 - 落位记录: **干净版修订定稿**（整段替换文本，原稿仅对照不做 diff）`docs/design/domain-model-amendment-decision-point-instance-2026-10-02.md`；实现计划 `docs/superpowers/plans/2026-10-02-decision-point-identity.md`（新起、不叠 v 号，T0 基线重取先行）。
 - 日期: 2026-10-02
-- 取代: 本 ADR v1/v2 单 epoch 形态与 v3 补丁形态 + `014` #3 递增判据、#5 控件守卫（并入单门）。其余 014 裁定（#1 保留 C2、#2 回声退通道、#6 stale 事件）保留。语义不改 `ADR-001`（提供正交显式载体）、不改 `ADR-006`。
+- 取代: 本 ADR v1/v2 单 epoch 形态与 v3 补丁形态 + `014` #3 递增判据、#5 控件守卫（并入单门）。其余 014 裁定（#1 保留 C2、#2 回声退通道、#6 stale 事件）保留。语义不改 `ADR-001`（提供正交显式载体）、不改 `ADR-006`。**后继（2026-10-03）：本 ADR 的 approval 面条款（#2 铺骨架含 approval、#5 approvalGranted 不叠代次、#6 `dc.approval` 恢复）由 `ADR-017` 取代**——确认卡族条款全部有效；正文不回改（ADR-016 代价条款）。
 - 相关: 轴报告四→十一 + 终审（`docs/audits/`，含 `as-is-decision-presentation-binding-2026-10-02.md`）；`intent-design` §2/§3.1/§3.4/§3.5/§4/§4.1/§8.2E、`00-domain-authority §3.2`（不变量 1 唯一措辞源）、`04 §1.2`；handoff `d000012`–`d000029`。
 
 ## Context

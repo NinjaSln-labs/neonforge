@@ -55,7 +55,7 @@
 | **Conversation（推进门控） vs Capability（环境）**   | 模型活动边界/确认点 → Conversation；环境检测/能力推导 → Capability                                                               | 能力是环境的事实视图，不是推进决策                                                                                            |
 | **Workspace（计划清单） vs Conversation（写边界）**  | 计划清单存储/批准记录 → Workspace；写边界判定（是否清单内）→ Conversation 推进门控读取清单                                       | PlannedFiles 是数据源，门控是决策者                                                                                           |
 | **Gateway（工具修复） vs ToolRegistry（执行）**      | 工具调用修复（畸形/未知）→ Gateway；工具执行分发 → ToolRegistry                                                                  | 修复是模型输出清洗（网关防腐），执行是注册分发                                                                                |
-| **授权裁决/任务级信任 vs Conversation（确认点）**    | 授权裁决（preApproval deny>allow>ask）+ 任务级信任（允许并记住）→ Workspace；确认点状态机（授权卡=会话级 pending）→ Conversation | 授权是工具执行批准机制（Workspace 安全面）；确认点是状态机（Conversation 推进面）——授权卡触发会话 pending，批准结果进信任集合 |
+| **授权裁决/规则三档 vs Conversation（确认点/授权窗口）** | 授权裁决（deny>always-allow>ask）＋session/persistent 规则＋执行日志（journal）→ Workspace/main（执行域）；授权窗口（ApprovalWindow——requests 集合）与确认点状态机 → Conversation | 裁决/执行判定权在执行域（renderer 不判断——防绕过）；决定记录与推进语义在 Conversation——**授权不"触发 pending"：请求经 approvalRequested 入窗，`pending='approval'` 是窗的单向派生呈现**（ADR-017） |
 
 ---
 
@@ -79,14 +79,14 @@
 
 ### 3.2 单一 PENDING 状态机（会话级——等用户决策——领域核心）
 
-**任何需要用户决策的点（卡弹出）→ 会话进入【PENDING——等用户决策】——pending 是会话级（Conversation 聚合承载——2026-08-07 领域定论），Task（会话内执行单元）不承载 pending（工具级授权等待是会话级 pending 的一部分）**：
+**任何需要用户决策的点（卡弹出）→ 会话进入【PENDING——等用户决策】——pending 是会话级（Conversation 聚合承载——2026-08-07 领域定论），Task（会话内执行单元）不承载 pending。授权面事实不直接住槽：需批准的执行请求以**授权窗口（ApprovalWindow——`ConversationState.approvalWindow`，请求记录集合）**为真相源，`pending='approval'` 是窗的单向派生呈现（ADR-017，原"工具级授权等待是会话级 pending 的一部分"据此精化）**：
 
 ```
 任何需要用户决策的点（卡弹出）──→ 【PENDING——等用户决策】
     ├─ 目标确认卡（大阶段）
     ├─ 方案确认卡（大阶段——PlanProposal 批准）
     ├─ 解决确认卡（大阶段——完成声明+证据对账）
-    └─ 授权卡（小阶段——工具级——但不批准则后续无法继续，影响大阶段）
+    └─ 授权卡（小阶段——工具级**与 plan-batch 合并授权卡**——窗内 pending 请求的呈现；不批准则后续无法继续，影响大阶段）
                                         │
                pending 下模型动作全部无效（做了等于白做——不执行不生效）
                                         │
@@ -98,10 +98,11 @@
 
 **要点**：
 
-1. **pending 只有一个**——所有确认点/授权卡统一「等用户决策」状态（来源只是卡类型，不各自建 pending）
-2. **pending 下模型动作无效**——模型后续工具调用不执行（做了白做）——状态保持 pending——**存在活 pending 时，用户决策（针对当前决策点实例——instanceId+kind 匹配）是下一个状态的唯一输入**；实例不符＝不作数（no-op，ADR-015）。无活决策点（pending＝none）＝无可推进实例（清理/任务边界路径，ADR-015 #3 门前置）
-3. **授权卡同属 pending**——授权卡是小阶段（工具级），但不批准则后续无法继续——影响大阶段——与确认卡同一状态机
-4. **决策点触发权在系统，不在模型文本**（2026-08-16 增补——三视角调研结论：竞品无一按模型标记触发确认；学术「介入点按动作属性」）：模型只能产出**提议**（结构化值对象：GoalProposal/PlanProposal/CompletionClaim），**卡（决策点）出现 = 状态 × 提议 × 动作属性的确定性派生**（§3.6）——模型措辞不直接弹卡
+1. **槽只有一个**——所有确认点/授权卡统一「等用户决策」状态（来源只是卡类型与授权窗口，不各自建 pending）。授权面为**单窗、N 可寻址目标**（不变量 7 改述——ADR-017）：窗是 `requests: ApprovalRecord[]` 集合，每请求一条可寻址记录；窗存续不增槽
+2. **pending 下模型动作无效**——模型后续工具调用不执行（做了白做）——状态保持 pending——**存在活 pending 时，用户决策是下一个状态的唯一输入**：确认卡族（goal/plan/resolution）针对当前决策点实例（instanceId+kind 匹配）寻址；授权面针对窗内记录以 **requestId** 寻址（main 签发、跨进程跨重启唯一；`approvalDecided` 为四入口＋规则命中的单一收敛函数，allow 与 deny 同权入态），**且此唯一性含其预先规则裁决**——session/persistent 规则命中＝`decidedBy:'rule'` 的同门登记，是先前用户决策的延迟执行、非新增输入源。实例/请求不符＝不作数（no-op＋stale 事件，ADR-015·ADR-017）。无活决策点（pending＝none 且窗无可决记录）＝无可推进实例（清理/任务边界路径，ADR-015 #3 门前置）
+3. **授权卡同属 pending**——授权面是小阶段（工具级），但不批准则后续无法继续——影响大阶段——与确认卡同一状态机；授权决策一律**写窗内记录**（不只是清槽），窗内 pending 可决记录的呈现即授权卡
+4. **决策点触发权在系统，不在模型文本**（2026-08-16 增补——三视角调研结论：竞品无一按模型标记触发确认；学术「介入点按动作属性」）：模型只能产出**提议**（结构化值对象：GoalProposal/PlanProposal/CompletionClaim），**卡（决策点）出现 = 状态 × 提议 × 动作属性的确定性派生**（§3.6）——模型措辞不直接弹卡；**授权面派生链细化（ADR-017）**：动作属性 ask → main 于 needApproval 裁决分支签发记录入窗（queued/pending）→ 槽位置再经窗态 × 槽空闲派生（要点 5）——"是否需批"的裁决权始终在 main 规则引擎（§2 判定表、02 §4.8）
+5. **槽呈现互斥（ADR-017）**：**窗含 pending 请求 且 无确认卡占槽 ⇒ `pending='approval'`（单向派生）**；确认卡接管期间窗存续——不置槽、不推号（`decisionInstanceSeq` 为 goal/plan/resolution 族专用，授权面无实例号）；槽释放 ⇒ `drainQueued`（queued→pending、置槽）；窗 pending+queued 归零 ⇒ `windowResolved`（槽释放）。D5 hasApproval effect 退役（UI 现象不再代理 pending）
 
 ### 3.3 确认点 = 推进门槛（不变式）
 
@@ -111,12 +112,13 @@
 
 ### 3.4 PENDING 下模型动作无效（做了等于白做——审计 Major 1 修正）
 
-**pending 状态（等用户决策）下——所有工具都不放行**：模型后续任何动作（read/search/write/edit/bash/check-capability…）一律**无效——不执行不生效**（做了白做——状态保持 pending——唯一措辞源见 §3.2 规则 2）。**无害 ≠ 有用**：read 等只读动作虽无副作用但**没用**（用户决策未到——结果无意义——同样白做）——pending 下模型不做任何事（停住等用户）。
+**pending 状态（等用户决策——此处 pending 指槽被置位，含窗派生的 `'approval'`）下——所有工具都不放行**：模型后续任何动作（read/search/write/edit/bash/check-capability…）一律**无效——不执行不生效**（做了白做——状态保持 pending——唯一措辞源见 §3.2 规则 2）。**无害 ≠ 有用**：read 等只读动作虽无副作用但**没用**（用户决策未到——结果无意义——同样白做）——pending 下模型不做任何事（停住等用户）。**确认卡占槽、窗内含未决记录（queued）时窗不释放槽、不改变本段效力——冻结判据恒为槽，不为窗**（窗是待决内容的真相源，冻结仍由 §3.2 单一 PENDING 承载——ADR-017）。
 
 **用户决策后放行**：
 
-- 用户「是」→ 状态推进 → 模型**根据决策重新做**（不是恢复 pending 前的动作——决策改变状态，动作跟随状态重新生成）
-- 用户「否」→ 状态回退 → 模型调整后再来
+- 用户「是」→ **确认卡族**：状态推进 → 模型**根据决策重新做**（不是恢复 pending 前的动作——决策改变状态，动作跟随状态重新生成）。**授权面**：决策写入窗内记录（approved＋decidedBy/decidedAt）；执行由调用层凭窗内记录**二次 execute 携 requestId**（main 校验 id ∈ 执行日志 journal ∧ phase 允许 ∧ argsFingerprint 等值——批 A 行 B 拒）；执行结果经 `approvalExecutionSettled` 收敛回写（批了但失败＝failed，防双真相）；槽由窗派生释放（ADR-017）
+- 用户「否」→ **确认卡族**：状态回退 → 模型调整后再来。**授权面**：决策写入窗内记录（denied，原因必填——§3.6 RejectReason）＋reason 回填模型＋拒绝记录进 actionGate 同轮同类短封（机制防绕过，语义不变）
+- **恢复/重连＝journal 对账（ADR-017 v3.3）**：窗快照与 main 执行日志按 requestId 对账三判——未决∧≤approved→**存续可决**（用户被中断的决定不丢）；done→对账收敛 settled('done')；started∧¬done→**uncertain**（执行效果不可证＝升格用户裁决，resolveUncertain 唯一出口、禁自动重放）；无行可判（旧档退化）→未决 expired、approved∧未 settled→settled('failed')
 
 ### 3.5 门控优先级（PENDING vs 计划清单——审计 Major 2 修正）
 
@@ -154,7 +156,7 @@ ActionAttribute {
 }
 ```
 
-**优先级**：会话冻结（pending）优先于 ActionGate（§3.5 不变）——pending 时任何动作无效，不进入属性判定；ActionGate 的 deny 为机制拦截（`tool.blocked` 事件[^gate-denied-rename]），ask 才产生授权请求（ApprovalRequest：toolName+subject+reason+risk——2026-08-16 第 13 轮审计 #8 补 toolName 字段，对齐 04 §2.3b）。
+**优先级**：会话冻结（pending）优先于 ActionGate（§3.5 不变）——pending 时任何动作无效，不进入属性判定；ActionGate 的 deny 为机制拦截（`tool.blocked` 事件[^gate-denied-rename]），ask 才产生授权请求（ApprovalRequest：toolName+subject+reason+risk——2026-08-16 第 13 轮审计 #8 补 toolName 字段，对齐 04 §2.3b；请求记录由 main 签发经 approvalRequested **入授权窗口**——呈现与闸在窗，ADR-017）。
 
 [^gate-denied-rename]: 历史文稿曾写 `gate.denied`；注册表与实现事件名为 `tool.blocked`。
 
@@ -173,7 +175,7 @@ ActionAttribute {
 系统派生决策点（确定性纯函数 deriveDecisionPoint(state, proposals, pendingActions)）：
   - 目标提议存在 && !GoalConfirmed      → 决策点：goal（目标确认卡）
   - GoalConfirmed && PlanProposal 存在 && !PlanConfirmed → 决策点：plan（方案卡）
-  - Goal+Plan 已确认 && 动作属性需授权  → 决策点：approval（授权卡）
+  - Goal+Plan 已确认 && 动作属性需授权  → 决策点：approval（main 签发记录入窗——授权卡＝窗内 pending 记录的呈现，槽位由窗派生，ADR-017）
   - CompletionClaim 存在（证据完备）&& !ResolutionConfirmed → 决策点：resolution（解决确认卡）
 ```
 
@@ -291,7 +293,7 @@ CompletionEvidence{ verification: [{command, output?, passed?}], diffs: [{path}]
 | 完成声明（Completion Claim）     | 模型「做完了」的主张——必须附证据（§4.2）                                                                                                                                                             |
 | 拒绝原因（RejectReason）         | 拒绝决策的结构化原因（kind/text/target）——回填模型调整（§5）                                                                                                                                         |
 | 动作属性（Action Attribute）     | 工具调用的客观性质（只读/网络只读/清单内/越界/高危）——ActionGate 判定（§3.5b）                                                                                                                       |
-| 授权（Approval）                 | 对「动作属性判定为需询问」的调用，向用户呈现请求（ApprovalRequest：toolName+subject+reason+risk），用户允许（一次/会话/永久）或拒绝（带原因）（2026-08-16 第 15 轮审计 #2 补——设计 §2 通用语言同源） |
+| 授权（Approval）                 | 对「动作属性判定为需询问」的调用，main 签发**授权请求记录**（requestId 跨进程跨重启唯一、不透明）入会话级**授权窗口（ApprovalWindow）**并向用户呈现（ApprovalRequest：toolName+subject+reason+risk），用户允许（一次/会话/永久三档）或拒绝（带原因）；四入口＋规则命中经 `approvalDecided` 收敛（ADR-017——2026-08-16 第 15 轮审计 #2 补 toolName；设计 §2 通用语言同源） |
 
 ---
 

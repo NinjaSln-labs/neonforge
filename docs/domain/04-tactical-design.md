@@ -9,9 +9,9 @@
 
 ### 1.1 Task 聚合（Conversation BC——会话内子状态机）
 
-**目标驱动的执行单元**（会话内——只管三个**任务级**确认点）。**注意：单一 PENDING 状态机归属会话级（Conversation 聚合——§1.2）——Task 不承载 pending**（工具级授权等待是会话级 pending 的一部分，不在 Task 状态机内）。
+**目标驱动的执行单元**（会话内——只管三个**任务级**确认点）。**注意：单一 PENDING 状态机归属会话级（Conversation 聚合——§1.2）——Task 不承载 pending**（授权面请求住会话级授权窗口、`pending='approval'` 为窗派生呈现——同样不在 Task 状态机内——ADR-017）。
 
-> **实现形态（2026-08-15 定论——M4 文档承认）**：Task 状态与会话级 PENDING 承载于**同一状态结构**（`conversationState.ts` 的 `ConversationState`——goal/execution/achievement 三确认布尔 + 会话 pending + plannedFiles/producedFiles 一体）——语义等价（pending 仍是会话级语义：确认卡/授权卡统一冻结、用户决策是下一状态唯一输入（唯一措辞源 A0 §3.2·ADR-015）；三布尔 = 5 态语义映射：clarifying=三 false、goal-confirmed=goal true、executing=goal+plan true、resolved-pending=goal+plan true+完成声明（证据对账中）、resolved=resolution true——2026-08-16 更名：execution→plan、achieved-reported→resolved-pending、achievement→resolution，第 13 轮审计 #14 同步），**结构合并**（避免双聚合同步开销与跨层一致性问题——2026-08-14 状态机落地选型）；A0 §3.2 单一 PENDING 语义不变。
+> **实现形态（2026-08-15 定论——M4 文档承认）**：Task 状态与会话级 PENDING 承载于**同一状态结构**（`conversationState.ts` 的 `ConversationState`——goal/execution/achievement 三确认布尔 + 会话 pending + plannedFiles/producedFiles 一体）——语义等价（pending 仍是会话级语义：确认卡/授权卡统一冻结、用户决策是下一状态唯一输入（唯一措辞源 A0 §3.2·ADR-015/ADR-017——授权面 requestId 寻址）；三布尔 = 5 态语义映射：clarifying=三 false、goal-confirmed=goal true、executing=goal+plan true、resolved-pending=goal+plan true+完成声明（证据对账中）、resolved=resolution true——2026-08-16 更名：execution→plan、achieved-reported→resolved-pending、achievement→resolution，第 13 轮审计 #14 同步），**结构合并**（避免双聚合同步开销与跨层一致性问题——2026-08-14 状态机落地选型）；A0 §3.2 单一 PENDING 语义不变。
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -53,7 +53,7 @@ clarifying ─[用户确认目标]→ goal-confirmed ─[用户批准方案]→ 
 - 未批准方案 → 不产生执行动作（write/edit/**有副作用 bash**——探索性只读命令如 ls/cat 放行：与 §3.6 actionGate 只读自动同源——A0 §3.1 澄清，2026-08-16 第 14 轮审计 #1 对齐）
 - 未确认解决 → 不收敛（推进保障保持——模型必须继续推进：产出/提议/证据）
 - 无证据不对账 → 证据不完备的完成声明不进入 resolved-pending（「已解决」卡不弹）
-- **pending（会话级）→ 模型动作全部无效**（做了白做——措辞源见 A0 §3.2 规则 2，实例寻址 ADR-015）
+- **pending（会话级）→ 模型动作全部无效**（做了白做——唯一措辞源见 A0 §3.2 规则 2——确认卡族实例寻址 ADR-015、授权面 requestId 寻址·含预先规则裁决 ADR-017）
 
 ### 1.2 Conversation 聚合（Conversation BC——单一 PENDING 状态机宿主）
 
@@ -61,8 +61,9 @@ clarifying ─[用户确认目标]→ goal-confirmed ─[用户批准方案]→ 
 ┌─────────────────────────────────────────────────────────────┐
 │ Conversation (聚合根——会话级单一 PENDING 状态机)                 │
 │ id / messages: Message[]                                    │
-│ ◆ pending: PendingDecision | null   // 会话级等待（核心）槽⊥实例（ADR-015）    │
-│     └─ 来源：目标确认卡 / 方案确认卡 / 解决确认卡 / 授权卡     │
+│ ◆ pending: PendingDecision | null   // 会话级等待（核心）槽⊥实例（ADR-015；approval 槽＝窗派生呈现 ADR-017）    │
+│     └─ 来源：目标确认卡 / 方案确认卡 / 解决确认卡 / 授权卡（＝approvalWindow 窗内 pending 记录的呈现）     │
+│ ◆ approvalWindow: { requests: ApprovalRecord[] }  // 授权窗口——需批准事实的领域真相源（ADR-017）        │
 │     └─ pending 下模型动作全部无效（做了白做——不执行不生效）      │
 │ ◆ activeTask: Task | null        // 会话内当前任务（目标驱动）   │
 │ ◆ environmentSnapshot: EnvSnapshot // 注入模型的环境事实        │
@@ -75,7 +76,7 @@ clarifying ─[用户确认目标]→ goal-confirmed ─[用户批准方案]→ 
 ```
 任何需要用户决策的点（卡弹出）──→ 会话进入【PENDING：等用户决策】
     ├─ 目标确认卡 / 方案确认卡 / 解决确认卡（任务级）
-    └─ 授权卡（工具级——小阶段——但不批准则后续无法继续，影响任务推进）
+    └─ 授权卡（窗内 pending 请求的呈现——小阶段——但不批准则后续无法继续，影响任务推进）
                                         │
           pending 下模型动作全部无效（做了等于白做——所有工具都不放行）
                                         │
@@ -87,9 +88,9 @@ clarifying ─[用户确认目标]→ goal-confirmed ─[用户批准方案]→ 
 
 **要点**：
 
-1. **pending 是会话级——只有一个**——任何卡弹出（确认卡/授权卡）→ 会话进入 pending（等用户决策）
-2. **pending 下模型动作全部无效**（做了白做）——用户决策是下一个状态的唯一输入（唯一措辞源 A0 §3.2 规则 2·ADR-015）
-3. **Task 只管任务级确认点**——工具级授权等待由会话级 pending 承载（Task 执行内部触发的会话等待）
+1. **pending 是会话级——槽只有一个**——任何决策通道统一等用户决策（确认卡/授权窗——授权面单窗 N 可寻址、槽为窗派生呈现，00 §3.2 要点 1/5·ADR-017）
+2. **pending 下模型动作全部无效**（做了白做）——用户决策是下一个状态的唯一输入（唯一措辞源 A0 §3.2 规则 2·ADR-015/ADR-017）
+3. **Task 只管任务级确认点**——工具级授权请求住会话级授权窗口（approvalWindow——需批准事实的领域真相源，Task 执行内部触发入窗）
 
 ### 1.3 PlannedFiles 聚合（Workspace BC）
 
@@ -197,11 +198,24 @@ interface CompletionEvidence {
 }
 
 interface ApprovalRequest {
-  // 授权请求（ActionGate 产出——DSH ApprovalRequest 同构）
+  // 授权请求的**呈现内容**（ActionGate ask 产出——窗记录 request 字段；DSH ApprovalRequest 同构）
   toolName: string
   subject: string // 要执行什么（命令/写哪个文件）
   reason: string // 为什么需要授权（verbatim）
   risk: 'low' | 'medium' | 'high' // 动作属性分级（ActionGate 判定）
+}
+
+interface ApprovalRecord {
+  // 授权请求记录（ConversationState.approvalWindow.requests 成员——身份＝requestId，ADR-017）
+  requestId: string // main 签发（needApproval 咽喉）；跨进程跨重启唯一；不透明字符串（禁解析内部结构）
+  kind: 'tool' | 'plan-batch' // plan-batch＝approve-files 合并卡（入窗统一存续与闸；执行链仍走 approvalGranted＋planConfirmed——规则命中不适用）
+  toolName: string
+  subject: string
+  argsFingerprint: string // main 二次 execute 核验（≠args 摘要⇒fail-closed 拒——TOCTOU）
+  request: ApprovalRequest // 呈现内容
+  state: 'queued' | 'pending' | 'approved' | 'denied' | 'failed' | 'expired' | 'uncertain' // queued/pending＝可决记录；uncertain＝执行日志判 C（效果待用户裁）
+  decidedBy?: 'user' | 'rule' // rule＝预先裁决（00 §3.2 规则 2 骑注）
+  decidedAt?: string // 审计时间戳，非身份
 }
 
 interface RejectReason {
@@ -282,17 +296,22 @@ interface DeliveryService {
 
 不变式：交付 ≠ 解决（closed 需用户确认关闭）；写前快照（可回滚）。
 
-### 2.6 TaskTrust（任务级信任——值对象/集合）
+### 2.6 规则三档（原 TaskTrust 升格——ADR-017 v3.3：once＝决定记录/session grant＝main 会话规则表/persistent＝Workspace 持久库）
 
 ```typescript
-interface TaskTrust {
-  paths: FilePath[] // 任务内信任的文件路径（允许并记住）
+interface SessionGrant {
+  pattern: ToolPattern // 「允许并记住」session 档（仅文件路径类 + 沙箱内；bash/高危永不入任何档——02:191）
   scope: 'sandbox-only' // 只信任沙箱内（项目根内）——沙箱外永不进入
-  clearedBy: TaskBoundary // 任务边界（goalSeq 递增——新目标确认）→ 清空
+  clearedBy: TaskBoundary // 任务边界（goalSeq 递增——新目标确认）→ clearSessionGrants（main 权威写——renderer 经 IPC 触发）
+}
+interface PersistentRule {
+  pattern: ToolPattern // persistent 档（文件/网络类——setRules 接线激活）
+  deny: boolean // 显式序 deny > always-allow > ask（取代 first-match 隐序）
+  crossesTask: true // persistent 跨任务（不参与边界清除）
 }
 ```
 
-### 2.7 AuthorizationService（授权裁决——领域服务）
+### 2.7 AuthorizationService（授权裁决——main 领域服务——ADR-017）
 
 ```typescript
 interface AuthorizationService {
@@ -300,16 +319,17 @@ interface AuthorizationService {
     tool: string,
     args: Record<string, unknown>,
     ctx: { rootPath?: string },
-  ): { auto: boolean; reason?: string } // 规则引擎 deny>allow>ask——fail-closed——main 进程裁决
-  addTrust(args: Record<string, unknown>): void // 允许并记住（仅文件路径类 + 沙箱内）
-  isTrusted(args: Record<string, unknown>): boolean // 任务信任集合命中 → write/edit 自动
-  clearTrust(): void // 任务边界（新目标确认）→ 清空信任 + 计划批准重置
+  ): { auto: boolean; reason?: string } // 规则引擎 deny>always-allow>ask——fail-closed——main 进程裁决（renderer 不判断）
+  issueApproval(tool, args): ApprovalRecord // needApproval 咽喉签发 requestId（跨重启唯一·不透明）＋journal append issued——经 approvalRequested 入窗
+  executeGated(requestId, args): ToolResult // 批复二次 execute：id∈journal ∧ phase 允许 ∧ argsFingerprint 等值，否则 fail-closed 拒（盲信面关闭）
+  reconcile(): JournalRow[] // 上行对账查询（恢复/重连/低频——reconcileJournal 三判数据源：issued/approved/started/done）
+  clearSessionGrants(): void // 任务边界（新目标确认）→ 清 session 档 + 计划批准重置（persistent 不动）
 }
 ```
 
-不变式：bash 无 path 永不进入信任（高危永远单独确认）；沙箱外永不进入信任（安全底线）；信任不跨任务（clearTrust）。
+不变式：bash 无 path 永不进入信任（高危永远单独确认）；沙箱外永不进入信任（安全底线）；session 档不跨任务（clearSessionGrants）、persistent 档跨任务；**uncertain（journal started∧¬done）只由用户决策退出——禁自动重放**。
 
-> **实现形态（2026-08-15 定论——M5 文档承认）**：Electron 架构必然的**双进程拆分**——规则引擎（`preApprove` deny>allow>ask fail-closed）部署于 **main 进程**（`tools.ts`——renderer 不判断，防绕过）；任务级信任集合（`addTrust`/`isTrusted`/`clearTrust`——renderer taskTrustRef）部署于 **renderer**（渲染需即时感知——信任条/授权卡）；`filesApproved` 幂等标记双进程对称（main `filesApprovedRef` ↔ renderer `filesApproved`——任务边界 `clearTrust` 经 IPC 同步重置，D2 2026-08-15 修复）。语义等价——信任裁决唯一权威在 main（execute 门控），renderer 侧为展示/交互镜像。
+> **实现形态（2026-08-15 定论，2026-10-03 ADR-017 v3.3 修正）**：Electron 双进程拆分——规则引擎＋**持久执行日志（journal：issued/approved/started/done）**＋三档规则表全部部署于 **main**（`tools.ts`——renderer 不判断，防绕过；renderer 持信任判定的 :2376 bash 全根绕过事故即本教训）；renderer taskTrust 集合**降为呈现投影**（信任条/授权卡即时渲染，isTrusted 判定权回收 main）；`filesApproved` 幂等标记双进程对称照旧（任务边界经 IPC 同步重置，D2 2026-08-15 修复保留）。信任裁决与可执行性判定的唯一权威在 main（execute 门控＋journal 对账）。
 
 ### 2.6b TimelineEvent（时间线事件——2026-08-16 审计 #5 编号修正，原 2.6 与 TaskTrust 重复）
 

@@ -34,11 +34,11 @@
 
 | 事件 | 触发时机 | 携带数据 |
 |------|---------|---------|
-| `tool.approved` / `tool.rejected` | 用户批准/拒绝工具 | toolName, args, action |
+| `tool.approved` / `tool.rejected` | 用户批准/拒绝工具（授权面经 approvalDecided **写窗内记录**——ADR-017） | toolName, args, action, **requestId, decidedBy('user'/'rule')** |
 | `tool.requested`（2026-08-16 第 16 轮审计 #1 补录——注册表实现）| 工具调用发起（执行前）| toolName, args |
 | `tool.executing`（#1 补录）| 工具执行中 | toolName |
 | `tool.executed` / `tool.failed` | 工具执行结果 | toolName, ok, error |
-| `tool.remembered`（#1 补录）| 用户「允许并记住」——任务信任加入 | toolName, path |
+| `tool.remembered`（#1 补录）| 用户「允许并记住」——**规则档位登记（session/persistent 档入 main 规则表——权威归 main，renderer 仅投影，ADR-017）** | toolName, path, tier |
 | `tool.pending_confirmation` | 方案未批准时工具调用到达（挂起——2026-08-16 语义更新）——**#1 承接标注：注册表以 `tool.requested` + `tool.blocked` 表达（挂起=发起后拦截）** | toolName, args |
 | `tool.blocked` | 工具被拦截（2026-08-15 补录——会话冻结/确认点/清单外/策略引导）| toolName, gate（pending/confirm/out-of-plan/policy）, reason |
 
@@ -46,7 +46,7 @@
 
 | 事件 | 触发时机 | 携带数据 |
 |------|---------|---------|
-| `session.pending_set` | 卡弹出 → 会话进入 PENDING | kind（goal/plan/approval/resolution——2026-08-16 更名，原 goal/execution/achievement/approval）|
+| `session.pending_set` | 卡弹出 → 会话进入 PENDING（**approval 值例外：由窗派生置槽（approvalRequested/drainQueued），不经常规 setPending——ADR-017**） | kind（goal/plan/approval/resolution——2026-08-16 更名，原 goal/execution/achievement/approval）|
 | `session.pending_cleared` | 用户决策 → PENDING 解除 | kind |
 
 ### 1.3c 卡 UI 生命周期事件（可观测——2026-08-15 补录；领域事件之外的用户交互视图）
@@ -182,9 +182,9 @@
 | `proposal.goal` | GoalProposal 完整内容（statement + assumptions——含关键假设）| 模型输出目标提议（结构化解析）|
 | `proposal.plan` | PlanProposal 完整内容（files[{path,reason}] + assumptions + verificationPlan）| 模型输出方案提议 |
 | `proposal.completion` | CompletionClaim 完整内容（summary + evidence）| 模型输出完成声明 |
-| `decision.requested` | 决策点出现（kind + decisionContent 快照——呈现内容完整审计）| deriveDecisionPoint 命中 |
-| `decision.resolved` | 确认/拒绝（confirm \| reject + RejectReason）——原 card.resolved 增强 | 用户决策 |
+| `decision.requested` | 决策点出现：确认卡族＝kind + decisionContent 快照；**授权族＝随 approvalRequested 开窗发（detail＝窗快照 + requestId，一开窗一发不推号）——ADR-017** | deriveDecisionPoint 命中 / approvalRequested |
+| `decision.resolved` | 确认/拒绝（confirm \| reject + RejectReason）——原 card.resolved 增强；**确认卡族携 answeredInstanceId、授权族携 requestId + outcome + decidedBy（按族二选一）** | 用户决策 |
 | `completion.evidence_missing` | 完成声明被拒（missing 清单——回填引导补证据）| verifyCompletion 失败 |
 | `tool.blocked` | ActionGate deny（高风险动作被机制拦——非 ask；历史文稿曾写 `gate.denied`——与 §1.3 既有 `tool.blocked` 同名，非另立事件）| 动作属性判定 |
 
-现有事件保持（task.*_proposed 兼容保留——proposal.* 为结构化替代；card.shown/resolved 与 decision.requested/resolved **两层并存、语义对齐**（card.* = UI 卡生命周期视图事件——保留——消费方/dedupe 依赖；decision.* = 领域决策点事件——2026-08-16 第 13 轮审计 #8 措辞修正：非「并入」非合并——设计 §3.5 注记）；session.pending_set/cleared 不变；ActionGate deny 复用既有 `tool.blocked`）。
+现有事件保持（task.*_proposed 兼容保留——proposal.* 为结构化替代；card.shown/resolved 与 decision.requested/resolved **两层并存、语义对齐**（card.* = UI 卡生命周期视图事件——保留——消费方/dedupe 依赖；decision.* = 领域决策点事件——2026-08-16 第 13 轮审计 #8 措辞修正：非「并入」非合并——设计 §3.5 注记）；session.pending_set/cleared 值名不变（approval 置/清者改窗派生——ADR-017；**事件注册表权威＝`domain/timeline.ts`，本文档随行——窗转换族新事件（duplicate_ingress/stale_input_discarded/journal 对账标记）随施工 B3 在注册表登记后同步本表**）；ActionGate deny 复用既有 `tool.blocked`）。
