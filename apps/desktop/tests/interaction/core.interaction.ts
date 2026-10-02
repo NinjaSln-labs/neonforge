@@ -1916,7 +1916,9 @@ test('问题 A：approve-files 卡悬挂 → 模型续轮被拦后停续聊（�
                   },
                 },
               })
-            } else if (chatCount === 6) {
+            } else if (chatCount >= 6) {
+              // 独立案修订（2026-10-03）：原 ===6 把"收尾轮"钉死在旧单槽丢文时序的轮次索引上；
+              // β 修正后轮序平移——语义改为"恢复并追打若干轮后模型收尾"＝≥6 一律给纯文本终局
               streamCb?.({ type: 'content', text: '游戏已写好，打开就能玩。' })
             } else {
               streamCb?.({
@@ -1941,7 +1943,11 @@ test('问题 A：approve-files 卡悬挂 → 模型续轮被拦后停续聊（�
       },
       tools: {
         list: async () => [],
-        execute: async () => ({ ok: true, data: {} }),
+        execute: async (name: string, args?: Record<string, unknown>) => ({
+          ok: true,
+          data:
+            name === 'write' ? { file: String(args?.path ?? '/test/game.js'), snapshot: true } : {},
+        }), // 独立案修订：write 如实回报产物（原恒空→produced=0→批准后 nudge 级联追打假过度续聊）
         revert: async () => ({ ok: true }),
       },
       context: { resolve: async () => ({ fragments: [] }) },
@@ -1974,24 +1980,31 @@ test('问题 A：approve-files 卡悬挂 → 模型续轮被拦后停续聊（�
   // **修复断言**：拦截后模型停——不再喂下一轮（修复前：maybeContinue 检测不到旧消息授权卡 → 续聊 →
   // forceTool 逼模型再调工具 → 再被拦 → chatCount 循环）。给足 2 个轮询周期（500ms/次）余量
   await page.waitForTimeout(2500)
-  expect(
-    await page.evaluate(() => (window as unknown as { __chatCount: number }).__chatCount),
-  ).toBe(5)
-  // 文件卡仍在（悬挂等待用户决策）→ 用户批准 → 恢复续聊：chat#5 write 真正执行（approved 放行）→
-  // chat#6 模型纯文本收尾 → 自然停止（chatCount 定格 6——批准路径不被误伤，也无新一轮循环）
+  // 独立案修订（2026-10-03，β T3）：旧 toBe(5) 是标定在"排队单槽覆盖丢一条回声"的偶然时序上
+  // （丢文=9 循环、回声全投递=6、stale 作废=4——5 恰落在中间）。域不变量本身＝**被拦后停住不循环、
+  // 卡仍悬挂**：以硬上限承载（原循环形态 9+ 必超）；恢复性由批准后 write 实际执行证明（下方）。
+  const countHang = await page.evaluate(
+    () => (window as unknown as { __chatCount: number }).__chatCount,
+  )
+  expect(countHang).toBeLessThanOrEqual(6)
+  // 文件卡仍在（悬挂等待用户决策）→ 用户批准 → 恢复续聊：write 真正执行（approved 放行）→ 收尾自然停止
   await expect(page.getByRole('button', { name: '批准这批文件' })).toBeVisible()
   await page.getByRole('button', { name: '批准这批文件' }).click()
   await expect(page.locator('.nf-toolcall--done').filter({ hasText: '已批准' })).toBeVisible({
     timeout: 10000,
   })
   await page.waitForTimeout(3000)
-  expect(
-    await page.evaluate(() => (window as unknown as { __chatCount: number }).__chatCount),
-  ).toBe(6)
+  const countResume = await page.evaluate(
+    () => (window as unknown as { __chatCount: number }).__chatCount,
+  )
+  // 批准必须真正恢复（至少一轮）；收尾轮 ≥6 后 mock 恒给纯文本终局——追加上限 3（恢复＋nudge＋收尾）
+  expect(countResume).toBeGreaterThanOrEqual(countHang + 1)
+  expect(countResume).toBeLessThanOrEqual(countHang + 3)
   await page.waitForTimeout(1500)
+  // 定格：无新一轮循环（旧缺陷＝每轮被拦每轮续喂）
   expect(
     await page.evaluate(() => (window as unknown as { __chatCount: number }).__chatCount),
-  ).toBe(6)
+  ).toBe(countResume)
 })
 
 // 2026-08-15 P2（时间线实证 a08d1775：同 args bash 双卡 → name+args 匹配从后往前错位到新卡 →
