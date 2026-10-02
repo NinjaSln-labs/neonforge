@@ -76,8 +76,12 @@ export type TimelineEventType =
   | 'card.rejected' // 卡被拒绝（载荷：card/action）
   | 'card.dismissed' // 卡消失/任务重置（载荷：card/cause）
   // —— Decision：领域决策点（意图确认重设计 §3.5——与 card.* 并存：card=UI 卡生命周期，decision=领域决策点）——
-  | 'decision.requested' // 决策点出现（载荷：kind/since——决策点内容快照随 S3 增强）
-  | 'decision.resolved' // 决策被确认/拒绝（载荷：point/action——reason 随 S3 回填）
+  // ADR-017 §6-1 decision.* 单源：按族二选一载荷——确认卡族 kind/since/instanceId；授权族 requestId/window 快照
+  | 'decision.requested' // 决策点出现（确认卡族：kind/since；授权族：kind:'approval'/requestId/toolName/subject/window——开窗即发）
+  | 'decision.resolved' // 决策被确认/拒绝（确认卡族：point/action＋answeredInstanceId＋?reason；授权族：point/action/requestId/decidedBy——§6-1）
+  // —— Approval：授权窗口可观测（ADR-017 §6——deriveStateEvents 对 approvalWindow 增派生规则的事件面）——
+  | 'approval.duplicate_ingress' // 同 id 再入窗 no-op 可观测化（§3 M-02；fingerprintMatch:false＝签发唯一性条款被违背信号——不静默）
+  | 'approval.uncertain_raised' // journal 判 C：started∧¬done 跃迁 uncertain（不可证事实待用户裁决——resolveUncertain 唯一出口，无自动重放）
   // —— Proposal：模型提议解析（S2 登记——§8.2 D；结构化提议事件——决策点产生前的解析层事实）——
   | 'proposal.goal' // 目标提议结构化事件（S7 A0 审校 P1-3 补登——§3.5：statement+assumptions）
   | 'proposal.plan' // 方案提议解析结果（载荷：ok/files/summary——parse-error: reason 打点）
@@ -191,12 +195,25 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
   'card.resolved': { domain: 'card', role: 'system', detailKeys: ['card', 'action'] },
   'card.rejected': { domain: 'card', role: 'system', detailKeys: ['card', 'action'] },
   'card.dismissed': { domain: 'card', role: 'system', detailKeys: ['card', 'cause'] },
-  'decision.requested': { domain: 'decision', role: 'system', detailKeys: ['kind', 'since'] },
+  // ADR-017 §6-1：decision.* 按族二选一载荷——since 系确认卡族专用（授权族开窗不带 dc——? 可选标记）
+  'decision.requested': { domain: 'decision', role: 'system', detailKeys: ['kind', '?since'] },
   'decision.resolved': {
     domain: 'decision',
     role: 'system',
     // S7（A0 审校 P1-4）：detailKeys 加 ?reason——reject 载荷带 RejectReason（设计 §3.5——reason 随 S7 回填落地）
+    // ADR-017 B3：授权族载荷 requestId/decidedBy、确认卡族 answeredInstanceId——宽松约定不强制（Record 穷举保登记）
     detailKeys: ['point', 'action', '?reason'],
+  },
+  // ADR-017 §6 事件面：授权窗口可观测（domain 归 tool——执行授权事实；调用层 duplicate/判 C 跃迁消费）
+  'approval.duplicate_ingress': {
+    domain: 'tool',
+    role: 'system',
+    detailKeys: ['requestId', 'fingerprintMatch'],
+  },
+  'approval.uncertain_raised': {
+    domain: 'tool',
+    role: 'system',
+    detailKeys: ['requestId', 'toolName'],
   },
   'proposal.goal': {
     domain: 'proposal',
@@ -303,6 +320,55 @@ export function deriveStateEvents(
       },
     })
   }
+  // —— ADR-017 §6-1 窗派生：decision.* 授权族按窗 diff（与确认卡族规则并存——按族二选一载荷）——
+  // prev 防御一行：旧会话恢复对象（C1 信封前旧 hydration）可能无窗字段
+  const prevWin = prev.approvalWindow ?? { requests: [] }
+  const prevVisible = prevWin.requests.filter((r) => r.state === 'pending').map((r) => r.requestId)
+  for (const r of next.approvalWindow.requests) {
+    // 新增可见 pending 记录（开窗/drain 顶位）——decision.requested 授权族（不推号——dc 无关）
+    if (r.state === 'pending' && !prevVisible.includes(r.requestId)) {
+      events.push({
+        type: 'decision.requested',
+        detail: {
+          kind: 'approval',
+          requestId: r.requestId,
+          toolName: r.toolName,
+          subject: r.subject,
+          window: next.approvalWindow.requests.map((x) => ({
+            requestId: x.requestId,
+            state: x.state,
+          })),
+        },
+      })
+    }
+    // journal 判 C 跃迁（边沿发——已 uncertain 不重发）
+    if (
+      r.state === 'uncertain' &&
+      prevWin.requests.find((x) => x.requestId === r.requestId)?.state !== 'uncertain'
+    ) {
+      events.push({
+        type: 'approval.uncertain_raised',
+        detail: { requestId: r.requestId, toolName: r.toolName },
+      })
+    }
+    // 可决→已决 —— decision.resolved 授权族（requestId＋decidedBy；窗 diff 为 confirm 唯一源）
+    const was = prevWin.requests.find((x) => x.requestId === r.requestId)
+    if (
+      was &&
+      (was.state === 'queued' || was.state === 'pending') &&
+      (r.state === 'approved' || r.state === 'denied')
+    ) {
+      events.push({
+        type: 'decision.resolved',
+        detail: {
+          point: 'approval',
+          action: r.state === 'approved' ? 'confirm' : 'reject',
+          requestId: r.requestId,
+          decidedBy: r.decidedBy,
+        },
+      })
+    }
+  }
   if (prev.pending !== 'none' && next.pending === 'none') {
     events.push({ type: 'session.pending_cleared', detail: { kind: prev.pending } })
     // decision.resolved：确认/拒绝由状态 diff 推断（拒绝记忆新增 = approval 拒绝；否则按确认位变化）
@@ -317,16 +383,10 @@ export function deriveStateEvents(
           ...(next.lastRejectReason ? { reason: next.lastRejectReason } : {}),
         },
       })
-    } else if (prev.pending === 'approval') {
-      events.push({
-        type: 'decision.resolved',
-        detail: {
-          point: 'approval',
-          action: 'confirm',
-          answeredInstanceId: prev.decisionContent?.instanceId,
-        },
-      })
-    } else {
+    } else if (prev.pending !== 'approval') {
+      // ADR-017 B3：approval confirm 不再经 pending 清位推断（窗 diff 唯一源——上方窗派生；
+      // 清位无决定事实＝expired/退役残值——不发 resolved）。reject 经 deniedApprovals diff 保留至 B7 评估
+      //（双发风险由 requestId 载荷区分——timelineEvents 锁定）。
       // ADR-010 UAT 二轮修复：system_clarify 的确认/拒绝按 underlying 确认位推断——
       // 原逻辑落 resolutionConfirmed 兜底，委派确认 goal 时被误记为 reject（真机 seq 97 实证）
       const point = prev.pending

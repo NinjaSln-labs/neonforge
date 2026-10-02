@@ -15,6 +15,8 @@ import {
   setPending,
   approvalDecided,
   approvalRequested,
+  reconcileJournal,
+  type ConversationState,
 } from '../../src/domain/conversationState'
 
 // 2026-08-15 DDD 重建：领域事件派生（Event Sourcing-lite——转换 diff → 事件）
@@ -182,10 +184,9 @@ describe('deriveStateEvents（decision.* 领域决策点事件——设计 §3.5
     })
   })
 
-  it('approval 允许 → decision.resolved（point: approval, action: confirm）；拒绝 → reject（拒绝记忆 diff 推断）', () => {
+  it('approval 允许/拒绝 → decision.resolved 按窗 diff（B3：confirm 唯一源；reject 双发由 requestId 载荷区分）', () => {
     const req = { toolName: 'bash', subject: 'rm -rf /', reason: '高危', risk: 'high' as const }
-    // ADR-017 B2 改型：窗记录入窗（approvalRequested）——dc/seq 铺现骨架供 answeredInstanceId 回放；
-    // 派生规则本体改窗 diff 属 B3（本案锁定 pending/cleared＋拒绝记忆 diff 推断面不回归）
+    // ADR-017 B3 改型：窗记录为派生源；dc 铺现骨架仅 legacy 拒绝分支消费 answeredInstanceId（B5 dc.approval 面退役）
     const s = approvalRequested(
       setPending(userConfirmed(userConfirmed(initialState(), 'goal'), 'plan'), 'approval', {
         approval: req,
@@ -201,21 +202,30 @@ describe('deriveStateEvents（decision.* 领域决策点事件——设计 §3.5
       },
       false,
     )
+    // confirm：pending 清位推断分支已删除——窗 diff 单源（requestId＋decidedBy，approval 族无 answeredInstanceId）
     const allow = deriveStateEvents(s, approvalDecided(s, { requestId: 'tl-1' }, { confirm: true }))
-    expect(allow.find((e) => e.type === 'decision.resolved')?.detail).toEqual({
-      point: 'approval',
-      action: 'confirm',
-      answeredInstanceId: 1, // ADR-015
-    })
+    expect(allow.filter((e) => e.type === 'decision.resolved').map((e) => e.detail)).toEqual([
+      { point: 'approval', action: 'confirm', requestId: 'tl-1', decidedBy: 'user' },
+    ])
+    expect(allow.map((e) => e.type)).toContain('session.pending_cleared') // 槽事件语义不变（置/清者变了）
+    // reject：双发锁定——窗 diff 事件携 requestId＋decidedBy；legacy 拒绝记忆 diff 事件携 reason（B7 评估收口）
     const deny = deriveStateEvents(
       s,
       approvalDecided(s, { requestId: 'tl-1' }, { confirm: false, reason: { kind: 'direction' } }),
     )
-    expect(deny.find((e) => e.type === 'decision.resolved')?.detail).toEqual({
+    const resolved = deny.filter((e) => e.type === 'decision.resolved')
+    expect(resolved).toHaveLength(2)
+    expect(resolved.find((e) => 'requestId' in e.detail)?.detail).toEqual({
       point: 'approval',
       action: 'reject',
+      requestId: 'tl-1',
+      decidedBy: 'user',
+    })
+    expect(resolved.find((e) => !('requestId' in e.detail))?.detail).toEqual({
+      point: 'approval',
+      action: 'reject',
+      answeredInstanceId: 1, // 确认卡族 legacy 回放键（拒绝记忆 diff 分支保留）
       reason: { kind: 'direction' }, // S7 P1-4：拒绝原因入载荷
-      answeredInstanceId: 1, // ADR-015
     })
   })
 })
@@ -362,5 +372,131 @@ describe('ADR-015 决策点实例事件（requested 随 seq 推进/answeredInsta
     expect(TIMELINE_EVENT_SPECS['conversation.stale_input_discarded'].detailKeys).toContain(
       'answers',
     )
+  })
+})
+
+// ADR-017 B3：窗派生——decision.* 授权族载荷（按族二选一，提案 §6-1 单源）＋ approval.* 新事件注册
+describe('ADR-017 B3 窗派生（decision.* 授权族＋approval.* 新事件）', () => {
+  const rec = (id: string) => ({
+    requestId: id,
+    kind: 'tool' as const,
+    toolName: 'bash',
+    subject: 'npm install',
+    argsFingerprint: 'fp',
+    request: {
+      toolName: 'bash',
+      subject: 'npm install',
+      reason: '需要授权',
+      risk: 'high' as const,
+    },
+  })
+
+  it('开窗一步 → decision.requested 授权族（kind/requestId/toolName/subject＋window 快照；不携 instanceId——dc 无关）', () => {
+    const s = initialState()
+    const next = approvalRequested(s, rec('w1'), false)
+    const events = deriveStateEvents(s, next)
+    const evt = events.find((e) => e.type === 'decision.requested')
+    expect(evt?.detail).toEqual({
+      kind: 'approval',
+      requestId: 'w1',
+      toolName: 'bash',
+      subject: 'npm install',
+      window: [{ requestId: 'w1', state: 'pending' }],
+    })
+    // 槽事件照旧经 pending diff 发（置/清者变了，事件语义不变——计划 B3 Interfaces）
+    expect(events.map((e) => e.type)).toContain('session.pending_set')
+  })
+
+  it('queued 记录不入 requested（恰一呈现基数——drain 顶位时才发）', () => {
+    const s = approvalRequested(
+      approvalRequested(initialState(), rec('w5'), false),
+      rec('w6'),
+      false,
+    )
+    const ids = deriveStateEvents(initialState(), s)
+      .filter((e) => e.type === 'decision.requested')
+      .map((e) => e.detail.requestId)
+    expect(ids).toEqual(['w5']) // w6 queued——不呈现不发 requested
+  })
+
+  it('confirm → decision.resolved 授权族单源（requestId＋decidedBy；pending 清位 confirm 推断已退役）', () => {
+    const s = approvalRequested(initialState(), rec('w2'), false)
+    const next = approvalDecided(s, { requestId: 'w2' }, { confirm: true })
+    const resolved = deriveStateEvents(s, next).filter((e) => e.type === 'decision.resolved')
+    expect(resolved).toEqual([
+      {
+        type: 'decision.resolved',
+        detail: { point: 'approval', action: 'confirm', requestId: 'w2', decidedBy: 'user' },
+      },
+    ])
+  })
+
+  it('rule 预先裁决 → decision.resolved decidedBy:rule（同闸同记——不变量 1 扩写）', () => {
+    const s = approvalRequested(initialState(), rec('w7'), false)
+    const next = approvalDecided(s, { requestId: 'w7' }, { confirm: true }, 'rule')
+    const evt = deriveStateEvents(s, next).find((e) => e.type === 'decision.resolved')
+    expect(evt?.detail.decidedBy).toBe('rule')
+  })
+
+  it('deny 窗 diff 语义：decidedBy 入窗 diff 事件；reason 在 legacy 拒绝记忆事件（双发锁定见 B3 改型案）', () => {
+    const s = approvalRequested(initialState(), rec('w3'), false)
+    const next = approvalDecided(
+      s,
+      { requestId: 'w3' },
+      { confirm: false, reason: { kind: 'direction' } },
+    )
+    const resolved = deriveStateEvents(s, next).filter((e) => e.type === 'decision.resolved')
+    expect(resolved.find((e) => 'requestId' in e.detail)?.detail).toEqual({
+      point: 'approval',
+      action: 'reject',
+      requestId: 'w3',
+      decidedBy: 'user',
+    })
+    // legacy 分支（deniedApprovals diff）仍发 reason——B7 前双发由 requestId 载荷区分
+    expect(resolved.find((e) => !('requestId' in e.detail))?.detail).toMatchObject({
+      point: 'approval',
+      action: 'reject',
+      reason: { kind: 'direction' },
+    })
+  })
+
+  it('reconcileJournal started→uncertain 边沿 → approval.uncertain_raised（同相再对账不重发）', () => {
+    let s = approvalRequested(initialState(), rec('u1'), false)
+    s = approvalDecided(s, { requestId: 'u1' }, { confirm: true })
+    const next = reconcileJournal(s, [{ requestId: 'u1', phase: 'started' }])
+    const evt = deriveStateEvents(s, next).find((e) => e.type === 'approval.uncertain_raised')
+    expect(evt?.detail).toEqual({ requestId: 'u1', toolName: 'bash' })
+    expect(
+      deriveStateEvents(next, reconcileJournal(next, [{ requestId: 'u1', phase: 'started' }])),
+    ).toEqual([])
+  })
+
+  it('SPECS 注册：approval.duplicate_ingress／uncertain_raised（domain=tool, role=system——type 联合穷举由 Record 编译强制）', () => {
+    expect(TIMELINE_EVENT_SPECS['approval.duplicate_ingress']).toEqual({
+      domain: 'tool',
+      role: 'system',
+      detailKeys: ['requestId', 'fingerprintMatch'],
+    })
+    expect(TIMELINE_EVENT_SPECS['approval.uncertain_raised']).toEqual({
+      domain: 'tool',
+      role: 'system',
+      detailKeys: ['requestId', 'toolName'],
+    })
+    // dev 校验通路（§6-1 M-02 可观测化载荷形态）
+    expect(
+      validateTimelineEvent('approval.duplicate_ingress', {
+        requestId: 'x',
+        fingerprintMatch: true,
+      }),
+    ).toEqual([])
+  })
+
+  it('旧水合防御：prev 无 approvalWindow 字段（C1 信封前旧档恢复对象）不抛——按 next 窗派生', () => {
+    const legacy = { ...initialState(), approvalWindow: undefined } as unknown as ConversationState
+    const next = approvalRequested(initialState(), rec('w4'), false)
+    const evt = deriveStateEvents(legacy, next).find(
+      (e) => e.type === 'decision.requested' && e.detail.kind === 'approval',
+    )
+    expect(evt?.detail.requestId).toBe('w4')
   })
 })
