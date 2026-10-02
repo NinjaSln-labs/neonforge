@@ -1424,41 +1424,51 @@ export default function ConversationPanel({
                       )
                         applyTool({ name: c.name, ok: true, file: c.file })
                     })
-                    const turn = evaluateTurnProgress({
-                      toolCalls: streamingRef.current.toolCalls.map((c) => ({
-                        name: c.name,
-                        status: c.status,
-                        file: c.file,
-                        command: String(c.args?.command ?? ''),
-                      })),
-                      content,
-                      prevReadFiles: prevReadFilesRef.current,
-                      plannedFiles: stateRef.current.plannedFiles,
-                      producedFiles: stateRef.current.producedFiles,
-                      // 2026-08-06 补充（用户「清单来源不只 approve-files」——③ projectFiles 项目文件树）：产出校验（规划文件出现在文件树=已产出）
-                      // 2026-08-15 坑 102 修复：projectFiles 统一绝对基准（MainWorkspace listDir 返回 basename——与 planned/produced 绝对基准分裂
-                      // → projectFiles.has(f) 恒 false → 文件树权威分支失效 → plannedComplete 只靠 produced 记录）；trustPath 归一
-                      projectFiles: new Set((recentFilesExternal ?? []).map((f) => trustPath(f))),
-                    })
-                    streamingRef.current.toolCalls.forEach((c) => {
-                      if (c.name === 'read' && c.file) prevReadFilesRef.current.add(c.file)
-                    })
-                    const { state, event } = detectStuck({ turn, prev: stuckStateRef.current })
-                    stuckStateRef.current = state
-                    if (event?.type === 'escalate') {
-                      tlog('stuck.escalated', { message: event.message }, 'system') // 2026-08-08 卡住升级打点
-                      onActionPromiseHint?.(null)
-                      // ADR-013：escalate 硬恢复须经 recoverInterrupt（显式停止 + recovery 来源）——禁止冒充普通 silent send
-                      void recoverInterrupt({ text: event.message, reason: 'stuck.escalate' })
-                    } else if (event?.type === 'needs-human') {
-                      tlog('stuck.needs_human', { message: event.message }, 'system') // 2026-08-08 升级达上限转用户
-                      onActionPromiseHint?.(event.message)
-                    }
                   }
                 }
               }
             }
           }
+        }
+      }
+      // S5-2/440 独立案（bisect 红点 59282e4）：stuck 评估与 nudge 链正交、每轮必算——
+      // 原压在 nudge 链最内 else：writeNudge（L1b 空转催写）命中轮从不计数 → escalate 永不发（S5-2 根因）。
+      // 判定条件与 nudge 链外层守卫同源；产出记录（applyTool）与 read 集维护留在原链（无害：nudge 命中轮
+      // 必含 write/edit 工具→writeNudge 条件自斥）。
+      if (
+        stateRef.current.goalConfirmed &&
+        stateRef.current.pending === 'none' &&
+        streamingRef.current.toolCalls.length === 0
+      ) {
+        const turn = evaluateTurnProgress({
+          toolCalls: streamingRef.current.toolCalls.map((c) => ({
+            name: c.name,
+            status: c.status,
+            file: c.file,
+            command: String(c.args?.command ?? ''),
+          })),
+          content,
+          prevReadFiles: prevReadFilesRef.current,
+          plannedFiles: stateRef.current.plannedFiles,
+          producedFiles: stateRef.current.producedFiles,
+          // 2026-08-06 补充（用户「清单来源不只 approve-files」——③ projectFiles 项目文件树）：产出校验（规划文件出现在文件树=已产出）
+          // 2026-08-15 坑 102 修复：projectFiles 统一绝对基准（MainWorkspace listDir 返回 basename——与 planned/produced 绝对基准分裂
+          // → projectFiles.has(f) 恒 false → 文件树权威分支失效 → plannedComplete 只靠 produced 记录）；trustPath 归一
+          projectFiles: new Set((recentFilesExternal ?? []).map((f) => trustPath(f))),
+        })
+        streamingRef.current.toolCalls.forEach((c) => {
+          if (c.name === 'read' && c.file) prevReadFilesRef.current.add(c.file)
+        })
+        const { state, event } = detectStuck({ turn, prev: stuckStateRef.current })
+        stuckStateRef.current = state
+        if (event?.type === 'escalate') {
+          tlog('stuck.escalated', { message: event.message }, 'system') // 2026-08-08 卡住升级打点
+          onActionPromiseHint?.(null)
+          // ADR-013：escalate 硬恢复须经 recoverInterrupt（显式停止 + recovery 来源）——禁止冒充普通 silent send
+          void recoverInterrupt({ text: event.message, reason: 'stuck.escalate' })
+        } else if (event?.type === 'needs-human') {
+          tlog('stuck.needs_human', { message: event.message }, 'system') // 2026-08-08 升级达上限转用户
+          onActionPromiseHint?.(event.message)
         }
       }
       streamingRef.current = { content: '', reasoning: '', toolCalls: [] }
