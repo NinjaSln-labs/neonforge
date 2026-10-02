@@ -43,6 +43,7 @@ import {
   inPlannedFiles as inPlannedFilesDomain,
   verifyCompletion,
   hydrateDecisionContent,
+  isAnswerStale,
   buildEvidenceBackfill,
   evidenceGuideMaxAttempts,
   deriveDiffs,
@@ -2535,9 +2536,7 @@ export default function ConversationPanel({
     // shouldStopContinuation/域门兜底（不推进任何状态），其过度计数形态由 1859 不变量断言承载。
     if (opts?.answers && !opts.echo) {
       const cur = stateRef.current
-      if (!(
-        cur.pending === opts.answers.kind && cur.decisionInstanceSeq === opts.answers.instanceId
-      )) {
+      if (isAnswerStale(cur, opts.answers)) {
         tlog(
           'conversation.stale_input_discarded',
           {

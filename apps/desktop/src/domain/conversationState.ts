@@ -410,6 +410,14 @@ export function restorePending(s: ConversationState, dc: DecisionContent): Conve
   }
 }
 
+// ADR-015 应用层前置探测的判据（纯函数——send 路由与域门共用同一语义；echo 豁免规则也在调用方）
+export function isAnswerStale(
+  cur: { pending: PendingKind; decisionInstanceSeq: number },
+  answers: DecisionAnswers,
+): boolean {
+  return !(cur.pending === answers.kind && cur.decisionInstanceSeq === answers.instanceId)
+}
+
 // ADR-015 旧会话补水（§8.2E 兼容）：存量快照无 instanceId → 视作新实例续号（拒 undefined/NaN 静默杀全门）
 export function hydrateDecisionContent(
   dc: Omit<DecisionContent, 'instanceId'> & { instanceId?: number },
