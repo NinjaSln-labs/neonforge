@@ -20,6 +20,7 @@ import {
   syncPlanConfirmed,
 } from './tools.js'
 import { getPlannedFilesStore } from './plannedFilesStore.instance.js'
+import { getApprovalJournal } from './approvalJournal.instance.js'
 import { registerLspTools, lsp } from './lsp.js'
 import { context } from './context.js'
 import { codeRag } from './codeRag.js'
@@ -408,4 +409,28 @@ ipcMain.handle(
 // S4 完成对账 V1a：系统代跑只读验证命令（fail-closed——非只读不执行；超时/截断护栏见 verification.ts）
 ipcMain.handle('completion:verify', (_e, opts: { commands: string[]; rootPath?: string | null }) =>
   runVerificationCommands(opts.commands ?? [], { cwd: opts.rootPath ?? undefined }),
+)
+// ADR-017 B4.1（§6-4 对账通道）：journal 每 id 最新阶段只读回传（恢复三判数据源——renderer 经 reconcileWindow 消费）
+ipcMain.handle('approval:reconcile', () => ({
+  ok: true as const,
+  rows: getApprovalJournal()
+    .latestRows()
+    .map(({ requestId, phase }) => ({ requestId, phase })),
+}))
+// ADR-017 B4.1（plan-batch 虚拟工具签发，B4.5/G2 消费）：main 唯一签发点复用 journal id；
+// argsFingerprint 用入参原样落账（renderer 侧算好传入——main 无 args 不重算）
+ipcMain.handle(
+  'approval:issue',
+  (_e, p: { toolName: string; subject: string; argsFingerprint: string }) => {
+    const j = getApprovalJournal()
+    const requestId = j.issueId()
+    j.append({
+      requestId,
+      toolName: String(p.toolName ?? ''),
+      argsFingerprint: String(p.argsFingerprint ?? ''),
+      phase: 'issued',
+    })
+    console.log(`[ipc:approval] issue plan-batch: ${p.toolName}「${p.subject}」→ ${requestId}`)
+    return { ok: true as const, requestId, argsFingerprint: p.argsFingerprint }
+  },
 )

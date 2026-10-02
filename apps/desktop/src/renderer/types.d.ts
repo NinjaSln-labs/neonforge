@@ -153,6 +153,18 @@ export interface NeonForgeBridge {
   session: {
     setPlanConfirmed: (v: boolean) => Promise<void>
   }
+  // ADR-017 B4.1：授权窗口对账回读（journal 只读）＋ plan-batch 签发（main 唯一 id 来源）
+  approval: {
+    reconcile: () => Promise<{
+      ok: boolean
+      rows: Array<{ requestId: string; phase: 'issued' | 'approved' | 'started' | 'done' }>
+    }>
+    issue: (p: {
+      toolName: string
+      subject: string
+      argsFingerprint: string
+    }) => Promise<{ ok: boolean; requestId: string; argsFingerprint: string }>
+  }
   context: {
     resolve: (
       files: string[],

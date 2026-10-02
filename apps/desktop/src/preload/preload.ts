@@ -205,6 +205,20 @@ contextBridge.exposeInMainWorld('neonforge', {
     setPlanConfirmed: (v: boolean) =>
       ipcRenderer.invoke('session:plan-confirmed', v) as Promise<void>,
   },
+  // ADR-017 B4.1：授权窗口对账回读（journal 每 id 最新阶段）＋ plan-batch 虚拟工具签发
+  approval: {
+    reconcile: () =>
+      ipcRenderer.invoke('approval:reconcile') as Promise<{
+        ok: boolean
+        rows: Array<{ requestId: string; phase: 'issued' | 'approved' | 'started' | 'done' }>
+      }>,
+    issue: (p: { toolName: string; subject: string; argsFingerprint: string }) =>
+      ipcRenderer.invoke('approval:issue', p) as Promise<{
+        ok: boolean
+        requestId: string
+        argsFingerprint: string
+      }>,
+  },
   context: {
     resolve: (files: string[]) =>
       ipcRenderer.invoke('context:resolve', { files }) as Promise<{
