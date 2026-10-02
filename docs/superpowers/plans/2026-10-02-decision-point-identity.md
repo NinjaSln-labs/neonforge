@@ -1,5 +1,7 @@
 # 实现计划：决策点一等身份与两轴分离（β 根因修复）
 
+> **已被详版取代（2026-10-03）**：`2026-10-03-decision-point-identity-detailed.md`（含裁决落地：core:685 本轮转绿、cards:440/core:1859 独立计划并入）。本文件保留作骨架索引。
+
 > 日期: 2026-10-02 ｜ 依据: 提案 accepted `docs/design/decision-point-identity-model-proposal-2026-10-02.md` ＋ 干净版修订定稿 `docs/design/domain-model-amendment-decision-point-instance-2026-10-02.md`（整段替换文本，原稿仅对照；**第十二轴修后版**）＋ ADR-015（定稿）/ADR-014 #1 #2 ｜ 审计: `docs/audits/independent-audit-v8-twelfth-axis-2026-10-02.md`（命门闭合；P2 镜像穿透已排 T3.6）。
 > 本计划**新起**（取代 v1–v7 补丁计划堆栈；结论承继、形态作废）。每步全绿再进；**T0 未获用户裁决前不进 T1**（ADR-012）。
 
