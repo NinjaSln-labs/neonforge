@@ -330,7 +330,7 @@ export function validateProtocolArgs(tool: string, args: unknown): ProtocolArgsV
 // ============================================================================
 
 export type ProtocolToolCallDecision =
-  | { action: 'pending'; kind: DecisionKind; content: DecisionContent }
+  | { action: 'pending'; kind: DecisionKind; content: Omit<DecisionContent, 'instanceId'> } // ADR-015：instanceId 由 setPending 推进时铺（此处不造号）
   | {
       action: 'clarify'
       content: {

@@ -11,6 +11,8 @@ import {
   userConfirmed,
   userRejected,
   setPending,
+  descriptorOf,
+  restorePending,
   approvalGranted,
   applyToolResult,
   deriveDecisionPoint,
@@ -1332,6 +1334,7 @@ describe('system_clarify 决策点（ADR-010）', () => {
       kind: 'system_clarify',
       proposal: { underlying: 'goal', statement },
       since: new Date().toISOString(),
+      instanceId: 1,
     },
   })
 
@@ -1345,6 +1348,7 @@ describe('system_clarify 决策点（ADR-010）', () => {
         kind: 'system_clarify',
         proposal: { underlying: 'plan', statement: '重做页面' },
         since: '2026-01-01',
+        instanceId: 1,
       },
     }
     s = userDecided(s, 'system_clarify', { confirm: true })
@@ -1367,6 +1371,7 @@ describe('system_clarify 决策点（ADR-010）', () => {
         kind: 'system_clarify',
         proposal: { underlying: 'goal', statement: 'x' },
         since: '2026-01-01',
+        instanceId: 1,
       },
     }
     s = userDecided(s, 'system_clarify', { confirm: false, reason: { kind: 'direction' } })
@@ -1389,5 +1394,180 @@ describe('system_clarify 决策点（ADR-010）', () => {
     s = userDecided(s, 'goal', { confirm: false, reason: { kind: 'direction' } }) // streak 2
     s = setPending(s, 'goal')
     expect(detectUnproductiveDialogue(s)).toBe('forced-clarify')
+  })
+})
+
+// ============================================================================
+// ADR-015 决策点一等身份（归属轴）——identity 门 + descriptorOf + setPending 推进 + restorePending
+// 承载：不变量 1 精确化（intent-design §3.4/§4；计划 2026-10-03-detailed T1.8 用例表 a-i）
+// ============================================================================
+describe('ADR-015 决策点实例身份与身份门（β 根因领域解）', () => {
+  const planA = plan([{ path: 'a.js', reason: '入口' }])
+  const planB = plan([
+    { path: 'a.js', reason: '入口' },
+    { path: 'b.js', reason: '样式' },
+  ])
+
+  it('a 命门：plan A→B（files 实质变）新实例——针对 A 的迟到 confirm/reject 均整转换 no-op（streak 不动）', () => {
+    let s = confirmed(initialState())
+    s = setPending(s, 'plan', { proposal: planA, since: 't1' })
+    expect(s.decisionInstanceSeq).toBe(1)
+    const answersA = { kind: 'plan' as const, instanceId: s.decisionContent?.instanceId ?? -1 }
+    s = userDecided(s, 'plan', { confirm: false, reason: reason('direction') }) // 拒 A（迁移豁免：无 answers）
+    s = setPending(s, 'plan', { proposal: planB, since: 't2' }) // 同 kind 续提议——实质变
+    expect(s.decisionInstanceSeq).toBe(2)
+    const staleConfirm = userDecided(s, 'plan', { confirm: true }, answersA)
+    expect(staleConfirm).toBe(s) // 引用级 no-op
+    expect(staleConfirm.planConfirmed).toBe(false)
+    const staleReject = userDecided(
+      s,
+      'plan',
+      { confirm: false, reason: reason('direction') },
+      answersA,
+    )
+    expect(staleReject).toBe(s)
+    expect(staleReject.rejectStreak).toBe(s.rejectStreak) // no-op 连协商轴都不污染
+    // 对照：针对 B 的答复正常生效
+    expect(
+      userDecided(s, 'plan', { confirm: true }, { kind: 'plan', instanceId: 2 }).planConfirmed,
+    ).toBe(true)
+  })
+
+  it('b 等值重提议＝同实例（措辞/reason 变不入 descriptor）——A-026 队列确认语命中', () => {
+    let s = confirmed(initialState())
+    s = setPending(s, 'plan', { proposal: planA, since: 't1' })
+    const ans = { kind: 'plan' as const, instanceId: s.decisionInstanceSeq }
+    s = setPending(s, 'plan', {
+      proposal: plan([{ path: 'a.js', reason: '入口（改写措辞）' }], { summary: '换个说法' }),
+      since: 't1b',
+    })
+    expect(s.decisionInstanceSeq).toBe(1) // 同 descriptor＝同实例
+    expect(userDecided(s, 'plan', { confirm: true }, ans).planConfirmed).toBe(true)
+  })
+
+  it('c resolution descriptor 含 passed：verdict 翻转＝新实例；仅 summary 变＝同实例（§7-1）', () => {
+    let s = setPending(initialState(), 'resolution', {
+      proposal: claim({
+        evidence: evidence({ verification: [{ command: 'npm test', passed: true }] }),
+      }),
+      since: 't1',
+    })
+    expect(s.decisionInstanceSeq).toBe(1)
+    s = setPending(s, 'resolution', {
+      proposal: claim({
+        summary: '换了措辞',
+        evidence: evidence({ verification: [{ command: 'npm test', passed: true }] }),
+      }),
+      since: 't2',
+    })
+    expect(s.decisionInstanceSeq).toBe(1)
+    s = setPending(s, 'resolution', {
+      proposal: claim({
+        evidence: evidence({ verification: [{ command: 'npm test', passed: false }] }),
+      }),
+      since: 't3',
+    })
+    expect(s.decisionInstanceSeq).toBe(2) // 红→绿/绿→红＝被裁决对象实质变
+  })
+
+  it('d descriptorOf 确定性：集乱序同键（纯措辞字段不入键）', () => {
+    const p1 = plan(
+      [
+        { path: 'b.js', reason: '1' },
+        { path: 'a.js', reason: '2' },
+      ],
+      { verificationPlan: ['v2', 'v1'] },
+    )
+    const p2 = plan(
+      [
+        { path: 'a.js', reason: '2' },
+        { path: 'b.js', reason: '1' },
+      ],
+      { verificationPlan: ['v1', 'v2'] },
+    )
+    expect(descriptorOf('plan', { proposal: p1, since: 'x' })).toBe(
+      descriptorOf('plan', { proposal: p2, since: 'y' }),
+    )
+  })
+
+  it('e pending=none 门跳过——任务边界 goal confirm 放行（:748 组兼容）', () => {
+    const s = initialState() // pending none，seq 0
+    expect(
+      userDecided(s, 'goal', { confirm: true }, { kind: 'goal', instanceId: 999 }).goalConfirmed,
+    ).toBe(true)
+  })
+
+  it('f system_clarify：underlying 轮转＝新实例；委派递归透传 answers 复过门；旧实例答复 no-op', () => {
+    let s = setPending(initialState(), 'system_clarify', {
+      proposal: { underlying: 'goal', statement: '重述目标' },
+      since: 't1',
+    })
+    s = setPending(s, 'system_clarify', {
+      proposal: { underlying: 'plan', statement: '重述目标' },
+      since: 't2',
+    })
+    expect(s.decisionInstanceSeq).toBe(2) // underlying 变＝descriptor 变
+    const cur = { kind: 'system_clarify' as const, instanceId: 2 }
+    const next = userDecided(s, 'system_clarify', { confirm: true }, cur) // 委派 underlying=plan
+    expect(next.planConfirmed).toBe(true)
+    expect(next.pending).toBe('none')
+    expect(
+      userDecided(
+        s,
+        'system_clarify',
+        { confirm: true },
+        { kind: 'system_clarify', instanceId: 1 },
+      ),
+    ).toBe(s)
+  })
+
+  it('g 恒铺骨架（X2）：无 content 置位仍携 instanceId 载体', () => {
+    const s = setPending(initialState(), 'approval')
+    expect(s.decisionContent).toBeDefined()
+    expect(s.decisionContent?.instanceId).toBe(1)
+    expect(s.activeDescriptor).toBe('approval::')
+  })
+
+  it('h restorePending 旁路：直置续号不推不 emit（领域纯函数）；恢复后新 setPending 续增不撞号', () => {
+    const s = setPending(initialState(), 'plan', { proposal: planA, since: 't1' })
+    const dc = s.decisionContent
+    expect(dc).toBeDefined()
+    const r = restorePending(initialState(), dc!)
+    expect(r.pending).toBe('plan')
+    expect(r.decisionInstanceSeq).toBe(1)
+    expect(r.activeDescriptor).toBe(s.activeDescriptor)
+    const r2 = setPending(r, 'plan', { proposal: planB, since: 't2' })
+    expect(r2.decisionInstanceSeq).toBe(2) // 从持久 seq 续增（不回 0）
+  })
+
+  it('i 迁移期豁免：answers 缺省＝跳门，既有调用行为不变（收紧必填前基线）', () => {
+    let s = setPending(initialState(), 'plan', { proposal: planA, since: 't1' })
+    s = userDecided(s, 'plan', { confirm: false, reason: reason('scope') })
+    expect(s.pending).toBe('none')
+    expect(s.rejectStreak).toBe(1)
+    s = userConfirmed(s, 'goal')
+    expect(s.goalConfirmed).toBe(true)
+  })
+
+  it('approval 族：拒绝携 answers 命中生效；旧实例 no-op；allow 无 answers 旁路（t000073 边界）', () => {
+    const s = setPending(initialState(), 'approval', { approval: approvalReq(), since: 't1' })
+    const cur = { kind: 'approval' as const, instanceId: s.decisionInstanceSeq }
+    const denied = approvalDecided(
+      s,
+      approvalReq(),
+      { confirm: false, reason: reason('other') },
+      cur,
+    )
+    expect(denied.pending).toBe('none')
+    expect(denied.deniedApprovals).toHaveLength(1)
+    expect(
+      approvalDecided(
+        s,
+        approvalReq(),
+        { confirm: false, reason: reason('other') },
+        { kind: 'approval', instanceId: 42 },
+      ),
+    ).toBe(s)
+    expect(approvalDecided(s, approvalReq(), { confirm: true }).pending).toBe('none') // allow 旁路
   })
 })

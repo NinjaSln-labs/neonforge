@@ -81,8 +81,10 @@ export function useConversationState(opts?: UseConversationStateOpts) {
       file?: string
     }) => transition((s) => applyToolResult(s, r)),
     // 确认卡触发 → 会话级 PENDING（D5）；S3：decisionContent 快照随置位（卡渲染唯一来源）
-    setPending: (kind: Exclude<PendingKind, 'none'>, content?: Omit<DecisionContent, 'kind'>) =>
-      transition((s) => setPending(s, kind, content)),
+    setPending: (
+      kind: Exclude<PendingKind, 'none'>,
+      content?: Omit<DecisionContent, 'kind' | 'instanceId'>,
+    ) => transition((s) => setPending(s, kind, content)),
     clearPending: () => transition((s) => ({ ...s, pending: 'none' as PendingKind })),
     // ADR-010：强制卡「我要重新描述」按钮专用——点卡 = 明确新一轮协商，rejectStreak 重置
     // （pending 期间打字拒绝不重置——C2 循环形态仍需累积触发强制卡）

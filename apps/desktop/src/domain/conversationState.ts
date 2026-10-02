@@ -105,6 +105,13 @@ export interface DecisionContent {
   proposal?: GoalProposal | PlanProposal | CompletionClaim | SystemClarifyProposal // 结构化内容
   approval?: ApprovalRequest // 授权请求内容
   since: string // 决策点出现时间（诊断）
+  instanceId: number // ADR-015：＝置位时 decisionInstanceSeq（卡/按钮 render 冻结与恢复重建的载体）
+}
+
+/** 答复归属凭据（ADR-015 归属轴——用户对「哪一版待决内容」作答；渲染帧/入队时刻冻结，flush 原样回传） */
+export interface DecisionAnswers {
+  kind: PendingKind
+  instanceId: number
 }
 
 // === Task 聚合状态（单一来源） ===
@@ -118,6 +125,9 @@ export interface ConversationState {
   filesApproved: boolean // 本任务已批准过 approve-files（幂等——坑 95；设计 §3.1 清单外保留字段）
   lastToolFailed: boolean // 上一轮工具执行失败（坑 93 ②：策略引导 policy 不置）
   decisionContent?: DecisionContent // 当前待决策内容快照（决策点呈现与审计唯一来源）
+  // —— 决策点身份（归属轴——ADR-015：descriptor 变→新实例；与 rejectStreak 协商轴正交）——
+  decisionInstanceSeq: number // 当前呈现实例号：单调；setPending 唯一推进；恢复续号不回 0
+  activeDescriptor?: string // 当前实例的决策描述符规范化键（descriptorOf 产物——"是否新实例"基准）
   deniedApprovals: Array<{ toolName: string; subject: string }> // 拒绝记忆（§3.4 C6——同轮同类动作短封，S6 actionGate 消费；任务边界重置）
   rejectStreak: number // 同一决策点连续拒绝计数（§4.1 C8——上限 3 超限回退澄清/人工接管；随确认/新提议重置；S3 消费）
   lastRejectReason?: RejectReason // S7（A0 审校 P1-4）：最近一次拒绝的原因（诊断——decision.resolved 载荷；confirm/其他转换清除）
@@ -134,11 +144,47 @@ export const initialState = (): ConversationState => ({
   producedFiles: new Set(),
   filesApproved: false,
   lastToolFailed: false,
+  decisionInstanceSeq: 0,
   deniedApprovals: [],
   rejectStreak: 0,
   pendingRepeatCount: 0,
   unresolvedTextReplies: 0,
 })
+
+// ============================================================================
+// ADR-015：决策描述符（DecisionDescriptor——归属轴判据；纯函数、无 crypto、可 L1 测）
+// 白名单＝用户被要求拍板的结构化内容；排除模型措辞（summary/assumptions/reason/risk/output/since）
+// ============================================================================
+
+const joinUniqSorted = (xs: string[]): string => [...new Set(xs)].sort().join('|')
+
+/** 决策描述符规范化键（集字段排序+去重 join——插入序 derivePlannedFiles 不可复用） */
+export function descriptorOf(
+  kind: DecisionKind,
+  content?: Omit<DecisionContent, 'kind' | 'instanceId'>,
+): string {
+  const p = content?.proposal
+  const a = content?.approval
+  switch (kind) {
+    case 'goal':
+      return `goal:${(p as GoalProposal | undefined)?.statement ?? ''}`
+    case 'plan': {
+      const pp = p as PlanProposal | undefined
+      return `plan:${joinUniqSorted((pp?.files ?? []).map((f) => f.path))}::${joinUniqSorted(pp?.verificationPlan ?? [])}`
+    }
+    case 'resolution': {
+      const ev = (p as CompletionClaim | undefined)?.evidence
+      // 含 passed（提案 §7-1：verdict 属被裁决对象——红转绿/unverifiable→核验 均为新实例）
+      return `res:${joinUniqSorted((ev?.verification ?? []).map((v) => `${v.command}=${String(v.passed)}`))}::${joinUniqSorted((ev?.diffs ?? []).map((d) => d.path))}`
+    }
+    case 'approval':
+      return `approval:${a?.toolName ?? ''}:${a?.subject ?? ''}`
+    case 'system_clarify': {
+      const sc = p as SystemClarifyProposal | undefined
+      return `clarify:${sc?.underlying ?? ''}::${sc?.statement ?? ''}`
+    }
+  }
+}
 
 // ============================================================================
 // 转换（唯一入口——所有状态变化必须经过这里；返回新实例，原状态不可变）
@@ -150,9 +196,21 @@ export function userDecided(
   s: ConversationState,
   point: DecisionKind,
   decision: { confirm: true } | { confirm: false; reason: RejectReason },
+  answers?: DecisionAnswers,
 ): ConversationState {
   if (!decision.confirm && !decision.reason) {
     throw new TypeError('拒绝决策必须携带 RejectReason（不变量 8）')
+  }
+  // ADR-015 身份门（不变量 1 唯一承载）：有活 pending 且答复不针对当前实例 → 整转换 no-op
+  // （stale 在途文本/点旧卡/换 kind/跨任务/同 kind 续提议后的旧答复，全挡；连 rejectStreak 亦不动）。
+  // answers 缺省＝迁移期实现豁免（跳门，行为同源现状）——非领域语义；stale 事件与可见重提示＝应用层前置探测义务。
+  // 门比 s.pending 不比 point（X5）：system_clarify 委派递归透传原 answers 复过门自洽，无例外分支。
+  if (
+    answers &&
+    s.pending !== 'none' &&
+    !(answers.kind === s.pending && answers.instanceId === s.decisionInstanceSeq)
+  ) {
+    return s
   }
   // ADR-010：system_clarify 是系统触发的包装决策点——确认/拒绝直接委派 underlying（真实决策点）
   if (point === 'system_clarify') {
@@ -166,7 +224,7 @@ export function userDecided(
     }
     // 强制卡 = 升级梯度终点：点卡上「我要重新描述」是明确的新一轮协商——由调用方（强制卡按钮）
     // 经 resetRejectStreak 重置；pending 期间的打字拒绝仍走 C2 累积（A-024 循环形态，不重置）
-    return userDecided(s, underlying, decision)
+    return userDecided(s, underlying, decision, answers)
   }
   const next: ConversationState = { ...s, pending: 'none', decisionContent: undefined }
   // ADR-010：任何用户决策都终结「无进展对话」状态——两类计数清零
@@ -263,9 +321,18 @@ export function approvalDecided(
   s: ConversationState,
   request: ApprovalRequest,
   decision: { confirm: true } | { confirm: false; reason: RejectReason },
+  answers?: DecisionAnswers,
 ): ConversationState {
   if (!decision.confirm && !decision.reason) {
     throw new TypeError('拒绝决策必须携带 RejectReason（不变量 8）')
+  }
+  // ADR-015 身份门（同 userDecided——授权卡按 instanceId 寻址；allow 族天然无 answers＝旁路，t000073 另批）
+  if (
+    answers &&
+    s.pending !== 'none' &&
+    !(answers.kind === s.pending && answers.instanceId === s.decisionInstanceSeq)
+  ) {
+    return s
   }
   const next: ConversationState = { ...s, pending: 'none', decisionContent: undefined }
   if (!decision.confirm) {
@@ -286,24 +353,29 @@ export function approvalDecided(
 export function userConfirmed(
   s: ConversationState,
   point: 'goal' | 'plan' | 'resolution' | 'system_clarify',
+  answers?: DecisionAnswers,
 ): ConversationState {
-  return userDecided(s, point, { confirm: true })
+  return userDecided(s, point, { confirm: true }, answers)
 }
 
 export function userRejected(
   s: ConversationState,
   point: 'goal' | 'plan' | 'resolution' | 'system_clarify',
   reason: RejectReason,
+  answers?: DecisionAnswers,
 ): ConversationState {
   // A-006：reason 必传——不变量 8 真身（userDecided throw）不得被兼容壳缺省绕过
-  return userDecided(s, point, { confirm: false, reason })
+  return userDecided(s, point, { confirm: false, reason }, answers)
 }
 
 // 卡弹出 → 会话进入 PENDING（A0 §3.2 单一 PENDING——pending 只有一个；不变量 7）
+// ADR-015：setPending＝归属轴唯一推进点——kind 变或 descriptor 变 → 新实例（seq+1）；
+// 描述符等值重提议＝同实例（seq 不变——"重提议＝同一决策点延续"，队列确认语照落地）；
+// 恒铺骨架（X2）：decisionContent 必带 instanceId（approval 置位须携 ApprovalRequest 才有描述符载体）
 export function setPending(
   s: ConversationState,
   kind: Exclude<PendingKind, 'none'>,
-  content?: Omit<DecisionContent, 'kind'>,
+  content?: Omit<DecisionContent, 'kind' | 'instanceId'>,
 ): ConversationState {
   // §4.1 C8 计数语义（S1.1 审计裁定）：模型重提议（新 content）属**同一决策点延续**——不重置计数
   // （否则「连续拒绝 3 次上限」因每次重提议清零而永远不触发——协商保护失效）；
@@ -311,8 +383,31 @@ export function setPending(
   // 是**新决策点**——由应用层经 goal 确认边界/新任务重置（S3 接线）；领域层只承载计数
   // ADR-010 T1：同 kind 连续置位计数（换 kind 重置为 1——notePendingSet 比较旧 pending）；
   // 计数只增不清（清零唯二入口：userDecided / noteUserTextReply 的 none 分支），避免重提议洗掉循环证据
+  const descriptor = descriptorOf(kind, content)
+  const seq =
+    kind !== s.pending || descriptor !== s.activeDescriptor
+      ? s.decisionInstanceSeq + 1
+      : s.decisionInstanceSeq
   const noted = notePendingSet(s, kind)
-  return { ...noted, pending: kind, decisionContent: content ? { kind, ...content } : undefined }
+  return {
+    ...noted,
+    pending: kind,
+    decisionInstanceSeq: seq,
+    activeDescriptor: descriptor,
+    decisionContent: { since: '', ...content, kind, instanceId: seq },
+  }
+}
+
+// ADR-015 恢复旁路（§8.2E）：直置 pending/快照/seq（续号不回 0）——应用层不经 transition、不 emit
+// （仿 useConversationState restorePlanned 先例：恢复是系统初始化非用户转换——不推号、不派生事件）
+export function restorePending(s: ConversationState, dc: DecisionContent): ConversationState {
+  return {
+    ...s,
+    pending: dc.kind,
+    decisionContent: dc,
+    decisionInstanceSeq: dc.instanceId,
+    activeDescriptor: descriptorOf(dc.kind, dc),
+  }
 }
 
 // approve-files 批准 → 计划清单追加（A0 §5 追加语义——不覆盖前批）+ 幂等标记（坑 95）
