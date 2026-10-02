@@ -13,6 +13,7 @@ import {
   isReadOnlyBash,
 } from '../../src/main/tools'
 import { getPlannedFilesStore } from '../../src/main/plannedFilesStore.instance'
+import { getApprovalJournal } from '../../src/main/approvalJournal.instance'
 
 // 2026-08-06 open 工具（用户「帮我打开」）：mock electron shell——vitest node 环境无 electron
 const { openExternalMock } = vi.hoisted(() => ({ openExternalMock: vi.fn(async () => {}) }))
@@ -299,5 +300,32 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     // 旧名 check-env 不再注册（改名后旧名应 404——防双名双源）
     const old = await toolRegistry.execute('check-env', {}, {})
     expect(old.needApproval).toBeUndefined()
+  })
+
+  // ADR-017 A2：needApproval 咽喉签发 requestId（ToolResult 上行）——沿用外层 beforeEach 的
+  // markPlanApproved()＋initTools()（write 过规划门、仍走 requiresApproval 授权通道）；
+  // afterEach rmSync TMP 连带清 journal 落盘文件（TMP/workspace 下）——用例间隔离。
+  describe('ADR-017 A2 requestId 签发', () => {
+    it('needApproval 返回携 approvalRequestId＋approvalFingerprint，journal 已落 issued', async () => {
+      const file = path.join(TMP, 'game.js')
+      const r = await toolRegistry.execute('write', { path: file, content: 'x' }, { rootPath: TMP })
+      expect(r.needApproval).toBe(true)
+      expect(r.approvalRequestId).toMatch(/^apr_/)
+      expect(typeof r.approvalFingerprint).toBe('string')
+      expect(getApprovalJournal().phaseOf(r.approvalRequestId!)).toBe('issued')
+    })
+    it('rule allow 通道不签发（未走 needApproval 分支即无 id）', async () => {
+      toolRegistry.setRules([
+        { action: 'allow', tool: 'write', specifier: path.join(TMP, 'ok.js') },
+      ])
+      const r = await toolRegistry.execute(
+        'write',
+        { path: path.join(TMP, 'ok.js'), content: 'y' },
+        { rootPath: TMP },
+      )
+      expect(r.ok).toBe(true)
+      expect(r.approvalRequestId).toBeUndefined()
+      toolRegistry.setRules([])
+    })
   })
 })

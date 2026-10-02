@@ -264,13 +264,15 @@ export interface NeonForgeTools {
   execute: (
     name: string,
     args: Record<string, unknown>,
-    opts?: { approved?: boolean; rootPath?: string; sessionId?: string },
+    opts?: { approved?: boolean; requestId?: string; rootPath?: string; sessionId?: string },
   ) => Promise<{
     ok: boolean
     data?: { file?: string; snapshot?: boolean } | unknown
     error?: string
     needApproval?: boolean
     policy?: boolean
+    approvalRequestId?: string
+    approvalFingerprint?: string
   }>
   revert: (filePath: string) => Promise<{ ok: boolean; error?: string }>
   // ticket 14 可撤销：停止当前活动命令（bash 高危——任何时刻可停，不卡死）

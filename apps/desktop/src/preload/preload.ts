@@ -167,12 +167,13 @@ contextBridge.exposeInMainWorld('neonforge', {
     execute: (
       name: string,
       args: Record<string, unknown>,
-      opts?: { approved?: boolean; rootPath?: string; sessionId?: string },
+      opts?: { approved?: boolean; requestId?: string; rootPath?: string; sessionId?: string },
     ) =>
       ipcRenderer.invoke('tools:execute', {
         name,
         args,
         approved: opts?.approved ?? false,
+        requestId: opts?.requestId,
         rootPath: opts?.rootPath,
         sessionId: opts?.sessionId,
       }) as Promise<{
@@ -181,6 +182,8 @@ contextBridge.exposeInMainWorld('neonforge', {
         error?: string
         needApproval?: boolean
         policy?: boolean
+        approvalRequestId?: string
+        approvalFingerprint?: string
       }>,
     revert: (filePath: string) =>
       ipcRenderer.invoke('tools:revert', { path: filePath }) as Promise<{

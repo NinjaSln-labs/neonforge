@@ -23,6 +23,9 @@ import { logTimeline } from './timelineLogger.js'
 import { classifyReadonly, isLocalhostCommand } from '../domain/conversationState.js'
 import { configStore } from './configStore.js'
 import { webSearch, webFetch } from './webTools.js'
+// ADR-017 A2：授权执行日志签发（与 plannedFilesStore.instance 同惰性纪律——registerIpc 前不触碰 app.getPath；vitest 走既有 electron mock）
+import { getApprovalJournal } from './approvalJournal.instance.js'
+import { fingerprintArgs } from './approvalJournal.js'
 
 // ToolRegistry（ticket 10 / A0 §2）：工具注册与执行分发
 // 边界判定：ToolRegistry=目录与分发；ShellAgent=bash 执行；Gateway=工具调用修复（02 已实现）
@@ -95,6 +98,9 @@ export interface ToolResult {
   // 2026-08-08 根因 3 修复②：policy 结构化字段——策略引导/拦截（如 write 规划门控「先 approve-files 再写」）
   // ≠ 工具执行失败：renderer 据此不置 lastToolFailed（否则 forceTool 恒释放 → 模型纯文本承诺后停住——冒烟 O4/O5 根因）
   policy?: boolean
+  // ADR-017 A2：授权请求身份（main 签发——renderer 建窗记录凭此寻址；仅 needApproval 返回时出现）
+  approvalRequestId?: string
+  approvalFingerprint?: string
 }
 
 class ToolRegistry {
@@ -127,7 +133,8 @@ class ToolRegistry {
   async execute(
     name: string,
     args: Record<string, unknown>,
-    opts: { approved?: boolean; rootPath?: string; sessionId?: string } = {},
+    // ADR-017 A2：requestId 此处仅透传声明（判定 B 期启用——journal 阶段链 A3 消费）
+    opts: { approved?: boolean; requestId?: string; rootPath?: string; sessionId?: string } = {},
   ): Promise<ToolResult> {
     console.log('[tools] execute', name, 'rootPath=' + (opts.rootPath ?? 'NONE'))
     // 2026-08-07 会话时间线（Session Timeline BC——main 侧工具执行记录兜底：renderer 崩溃也有工具时间线）
@@ -167,9 +174,16 @@ class ToolRegistry {
       const pre = tool.preApproval?.(args, opts)
       if (!pre?.auto) {
         // 2026-08-07 T2（regex-todo）：needApproval 结构化标记——renderer 读字段判定授权卡（不再 includes('授权') 文本匹配）
+        // ADR-017 A2：签发即记 issued（journal 只记不判——A 期不改执行判定）
+        const j = getApprovalJournal()
+        const requestId = j.issueId()
+        const fp = fingerprintArgs(name, args)
+        j.append({ requestId, toolName: name, argsFingerprint: fp, phase: 'issued' })
         return {
           ok: false,
           needApproval: true,
+          approvalRequestId: requestId,
+          approvalFingerprint: fp,
           error: `「${name}」需要授权（L3）——approved=true 后执行`,
         }
       }

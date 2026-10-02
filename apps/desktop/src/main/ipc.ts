@@ -348,12 +348,14 @@ ipcMain.handle(
       name: string
       args: Record<string, unknown>
       approved?: boolean
+      requestId?: string
       rootPath?: string
       sessionId?: string
     },
   ) => {
     const res = await toolRegistry.execute(opts.name, opts.args ?? {}, {
       approved: opts.approved ?? false,
+      requestId: opts.requestId,
       rootPath: opts.rootPath ?? workspace.getCurrentRoot() ?? undefined,
       sessionId: opts.sessionId,
     })
