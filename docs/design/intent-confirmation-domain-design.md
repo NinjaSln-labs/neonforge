@@ -38,8 +38,9 @@
 | 术语                           | 定义                                                                                                                                                                             |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **提议 Proposal**              | 模型产出的结构化主张：目标提议 / 方案提议 / 完成声明。模型可随时产出，**不产生任何状态变化**，只进入「待决策」或「待对账」                                                       |
-| **决策点 DecisionPoint**       | 「需要用户输入才能继续」的确定性状态：`待决策的目标 / 待决策的方案 / 待决策的授权 / 待对账的完成`。由系统对（状态 × 提议 × 动作）求值产生，**模型不能制造**                      |
-| **决策 Decision**              | 用户对决策点的响应：确认 / 拒绝（带原因）/ 修改（带修正内容）。决策是状态推进的唯一输入（不变量 1）                                                                              |
+| **决策点 DecisionPoint**       | 「需要用户输入才能继续」的确定性状态：`待决策的目标 / 待决策的方案 / 待决策的授权 / 待对账的完成`。由系统对（状态 × 提议 × 动作）求值产生，**模型不能制造**。**具一等身份的实例**——身份＝其决策描述符（下行）；kind 为决策点**槽**（goal/plan/approval/resolution；`system_clarify`＝委派槽——ADR-010 强制卡经 underlying 落四类），承载协商连续性 `rejectStreak`（§4.1/ADR-001） |
+| **决策描述符 DecisionDescriptor** | 用户被要求**就其拍板的结构化内容**（deriveDecisionPoint 输出的值对象部分）——纯值、可等值比较。descriptor 实质变（或换 kind）＝**新决策点实例**（`instanceId`+1）；逐字/等值重提议＝**同实例**（延续）。字段白名单见 §3.4 `descriptorOf`，**排除模型措辞** |
+| **决策 Decision**              | 用户对决策点**实例**的响应（携 `answers{kind, instanceId}`）：确认 / 拒绝（带原因）/ 修改（带修正内容）。**针对当前实例**的决策是状态推进的唯一输入（不变量 1，唯一措辞源 A0 §3.2） |
 | **证据 Evidence**              | 完成声明的可核验支撑：验证命令+输出、测试结果、diff 对账、遗留问题清单。证据不足（零条可代跑 / verification 空 / passed=false / V1a 对账失败）= 不进入对账；unverifiable 仅标注（ADR-011，恢复拍板 4）；**遗留问题为知情项不阻塞对账**（解决卡呈现——ADR-008）                                                                       |
 | **动作属性 ActionAttribute**   | 工具调用的客观性质：只读 / 网络只读 / 清单内写 / 越界写 / 高危命令（kind：readonly / network-read / in-plan / out-of-plan / hazardous——§3.2 同源）。由门控判定（与模型自评无关） |
 | **授权 Approval**              | 对「动作属性判定为需询问」的调用，向用户呈现请求（subject+reason+risk），用户允许（一次/会话/永久）或拒绝（带原因）                                                              |
@@ -55,22 +56,28 @@
 ConversationState {
   // —— 确认状态（用户决策的累积结果）——
   goalConfirmed: boolean
-  planConfirmed: boolean          // 原 executionConfirmed——语义更准确：确认的是「方案」不是「执行」
-  resolutionConfirmed: boolean    // 原 achievementConfirmed——确认的是「解决」不是「达成」（达成是模型声明）
-  // —— 会话级等待（单一 PENDING——保留，触发源重构）——
-  pending: PendingKind            // none | goal | plan | approval | resolution
+  planConfirmed: boolean          // 原 executionConfirmed——确认的是「方案」不是「执行」
+  resolutionConfirmed: boolean    // 原 achievementConfirmed——确认的是「解决」不是「达成」
+  // —— 会话级等待（单一 PENDING）——
+  pending: PendingKind   // 槽：none | goal | plan | approval | resolution（system_clarify＝委派槽，§2 注）
+  // —— 决策点身份（归属轴——ADR-015）——
+  decisionInstanceSeq: number     // 当前呈现实例号：单调；setPending 按 descriptor 推进；初值 0；
+                                  // 随会话序列化、恢复续号（不回 0、不与落盘 decision.requested.instanceId 撞号）
+  activeDescriptor?: string       // 当前实例的决策描述符规范化键（descriptorOf 产物——"是否新实例"之基准）
   // —— 宿主边界（保留 A0 §5）——
   plannedFiles: Set<string>       // 由 PlanProposal.files 派生（追加语义）
   producedFiles: Set<string>
   // —— 推进数据（保留）——
   lastToolFailed: boolean
-  // —— 新增：当前待决策内容（决策点的「内容快照」——卡呈现与审计）——
+  // —— 当前待决策内容（决策点的「内容快照」——卡呈现与审计唯一来源）——
   decisionContent?: {
     kind: 'goal' | 'plan' | 'approval' | 'resolution'
-    proposal?: GoalProposal | PlanProposal | CompletionClaim   // 结构化内容
-    approval?: ApprovalRequest                                  // 授权请求内容
-    since: string                                               // 决策点出现时间（诊断）
+    proposal?: GoalProposal | PlanProposal | CompletionClaim
+    approval?: ApprovalRequest
+    since: string
+    instanceId: number            // ＝置位时 decisionInstanceSeq（镜像——卡/按钮 render 冻结与恢复重建的载体）
   }
+  rejectStreak: number            // 协商轴：挂 kind/槽，与归属轴正交（§4.1/ADR-001 语义不变）
 }
 ```
 
@@ -79,6 +86,7 @@ ConversationState {
 - ✅ 继承：单一 PENDING、确认点三态、plannedFiles 追加语义、producedFiles、lastToolFailed
 - 🔄 重构：`executionConfirmed` → `planConfirmed`（用户确认的是方案——与 PlanProposal 对应；「执行」是确认后的自动结果）；`achievementConfirmed` → `resolutionConfirmed`（「达成」是模型声明，用户确认的是「问题解决」）
 - ➕ 新增：`decisionContent`（决策点内容快照——决策点呈现与审计的唯一来源；run4「用户确认了含未确认假设的方案」无法追溯的问题由此解决）
+- ➕ 新增：`decisionInstanceSeq`/`activeDescriptor`/`decisionContent.instanceId`（决策点实例身份——答复归属寻址，β 根因的领域解，ADR-015；`rejectStreak`/`pendingRepeatCount` 系补记代码事实 conversationState.ts:122/:124，原稿素来未列，本次一并落准）
 
 ### 3.2 值对象
 
@@ -206,23 +214,60 @@ derivePlannedFiles(state, proposal: PlanProposal): Set<string>
 shouldStopContinuation(state, lastMsgSignals): boolean
 ```
 
-### 3.4 状态转换（唯一入口——继承）
+### 3.4 状态转换（唯一入口——继承；身份与归属 ADR-015）
 
 ```
-userDecided(state, point, decision: { confirm: true } | { confirm: false, reason: RejectReason }): ConversationState   // 不变量 8：拒绝必须带原因（reason 必填）
-//   - confirm=true：推进（goal → goalConfirmed；plan → planConfirmed + plannedFiles ∪= derivePlannedFiles(proposal)；resolution → resolutionConfirmed）
-//   - confirm=false + reason：回退 + 回填 reason（模型调整方向——Cline/Deep Code 方向）
-//   - pending 期间用户发新自由文本（改变意图——2026-08-16 第三轮审计 C2 归义）：等价 reject 当前决策点
-//     （reason.kind='direction' + text=新意图）→ 新意图作为新 GoalProposal 输入 deriveDecisionPoint——
-//     全部走 userDecided 入口（不变量 1 保持：状态推进唯一输入=用户决策）
-approvalDecided(state, request, decision: { confirm: true } | { confirm: false, reason: RejectReason }): ConversationState
-//   - 允许：pending 清除（执行继续）
-//   - 拒绝 + reason（必填——不变量 8）：pending 清除 + reason 回填模型（防重试——「不要绕过」）
-//   - 机制层防绕过（2026-08-16 第三轮审计 C6 修正——prompt 纪律不够）：拒绝的 ApprovalRequest（toolName+命令类）
-//     登记拒绝记忆——actionGate 对**同轮内同类动作**直接 deny（tool.blocked 事件；历史文稿曾写 gate.denied）——「不要绕过」落到
-//     reason 回填 + actionGate 短封两层
-applyToolResult(...)  // 继承（producedFiles/lastToolFailed）
+// —— 决策描述符（纯函数，无 crypto；集合字段排序+去重 join）——
+descriptorOf(kind, content): string
+//   goal            ＝ statement
+//   plan            ＝ files[].path 集 + verificationPlan 集
+//   resolution      ＝ (command+passed) 对集 + diffs[].path 集   // 含 passed（提案 §7-1：verdict 属被裁决对象）
+//   approval        ＝ toolName + subject
+//   system_clarify  ＝ underlying + statement（委派槽——门/递归见下）
+//   排除：summary / assumptions / reason / risk / output / since 及一切模型措辞
+//   注：插入序的 derivePlannedFiles 不可直接复用为描述符
+
+// —— 归属轴唯一推进点 ——
+setPending(state, kind, content?): ConversationState
+//   descriptor = descriptorOf(kind, content)
+//   kind ≠ state.pending ∨ descriptor ≠ state.activeDescriptor → decisionInstanceSeq + 1（新决策点实例）
+//   描述符等值重提议 → 同实例（seq 不变——"重提议＝同一决策点延续"，队列确认语照落地）
+//   decisionContent ＝ { kind, ...content, since, instanceId: seq }（恒铺骨架，approval 置位须携 ApprovalRequest）
+//   activeDescriptor ＝ descriptor；pending ＝ kind
+
+userDecided(state, point, decision: { confirm: true } | { confirm: false, reason: RejectReason },
+            answers: { kind: PendingKind; instanceId: number }): ConversationState   // 不变量 8：拒绝必须带原因（reason 必填）
+//   【身份门——不变量 1 唯一承载】state.pending !== 'none' ∧
+//     ¬(answers.kind === state.pending ∧ answers.instanceId === state.decisionInstanceSeq)
+//     ⇒ 整转换 no-op（连 rejectStreak 亦不动）——挡住全部 stale 形态：在途文本迟到、点旧卡、换 kind、跨任务、
+//     同 kind 续提议后的旧答复。域门＝静默兜底；事件与可见重提示是应用层义务：调用前前置探测，不符 ⇒ 不进本转换
+//     ＋发 conversation.stale_input_discarded＋重确认提示（不吞文本、不回喂模型）
+//   门比 state.pending（不比 point）——system_clarify 委派递归透传原 answers 自洽，无例外分支
+//   pending==='none' 时门有意跳过——放行清理与任务边界 goal-confirm
+//   门过后逻辑逐行不变：confirm 推进（goal → goalConfirmed；plan → planConfirmed + plannedFiles ∪= derivePlannedFiles(proposal)；
+//     resolution → resolutionConfirmed）；reject 回退 + reason 回填；rejectStreak 协商轴（§4.1/ADR-001）不因 descriptor 变而重置
+//   （实现注：调用点迁移完成前 answers 暂可缺省＝跳门的实现豁免——过渡安排非领域语义；凡"用户对卡作答"站点必携
+//     answers，零缺省审计后收紧为必填）
+//   C2（2026-08-16 第三轮审计归义，语义不变——ADR-014 #1）：pending 期间用户发新自由文本（改变意图）＝等价 reject
+//     当前决策点实例（reason.kind='direction' + text=新意图）→ 新意图作为新 GoalProposal 输入 deriveDecisionPoint
+//     → setPending 新 descriptor ⇒ 新实例——"改意图⇒新决策点"判据由描述符精确化；全部走 userDecided 入口
+
+approvalDecided(state, request, decision: { confirm: true } | { confirm: false, reason: RejectReason },
+                answers?: { kind; instanceId }): ConversationState
+//   身份门同上（授权卡按 instanceId 寻址）。本批 approval 面选边（依提案 §3＋t000073）：拒绝按钮携 answers（进门）；
+//     allow/文本批准天然无 answers＝旁路（另批接线），门随 answers 在场才生效，两权威在此兼容
+//   允许：pending 清除（执行继续）；拒绝 + reason（必填——不变量 8）：pending 清除 + reason 回填模型（防重试——「不要绕过」）
+//   机制层防绕过（C6 不变）：拒绝的 ApprovalRequest（toolName+命令类）登记拒绝记忆——actionGate 对同轮内同类动作
+//     直接 deny（tool.blocked 事件）——「不要绕过」落到 reason 回填 + actionGate 短封两层
+
+restorePending(state, decisionContent): ConversationState   // 恢复旁路（§8.2E）
+//   直置 pending＝dc.kind、decisionContent＝dc、decisionInstanceSeq＝dc.instanceId、activeDescriptor＝descriptorOf(dc.kind, dc)
+//   不走 transition、不 emit、不推号（续号不回 0）——仿 restorePlanned 先例
+
+applyToolResult(...)   // 继承（producedFiles/lastToolFailed）——不涉归属轴
 ```
+
+**渲染合同（应用层义务——ADR-015 #4）**：按钮 onClick 携**渲染帧**的 `decisionContent.instanceId`；文本答复在**入队时刻**冻结 answers、flush 原样回传——绝不在 flush 按当时 pending 重冻。**main 镜像联动（第十二轴 P2）**：`setPlanConfirmed` 等 main 侧镜像仅在转换真生效（门通过）后执行——门 no-op 时镜像不得翻真（否则 approve-files 硬序门从门旁漏开）。
 
 ### 3.5 领域事件（timeline 注册表扩展）
 
@@ -231,10 +276,12 @@ applyToolResult(...)  // 继承（producedFiles/lastToolFailed）
 | `proposal.goal`               | GoalProposal 完整内容（statement+assumptions）——替代现 task.goal_proposed 文本摘要 |
 | `proposal.plan`               | PlanProposal 完整内容（files+assumptions+verificationPlan）                        |
 | `proposal.completion`         | CompletionClaim 完整内容（summary+evidence）                                       |
-| `decision.requested`          | 决策点出现（kind + decisionContent 快照——含呈现内容的完整审计）                    |
-| `decision.resolved`           | 确认/拒绝（confirm/reject + RejectReason）——现有 card.resolved 增强                |
+| `decision.requested`          | 决策点出现（kind + **instanceId** + decisionContent 快照——新实例呈现的唯一记录）                    |
+| `decision.resolved`           | 确认/拒绝（confirm/reject + RejectReason + **answeredInstanceId**——被应答实例，审计回放键）                |
 | `completion.evidence_missing` | 完成声明被拒原因（missing 清单——新诊断事件）                                       |
 | `tool.blocked`                | ActionGate deny（高风险动作被机制拦——非 ask；历史文稿曾写 `gate.denied`——复用既有 tool.blocked，非另立） |
+
+**stale 答复事件注（ADR-015）**：走既有 domain=`conversation`：`conversation.stale_input_discarded`（detail＝被拒 answers{kind,instanceId} × 当前{pending, decisionInstanceSeq}；ADR-014 #6 旧载荷词 wantEpoch/curEpoch 作废，以本注为准）。实现注：TimelineEventType 联合与 TIMELINE_EVENT_SPECS **双写**（timeline.ts:116 Record 强制）；decision.* 已注册，零新增 domain。
 
 现有事件保持（session.pending_set/cleared、tool.blocked、execution.forced/released 等）。
 
@@ -247,15 +294,15 @@ applyToolResult(...)  // 继承（producedFiles/lastToolFailed）
 
 ## 4. 不变量清单（L1 穷举测试规格）
 
-> 承载映射（§9.2 覆盖矩阵依据）：Inv 2/3/4/5 → §3.3 领域服务（deriveDecisionPoint/sessionGate×actionGate/verifyCompletion/decideProgressGuarantee）；**Inv 1/8 → §3.4 状态转换函数（userDecided/approvalDecided——签名强制）**；Inv 6 → derivePlannedFiles；Inv 7 → deriveDecisionPoint 单值返回 + pending: PendingKind 类型（状态空间测试）。
+> 承载映射（§9.2 覆盖矩阵依据）：Inv 2/3/4/5 → §3.3 领域服务（deriveDecisionPoint/sessionGate×actionGate/verifyCompletion/decideProgressGuarantee）；**Inv 1/8 → §3.4 状态转换函数（userDecided/approvalDecided 身份门 + setPending 推进——签名携 answers）**；Inv 6 → derivePlannedFiles；Inv 7 → deriveDecisionPoint 单值返回 + pending: PendingKind 类型（状态空间测试）。
 
-1. **决策唯一输入**：状态推进只能由用户决策发生（无决策无推进——A0 §3.2 继承——承载：§3.4 转换函数）
+1. **决策唯一输入**：状态推进只能由**针对当前决策点实例**的用户决策发生（answers.instanceId+kind 匹配当前呈现；实例不符＝no-op——唯一措辞源 A0 §3.2，ADR-015——承载：§3.4 身份门 + setPending 推进）
 2. **决策点确定性**：同一（状态×提议×动作）输入 → 同一决策点（纯函数；模型文本不参与）
 3. **门控顺序**：SessionGate（冻结）优先于 ActionGate（属性）——pending 时任何动作无效（A0 §3.5 + §3.5b——2026-08-16 审计修正引用）
 4. **无证据不对账**：verification 非空 ∧ ≥1 条 `isSystemVerifiable` 且 V1a/纯逻辑通过对账 ∧ missing 空 → ok；unverifiable 仅清单+提示，不单独否决 ok；全部不可代跑 → ok=false；**遗留问题（pendingQuestions）不阻塞**——ADR-008 / ADR-011（2026-08-30 #6 真机：阻塞语义与 sysPrompt ⑮「必须列遗留问题」构成死锁，诚实声明永不可达已解决——遗留问题改为解决卡知情呈现）
 5. **推进 ≠ 调工具**：推进保障的强制对象是「推进」不是「工具调用」；pending 时恒 auto
 6. **方案单一来源**：plannedFiles 只由已确认的 PlanProposal.files 派生（追加语义 A0 §5 继承）
-7. **PENDING 单一**：任一时刻只有一个决策点（继承）
+7. **PENDING 单一**：任一时刻只有一个决策点（继承）。同 kind 可跨**实例**延续呈现；答复必须绑被应答的实例（见不变量 1）
 8. **拒绝带原因**：拒绝决策必须携带 RejectReason（结构化）——回填模型
 
 ---
@@ -301,6 +348,7 @@ applyToolResult(...)  // 继承（producedFiles/lastToolFailed）
 - 同一决策点连续拒绝（含 kind='modify'）计数上限（建议 3 次）——超限：**回退 AskToAct 澄清**（模型必须输出结构化澄清问题收敛意图，不再直接重提议）或**人工接管提示**（状态栏提示用户手动输入明确指令）
 - 计数随决策点确认/新提议重置；纳入 L1 状态空间测试（不变量矩阵扩展）
 - **S1.1 实现裁定（2026-08-16 审计——`rejectStreak` 语义）**：模型重提议（setPending 带新 content）属**同一决策点延续——不重置计数**（否则「连续拒绝 3 次上限」因每次重提议清零而永远不触发——协商保护失效）；「随新提议重置」按 §3.4 C2 语义 = 用户新意图（pending 期间新自由文本 → reject(direction) + 新 GoalProposal）是**新决策点**——由应用层经 goal 确认边界/新任务重置（S3 接线）；领域层只承载计数（`rejectStreak`）。超限回退消费方 = S3
+- **两轴分离（2026-10-02 ADR-015）**：本节 `rejectStreak` 属**协商轴**（挂 kind/槽）；答复归属另由**归属轴** `instanceId` 承载（§3.4）。descriptor 变（新实例）**不**重置计数——"重提议＝同一决策点延续不重置"获得正交显式载体；"新意图＝新决策点、由 goal 边界/新任务重置"不变。ADR-001 语义不改。
 
 ## 7. 待拍板问题（不阻塞 S1，但影响范围）
 
@@ -352,9 +400,9 @@ applyToolResult(...)  // 继承（producedFiles/lastToolFailed）
 
 **E. 会话持久化（`sessionStore.ts` 断点续做）**
 
-- 耦合点：decisionContent（决策点内容快照）必须随会话序列化——断点续做恢复后决策点内容不丢（否则恢复的会话卡内容空白、确认语义丢失）。
-- 同步内容：serializeMessages/loadSession 支持 decisionContent 字段（含 PlanProposal/CompletionClaim 结构）。
-- 恢复时序规则（2026-08-16 第三轮审计 C5 修正）：恢复后 **pending 冻结立即生效**（模型首轮只能响应用户对已有决策点的决策，不得新产出提议覆盖序列化的 decisionContent——与多提议归约规则 §3.6 性质 5 一致）；goal/plan 决策点恢复后**默认重显旧内容**，用户确认/修改后才更新。
+- 耦合点：decisionContent（决策点内容快照，**含 instanceId**）与 `decisionInstanceSeq`/`activeDescriptor` 必须随会话序列化——断点续做恢复后决策点内容与**实例身份**不丢（否则恢复的会话卡内容空白、确认语义丢失、stale 答复无从作废）。
+- 同步内容：serializeMessages/loadSession 支持上述字段（含 PlanProposal/CompletionClaim 结构与 `dc.approval`）。
+- 恢复时序规则（2026-08-16 第三轮审计 C5 修正保留）：恢复后 **pending 冻结立即生效**（模型首轮只能响应用户对已有决策点的决策，不得新产出提议覆盖序列化的 decisionContent——与多提议归约规则 §3.6 性质 5 一致）；goal/plan 决策点恢复后**默认重显旧内容**——重显＝重显**同实例**（恢复走 §3.4 `restorePending` 旁路：直置、不 emit、续号不回 0；恢复后新 setPending 从持久 seq 续增，不与落盘 `decision.requested.instanceId` 撞号），用户确认/修改后才更新。
 - 阶段：S3（renderer 接线）一并落地。
 
 ### 8.3 测试与文档同步（每阶段门禁内）

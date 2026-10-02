@@ -1,5 +1,7 @@
 # β（stale 输入冲卡）修法实现计划
 
+> ⚠️ **v1 — 已被取代**（四轴判 GO-with-fixes 且 ⓪「废 C2」/S7-1 翻转经第五/六轴判否；现行方案＝`2026-10-02-decision-input-attribution-fix-v3.md`，领域裁定＝ADR-014）。本文留作历史链，**勿据此改码**。
+
 > **For agentic workers:** REQUIRED WORKFLOW: implement this plan task-by-task — either dispatch a fresh subagent per task with a review gate between tasks (recommended), or execute inline with checkpoints. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 让「用户对某个决策点做出的答复」只能作用于它被写就的那个决策点——代次不符即失效，且未命中确认/拒绝词表的自由文本不再改动卡片。

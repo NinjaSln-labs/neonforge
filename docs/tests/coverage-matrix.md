@@ -8,7 +8,7 @@
 
 | 不变量 | 语义 | 覆盖测试（文件::用例） | 判定 |
 |--------|------|------------------------|------|
-| Inv 1 | 决策唯一输入——无决策无推进 | conversationState.test.ts::Inv 1 决策唯一输入 | ✅ |
+| Inv 1 | 决策唯一输入——无决策无推进（实例寻址后措辞源 00 §3.2·ADR-015） | conversationState.test.ts::Inv 1 决策唯一输入 | ✅ |
 | Inv 2 | 决策点确定性——deriveDecisionPoint 纯函数 | conversationState.test.ts::Inv 2 决策点确定性 | ✅ |
 | Inv 3 | 门控顺序——sessionGate × actionGate 双维正交 | conversationState.test.ts::Inv 3 门控顺序 | ✅ |
 | Inv 4 | 无证据不对账——verifyCompletion 单源；≥1 条可代跑通过对账（ADR-011） | conversationState.test.ts::Inv 4 + verifyCompletionSystem.test.ts（V1a/V1b 扩展） | ✅ |

@@ -11,7 +11,7 @@
 
 **目标驱动的执行单元**（会话内——只管三个**任务级**确认点）。**注意：单一 PENDING 状态机归属会话级（Conversation 聚合——§1.2）——Task 不承载 pending**（工具级授权等待是会话级 pending 的一部分，不在 Task 状态机内）。
 
-> **实现形态（2026-08-15 定论——M4 文档承认）**：Task 状态与会话级 PENDING 承载于**同一状态结构**（`conversationState.ts` 的 `ConversationState`——goal/execution/achievement 三确认布尔 + 会话 pending + plannedFiles/producedFiles 一体）——语义等价（pending 仍是会话级语义：确认卡/授权卡统一冻结、用户决策是下一状态唯一输入；三布尔 = 5 态语义映射：clarifying=三 false、goal-confirmed=goal true、executing=goal+plan true、resolved-pending=goal+plan true+完成声明（证据对账中）、resolved=resolution true——2026-08-16 更名：execution→plan、achieved-reported→resolved-pending、achievement→resolution，第 13 轮审计 #14 同步），**结构合并**（避免双聚合同步开销与跨层一致性问题——2026-08-14 状态机落地选型）；A0 §3.2 单一 PENDING 语义不变。
+> **实现形态（2026-08-15 定论——M4 文档承认）**：Task 状态与会话级 PENDING 承载于**同一状态结构**（`conversationState.ts` 的 `ConversationState`——goal/execution/achievement 三确认布尔 + 会话 pending + plannedFiles/producedFiles 一体）——语义等价（pending 仍是会话级语义：确认卡/授权卡统一冻结、用户决策是下一状态唯一输入（唯一措辞源 A0 §3.2·ADR-015）；三布尔 = 5 态语义映射：clarifying=三 false、goal-confirmed=goal true、executing=goal+plan true、resolved-pending=goal+plan true+完成声明（证据对账中）、resolved=resolution true——2026-08-16 更名：execution→plan、achieved-reported→resolved-pending、achievement→resolution，第 13 轮审计 #14 同步），**结构合并**（避免双聚合同步开销与跨层一致性问题——2026-08-14 状态机落地选型）；A0 §3.2 单一 PENDING 语义不变。
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -53,7 +53,7 @@ clarifying ─[用户确认目标]→ goal-confirmed ─[用户批准方案]→ 
 - 未批准方案 → 不产生执行动作（write/edit/**有副作用 bash**——探索性只读命令如 ls/cat 放行：与 §3.6 actionGate 只读自动同源——A0 §3.1 澄清，2026-08-16 第 14 轮审计 #1 对齐）
 - 未确认解决 → 不收敛（推进保障保持——模型必须继续推进：产出/提议/证据）
 - 无证据不对账 → 证据不完备的完成声明不进入 resolved-pending（「已解决」卡不弹）
-- **pending（会话级）→ 模型动作全部无效**（做了白做——用户决策是下一个状态的唯一输入）
+- **pending（会话级）→ 模型动作全部无效**（做了白做——措辞源见 A0 §3.2 规则 2，实例寻址 ADR-015）
 
 ### 1.2 Conversation 聚合（Conversation BC——单一 PENDING 状态机宿主）
 
@@ -61,7 +61,7 @@ clarifying ─[用户确认目标]→ goal-confirmed ─[用户批准方案]→ 
 ┌─────────────────────────────────────────────────────────────┐
 │ Conversation (聚合根——会话级单一 PENDING 状态机)                 │
 │ id / messages: Message[]                                    │
-│ ◆ pending: PendingDecision | null   // 会话级等待状态（核心！）  │
+│ ◆ pending: PendingDecision | null   // 会话级等待（核心）槽⊥实例（ADR-015）    │
 │     └─ 来源：目标确认卡 / 方案确认卡 / 解决确认卡 / 授权卡     │
 │     └─ pending 下模型动作全部无效（做了白做——不执行不生效）      │
 │ ◆ activeTask: Task | null        // 会话内当前任务（目标驱动）   │
@@ -88,7 +88,7 @@ clarifying ─[用户确认目标]→ goal-confirmed ─[用户批准方案]→ 
 **要点**：
 
 1. **pending 是会话级——只有一个**——任何卡弹出（确认卡/授权卡）→ 会话进入 pending（等用户决策）
-2. **pending 下模型动作全部无效**（做了白做）——用户决策是下一个状态的唯一输入
+2. **pending 下模型动作全部无效**（做了白做）——用户决策是下一个状态的唯一输入（唯一措辞源 A0 §3.2 规则 2·ADR-015）
 3. **Task 只管任务级确认点**——工具级授权等待由会话级 pending 承载（Task 执行内部触发的会话等待）
 
 ### 1.3 PlannedFiles 聚合（Workspace BC）
