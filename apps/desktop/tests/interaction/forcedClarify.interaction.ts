@@ -83,4 +83,18 @@ test.describe('ADR-010 强制澄清卡', () => {
     await expect(page.locator('.nf-msg--assistant .nf-msg__body--thinking')).toHaveCount(0)
     await expect(page.locator('.nf-msg--assistant .nf-breath')).toHaveCount(0)
   })
+
+  // RC1a 同族的另一裸退位：网关 ok 却整轮零 chunk（连 done 都没发）＝静默轮——链尾同样要收尾占位，
+  // 否则永久留「搭档处理中」幽灵而状态栏已「就绪」。判据必须窄（本轮 chunk 数为 0）：
+  // 链尾跑在 React 提交之前，无条件收尾会把承载确认卡的信号消息当空占位丢弃（实测踩过）。
+  test('T-FORCE-5：静默轮（零 chunk／无 done）不得残留流式占位', async ({ page }) => {
+    installMockBridge(page, { project: 'none', script: [[]], defaultRound: [] })
+    await startFromScratch(page, '做个待办应用')
+    // 先确认本轮确实进门（启动页自动发送有 ≈50ms 延后）——否则「就绪」会被发送前的初始就绪态先满足，
+    // 慢负载轮里就在占位仍在流时断言（本用例首轮整项目冷启即为此误红）
+    await expect(page.locator('.nf-msg--user')).toHaveCount(1)
+    await expectChatReady(page)
+    await expect(page.locator('.nf-msg--assistant .nf-msg__body--thinking')).toHaveCount(0)
+    await expect(page.locator('.nf-msg--assistant .nf-breath')).toHaveCount(0)
+  })
 })

@@ -370,6 +370,8 @@ export default function ConversationPanel({
   // （Spike-4 实证「同响应混合协议+普通工具」：协议工具置 pending 等用户决策 → 普通工具无意义
   // ——挂起不执行，结果引导模型等确认后重试；deriveDecisionPoint 单决策点互斥语义的流式承载）
   const suspendRoundRef = useRef(false)
+  // 本轮收到的 chunk 数（runChat 轮首复位）——链尾判「静默轮」（网关 ok 但零 chunk、无 done）用
+  const roundChunksRef = useRef(0)
   // V1.5 S3：文本标记降级引导计数——每会话最多 3 次自动引导（模型连续输出标记不改用工具则停，
   // 防 silent 续聊空转；超过转用户可见提示——等用户输入/手动处理）
   const textFallbackCountRef = useRef(0)
@@ -849,6 +851,7 @@ export default function ConversationPanel({
     toolCall?: { name: string; args: Record<string, unknown> }
   }) => {
     console.log('[conv] chunk', chunk.type)
+    roundChunksRef.current++ // 静默轮判据（见 send 链尾）
     if (chunk.type === 'stream-reset') {
       // 网关超时重试：丢掉半截流，等新流补上
       streamingRef.current = { content: '', reasoning: '', toolCalls: [] }
@@ -2141,6 +2144,7 @@ export default function ConversationPanel({
     // V1.5 S2 A-017：每轮流开始复位挂起标记（防 stopGeneration/错误路径残留——stop 不触发 done 分支，
     // 若只在 done 复位，中断的轮会把挂起误带到下一轮 → 兄弟工具被错误挂起）。挂起只约束同轮兄弟调用。
     suspendRoundRef.current = false
+    roundChunksRef.current = 0 // 静默轮判据复位（见 send 链尾）
     // 2026-08-04 重构（用户：「定多少才不卡」根因——原 `depth > 4` 硬上限，开发工具链 5+ 轮必断）：40 轮总兜底（防死循环由 maybeContinue 重复检测承担）
     if (depth > 40) {
       // 2026-08-05：提前 return 释放 working（不经过 maybeContinue/finishError——防卡「搭档处理中」）
@@ -2835,7 +2839,14 @@ export default function ConversationPanel({
       finishError('network')
     } finally {
       setWorking(false)
+      // 同步清门闩：workingRef 靠 effect 镜像 setWorking（上方 workingRef 声明处），滞后 ≈100ms——
+      // 窗口内确认卡的回声 send 会误判 busy 再入队，而本链 flush（下方）已过＝死信。
+      // 同坑在 stopGeneration 与 retryFailedTurn 已各用此法同步清，链尾是第三处漏位（t000067 同根）。
+      workingRef.current = false
       onWorkingChange?.(false)
+      // 静默轮（网关 ok 但零 chunk、连 done 都没发）收尾占位——否则永久留幽灵「搭档处理中…」而状态栏已「就绪」（RC1a/t000065 同族）。
+      // 窄条件必需：有 chunk 的轮不碰——链尾跑在 React 提交前，宽条件会把承载确认卡的信号消息当空占位丢弃（实测踩过）。
+      if (roundChunksRef.current === 0) finalizeOrphanStream(sid)
       // 2026-08-07 无阶段修复（输入≠打断）：当前轮（流式+工具链）完成 → 排队消息自动衔接发送
       flushPendingSend()
     }

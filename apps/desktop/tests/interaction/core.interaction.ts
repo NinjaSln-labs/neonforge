@@ -45,6 +45,8 @@ async function mockBridge(page: Page): Promise<void> {
         readFile: async (p: string) => ({ ok: true, content: '// ' + p }),
         readNotebook: async () => null,
         initProject: async () => ({ ok: true, path: '/test', title: 't' }),
+        // 桩缺口补齐：目标确认点选会经 MainWorkspace 回写台账标题（硬调用），缺此方法即抛断该次点击
+        updateProjectTitle: async () => ({ ok: true }),
       },
       gateway: {
         validate: async () => ({ ok: true }),
