@@ -136,7 +136,7 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
     if (id && !decideApproval({ requestId: id }, { confirm: true })) return
     if (!id) {
       // 旧档恢复卡/L3 mock 未供 id（C1/C2 前过渡）——走旧路径并观察，不静默
-      tlog('conversation.error', { kind: 'approval-id-missing', name: tc.name }, 'system')
+      tlog('conversation.error', { errorType: 'approval-id-missing', name: tc.name }, 'system')
     }
     tlog('tool.approved', { name: tc.name }, 'system')
     tlog('card.resolved', { card: 'approval', action: 'approve', name: tc.name }, 'system')
@@ -202,7 +202,13 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
 
   const rejectToolCall = (calls: ToolCallMsg[], idx: number): void => {
     const tc = calls[idx]
-    if (!tc) return
+    if (!tc) {
+      // D3 评审修：恢复 B4.2 前旧形——空 tc 照打两条拒绝事件（name/args undefined）；
+      // 不 patch（现 patchToolCall 需 tc 做 id 定位，旧末条消息 idx 盲改正是 B4.2 移除的误伤线）
+      tlog('tool.rejected', { name: undefined, args: undefined }, 'system')
+      tlog('card.rejected', { card: 'approval', action: 'reject', name: undefined }, 'system')
+      return
+    }
     // ADR-017 B4.2（关键改线 3）：有审批身份→窗寻址进门（false＝闸 miss stale 点击——不 patch）；
     // 无 id＝旧档卡→保持 rejectApproval 兼容线（取窗内最近可决记录——窗空即 no-op）
     const id = tc.approvalRequestId
@@ -289,18 +295,21 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
       )
       setTimeout(() => void maybeContinue(chatRef.current?.depth ?? 0, sessionRef.current), 150)
     }
-    const subject = String(tc.args?.summary ?? '')
+    // D1 评审修（B4.2）：summary 模型常缺省——与卡渲染同源回退为文件路径清单
+    const pbSubject =
+      String(tc.args?.summary ?? '') ||
+      ((tc.args?.files ?? []) as Array<{ path: string }>).map((f) => f.path).join('、')
     const issue = window.neonforge.approval?.issue
     if (!issue) {
       // 旧档/L3 mock 无签发通道——跳过窗步骤走原样链＋观察打点（与 approve 路径 approval-id-missing 同语义）
-      tlog('conversation.error', { kind: 'approval-id-missing', name: tc.name }, 'system')
+      tlog('conversation.error', { errorType: 'approval-id-missing', name: tc.name }, 'system')
       finish()
       return
     }
-    void issue({ toolName: 'approve-files', subject, argsFingerprint: 'planbatch' })
+    void issue({ toolName: 'approve-files', subject: pbSubject, argsFingerprint: 'planbatch' })
       .then((r) => {
         if (!r?.ok || !r.requestId) {
-          tlog('conversation.error', { kind: 'approval-id-missing', name: tc.name }, 'system')
+          tlog('conversation.error', { errorType: 'approval-id-missing', name: tc.name }, 'system')
           finish()
           return
         }
@@ -310,11 +319,11 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
           requestId: id,
           kind: 'plan-batch',
           toolName: 'approve-files',
-          subject,
+          subject: pbSubject,
           argsFingerprint: r.argsFingerprint || 'planbatch',
           request: {
             toolName: 'approve-files',
-            subject,
+            subject: pbSubject,
             reason: '批量批准执行方案文件清单（本次任务内自动放行）',
             risk: 'low',
           },
@@ -326,7 +335,7 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
         finish()
       })
       .catch(() => {
-        tlog('conversation.error', { kind: 'approval-id-missing', name: tc.name }, 'system')
+        tlog('conversation.error', { errorType: 'approval-id-missing', name: tc.name }, 'system')
         finish()
       })
   }
