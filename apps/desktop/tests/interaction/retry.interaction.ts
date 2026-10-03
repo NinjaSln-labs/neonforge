@@ -1,4 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
+// flake 治理 L1：入口统一走挂载门 helper（.nf-start 15s）
+import { gotoApp } from './scenarios'
 
 /** 服务失败 → 点「重试」→ 同回合重放（不追加用户消息） */
 async function mockRetryBridge(page: Page): Promise<void> {
@@ -164,8 +166,7 @@ async function mockAutoRetryAfterPlan(page: Page): Promise<void> {
 }
 
 async function enter(page: Page): Promise<void> {
-  await page.goto('/')
-  await expect(page.locator('.nf-start')).toBeVisible()
+  await gotoApp(page)
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.waitForSelector('.nf-chat__input textarea')
 }
@@ -186,8 +187,7 @@ test('服务失败气泡显示「重试」→ 点击后不追加用户消息且�
 
 test('计划确认后 service 自动续跑一次；第二次 service 须点重试', async ({ page }) => {
   await mockAutoRetryAfterPlan(page)
-  await page.goto('/')
-  await expect(page.locator('.nf-start')).toBeVisible()
+  await gotoApp(page)
   await page.getByLabel('想解决的问题').fill('做个待办')
   await page.getByRole('button', { name: '从零开始' }).click()
   await page.waitForSelector('.nf-chat__input textarea', { timeout: 15000 })

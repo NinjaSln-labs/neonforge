@@ -152,10 +152,16 @@ export function deliveredPackage(pkg: Partial<DeliveryFixture> = {}): DeliveryFi
 import type { Page } from '@playwright/test'
 import { expectVisible } from '../helpers/assertions'
 
+/** 应用挂载门（flake 治理 L1：.nf-start 首绘预算 15s——冷 vite/负载轮实测 >5s 吃满默认；
+ *  新案一律走此入口，防漏配超时；goto 相对形态吃 use.baseURL（与 retry 文件统一） */
+export async function gotoApp(page: Page): Promise<void> {
+  await page.goto('/')
+  await expectVisible(page.locator('.nf-start'), 15000)
+}
+
 /** 打开已有项目（配合 project: 'open'） */
 export async function enterWorkspace(page: Page): Promise<void> {
-  await page.goto('http://localhost:5175/')
-  await expectVisible(page.locator('.nf-start'))
+  await gotoApp(page)
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.waitForSelector('.nf-chat__input textarea', { timeout: 8000 })
 }
@@ -164,8 +170,7 @@ export async function enterWorkspace(page: Page): Promise<void> {
  * 注意：用按钮而非 Enter——Enter 与应用内 50ms 自动发送存在竞态（目标卡可能先于首轮流式出现，
  * 导致点击确认目标时首轮尚未完成——forceTool 断言错位；按钮路径与旧测试（根因3）一致，确定性稳定） */
 export async function startFromScratch(page: Page, text?: string): Promise<void> {
-  await page.goto('http://localhost:5175/')
-  await expectVisible(page.locator('.nf-start'))
+  await gotoApp(page)
   if (text !== undefined) {
     await page.locator('.nf-start__input').fill(text)
     await page.getByRole('button', { name: '从零开始' }).click()

@@ -1,4 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
+// flake 治理 L1：无断言裸 goto 补挂载门（gotoApp——.nf-start 15s）
+import { gotoApp } from './scenarios'
 
 // ADR-017 B8：requestId 随行断言记录面——raw bridge 的 tools.execute 每次调用 push
 // {name,args,opts,issued}（issued＝needApproval 案本调用签发的 approvalRequestId）到 window.__execCalls
@@ -369,7 +371,7 @@ test('信任阶梯：授权记录接真实数据（06 问题快照 authorized—
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = bridge
   })
-  await page.goto('http://localhost:5175/')
+  await gotoApp(page)
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.waitForSelector('.nf-chat__input textarea', { timeout: 8000 })
   // 选中问题（activeProblem 生效 → 快照 authorized 传给 TrustLadder）
@@ -1781,7 +1783,7 @@ test('需求分流 B 类：改文件内容 → edit 直接执行（不弹 plan �
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
   })
-  await page.goto('http://localhost:5175/')
+  await gotoApp(page)
   await page.getByRole('button', { name: '从零开始' }).click()
   // 2026-08-07 无阶段重构 S4：模型选择按钮删除
   await page.locator('.nf-chat__input textarea').fill('把待办事项.txt 里的买牛奶改成买面包')
