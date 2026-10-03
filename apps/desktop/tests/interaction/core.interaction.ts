@@ -15,6 +15,15 @@ async function mockBridge(page: Page): Promise<void> {
         setKey: async () => {},
         clearKey: async () => {},
       },
+      // ADR-017 B5（B8 前置桩面）：授权窗口 IPC 桩——issue＝main 签发（自增 id，approve-files 弹卡/批准）；reconcile 空账
+      approval: {
+        reconcile: async () => ({ ok: true, rows: [] }),
+        issue: async () => ({
+          ok: true,
+          requestId: 'apr_pb_' + (window.__aprN = (window.__aprN || 0) + 1),
+          argsFingerprint: 'fp',
+        }),
+      },
       workspace: {
         openFolder: async () => '/test',
         listDir: async () => [{ name: 'a.ts', path: '/test/a.ts', kind: 'file' }],
@@ -169,6 +178,15 @@ test('信任阶梯：授权记录接真实数据（06 问题快照 authorized—
         setKey: async () => {},
         clearKey: async () => {},
       },
+      // ADR-017 B5（B8 前置桩面）：授权窗口 IPC 桩——issue＝main 签发（自增 id，approve-files 弹卡/批准）；reconcile 空账
+      approval: {
+        reconcile: async () => ({ ok: true, rows: [] }),
+        issue: async () => ({
+          ok: true,
+          requestId: 'apr_pb_' + (window.__aprN = (window.__aprN || 0) + 1),
+          argsFingerprint: 'fp',
+        }),
+      },
       workspace: {
         openFolder: async () => '/test',
         listDir: async () => [],
@@ -245,6 +263,15 @@ test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 1
         setKey: async () => {},
         clearKey: async () => {},
       },
+      // ADR-017 B5（B8 前置桩面）：授权窗口 IPC 桩——issue＝main 签发（自增 id，approve-files 弹卡/批准）；reconcile 空账
+      approval: {
+        reconcile: async () => ({ ok: true, rows: [] }),
+        issue: async () => ({
+          ok: true,
+          requestId: 'apr_pb_' + (window.__aprN = (window.__aprN || 0) + 1),
+          argsFingerprint: 'fp',
+        }),
+      },
       workspace: {
         openFolder: async () => '/test',
         listDir: async () => [],
@@ -279,9 +306,12 @@ test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 1
               data: { file: '/test/' + String(args.path).split('/').pop(), snapshot: true },
             }
           // 2026-08-07 T2（regex-todo）：mock 同步真实契约——needApproval 结构化字段（renderer 读字段不再 includes('授权') 文本）
+          // ADR-017 B5（B8 前置桩面）：approvalRequestId 随 needApproval 返回（每次新 id——窗生产者入窗供料）
           return {
             ok: false,
             needApproval: true,
+            approvalRequestId: 'apr_' + (window.__aprN = (window.__aprN || 0) + 1),
+            approvalFingerprint: 'fp',
             error: `「${name}」需要授权（L3）——approved=true 后执行`,
           }
         },
@@ -388,6 +418,15 @@ test('0-1 从零开始：GoalCard 已删除（目标确认走对话澄清——d
         setKey: async () => {},
         clearKey: async () => {},
       },
+      // ADR-017 B5（B8 前置桩面）：授权窗口 IPC 桩——issue＝main 签发（自增 id，approve-files 弹卡/批准）；reconcile 空账
+      approval: {
+        reconcile: async () => ({ ok: true, rows: [] }),
+        issue: async () => ({
+          ok: true,
+          requestId: 'apr_pb_' + (window.__aprN = (window.__aprN || 0) + 1),
+          argsFingerprint: 'fp',
+        }),
+      },
       workspace: {
         openFolder: async () => null,
         listDir: async () => [{ name: 'a.ts', path: '/test/a.ts', kind: 'file' }],
@@ -431,6 +470,15 @@ test('0-1 从零开始：目标确认卡确认 → 目标确认 + 执行确认�
         getKey: async () => 'test-key',
         setKey: async () => {},
         clearKey: async () => {},
+      },
+      // ADR-017 B5（B8 前置桩面）：授权窗口 IPC 桩——issue＝main 签发（自增 id，approve-files 弹卡/批准）；reconcile 空账
+      approval: {
+        reconcile: async () => ({ ok: true, rows: [] }),
+        issue: async () => ({
+          ok: true,
+          requestId: 'apr_pb_' + (window.__aprN = (window.__aprN || 0) + 1),
+          argsFingerprint: 'fp',
+        }),
       },
       workspace: {
         openFolder: async () => null,
@@ -504,6 +552,15 @@ test('0-1 从零开始：模型需求确认 → 回写台账标题 + updateProje
         getKey: async () => 'test-key',
         setKey: async () => {},
         clearKey: async () => {},
+      },
+      // ADR-017 B5（B8 前置桩面）：授权窗口 IPC 桩——issue＝main 签发（自增 id，approve-files 弹卡/批准）；reconcile 空账
+      approval: {
+        reconcile: async () => ({ ok: true, rows: [] }),
+        issue: async () => ({
+          ok: true,
+          requestId: 'apr_pb_' + (window.__aprN = (window.__aprN || 0) + 1),
+          argsFingerprint: 'fp',
+        }),
       },
       workspace: {
         openFolder: async () => null,
@@ -613,6 +670,15 @@ test('执行确认门控：目标+执行确认后无产出 → 强制工具产�
         setKey: async () => {},
         clearKey: async () => {},
       },
+      // ADR-017 B5（B8 前置桩面）：授权窗口 IPC 桩——issue＝main 签发（自增 id，approve-files 弹卡/批准）；reconcile 空账
+      approval: {
+        reconcile: async () => ({ ok: true, rows: [] }),
+        issue: async () => ({
+          ok: true,
+          requestId: 'apr_pb_' + (window.__aprN = (window.__aprN || 0) + 1),
+          argsFingerprint: 'fp',
+        }),
+      },
       workspace: {
         openFolder: async () => '/test',
         listDir: async () => [],
@@ -704,6 +770,15 @@ test('根因 3：点「确认执行」按钮 → 同事件 send 读到已确认�
         setKey: async () => {},
         clearKey: async () => {},
       },
+      // ADR-017 B5（B8 前置桩面）：授权窗口 IPC 桩——issue＝main 签发（自增 id，approve-files 弹卡/批准）；reconcile 空账
+      approval: {
+        reconcile: async () => ({ ok: true, rows: [] }),
+        issue: async () => ({
+          ok: true,
+          requestId: 'apr_pb_' + (window.__aprN = (window.__aprN || 0) + 1),
+          argsFingerprint: 'fp',
+        }),
+      },
       workspace: {
         openFolder: async () => '/test',
         listDir: async () => [],
@@ -786,6 +861,8 @@ test('根因 3：点「确认执行」按钮 → 同事件 send 读到已确认�
             return {
               ok: false,
               needApproval: true,
+              approvalRequestId: 'apr_' + (window.__aprN = (window.__aprN || 0) + 1),
+              approvalFingerprint: 'fp',
               error: '「write」需要授权（L3）——approved=true 后执行',
             }
           }
@@ -857,6 +934,15 @@ test('0-1 对话确认需求：propose_goal 确认卡 → 点确认目标推进�
         getKey: async () => 'test-key',
         setKey: async () => {},
         clearKey: async () => {},
+      },
+      // ADR-017 B5（B8 前置桩面）：授权窗口 IPC 桩——issue＝main 签发（自增 id，approve-files 弹卡/批准）；reconcile 空账
+      approval: {
+        reconcile: async () => ({ ok: true, rows: [] }),
+        issue: async () => ({
+          ok: true,
+          requestId: 'apr_pb_' + (window.__aprN = (window.__aprN || 0) + 1),
+          argsFingerprint: 'fp',
+        }),
       },
       workspace: {
         openFolder: async () => null,
@@ -938,6 +1024,15 @@ test('0-1 工具链自主推进：连续 3 轮 read → 自动续聊 → 最终�
         getKey: async () => 'test-key',
         setKey: async () => {},
         clearKey: async () => {},
+      },
+      // ADR-017 B5（B8 前置桩面）：授权窗口 IPC 桩——issue＝main 签发（自增 id，approve-files 弹卡/批准）；reconcile 空账
+      approval: {
+        reconcile: async () => ({ ok: true, rows: [] }),
+        issue: async () => ({
+          ok: true,
+          requestId: 'apr_pb_' + (window.__aprN = (window.__aprN || 0) + 1),
+          argsFingerprint: 'fp',
+        }),
       },
       workspace: {
         openFolder: async () => null,
@@ -1029,6 +1124,15 @@ test('O2：check-capability 能力齐备 → 工具卡隐藏；能力缺失 → 
         getKey: async () => 'test-key',
         setKey: async () => {},
         clearKey: async () => {},
+      },
+      // ADR-017 B5（B8 前置桩面）：授权窗口 IPC 桩——issue＝main 签发（自增 id，approve-files 弹卡/批准）；reconcile 空账
+      approval: {
+        reconcile: async () => ({ ok: true, rows: [] }),
+        issue: async () => ({
+          ok: true,
+          requestId: 'apr_pb_' + (window.__aprN = (window.__aprN || 0) + 1),
+          argsFingerprint: 'fp',
+        }),
       },
       workspace: {
         openFolder: async () => '/test',
@@ -1155,6 +1259,15 @@ test('0-1 授权 v4 完整路径：允许并记住 → 同文件自动 → 新�
         setKey: async () => {},
         clearKey: async () => {},
       },
+      // ADR-017 B5（B8 前置桩面）：授权窗口 IPC 桩——issue＝main 签发（自增 id，approve-files 弹卡/批准）；reconcile 空账
+      approval: {
+        reconcile: async () => ({ ok: true, rows: [] }),
+        issue: async () => ({
+          ok: true,
+          requestId: 'apr_pb_' + (window.__aprN = (window.__aprN || 0) + 1),
+          argsFingerprint: 'fp',
+        }),
+      },
       workspace: {
         openFolder: async () => null,
         listDir: async () => [{ name: 'index.html', path: '/test/index.html', kind: 'file' }],
@@ -1228,6 +1341,8 @@ test('0-1 授权 v4 完整路径：允许并记住 → 同文件自动 → 新�
             return {
               ok: false,
               needApproval: true,
+              approvalRequestId: 'apr_' + (window.__aprN = (window.__aprN || 0) + 1),
+              approvalFingerprint: 'fp',
               error: '「write」需要授权（L3）——approved=true 后执行',
             }
           return { ok: true, data: { file: String(args.path), snapshot: true } }
@@ -1281,6 +1396,15 @@ test('结构化候选：<candidates> 渲染为按钮 + 点选发送选项文本'
         getKey: async () => 'test-key',
         setKey: async () => {},
         clearKey: async () => {},
+      },
+      // ADR-017 B5（B8 前置桩面）：授权窗口 IPC 桩——issue＝main 签发（自增 id，approve-files 弹卡/批准）；reconcile 空账
+      approval: {
+        reconcile: async () => ({ ok: true, rows: [] }),
+        issue: async () => ({
+          ok: true,
+          requestId: 'apr_pb_' + (window.__aprN = (window.__aprN || 0) + 1),
+          argsFingerprint: 'fp',
+        }),
       },
       workspace: {
         openFolder: async () => '/test',
@@ -1360,6 +1484,15 @@ test('目标经 propose_goal：点确认目标 → 回写台账（P1-A 无文本
         getKey: async () => 'test-key',
         setKey: async () => {},
         clearKey: async () => {},
+      },
+      // ADR-017 B5（B8 前置桩面）：授权窗口 IPC 桩——issue＝main 签发（自增 id，approve-files 弹卡/批准）；reconcile 空账
+      approval: {
+        reconcile: async () => ({ ok: true, rows: [] }),
+        issue: async () => ({
+          ok: true,
+          requestId: 'apr_pb_' + (window.__aprN = (window.__aprN || 0) + 1),
+          argsFingerprint: 'fp',
+        }),
       },
       workspace: {
         openFolder: async () => null,
@@ -1451,6 +1584,15 @@ test('需求分流 B 类：改文件内容 → edit 直接执行（不弹 plan �
         getKey: async () => 'test-key',
         setKey: async () => {},
         clearKey: async () => {},
+      },
+      // ADR-017 B5（B8 前置桩面）：授权窗口 IPC 桩——issue＝main 签发（自增 id，approve-files 弹卡/批准）；reconcile 空账
+      approval: {
+        reconcile: async () => ({ ok: true, rows: [] }),
+        issue: async () => ({
+          ok: true,
+          requestId: 'apr_pb_' + (window.__aprN = (window.__aprN || 0) + 1),
+          argsFingerprint: 'fp',
+        }),
       },
       workspace: {
         openFolder: async () => null,
@@ -1544,6 +1686,15 @@ test('失败重试检测：bash 连续 3 次失败重试同一命令 → 自动�
         setKey: async () => {},
         clearKey: async () => {},
       },
+      // ADR-017 B5（B8 前置桩面）：授权窗口 IPC 桩——issue＝main 签发（自增 id，approve-files 弹卡/批准）；reconcile 空账
+      approval: {
+        reconcile: async () => ({ ok: true, rows: [] }),
+        issue: async () => ({
+          ok: true,
+          requestId: 'apr_pb_' + (window.__aprN = (window.__aprN || 0) + 1),
+          argsFingerprint: 'fp',
+        }),
+      },
       workspace: {
         openFolder: async () => '/test',
         listDir: async () => [],
@@ -1631,6 +1782,15 @@ test('approve-files 多卡并存：连续 2 次批量授权 → 各自批准都�
         getKey: async () => 'test-key',
         setKey: async () => {},
         clearKey: async () => {},
+      },
+      // ADR-017 B5（B8 前置桩面）：授权窗口 IPC 桩——issue＝main 签发（自增 id，approve-files 弹卡/批准）；reconcile 空账
+      approval: {
+        reconcile: async () => ({ ok: true, rows: [] }),
+        issue: async () => ({
+          ok: true,
+          requestId: 'apr_pb_' + (window.__aprN = (window.__aprN || 0) + 1),
+          argsFingerprint: 'fp',
+        }),
       },
       workspace: {
         openFolder: async () => '/test',
@@ -1772,6 +1932,15 @@ test('执行确认卡不漂移：write 被拦后模型连发消息 → 卡固定
         setKey: async () => {},
         clearKey: async () => {},
       },
+      // ADR-017 B5（B8 前置桩面）：授权窗口 IPC 桩——issue＝main 签发（自增 id，approve-files 弹卡/批准）；reconcile 空账
+      approval: {
+        reconcile: async () => ({ ok: true, rows: [] }),
+        issue: async () => ({
+          ok: true,
+          requestId: 'apr_pb_' + (window.__aprN = (window.__aprN || 0) + 1),
+          argsFingerprint: 'fp',
+        }),
+      },
       workspace: {
         openFolder: async () => '/test',
         listDir: async () => [],
@@ -1821,6 +1990,8 @@ test('执行确认卡不漂移：write 被拦后模型连发消息 → 卡固定
         execute: async () => ({
           ok: false,
           needApproval: true,
+          approvalRequestId: 'apr_' + (window.__aprN = (window.__aprN || 0) + 1),
+          approvalFingerprint: 'fp',
           error: '「write」需要授权（L3）——approved=true 后执行',
         }),
         revert: async () => ({ ok: true }),
@@ -1875,6 +2046,15 @@ test('问题 A：approve-files 卡悬挂 → 模型续轮被拦后停续聊（�
         getKey: async () => 'test-key',
         setKey: async () => {},
         clearKey: async () => {},
+      },
+      // ADR-017 B5（B8 前置桩面）：授权窗口 IPC 桩——issue＝main 签发（自增 id，approve-files 弹卡/批准）；reconcile 空账
+      approval: {
+        reconcile: async () => ({ ok: true, rows: [] }),
+        issue: async () => ({
+          ok: true,
+          requestId: 'apr_pb_' + (window.__aprN = (window.__aprN || 0) + 1),
+          argsFingerprint: 'fp',
+        }),
       },
       workspace: {
         openFolder: async () => '/test',
@@ -2029,6 +2209,15 @@ test('P2：同 args bash 双卡并存 → 点第一张卡按 id 精确定位（�
         setKey: async () => {},
         clearKey: async () => {},
       },
+      // ADR-017 B5（B8 前置桩面）：授权窗口 IPC 桩——issue＝main 签发（自增 id，approve-files 弹卡/批准）；reconcile 空账
+      approval: {
+        reconcile: async () => ({ ok: true, rows: [] }),
+        issue: async () => ({
+          ok: true,
+          requestId: 'apr_pb_' + (window.__aprN = (window.__aprN || 0) + 1),
+          argsFingerprint: 'fp',
+        }),
+      },
       workspace: {
         openFolder: async () => '/test',
         listDir: async () => [],
@@ -2090,6 +2279,8 @@ test('P2：同 args bash 双卡并存 → 点第一张卡按 id 精确定位（�
             : {
                 ok: false,
                 needApproval: true,
+                approvalRequestId: 'apr_' + (window.__aprN = (window.__aprN || 0) + 1),
+                approvalFingerprint: 'fp',
                 error: '「bash」需要授权（L3）——approved=true 后执行',
               },
         revert: async () => ({ ok: true }),
@@ -2160,6 +2351,15 @@ test('A-016 硬序门时序：方案未确认早调 approve-files 被拒（不�
         getKey: async () => 'test-key',
         setKey: async () => {},
         clearKey: async () => {},
+      },
+      // ADR-017 B5（B8 前置桩面）：授权窗口 IPC 桩——issue＝main 签发（自增 id，approve-files 弹卡/批准）；reconcile 空账
+      approval: {
+        reconcile: async () => ({ ok: true, rows: [] }),
+        issue: async () => ({
+          ok: true,
+          requestId: 'apr_pb_' + (window.__aprN = (window.__aprN || 0) + 1),
+          argsFingerprint: 'fp',
+        }),
       },
       workspace: {
         openFolder: async () => '/test',
@@ -2252,6 +2452,8 @@ test('A-016 硬序门时序：方案未确认早调 approve-files 被拒（不�
               return {
                 ok: false,
                 needApproval: true,
+                approvalRequestId: 'apr_' + (window.__aprN = (window.__aprN || 0) + 1),
+                approvalFingerprint: 'fp',
                 error: `「${name}」需要授权（L3）——approved=true 后执行`,
               }
             return {

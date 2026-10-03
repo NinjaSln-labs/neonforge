@@ -231,13 +231,15 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
   const titleCalls = []
   const planConfirmedCalls = []
   const cbRef = { cb: null }
+  // ADR-017 B5（B8 前置桩面）：授权签发计数器——needApproval 返回体与 approval:issue 桩共用
+  let aprSeq = 0
 
   const executeImpl = ${
     opts.executeSource ??
     `
     async (name, args, opts) => {
       if (${needApprovalCond} && !(opts && opts.approved)) {
-        return { ok: false, needApproval: true, error: '「' + name + '」需要授权（L3）——approved=true 后执行' }
+        return { ok: false, needApproval: true, approvalRequestId: 'apr_' + (++aprSeq), approvalFingerprint: 'fp', error: '「' + name + '」需要授权（L3）——approved=true 后执行' }
       }
       if ((name === 'write' || name === 'edit') && ${json(spec.capture.approvedFlags)}) approvedFlags.push(!!(opts && opts.approved))
       const result = ${json(spec.executeResults)}[name]
@@ -337,6 +339,12 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
         planConfirmedCalls.push(v)
         return { ok: true }
       },
+    },
+    // ADR-017 B5（B8 前置桩面）：授权窗口 IPC 面——reconcile 空账（C2 前无消费者，防 undefined 噪声）；
+    // issue＝main 唯一签发者桩（approve-files 弹卡/批准经此，自增 id）
+    approval: {
+      reconcile: async () => ({ ok: true, rows: [] }),
+      issue: async () => ({ ok: true, requestId: 'apr_pb_' + (++aprSeq), argsFingerprint: 'fp' }),
     },
     // D3（ADR-005）：PlannedFiles 三件套契约（main 权威 mock——内存态；恢复场景经 plannedFiles 选项预置）
     plannedFiles: (() => {

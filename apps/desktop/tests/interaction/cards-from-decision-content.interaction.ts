@@ -518,10 +518,13 @@ test('S6-2：外网 curl GET → ask 弹授权卡（拍板 3——安全默认�
   await installMockBridge(page, {
     project: 'none',
     // main preApproval 模拟（L1 tools.test.ts 已锁 isReadOnlyBash 外网 false——此处 UI 层验证 ask 路径）
+    // ADR-017 B5（B8 前置桩面）：静态单卡单 id（needApproval 案随卡入窗——id 本 test 唯一）
     executeResults: {
       bash: {
         ok: false,
         needApproval: true,
+        approvalRequestId: 'apr_s62',
+        approvalFingerprint: 'fp',
         error: '「bash」需要授权（L3）——approved=true 后执行',
       },
     },
@@ -601,10 +604,13 @@ test('S7-3：授权卡待批时用户打字「批准」→ 自动批准（approv
   await installMockBridge(page, {
     project: 'none',
     // bash 需授权（approval 卡）
+    // ADR-017 B5（B8 前置桩面）：id 随卡入窗——文本批准「批准」经窗内恰一可决记录进门
     executeResults: {
       bash: {
         ok: false,
         needApproval: true,
+        approvalRequestId: 'apr_s73',
+        approvalFingerprint: 'fp',
         error: '「bash」需要授权（L3）——approved=true 后执行',
       },
     },
