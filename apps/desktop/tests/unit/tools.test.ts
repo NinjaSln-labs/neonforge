@@ -97,10 +97,13 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
   it('write：授权后写文件 + 写前快照 .nf-bak + 回滚恢复原样', async () => {
     const file = path.join(TMP, 'b.txt')
     writeFileSync(file, 'old-content\n', 'utf-8')
+    // ADR-017 B7 改型：真实批复通道＝needApproval 签发 id → 携 requestId 复执行（renderer 盲信布尔终结）
+    const gate = await toolRegistry.execute('write', { path: file, content: 'new-content\n' }, {})
+    expect(gate.needApproval).toBe(true)
     const r = await toolRegistry.execute(
       'write',
       { path: file, content: 'new-content\n' },
-      { approved: true },
+      { approved: true, requestId: gate.approvalRequestId },
     )
     expect(r.ok).toBe(true)
     expect(readFileSync(file, 'utf-8')).toBe('new-content\n')
@@ -113,10 +116,13 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
   it('edit：替换 + 写前快照 + 回滚', async () => {
     const file = path.join(TMP, 'c.txt')
     writeFileSync(file, 'alpha\nbeta\n', 'utf-8')
+    // ADR-017 B7 改型：edit 无布尔通道（例外仅清单内 write 自证）——经签发 id 批复执行
+    const gate = await toolRegistry.execute('edit', { path: file, old: 'beta', new: 'BETA' }, {})
+    expect(gate.needApproval).toBe(true)
     const r = await toolRegistry.execute(
       'edit',
       { path: file, old: 'beta', new: 'BETA' },
-      { approved: true },
+      { approved: true, requestId: gate.approvalRequestId },
     )
     expect(r.ok).toBe(true)
     expect(readFileSync(file, 'utf-8')).toBe('alpha\nBETA\n')
@@ -205,7 +211,14 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
   })
 
   it('bash：取消当前活动命令（ticket 14 可撤销——任何时刻停止，不卡死）', async () => {
-    const execPromise = toolRegistry.execute('bash', { command: 'sleep 10' }, { approved: true })
+    // ADR-017 B7 改型：非只读命令经签发 id 批复执行（approved 布尔无 id 已被盲信面守卫拒）
+    const gate = await toolRegistry.execute('bash', { command: 'sleep 10' }, {})
+    expect(gate.needApproval).toBe(true)
+    const execPromise = toolRegistry.execute(
+      'bash',
+      { command: 'sleep 10' },
+      { approved: true, requestId: gate.approvalRequestId },
+    )
     // 轮询等 bash 子进程启动（child_process 动态导入 + exec 启动有延迟）
     let cancelled = false
     for (let i = 0; i < 20; i++) {
@@ -365,6 +378,146 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
       const r = await toolRegistry.execute('boom', {}, { approved: true, requestId: id })
       expect(r.ok).toBe(false)
       expect(j.phaseOf(id)).toBe('started')
+    })
+  })
+
+  // ADR-017 B7：renderer 盲信面关闭——approved:true 布尔无审批身份（requestId）且非规则/preApproval
+  // 通道一律拒（policy 布尔拒，旧旁路终结）。裁定 (b) 唯一例外＝清单内 write 自证（filesApprovedRef
+  // ∧ plannedFilesStore 命中——批准事实住 main）。rule allow／requiresApproval:false／
+  // approved 缺省（auto 通道）不受影响；批复线（requestId 在 journal）放行（A3 describe 已锁，
+  // 此处补「requestId 属 journal ∧phase=issued→放行」的同形案）。
+  describe('ADR-017 B7 盲信面关闭（无 id 可信布尔拒）', () => {
+    it('write approved:true 无 requestId（自证例外外）→ 拒：policy 布尔拒 + 不写文件', async () => {
+      const file = path.join(TMP, 'blind-w.txt')
+      const r = await toolRegistry.execute(
+        'write',
+        { path: file, content: 'x' },
+        { approved: true, rootPath: TMP },
+      )
+      expect(r.ok).toBe(false)
+      expect(r.policy).toBe(true)
+      expect(r.needApproval).toBeUndefined() // 非重新签发——盲信布尔直接终结
+      expect(r.error).toContain('缺授权标识')
+      expect(existsSync(file)).toBe(false)
+    })
+
+    it('bash/edit autoApproved 形态（approved:true 无 id）→ 一律拒（例外仅清单内 write）', async () => {
+      const b = await toolRegistry.execute(
+        'bash',
+        { command: 'touch /tmp/nf-unit-tools/never.txt' },
+        { approved: true },
+      )
+      expect(b.ok).toBe(false)
+      expect(b.policy).toBe(true)
+      expect(b.error).toContain('缺授权标识')
+      expect(existsSync('/tmp/nf-unit-tools/never.txt')).toBe(false)
+      const file = path.join(TMP, 'blind-e.txt')
+      writeFileSync(file, 'alpha', 'utf-8')
+      const e = await toolRegistry.execute(
+        'edit',
+        { path: file, old: 'alpha', new: 'beta' },
+        { approved: true },
+      )
+      expect(e.ok).toBe(false)
+      expect(e.error).toContain('缺授权标识')
+      expect(readFileSync(file, 'utf-8')).toBe('alpha')
+    })
+
+    it('rule allow 通道：approved:true 无 id 不触发守卫（allow 命中放行）', async () => {
+      const file = path.join(TMP, 'blind-rule.js')
+      toolRegistry.setRules([
+        { action: 'allow', tool: 'write', specifier: path.join(TMP, 'blind-rule.js') },
+      ])
+      try {
+        const r = await toolRegistry.execute(
+          'write',
+          { path: file, content: 'y' },
+          { approved: true, rootPath: TMP },
+        )
+        expect(r.ok).toBe(true) // 拒的是无授权身份布尔——显式 allow 规则是授权来源
+      } finally {
+        toolRegistry.setRules([])
+      }
+    })
+
+    it('preApproval auto 通道 opts.approved 缺省 → 守卫不触发（S6 自动放行 L1 锁定）', async () => {
+      const r = await toolRegistry.execute('bash', { command: 'ls' }, { rootPath: TMP })
+      expect(r.needApproval).toBeUndefined()
+      expect(String(r.error ?? '')).not.toContain('缺授权标识') // 自动执行非布尔拒
+      expect(r.ok).toBe(true)
+    })
+
+    it('裁定 (b) 自证例外：清单内 write（filesApprovedRef ∧ store 命中）approved:true 无 id → 放行', async () => {
+      const file = path.join(TMP, 'blind-plan.txt')
+      getPlannedFilesStore().add([file]) // 批准清单落 main store（approve-files 批准事实同源）
+      syncPlanApprovedFromStore()
+      const r = await toolRegistry.execute(
+        'write',
+        { path: file, content: 'z' },
+        { approved: true, rootPath: TMP },
+      )
+      expect(r.ok).toBe(true)
+      expect(readFileSync(file, 'utf-8')).toBe('z')
+    })
+
+    it('自证例外边界：filesApprovedRef=false 或未入清单 → 拒；edit 永无例外', async () => {
+      const file = path.join(TMP, 'blind-edge.txt')
+      getPlannedFilesStore().add([file])
+      resetPlanApproved() // 批准镜像未同步（未批准过 approve-files）——例外不成立
+      const w = await toolRegistry.execute(
+        'write',
+        { path: file, content: 'x' },
+        { approved: true, rootPath: TMP },
+      )
+      expect(w.ok).toBe(false)
+      expect(w.error).toContain('缺授权标识')
+      markPlanApproved() // 批准位恢复，但换清单外路径——仍拒
+      const out = await toolRegistry.execute(
+        'write',
+        { path: path.join(TMP, 'blind-outside.txt'), content: 'x' },
+        { approved: true, rootPath: TMP },
+      )
+      expect(out.ok).toBe(false)
+      expect(out.error).toContain('缺授权标识')
+      const ed = await toolRegistry.execute(
+        'edit',
+        { path: file, old: 'x', new: 'y' },
+        { approved: true, rootPath: TMP },
+      )
+      expect(ed.ok).toBe(false)
+      expect(ed.error).toContain('缺授权标识')
+    })
+
+    it('requiresApproval:false 工具不受守卫影响（read 携 approved 布尔照过）', async () => {
+      const file = path.join(TMP, 'blind-read.txt')
+      writeFileSync(file, 'content', 'utf-8')
+      const r = await toolRegistry.execute(
+        'read',
+        { path: file },
+        { approved: true, rootPath: TMP },
+      )
+      expect(r.ok).toBe(true)
+      expect(r.data).toBe('content')
+    })
+
+    it('approveToolCall 线替代形：requestId 属 journal（issued）→ 携 id 放行（盲信面的正门）', async () => {
+      const j = getApprovalJournal()
+      const id = j.issueId()
+      j.append({
+        requestId: id,
+        toolName: 'bash',
+        argsFingerprint: fingerprintArgs('bash', { command: 'echo nf-b7' }),
+        phase: 'issued',
+      })
+      expect(j.phaseOf(id)).toBe('issued')
+      const r = await toolRegistry.execute(
+        'bash',
+        { command: 'echo nf-b7' },
+        { approved: true, requestId: id },
+      )
+      expect(r.ok).toBe(true)
+      expect(JSON.stringify(r.data)).toContain('nf-b7')
+      expect(j.phaseOf(id)).toBe('done') // 阶段链完整（issued→approved→started→done）
     })
   })
 })

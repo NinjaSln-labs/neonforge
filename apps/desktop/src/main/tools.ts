@@ -160,15 +160,17 @@ class ToolRegistry {
       }
     }
     // 2026-08-04 授权架构 v4：规则裁决 deny > allow > ask（fail-closed）——对齐 Claude/Codex/Cursor 共识
-    const rule = this.rules.find((r) => matchesRule(name, args, r))
-    if (rule?.action === 'deny') {
+    // ADR-017 B7：显式序两趟扫描——先 deny（命中即拒）再 allow。旧单趟 first-match 依赖规则数组
+    // 声明序：同 specifier 同时存在 deny+allow 时 allow 排前即穿透（deny 被吞）。两趟＝deny 恒胜。
+    const denyRule = this.rules.find((r) => r.action === 'deny' && matchesRule(name, args, r))
+    if (denyRule) {
       return {
         ok: false,
         policy: true,
-        error: `已阻止：${name}（deny 规则 ${rule.specifier || '全部'}）——如需执行请先调整授权规则`,
+        error: `已阻止：${name}（deny 规则 ${denyRule.specifier || '全部'}）——如需执行请先调整授权规则`,
       }
     }
-    const ruleAllows = rule?.action === 'allow'
+    const ruleAllows = this.rules.some((r) => r.action === 'allow' && matchesRule(name, args, r))
     if (!ruleAllows && tool.requiresApproval && !opts.approved) {
       // 2026-08-04 授权架构重构：preApproval 裁决（如 bash 只读命令自动执行）——原一律 need-approval（授权疲劳根因：ls/cat 也弹卡）
       const pre = tool.preApproval?.(args, opts)
@@ -186,6 +188,29 @@ class ToolRegistry {
           approvalFingerprint: fp,
           error: `「${name}」需要授权（L3）——approved=true 后执行`,
         }
+      }
+    }
+    // ADR-017 B7（裁定落法 b·main 权威）：renderer 盲信面关闭——无审批身份的可信布尔拒
+    // （旧 approved:true 无 id 旁路终结）。豁免通道核验：rule allow（ruleAllows）、非 requiresApproval
+    // 工具、preApproval auto（opts.approved 为 false/undefined 不进本分支）、批复线（opts.requestId
+    // 随行）均不触发；唯一布尔例外＝清单内 write 自证——批准事实住 main plannedFilesStore
+    // （filesApprovedRef ∧ 清单命中），不依赖 renderer 声明。bash/edit 等其余无 id 布尔一律拒
+    // （恢复经授权卡重新批准——C3 sessionGrants 归位后规则三档免卡线另承）。
+    if (
+      !ruleAllows &&
+      tool.requiresApproval &&
+      opts.approved &&
+      !opts.requestId &&
+      !(
+        name === 'write' &&
+        filesApprovedRef &&
+        inPlannedFile(String(args.path ?? args.filePath ?? args.file ?? ''), opts.rootPath)
+      )
+    ) {
+      return {
+        ok: false,
+        policy: true,
+        error: `「${name}」缺授权标识——请经授权卡重新批准`,
       }
     }
     // ADR-017 A3：批复执行走 journal 阶段链（只记不判——started 无 done＝恢复判 C 唯一数据源）
@@ -591,6 +616,21 @@ export function resetPlanApproved(): void {
 // D3：store 权威 → 内存镜像刷新（write 门控热路径不读盘；registerIpc 启动恢复 + IPC 写后调用）
 export function syncPlanApprovedFromStore(): void {
   filesApprovedRef = getPlannedFilesStore().load().approved
+}
+
+// ADR-017 B7（裁定 b）：清单自证——main 侧批准清单命中判定（盲信面守卫 write 例外专用）。
+// 路径归一与 resolvePath 语义一致（真绝对直接用；相对/类绝对剥首斜杠经 resolveSandboxPath）；
+// 匹配式同领域层 inPlannedFiles（精确/斜杠边界后缀互含）。冷路径（仅 approved 布尔无 id 时触盘一次）。
+function inPlannedFile(p: string, rootPath?: string): boolean {
+  if (!p) return false
+  const segments = p.split('/').filter(Boolean)
+  const target =
+    rootPath && !(path.isAbsolute(p) && segments.length > 1)
+      ? resolveSandboxPath(rootPath, p.replace(/^\/+/, ''))
+      : p
+  return getPlannedFilesStore()
+    .load()
+    .files.some((f) => f === target || f.endsWith('/' + target) || target.endsWith('/' + f))
 }
 
 // 注册 4 核心工具 + search（Layer2 CodeRAG——2026-08-02 接入模型；6 LSP 随 12 ContextEngine 注册）
