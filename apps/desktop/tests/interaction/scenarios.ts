@@ -153,10 +153,20 @@ import type { Page } from '@playwright/test'
 import { expectVisible } from '../helpers/assertions'
 
 /** 应用挂载门（flake 治理 L1：.nf-start 首绘预算 15s——冷 vite/负载轮实测 >5s 吃满默认；
- *  新案一律走此入口，防漏配超时；goto 相对形态吃 use.baseURL（与 retry 文件统一） */
+ *  新案一律走此入口，防漏配超时；goto 相对形态吃 use.baseURL（与 retry 文件统一）
+ *
+ *  t000076 治理 A（2026-10-03）：首绘失败先重导航一次再等。现场坐实的挂载红是**资源请求被中止**
+ *  （net::ERR_NETWORK_CHANGED 打在 monaco CSS / vite deps chunk 上，React 根本没执行）——
+ *  这类不是等待不够（L1 的 15s 与 L2 预热都救不回已 abort 的请求），重导航才对症。
+ *  纪律：**只重导航、不重断言**——retries 仍为 0，二次仍不挂载即原样抛错，不掩盖真实产品缺陷。 */
 export async function gotoApp(page: Page): Promise<void> {
   await page.goto('/')
-  await expectVisible(page.locator('.nf-start'), 15000)
+  try {
+    await expectVisible(page.locator('.nf-start'), 15000)
+  } catch {
+    await page.reload()
+    await expectVisible(page.locator('.nf-start'), 15000)
+  }
 }
 
 /** 打开已有项目（配合 project: 'open'） */
