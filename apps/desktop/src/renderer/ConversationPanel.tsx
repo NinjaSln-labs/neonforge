@@ -314,41 +314,12 @@ export default function ConversationPanel({
   const msgSeqRef = useRef(0)
   const nextMsgId = () => `m${Date.now().toString(36)}-${(msgSeqRef.current++).toString(36)}`
   // 2026-08-04 审计修复（D2）：有待批准工具操作 → 上报状态栏提示（need-approval 出现/消失）
-  // 2026-08-07 无阶段修复（输入≠打断）：send 排队判定用（待授权时模型停住等批准，
+  // 2026-08-07 无阶段修复（输入≠打断）：send 排队判定走 busyGate 读槽（待授权时模型停住等批准，
   // 用户输入直接处理不排队——排队会卡在授权等待；模型产出中才排队衔接）
-  // 2026-08-14 S2b：授权等待接入状态机单一 PENDING（pending='approval'——A0 §3.2 授权卡同属会话级 pending）
-  // 2026-08-15 D5：互斥——确认卡 pending（goal/execution/achievement——done 分支 setPending 置位）优先，
-  // 授权卡 pending 只在当前无确认卡 pending 时置位（A0：pending 只有一个——决策点互斥，用户先处理先弹的卡）
-  useEffect(() => {
-    const hasApproval =
-      messages.some((m) =>
-        m.toolCalls?.some((c) => c.status === 'need-approval' || c.status === 'file-approval'),
-      ) ?? false
-    if (hasApproval && stateRef.current.pending === 'none') {
-      // ADR-015 X2：approval 置位携 ApprovalRequest（描述符载体 toolName+subject——授权卡才有实例身份；
-      // best-effort 取自当前待批卡——allow 通道接线仍 t000073 另批）
-      const last = messages[messages.length - 1]
-      const t = last?.toolCalls?.find(
-        (c) => c.status === 'need-approval' || c.status === 'file-approval',
-      )
-      setPendingState('approval', {
-        since: new Date().toISOString(),
-        ...(t
-          ? {
-              approval: {
-                toolName: t.name,
-                subject: String(t.args?.command ?? t.args?.path ?? t.args?.url ?? t.name),
-                reason: '',
-                risk: 'low' as const,
-              },
-            }
-          : {}),
-      })
-    } else if (!hasApproval && stateRef.current.pending === 'approval') {
-      clearPending()
-    }
-    onApprovalChange?.(hasApproval)
-  }, [messages, onApprovalChange])
+  // 2026-08-14 S2b / 2026-08-15 D5：ADR-017 B5 退役全列表扫描＋置槽 effect（原 :320-350）——置槽职责＝
+  // requestApproval 入窗（approvalRequested），清槽职责＝windowResolved/drainQueued（转换族自管）；
+  // pending='approval' 降为窗派生值。状态栏提示（onApprovalChange）按提案 §8 改接保留：派生源＝
+  // 槽 ∨ 窗可决记录（挂在 hook 解构之后——stateVersion 为响应式依赖）。
   // 断点续做（ticket 06/基线 §21）：挂载恢复上次会话（onNew 已 clearSession → 空）
   // S3（§8.2 E C5）：恢复后 pending 冻结立即生效——决策点内容快照（decisionContent）随消息恢复，
   // 卡重显旧内容（用户确认/修改后才更新——模型首轮只能响应用户对已有决策点的决策）
@@ -533,7 +504,8 @@ export default function ConversationPanel({
     decideApproval: decideWindow,
     settleApproval,
     setPending: setPendingState,
-    clearPending,
+    // ADR-017 B5：clearPending 的 approval 清槽调用者随 D5 effect 退役——槽释放由转换族自管
+    // （windowResolved/drainQueued）；面板无确认卡族直接 clearPending 调用点，解构移除。
     resetRejectStreak,
     addPlannedFiles,
     setFilesApproved,
@@ -542,6 +514,14 @@ export default function ConversationPanel({
   } = useConversationState({
     emit: (type, detail) => tlog(type, detail, 'system'),
   })
+  // ADR-017 B5（D2 状态栏提示保留·派生改窗）：onApprovalChange＝槽 ∨ 窗可决记录
+  // （原 D5 全列表扫描镜像随本刀退役——见上注释链；依赖挂 stateVersion＝转换族的响应式信号）
+  useEffect(() => {
+    onApprovalChange?.(
+      stateRef.current.pending === 'approval' ||
+        decidableRequests(stateRef.current.approvalWindow).length > 0,
+    )
+  }, [stateVersion, onApprovalChange])
   // D3（ADR-005）：启动恢复——main plannedFilesStore 权威（批准事实跨重启）→ 本地镜像
   // 恢复后模型继续写清单内文件不需重新批量授权（与问题台账 authorized 恢复同构）
   useEffect(() => {
@@ -1578,6 +1558,80 @@ export default function ConversationPanel({
       }
       return [...prev.slice(0, target), next, ...prev.slice(target + 1)]
     })
+    // ADR-017 B5（十五轴审计必修 #4：file-approval 入窗统一——D5 退役的挂卡放飞补口）：
+    // approve-files 合并授权卡＝kind:'plan-batch' 窗记录——弹卡即经 main 签发入窗（存续入窗统一），
+    // 悬挂冻结自本刀起由窗事实供料（approvalRequested 置槽；问题 A 十四轮防线不再靠 D5 全列表镜像）。
+    // 决定内容/执行链仍正交（approvalGranted＋硬序门——approvePlan.finish 不动）；守卫条件与 updater
+    // 内 status 判定同式（planConfirmed ∧ ¬filesApproved——虚拟工具无 execute，id 只能此处铸）。
+    // 无签发通道＝兼容线（旧桥/L3 未补桩——卡无 id 窗无记录，同 approvePlan missing-issue 语义＋观察打点）。
+    if (
+      chunk.type === 'tool-call' &&
+      chunk.toolCall?.name === 'approve-files' &&
+      stateRef.current.planConfirmed &&
+      !stateRef.current.filesApproved
+    ) {
+      const pbTcId = tcId
+      const pbArgs = chunk.toolCall.args ?? {}
+      const pbSubject =
+        String(pbArgs.summary ?? '') ||
+        ((pbArgs.files ?? []) as Array<{ path?: string }>).map((f) => f.path ?? '').join('、')
+      const issue = window.neonforge.approval?.issue
+      if (!issue) {
+        tlog(
+          'conversation.error',
+          { errorType: 'approval-id-missing', name: 'approve-files' },
+          'system',
+        )
+      } else {
+        void issue({ toolName: 'approve-files', subject: pbSubject, argsFingerprint: 'planbatch' })
+          .then((r) => {
+            if (!r?.ok || !r.requestId) {
+              tlog(
+                'conversation.error',
+                { errorType: 'approval-id-missing', name: 'approve-files' },
+                'system',
+              )
+              return
+            }
+            requestApproval(
+              {
+                requestId: r.requestId,
+                kind: 'plan-batch',
+                toolName: 'approve-files',
+                subject: pbSubject,
+                argsFingerprint: r.argsFingerprint || 'planbatch',
+                request: {
+                  toolName: 'approve-files',
+                  subject: pbSubject,
+                  reason: '批量批准执行方案文件清单（本次任务内自动放行）',
+                  risk: 'low',
+                },
+              },
+              ['goal', 'plan', 'resolution', 'system_clarify'].includes(stateRef.current.pending),
+            )
+            // 签发 id 随卡落位（与真实工具首执行同构——批准/拒绝/文本批准按 id 进门）
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.toolCalls?.some((c) => c.id === pbTcId)
+                  ? {
+                      ...m,
+                      toolCalls: m.toolCalls.map((c) =>
+                        c.id === pbTcId ? { ...c, approvalRequestId: r.requestId } : c,
+                      ),
+                    }
+                  : m,
+              ),
+            )
+          })
+          .catch(() => {
+            tlog(
+              'conversation.error',
+              { errorType: 'approval-id-missing', name: 'approve-files' },
+              'system',
+            )
+          })
+      }
+    }
     // 工具执行副作用（移出 updater——StrictMode 双调会执行两次；真实工具写文件等不可重复）
     // 2026-08-04 规划级授权：approve-files 跳过执行（虚拟工具——批准由 renderer approvePlan 处理）
     // V1.5 S1 Task 1.3：协议工具同为虚拟工具——不真实执行（决策内容由 renderer 协议分支经
@@ -1589,6 +1643,10 @@ export default function ConversationPanel({
       chunk.toolCall.name !== 'approve-files'
     ) {
       const tc = chunk.toolCall
+      // ADR-017 B5：结果回填改按 tcId 精确定位——name 匹配在同轮同名兄弟卡并存时会被首个
+      // resolve 的 .then 全量劫持（两 edit 卡合贴同一 approvalRequestId → 合并批准第二张闸 miss）。
+      // 流事件层 id（P2 双卡机制）是兄弟卡的唯一键；结果回填是 id 落卡唯一路径，随窗线必修。
+      const patchTcId = tcId
       // 2026-08-06 用户反馈「第一句话就有一个工具执行」：目标确认前工具门控——目标没澄清前不执行任何工具
       // （目标都没澄清，看目录/写文件都没意义）；工具直接 done + 提示（maybeContinue 回填给模型 → 模型停止调工具继续澄清目标）
       // 2026-08-03 v35：workingStage 人类化（原「调用工具 bash…」技术腔——按工具名映射自然描述）
@@ -1818,7 +1876,7 @@ export default function ConversationPanel({
           const last = prev[prev.length - 1]
           if (!last || last.role !== 'assistant') return prev
           const calls = (last.toolCalls ?? []).map((c) => {
-            if (c.name !== tc.name || c.status !== 'pending') return c
+            if (c.id !== patchTcId || c.status !== 'pending') return c
             return r.ok
               ? (() => {
                   // 2026-08-08 O2：check-capability 检测结果——能力齐备 → 工具卡隐藏（hidden——用户不被打扰，结果仍回填模型）；
@@ -1942,9 +2000,12 @@ export default function ConversationPanel({
         return
       }
       const pending = lastMsg.toolCalls.filter((c) => c.status === 'pending')
-      const needsApproval = lastMsg.toolCalls.some(
-        (c) => c.status === 'need-approval' || c.status === 'file-approval',
-      )
+      const needsApproval =
+        lastMsg.toolCalls.some(
+          (c) => c.status === 'need-approval' || c.status === 'file-approval',
+        ) ||
+        // ADR-017 B5：D5 退役后窗事实直读（原经 pending 代理——纯镜像断言失效）
+        decidableRequests(stateRef.current.approvalWindow).length > 0
       // 2026-08-07 会话级单一 PENDING（重构——确认卡待决策 → 模型停——动作无效——用户决策是唯一输入）
       // 2026-08-14 S2b（缝隙 4/5）：确认卡触发走状态机派生——执行确认只认**有副作用动作**（探索 bash 不再触发）
       const lastContent = lastMsg.content ?? ''
@@ -1961,7 +2022,8 @@ export default function ConversationPanel({
         ) !== 'none'
       // 2026-08-15 问题 A 修复（用户实测 14 轮工具循环根因）：停止条件接入状态机——pending 非 none 即停
       // （与 canExecute 同源——领域层 shouldStopContinuation）。授权卡（need-approval/file-approval）可能挂在
-      // **旧消息**（用户未批准未拒绝——卡悬挂）→ 全列表 effect 已置 pending='approval'，但 lastMsg 派生检测不到
+      // **旧消息**（用户未批准未拒绝——卡悬挂）→ 槽由窗转换族置 'approval'（ADR-017 B5：原 D5 全列表
+      // effect 退役，悬挂事实＝窗可决记录直读，见上 needsApproval），但 lastMsg 派生检测不到
       // → 修复前继续喂模型 → forceTool 逼模型每轮调工具 → 被 pendingBlocked 拦 → 循环。现在卡在任意消息都停续聊
       if (shouldStopContinuation(stateRef.current, { needsApproval, confirmPending })) {
         releaseWorking()
@@ -2623,7 +2685,15 @@ export default function ConversationPanel({
           if (dec.length === 1) {
             const lastMsg = messagesRef.current[messagesRef.current.length - 1]
             const tc = lastMsg?.toolCalls?.find((c) => c.approvalRequestId === dec[0].requestId)
-            if (tc) approveToolCall(lastMsg!.toolCalls ?? [], lastMsg!.toolCalls!.indexOf(tc), tc)
+            // ADR-017 B5：plan-batch（file-approval 挂卡）＝批准这批文件的同权入口（execute 虚拟工具
+            // 不可走 approveToolCall——G2 正交：决定进门经 approvePlan，执行链仍 approvalGranted 硬序门）
+            if (tc) {
+              if (dec[0].kind === 'plan-batch') {
+                approvePlan(lastMsg!.toolCalls ?? [], lastMsg!.toolCalls!.indexOf(tc), tc)
+              } else {
+                approveToolCall(lastMsg!.toolCalls ?? [], lastMsg!.toolCalls!.indexOf(tc), tc)
+              }
+            }
           } else if (dec.length > 1) {
             setApprovalHint('有多张待批授权卡——请在卡片上逐张指明批准')
             setTimeout(() => setApprovalHint(''), 6000)

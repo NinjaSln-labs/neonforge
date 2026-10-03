@@ -128,11 +128,11 @@ export interface SystemClarifyProposal {
 // ============================================================================
 export type PendingKind = 'none' | DecisionKind
 
-/** 决策点内容快照（决策点呈现与审计的唯一来源——run4「确认了什么无法追溯」解法） */
+/** 决策点内容快照（决策点呈现与审计的唯一来源——run4「确认了什么无法追溯」解法）
+ *  ADR-017 B5：dc.approval 成员退役——授权事实住窗（ApprovalRecord.request），dc 限确认卡族 */
 export interface DecisionContent {
   kind: DecisionKind
   proposal?: GoalProposal | PlanProposal | CompletionClaim | SystemClarifyProposal // 结构化内容
-  approval?: ApprovalRequest // 授权请求内容
   since: string // 决策点出现时间（诊断）
   instanceId: number // ADR-015：＝置位时 decisionInstanceSeq（卡/按钮 render 冻结与恢复重建的载体）
 }
@@ -528,7 +528,7 @@ export function userRejected(
 // 卡弹出 → 会话进入 PENDING（A0 §3.2 单一 PENDING——pending 只有一个；不变量 7）
 // ADR-015：setPending＝归属轴唯一推进点——kind 变或 descriptor 变 → 新实例（seq+1）；
 // 描述符等值重提议＝同实例（seq 不变——"重提议＝同一决策点延续"，队列确认语照落地）；
-// 恒铺骨架（X2）：decisionContent 必带 instanceId（approval 置位须携 ApprovalRequest 才有描述符载体）
+// 恒铺骨架（X2）：decisionContent 必带 instanceId（ADR-017 B5：approval 置位者已随 D5 退役——dc 限确认卡族）
 export function setPending(
   s: ConversationState,
   kind: Exclude<PendingKind, 'none'>,

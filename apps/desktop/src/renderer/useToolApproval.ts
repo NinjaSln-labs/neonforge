@@ -299,6 +299,13 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
     const pbSubject =
       String(tc.args?.summary ?? '') ||
       ((tc.args?.files ?? []) as Array<{ path: string }>).map((f) => f.path).join('、')
+    // ADR-017 B5（file-approval 入窗统一）：弹卡时已由 main 签发并随卡落位——点击只进门批准
+    // （id∈窗∧可决；不再二次 issue，防同卡双记录）
+    if (tc.approvalRequestId) {
+      decideApproval({ requestId: tc.approvalRequestId }, { confirm: true })
+      finish()
+      return
+    }
     const issue = window.neonforge.approval?.issue
     if (!issue) {
       // 旧档/L3 mock 无签发通道——跳过窗步骤走原样链＋观察打点（与 approve 路径 approval-id-missing 同语义）
