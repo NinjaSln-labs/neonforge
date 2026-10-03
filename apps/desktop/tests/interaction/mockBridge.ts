@@ -118,6 +118,14 @@ export interface MockBridgeOptions {
   hasKey?: boolean
 }
 
+/** tools.execute 调用记录（ADR-017 B8——requestId 随行断言记录面；needApproval 案附签发 id） */
+export interface ExecCallRec {
+  name: string
+  args?: Record<string, unknown>
+  opts?: { approved?: boolean; requestId?: string; [k: string]: unknown }
+  issued?: string
+}
+
 export interface MockBridgeHandle {
   /** 手动推流（manualEmit: true 时）——按序推一轮 chunk */
   emit(chunks: StreamChunk[]): Promise<void>
@@ -130,6 +138,8 @@ export interface MockBridgeHandle {
   planConfirmedCalls(): Promise<boolean[]>
   /** 读任意捕获值（含 escape hatch 自定义的 window.__*） */
   readCapture<T>(name: string): Promise<T | undefined>
+  /** ADR-017 B8：tools.execute 调用记录（name/args/opts；needApproval 案附 issued＝签发的 approvalRequestId） */
+  execCalls(): Promise<ExecCallRec[]>
 }
 
 // ── 实现 ──────────────────────────────────────────────────────────────────
@@ -201,6 +211,7 @@ export async function installMockBridge(
     approvedFlags: () => read<boolean[]>('__nfApprovedFlags', page),
     titleCalls: () => read<Array<{ p: string; title: string }>>('__nfTitleCalls', page),
     planConfirmedCalls: () => read<boolean[]>('__nfPlanConfirmedCalls', page),
+    execCalls: () => read<ExecCallRec[]>('__nfExecCalls', page).then((v) => v ?? []),
     readCapture: <T>(name: string) => read<T>(name, page),
   }
 }
@@ -230,6 +241,9 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
   const approvedFlags = []
   const titleCalls = []
   const planConfirmedCalls = []
+  // ADR-017 B8：tools.execute 调用记录（每次 {name,args,opts}——requestId 随行断言记录面；
+  // needApproval 案 ent.issued＝本调用签发的 approvalRequestId，供批准后二次调用 opts 比对）
+  const execCalls = []
   const cbRef = { cb: null }
   // ADR-017 B5（B8 前置桩面）：授权签发计数器——needApproval 返回体与 approval:issue 桩共用
   let aprSeq = 0
@@ -238,8 +252,11 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
     opts.executeSource ??
     `
     async (name, args, opts) => {
+      const ent = { name, args, opts }
+      execCalls.push(ent)
       if (${needApprovalCond} && !(opts && opts.approved)) {
-        return { ok: false, needApproval: true, approvalRequestId: 'apr_' + (++aprSeq), approvalFingerprint: 'fp', error: '「' + name + '」需要授权（L3）——approved=true 后执行' }
+        ent.issued = 'apr_' + (++aprSeq)
+        return { ok: false, needApproval: true, approvalRequestId: ent.issued, approvalFingerprint: 'fp', error: '「' + name + '」需要授权（L3）——approved=true 后执行' }
       }
       if ((name === 'write' || name === 'edit') && ${json(spec.capture.approvedFlags)}) approvedFlags.push(!!(opts && opts.approved))
       const result = ${json(spec.executeResults)}[name]
@@ -377,6 +394,7 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
   ${opts.extraInit ?? ''}
 
   window.neonforge = bridge
+  window.__nfExecCalls = execCalls
   if (${json(spec.capture.chatCount)}) Object.defineProperty(window, '__nfChatCount', { get: () => chatCountRef.n })
   if (${json(spec.capture.sentMsgs)}) window.__nfSentMsgs = sentMsgs
   if (${json(spec.capture.forceToolCalls)}) window.__nfForceToolCalls = forceToolCalls

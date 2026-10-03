@@ -1,5 +1,18 @@
 import { test, expect, type Page } from '@playwright/test'
 
+// ADR-017 B8：requestId 随行断言记录面——raw bridge 的 tools.execute 每次调用 push
+// {name,args,opts,issued}（issued＝needApproval 案本调用签发的 approvalRequestId）到 window.__execCalls
+type ExecRec = {
+  name: string
+  args?: Record<string, unknown>
+  opts?: { approved?: boolean; requestId?: string }
+  issued?: string
+}
+const readExecCalls = (page: Page): Promise<ExecRec[]> =>
+  page.evaluate(
+    () => ((window as unknown as { __execCalls?: ExecRec[] }).__execCalls ?? []) as ExecRec[],
+  )
+
 // L3 组件交互测试（ddd-qa-chain 缺层——2026-08-02 补）：纯 DOM 断言无截图——跨平台稳定，CI 可跑
 // 覆盖核心交互流：进入工作区 → 发送 → 工具卡（授权/回滚）→ 交付包 → 批量接受 → 快捷键
 // 与 L5 视觉（像素基线）分工：L3 验证「行为正确」，L5 验证「渲染正确」
@@ -108,13 +121,133 @@ test('发送消息 → 消息流出现（用户消息 + 搭档处理中）', asy
 
 test('工具卡：write 需授权 → 允许执行 → 可回滚 → 已回滚（L3 授权闭环）', async ({ page }) => {
   await mockBridge(page)
+  // ADR-017 B8：真闭环（标题语义补装——原案借 demo 注入只验交付面板）。第二支 init script
+  // 同页先后执行、覆盖 bridge.gateway/bridge.tools：edit 首执行 not approved→签发 apr_N→
+  // 授权卡「允许执行」→二次 execute 参数含 requestId＝该卡 approvalRequestId→done 可回滚
+  // （write 在确认后走清单自动放行/偏离拦截两路均不弹卡——need-approval 正门取 edit，v4 案同机制）
+  await page.addInitScript(() => {
+    const bridge = window.neonforge as unknown as { gateway: unknown; tools: unknown }
+    const execCalls: {
+      name: string
+      args?: Record<string, unknown>
+      opts?: Record<string, unknown>
+      issued?: string
+    }[] = []
+    window.__execCalls = execCalls
+    let streamCb:
+      | ((c: {
+          type: string
+          text?: string
+          toolCall?: { name: string; args: Record<string, unknown> }
+        }) => void)
+      | null = null
+    let chatCount = 0
+    let aprN = 0
+    bridge.gateway = {
+      validate: async () => ({ ok: true }),
+      streamChat: async () => {
+        chatCount++
+        setTimeout(() => {
+          if (chatCount === 1) {
+            streamCb?.({
+              type: 'tool-call',
+              toolCall: { name: 'propose_goal', args: { statement: '做一个网页游戏' } },
+            })
+          } else if (chatCount === 2) {
+            streamCb?.({
+              type: 'tool-call',
+              toolCall: {
+                name: 'propose_plan',
+                args: { summary: '执行方案', files: [{ path: '/test/game.js', reason: 'x' }] },
+              },
+            })
+          } else if (chatCount === 3) {
+            // 清单内 edit 走逐个授权（write 会被 execPlanApproved 自动放行——v4 案同款机制；
+            // 清单外 write 走偏离拦截——两路都不弹卡，edit 是本场景唯一 need-approval 正门）
+            streamCb?.({
+              type: 'tool-call',
+              toolCall: { name: 'edit', args: { path: '/test/game.js', old: 'prev', new: 'x' } },
+            })
+          } else {
+            streamCb?.({ type: 'content', text: '游戏已写好。' })
+          }
+          streamCb?.({ type: 'done' })
+        }, 30)
+        return { ok: true }
+      },
+      onStreamChunk: (
+        cb: (c: {
+          type: string
+          text?: string
+          toolCall?: { name: string; args: Record<string, unknown> }
+        }) => void,
+      ) => {
+        streamCb = cb
+        return () => {}
+      },
+    }
+    bridge.tools = {
+      list: async () => [],
+      execute: async (
+        name: string,
+        args?: Record<string, unknown>,
+        opts?: { approved?: boolean; requestId?: string },
+      ) => {
+        const ent: {
+          name: string
+          args?: Record<string, unknown>
+          opts?: Record<string, unknown>
+          issued?: string
+        } = { name, args, opts }
+        execCalls.push(ent)
+        if (name === 'edit' && !(opts && opts.approved)) {
+          ent.issued = 'apr_' + ++aprN
+          return {
+            ok: false,
+            needApproval: true,
+            approvalRequestId: ent.issued,
+            approvalFingerprint: 'fp',
+            error: '「edit」需要授权（L3）——approved=true 后执行',
+          }
+        }
+        return {
+          ok: true,
+          data:
+            name === 'write' || name === 'edit'
+              ? { file: String(args?.path ?? '/test/game.js'), snapshot: true }
+              : {},
+        }
+      },
+      revert: async () => ({ ok: true }),
+    }
+  })
   await enterWorkspace(page)
-  // 直接验证工具卡渲染（mock streamChat 不产生 tool-call——用 demo 注入交互验证授权 UI 状态机）
-  // 授权按钮存在性由 L5 覆盖；此处验证工具卡容器与回滚链路可用
+  // 原断言保留：demo 注入交付面板可用（产物 Tab diff 摘要——先于授权环执行，与旧案同形）
   await page.getByRole('button', { name: '产物' }).click()
   await page.waitForTimeout(300)
   await expect(page.locator('.nf-delivery')).toBeVisible()
   await expect(page.locator('.nf-delivery__summary')).toContainText('修复了')
+  // ── 真闭环 ──
+  await page.locator('.nf-chat__input textarea').fill('帮我做一个网页游戏')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  // chat#1：目标确认卡 → chat#2：执行方案卡（game.js 入清单——chat#3 edit 走逐个授权路径）
+  await expect(page.getByRole('button', { name: '确认目标' })).toBeVisible({ timeout: 10000 })
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expect(page.getByRole('button', { name: '确认执行' })).toBeVisible({ timeout: 10000 })
+  await page.getByRole('button', { name: '确认执行' }).click()
+  // chat#3：edit 首执行 not approved → need-approval 授权卡（「需要你批准——点允许执行继续」）
+  await expect(page.locator('.nf-toolcall__approve')).toHaveCount(1, { timeout: 10000 })
+  const firstCalls = await readExecCalls(page)
+  const editFirst = firstCalls.find((c) => c.name === 'edit')
+  expect(editFirst?.issued).toMatch(/^apr_/)
+  expect(editFirst?.opts?.approved).not.toBe(true)
+  // 点「允许执行」→ 卡 done 可回滚；二次 execute 参数含 requestId＝该卡 approvalRequestId（apr_ 前缀）
+  await page.locator('.nf-toolcall__approve').first().click()
+  await expect(page.locator('.nf-toolcall__approve')).toHaveCount(0, { timeout: 10000 })
+  const editCalls = (await readExecCalls(page)).filter((c) => c.name === 'edit')
+  expect(editCalls).toHaveLength(2)
+  expect(editCalls[1]?.opts?.requestId).toBe(editFirst?.issued)
+  expect(editCalls[1]?.opts?.approved).toBe(true)
 })
 
 test('交付包：产物 Tab → diff 审核（行级渲染 + 全部接受并写入）', async ({ page }) => {
@@ -2039,6 +2172,17 @@ test('问题 A：approve-files 卡悬挂 → 模型续轮被拦后停续聊（�
         }) => void)
       | null = null
     let chatCount = 0
+    // ADR-017 B8：tools.execute 调用记录（requestId 随行断言记录面）＋恢复线推进状态——
+    // 批准后清单内 write 以 approved 通道自动放行（main 清单自证语义），随后 bash 走授权卡闭环
+    const execCalls: {
+      name: string
+      args?: Record<string, unknown>
+      opts?: Record<string, unknown>
+      issued?: string
+    }[] = []
+    window.__execCalls = execCalls
+    let sawApprovedWrite = false
+    let bashShown = false
     window.neonforge = {
       version: 'test',
       config: {
@@ -2096,10 +2240,20 @@ test('问题 A：approve-files 卡悬挂 → 模型续轮被拦后停续聊（�
                   },
                 },
               })
-            } else if (chatCount >= 6) {
+            } else if (sawApprovedWrite && bashShown) {
               // 独立案修订（2026-10-03）：原 ===6 把"收尾轮"钉死在旧单槽丢文时序的轮次索引上；
-              // β 修正后轮序平移——语义改为"恢复并追打若干轮后模型收尾"＝≥6 一律给纯文本终局
+              // β 修正后轮序平移——语义改为"恢复并追打若干轮后模型收尾"＝≥6 一律给纯文本终局。
+              // ADR-017 B8：轮次索引改状态驱动（countHang 实测 4~6 漂移，恢复后轮序不锚定）——
+              // 收尾恒＝"批准后 write 已走清单通道 ∧ bash 授权卡已出"
               streamCb?.({ type: 'content', text: '游戏已写好，打开就能玩。' })
+            } else if (sawApprovedWrite) {
+              // ADR-017 B8：批准后恢复线追加一张授权卡（bash 首执行 not approved→签发 apr_N）——
+              // 供"允许执行→二次 execute 携 requestId"闭环断言
+              bashShown = true
+              streamCb?.({
+                type: 'tool-call',
+                toolCall: { name: 'bash', args: { command: 'npm install' } },
+              })
             } else {
               streamCb?.({
                 type: 'tool-call',
@@ -2123,11 +2277,39 @@ test('问题 A：approve-files 卡悬挂 → 模型续轮被拦后停续聊（�
       },
       tools: {
         list: async () => [],
-        execute: async (name: string, args?: Record<string, unknown>) => ({
-          ok: true,
-          data:
-            name === 'write' ? { file: String(args?.path ?? '/test/game.js'), snapshot: true } : {},
-        }), // 独立案修订：write 如实回报产物（原恒空→produced=0→批准后 nudge 级联追打假过度续聊）
+        execute: async (
+          name: string,
+          args?: Record<string, unknown>,
+          opts?: { approved?: boolean; requestId?: string },
+        ) => {
+          const ent: {
+            name: string
+            args?: Record<string, unknown>
+            opts?: Record<string, unknown>
+            issued?: string
+          } = { name, args, opts }
+          execCalls.push(ent)
+          // B8：bash 走授权卡闭环——首执行 not approved → 签发 approvalRequestId（apr_ 前缀，
+          // 随卡落位后批准线的二次 execute 必须携同值 requestId）
+          if (name === 'bash' && !(opts && opts.approved)) {
+            ent.issued = 'apr_' + (window.__aprN = (window.__aprN || 0) + 1)
+            return {
+              ok: false,
+              needApproval: true,
+              approvalRequestId: ent.issued,
+              approvalFingerprint: 'fp',
+              error: '「bash」需要授权（L3）——approved=true 后执行',
+            }
+          }
+          if (name === 'write' && opts && opts.approved) sawApprovedWrite = true
+          return {
+            ok: true,
+            data:
+              name === 'write'
+                ? { file: String(args?.path ?? '/test/game.js'), snapshot: true }
+                : {},
+          }
+        }, // 独立案修订：write 如实回报产物（原恒空→produced=0→批准后 nudge 级联追打假过度续聊）
         revert: async () => ({ ok: true }),
       },
       context: { resolve: async () => ({ fragments: [] }) },
@@ -2168,6 +2350,11 @@ test('问题 A：approve-files 卡悬挂 → 模型续轮被拦后停续聊（�
   )
   expect(countHang).toBeLessThanOrEqual(6)
   // 文件卡仍在（悬挂等待用户决策）→ 用户批准 → 恢复续聊：write 真正执行（approved 放行）→ 收尾自然停止
+  // B8 硬断言：悬挂期零副作用执行——协议虚拟卡与 pending 拦截都发生在 execute 之前
+  // （check-capability 环境探针不计——非授权域工具）
+  expect(
+    (await readExecCalls(page)).filter((c) => c.name === 'write' || c.name === 'bash'),
+  ).toHaveLength(0)
   await expect(page.getByRole('button', { name: '批准这批文件' })).toBeVisible()
   await page.getByRole('button', { name: '批准这批文件' }).click()
   await expect(page.locator('.nf-toolcall--done').filter({ hasText: '已批准' })).toBeVisible({
@@ -2185,6 +2372,23 @@ test('问题 A：approve-files 卡悬挂 → 模型续轮被拦后停续聊（�
   expect(
     await page.evaluate(() => (window as unknown as { __chatCount: number }).__chatCount),
   ).toBe(countResume)
+  // ── ADR-017 B8：requestId 随行断言（批准线审批身份闭环）──────────────────────────
+  const calls = await readExecCalls(page)
+  // 恢复线：清单内 write 以 approved 通道自动放行（main 清单自证——无需审批身份，首执行即 approved:true）
+  expect(calls.some((c) => c.name === 'write' && c.opts?.approved === true)).toBe(true)
+  // 第二张授权卡（bash）：首执行 not approved → main 签发 approvalRequestId（apr_ 前缀——随卡入窗）
+  const bashFirst = calls.find((c) => c.name === 'bash')
+  expect(bashFirst?.issued).toMatch(/^apr_/)
+  expect(bashFirst?.opts?.approved).not.toBe(true)
+  // 点 bash 卡「允许执行」→ 二次 execute 参数含 requestId 字段且等于该卡 approvalRequestId
+  await page.locator('.nf-toolcall__approve').first().click()
+  await expect(page.locator('.nf-toolcall--done').filter({ hasText: 'npm install' })).toBeVisible({
+    timeout: 10000,
+  })
+  const bashCalls = (await readExecCalls(page)).filter((c) => c.name === 'bash')
+  expect(bashCalls).toHaveLength(2)
+  expect(bashCalls[1]?.opts?.requestId).toBe(bashFirst?.issued)
+  expect(bashCalls[1]?.opts?.approved).toBe(true)
 })
 
 // 2026-08-15 P2（时间线实证 a08d1775：同 args bash 双卡 → name+args 匹配从后往前错位到新卡 →
