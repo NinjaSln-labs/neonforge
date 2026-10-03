@@ -8,6 +8,8 @@ import {
 } from '../../src/domain/conversationState'
 import { deriveStateEvents } from '../../src/domain/timeline'
 import { useConversationState } from '../../src/renderer/useConversationState'
+import { useToolApproval, type UseToolApprovalDeps } from '../../src/renderer/useToolApproval'
+import type { Msg, ToolCallMsg } from '../../src/renderer/ConversationPanel'
 
 // ADR-017 B4.1：hook 窗口面真实执行（node 环境无 jsdom/RTL——mock react 的 useRef/useState
 // 为单帧壳，hook 函数体直调；transition/emit 语义为真身）
@@ -161,5 +163,99 @@ describe('ADR-017 B4.1 hook 窗口面装配', () => {
     expect(h.confirm('goal')).toBe(true)
     expect(h.stateRef.current.pending).toBe('approval')
     expect(h.stateRef.current.approvalWindow.requests[0].state).toBe('pending')
+  })
+})
+
+// ============================================================================
+// ADR-017 B6：停止语义（停止＝denied——decidedBy user，防悬挂 queued）
+// useToolApproval 无独立测试先例——handler 为纯闭包 DI（不经 React 运行时），
+// 在此以最小 deps 装配、窗链走 B4.1 hook 真身（断言落等价链上）。
+// ============================================================================
+
+const mkApproval = (over: Partial<UseToolApprovalDeps>): UseToolApprovalDeps => ({
+  setMessages: () => {},
+  tlog: () => {},
+  fmtToolResult: () => '',
+  trustPath: (p) => String(p),
+  rootPath: null,
+  sessionId: 's1',
+  applyTool: () => {},
+  grantPlan: () => {},
+  rejectApproval: () => {},
+  requestApproval: () => true,
+  decideApproval: () => true,
+  settleApproval: () => {},
+  addTrust: () => {},
+  acquireChain: async () => () => {},
+  maybeContinue: async () => {},
+  chatRef: { current: null },
+  sessionRef: { current: 0 },
+  streamingSidRef: { current: 0 },
+  streamingRef: { current: { content: '', reasoning: '', toolCalls: [] } },
+  setWorking: () => {},
+  setWorkingStage: () => {},
+  ...over,
+})
+
+describe('ADR-017 B6 停止语义（stopToolCall＝denied）', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  const card = (id: string, requestId?: string): ToolCallMsg => ({
+    id,
+    name: 'bash',
+    args: { command: `echo ${id}` },
+    status: 'need-approval',
+    approvalRequestId: requestId,
+  })
+
+  it('need-approval 卡携窗记录 → stop → 记录 denied（decidedBy user）、槽归 none、卡标 error', () => {
+    vi.stubGlobal('window', { neonforge: { tools: {} } })
+    const { h } = mkHook()
+    h.requestApproval(rec('apr_1'), false) // 记录 pending＋槽 approval
+    const tc = card('tc_1', 'apr_1')
+    let msgs: Msg[] = [{ role: 'assistant', content: '', status: 'done', toolCalls: [tc] }]
+    const approval = useToolApproval(
+      mkApproval({ setMessages: (fn) => void (msgs = fn(msgs)), decideApproval: h.decideApproval }),
+    )
+    approval.stopToolCall([tc], 0)
+    const r = h.stateRef.current.approvalWindow.requests[0]
+    expect(r.state).toBe('denied')
+    expect(r.decidedBy).toBe('user')
+    expect(h.stateRef.current.pending).toBe('none') // 槽释放（窗派生归零）
+    expect(msgs[0].toolCalls?.[0].status).toBe('error') // 卡同刀标记
+  })
+
+  it('防悬挂 queued：窗内 pending+queued 两记录均携卡 → stop 逐条决 denied，无 queued 残留', () => {
+    vi.stubGlobal('window', { neonforge: { tools: {} } })
+    const { h } = mkHook()
+    h.requestApproval(rec('apr_1'), false) // pending（占槽）
+    h.requestApproval(rec('apr_2'), false) // 已有可见 → queued
+    const tc1 = card('tc_1', 'apr_1')
+    const tc2 = card('tc_2', 'apr_2')
+    let msgs: Msg[] = [{ role: 'assistant', content: '', status: 'done', toolCalls: [tc1, tc2] }]
+    const approval = useToolApproval(
+      mkApproval({ setMessages: (fn) => void (msgs = fn(msgs)), decideApproval: h.decideApproval }),
+    )
+    approval.stopToolCall([tc1, tc2], 1)
+    const states = h.stateRef.current.approvalWindow.requests.map((r) => r.state)
+    expect(states).toEqual(['denied', 'denied']) // queued 同样被决（decidable 含 queued）
+    expect(h.stateRef.current.pending).toBe('none')
+    expect(msgs[0].toolCalls?.map((c) => c.status)).toEqual(['error', 'error'])
+  })
+
+  it('无 approvalRequestId 卡跳过（窗不动，卡仍标 error——旧档/L3 mock 过渡语义）', () => {
+    vi.stubGlobal('window', { neonforge: { tools: {} } })
+    const { h } = mkHook()
+    h.requestApproval(rec('apr_1'), false)
+    const tc = card('tc_1') // 无 id
+    let msgs: Msg[] = [{ role: 'assistant', content: '', status: 'done', toolCalls: [tc] }]
+    const decide = vi.fn(h.decideApproval)
+    const approval = useToolApproval(
+      mkApproval({ setMessages: (fn) => void (msgs = fn(msgs)), decideApproval: decide }),
+    )
+    approval.stopToolCall([tc], 0)
+    expect(decide).not.toHaveBeenCalled()
+    expect(h.stateRef.current.approvalWindow.requests[0].state).toBe('pending') // 窗未动
+    expect(msgs[0].toolCalls?.[0].status).toBe('error')
   })
 })

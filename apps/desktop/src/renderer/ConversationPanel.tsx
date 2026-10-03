@@ -112,7 +112,7 @@ import { PROTOCOL_TOOL_NAMES, decideProtocolToolCall } from '../domain/protocolT
 // 消费 02：streamChat（四档 basic）+ ModelRouter（默认 Flash）；错误分支：Key 失效内嵌更新 / 服务故障提示
 
 export interface ToolCallMsg {
-  id?: string // 2026-08-15 P2：稳定 id（会话内递增——同 args 卡并存的精确定位键；旧存档无 id → 渲染/定位 fallback）
+  id?: string // ADR-017 B6 双 id：id＝卡定位（流事件层生成——patch/回填寻址；2026-08-15 P2 会话内递增，同 args 卡并存精确区分；旧存档无 id → 渲染/定位 fallback）
   name: string
   args: Record<string, unknown>
   status: 'pending' | 'done' | 'need-approval' | 'file-approval' | 'error' | 'reverted'
@@ -121,7 +121,7 @@ export interface ToolCallMsg {
   file?: string // write/edit 成功写入的文件路径（回滚目标）
   canRevert?: boolean // 写前已快照——可回滚
   hidden?: boolean // 2026-08-08 O2：UI 隐藏（如 check-capability 能力齐备时默认不展示——结果仍回填模型上下文）
-  approvalRequestId?: string // ADR-017 B4.2：审批寻址（main 签发——窗/闸/journal 定位键；双 id 语义：id＝卡定位、本字段＝审批定位）
+  approvalRequestId?: string // ADR-017 B6 双 id：approvalRequestId＝审批寻址（main 签发——窗/闸/journal 三域定位键；卡定位见上 id 字段）
 }
 interface Msg {
   role: 'user' | 'assistant'

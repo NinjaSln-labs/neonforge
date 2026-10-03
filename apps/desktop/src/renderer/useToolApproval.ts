@@ -254,12 +254,10 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
 
   // 批量「全部允许并记住」——一条消息内多个待授权文件一次批准整批
   const approveAllRemember = (calls: ToolCallMsg[]): void => {
-    const pending = calls.filter((c) => c.status === 'need-approval')
-    pending.forEach((c) => addTrust(c.args))
-    pending.forEach((c) => {
-      const idx = calls.indexOf(c)
-      approveToolCall(calls, idx, c)
-    })
+    // ADR-017 B6：map 保 index（消除 indexOf 引用反查——O(n²) 与引用比较脆性）
+    const pending = calls.map((c, i) => ({ c, i })).filter(({ c }) => c.status === 'need-approval')
+    pending.forEach(({ c }) => addTrust(c.args))
+    pending.forEach(({ c, i }) => approveToolCall(calls, i, c))
   }
 
   // 批准计划文件清单（追加语义 + 幂等标记 + 通知 main）
@@ -371,7 +369,21 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
   }
 
   // 可撤销：停止当前操作 = 中止整条链（kill bash + sid++ 失效旧流 + 卡标记已停止）
-  const stopToolCall = (_calls: ToolCallMsg[], _idx: number): void => {
+  const stopToolCall = (calls: ToolCallMsg[], _idx: number): void => {
+    // ADR-017 B6 裁定：停止＝denied（decidedBy user）——与卡标 error 同刀对窗内受影响记录逐条进门
+    // （仅携 approvalRequestId 且可决者——decideApproval 自闸对 miss/已决 no-op；无 id 卡跳过）；
+    // 防窗内 pending/queued 悬挂（卡死了但记录还活着＝续转判定误停/闸位错占）
+    for (const tc of calls) {
+      if (tc.status === 'need-approval' && tc.approvalRequestId) {
+        decideApproval(
+          { requestId: tc.approvalRequestId },
+          {
+            confirm: false,
+            reason: { kind: 'other', text: '用户停止' },
+          },
+        )
+      }
+    }
     void (window.neonforge.tools?.cancel?.() ?? Promise.resolve({ ok: false }))
     sessionRef.current++
     streamingSidRef.current = 0
