@@ -35,6 +35,7 @@ import {
   detectUnproductiveDialogue,
   noteUserTextReply,
   canExecute,
+  decidableRequests,
   decideProgressGuarantee,
   deriveDecisionPoint,
   isConsumedProposal,
@@ -120,6 +121,7 @@ export interface ToolCallMsg {
   file?: string // write/edit 成功写入的文件路径（回滚目标）
   canRevert?: boolean // 写前已快照——可回滚
   hidden?: boolean // 2026-08-08 O2：UI 隐藏（如 check-capability 能力齐备时默认不展示——结果仍回填模型上下文）
+  approvalRequestId?: string // ADR-017 B4.2：审批寻址（main 签发——窗/闸/journal 定位键；双 id 语义：id＝卡定位、本字段＝审批定位）
 }
 interface Msg {
   role: 'user' | 'assistant'
@@ -433,6 +435,8 @@ export default function ConversationPanel({
   const [workingStage, setWorkingStage] = useState('等待回复…')
   // ADR-015 §6-D2：stale 作废可见重确认提示（独立通道——不寄生 working 条，空闲时也可见；6s 自隐）
   const [staleNotice, setStaleNotice] = useState('')
+  // ADR-017 B4.2：文本批准多卡提示（恰一呈现基数 P-03——窗内 >1 可决时文本不生效且可见提示；6s 自隐复用 staleNotice 形态）
+  const [approvalHint, setApprovalHint] = useState('')
   // 2026-08-08 B 修复（feedback.log「候选+确认卡不能同时出来」）：候选点击后标记已选（消息索引 → 选项索引）——
   // 跨消息视觉：旧候选消息不再显示可点按钮（已选态），确认卡接管决策（决策点互斥）
   const [chosenCandidates, setChosenCandidates] = useState<Record<number, number>>({})
@@ -525,6 +529,9 @@ export default function ConversationPanel({
     grantPlan,
     rejectApproval,
     applyTool,
+    requestApproval,
+    decideApproval: decideWindow,
+    settleApproval,
     setPending: setPendingState,
     clearPending,
     resetRejectStreak,
@@ -1865,10 +1872,34 @@ export default function ConversationPanel({
                   ...c,
                   status: r.needApproval ? ('need-approval' as const) : ('error' as const),
                   result: r.error,
+                  // ADR-017 B4.2：main 签发 id 随卡落位（审批寻址键——approve/reject 进门用）
+                  ...(r.needApproval && r.approvalRequestId
+                    ? { approvalRequestId: r.approvalRequestId }
+                    : {}),
                 }
           })
           return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
         })
+        // ADR-017 B4.2：首执行入窗——needApproval＋main 签发 id → 窗成需批准事实真相源（关键改线 1，代码块逐字）
+        if (r.needApproval && r.approvalRequestId) {
+          const subject = String(tc.args?.command ?? tc.args?.path ?? tc.args?.url ?? tc.name)
+          requestApproval(
+            {
+              requestId: r.approvalRequestId,
+              kind: 'tool',
+              toolName: tc.name,
+              subject,
+              argsFingerprint: r.approvalFingerprint ?? '',
+              request: {
+                toolName: tc.name,
+                subject,
+                reason: r.error ?? '',
+                risk: toolRisk(tc.name) === 'high' ? 'high' : 'low',
+              },
+            },
+            ['goal', 'plan', 'resolution', 'system_clarify'].includes(stateRef.current.pending),
+          )
+        }
       })
     }
   }
@@ -2587,11 +2618,21 @@ export default function ConversationPanel({
           // 「继续」等非批准语义不自动批——手动按卡测试与真实「让模型继续」路径保持手动）
           /^(行|好|可以|批准|同意|没问题|确认|就这么办)[。！!~～]?$|批准|同意/.test(text)
         ) {
-          // S7（C2 完善——e2e-0to1 场景 B）：approval 期确认文本 → 自动批准当前待批授权卡
-          // （真实用户打字「行/批准」——确认卡时代只处理按钮批准遗漏文本批准）
-          const lastMsg = messagesRef.current[messagesRef.current.length - 1]
-          if (lastMsg?.role === 'assistant' && lastMsg.toolCalls?.length) {
-            approveAllToolCalls(lastMsg.toolCalls)
+          // ADR-017 §4：窗内恰一可决才认文本批准；多记录→不生效＋可见提示（不静默、不落入 C2 误判）
+          const dec = decidableRequests(stateRef.current.approvalWindow)
+          if (dec.length === 1) {
+            const lastMsg = messagesRef.current[messagesRef.current.length - 1]
+            const tc = lastMsg?.toolCalls?.find((c) => c.approvalRequestId === dec[0].requestId)
+            if (tc) approveToolCall(lastMsg!.toolCalls ?? [], lastMsg!.toolCalls!.indexOf(tc), tc)
+          } else if (dec.length > 1) {
+            setApprovalHint('有多张待批授权卡——请在卡片上逐张指明批准')
+            setTimeout(() => setApprovalHint(''), 6000)
+          } else {
+            // 恰零＝窗未装配（旧档恢复卡/L3 mock 未供 id 过渡期）——保持旧行为全批兼容线
+            const lastMsg = messagesRef.current[messagesRef.current.length - 1]
+            if (lastMsg?.role === 'assistant' && lastMsg.toolCalls?.length) {
+              approveAllToolCalls(lastMsg.toolCalls)
+            }
           }
         }
         // 13 复跑入口：上报用户输入（真实交付包 rerunPrompt 用）
@@ -2741,6 +2782,19 @@ export default function ConversationPanel({
   // 2026-08-04 重构（用户：「搭档处理中」卡住根因）：按消息定位工具卡更新——原固定更新最后一条消息，
   // 续聊已追加新 streaming 消息时错位（工具结果回填错位 → maybeContinue 看不到 done → 链中断 + working 卡）
   // 2026-08-15 Q1b：工具授权 handler 封装（useToolApproval——批准/拒绝/记住/合并/回滚/停止）
+  // S7 拒绝生效后的副作用线（rejectApproval 兼容包装与 ADR-017 窗寻址 decideApproval 共用——ref 置位＋L2 当场 silent）
+  const applyApprovalRejectSideEffects = () => {
+    approvalWasRejectedRef.current = true
+    // L2：拒授权回调当场 silent（不等纯文本窗）；计 1 次，纯文本路径可再催一次
+    if (stateRef.current.planConfirmed && !approvalRejectImmediateNudgedRef.current) {
+      approvalRejectImmediateNudgedRef.current = true
+      approvalRejectNudgeCountRef.current = Math.max(1, approvalRejectNudgeCountRef.current)
+      const msg =
+        '【系统提示·非用户发言】上一工具授权已被拒绝。请改用无需高风险授权的只读核验，或再次请求授权后继续；有产出则立即调用 report_completion——不要停在文字说明。'
+      tlog('conversation.system_nudge', { kind: 'protocol', content: msg.slice(0, 200) }, 'system')
+      void sendRef.current?.({ silent: true, text: msg })
+    }
+  }
   const {
     approveToolCall,
     rejectToolCall,
@@ -2769,21 +2823,21 @@ export default function ConversationPanel({
       // ADR-015：进门在副作用之前——stale 点击（域门兜底 no-op）不复写拒绝标志/不注 nudge
       const eff = rejectApproval(request, reason, ans)
       if (!eff && ans) return
-      approvalWasRejectedRef.current = true
-      // L2：拒授权回调当场 silent（不等纯文本窗）；计 1 次，纯文本路径可再催一次
-      if (stateRef.current.planConfirmed && !approvalRejectImmediateNudgedRef.current) {
-        approvalRejectImmediateNudgedRef.current = true
-        approvalRejectNudgeCountRef.current = Math.max(1, approvalRejectNudgeCountRef.current)
-        const msg =
-          '【系统提示·非用户发言】上一工具授权已被拒绝。请改用无需高风险授权的只读核验，或再次请求授权后继续；有产出则立即调用 report_completion——不要停在文字说明。'
-        tlog(
-          'conversation.system_nudge',
-          { kind: 'protocol', content: msg.slice(0, 200) },
-          'system',
-        )
-        void sendRef.current?.({ silent: true, text: msg })
-      }
+      applyApprovalRejectSideEffects()
     },
+    // ADR-017 B4.2 窗面接线（hook B4.1 七方法→deps；slotBusy 在此计算——useToolApproval 无 stateRef）
+    requestApproval: (rec) =>
+      requestApproval(
+        rec,
+        ['goal', 'plan', 'resolution', 'system_clarify'].includes(stateRef.current.pending),
+      ),
+    decideApproval: (target, decision, by) => {
+      const eff = decideWindow(target, decision, by)
+      if (!eff) return false
+      if (!decision.confirm) applyApprovalRejectSideEffects()
+      return true
+    },
+    settleApproval,
     addTrust,
     acquireChain,
     maybeContinue,
@@ -3572,6 +3626,23 @@ export default function ConversationPanel({
           }}
         >
           {staleNotice}
+        </div>
+      )}
+      {/* ADR-017 B4.2：文本批准多卡提示（恰一基数 P-03——不静默；staleNotice 同形态 amber role=status） */}
+      {approvalHint && (
+        <div
+          className="nf-stalenotice"
+          role="status"
+          style={{
+            margin: '6px 12px',
+            padding: '6px 10px',
+            borderRadius: 8,
+            background: 'rgba(250,200,80,0.12)',
+            border: '1px solid rgba(250,200,80,0.45)',
+            fontSize: 13,
+          }}
+        >
+          {approvalHint}
         </div>
       )}
       {taskTrust.length > 0 && (

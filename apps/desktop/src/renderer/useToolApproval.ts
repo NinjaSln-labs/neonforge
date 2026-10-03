@@ -1,7 +1,7 @@
 // 工具授权 handler 封装（2026-08-15 Q1b——ConversationPanel 瘦身：批准/拒绝/记住/合并/回滚/停止）
 // 依赖注入（组件状态交织——setMessages/续聊链/流式 ref 经参数传入；不可变依赖走 deps）
 import type { ToolCallMsg, Msg } from './ConversationPanel'
-import type { ApprovalRequest, RejectReason } from '../domain/conversationState'
+import type { ApprovalRecord, ApprovalRequest, RejectReason } from '../domain/conversationState'
 
 /** 拒绝记忆 risk 分级（S7 P1-2——复用工具卡既有 risk 判定语义：bash 高危/其余 low-medium） */
 function classifyRiskForReject(tc: ToolCallMsg): 'low' | 'medium' | 'high' {
@@ -32,6 +32,14 @@ export interface UseToolApprovalDeps {
   grantPlan: (files: string[]) => void
   // S7（A0 审校 P1-2）：授权拒绝 → approvalDecided（§3.4 C6——拒绝记忆登记——同轮同类短封）
   rejectApproval: (request: ApprovalRequest, reason: RejectReason) => void
+  // ADR-017 B4.2 窗面（useConversationState B4.1 hook 方法；slotBusy 由组件装配处计算）
+  requestApproval: (rec: Omit<ApprovalRecord, 'state'>) => boolean
+  decideApproval: (
+    target: { requestId: string } | { batch: 'window' } | { batch: 'reject-rest'; keep: string[] },
+    decision: { confirm: true } | { confirm: false; reason: RejectReason },
+    by?: 'user' | 'rule',
+  ) => boolean
+  settleApproval: (id: string, outcome: 'done' | 'failed') => void
   // 任务信任（addTrust 定义于组件——依赖 rootPath/沙箱判定）
   addTrust: (args: Record<string, unknown>) => void
   // 续聊链
@@ -64,6 +72,9 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
     applyTool,
     grantPlan,
     rejectApproval,
+    requestApproval,
+    decideApproval,
+    settleApproval,
     addTrust,
     acquireChain,
     maybeContinue,
@@ -120,6 +131,13 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
 
   const approveToolCall = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg): void => {
     onApprovalAllow?.()
+    // ADR-017 B4.2 进门：窗决策先行（false＝闸 miss/stale 点击——不 patch 不复执行；关键改线 2）
+    const id = tc.approvalRequestId
+    if (id && !decideApproval({ requestId: id }, { confirm: true })) return
+    if (!id) {
+      // 旧档恢复卡/L3 mock 未供 id（C1/C2 前过渡）——走旧路径并观察，不静默
+      tlog('conversation.error', { kind: 'approval-id-missing', name: tc.name }, 'system')
+    }
     tlog('tool.approved', { name: tc.name }, 'system')
     tlog('card.resolved', { card: 'approval', action: 'approve', name: tc.name }, 'system')
     // #6 真机 2026-08-30（P1-5——用户点名设计违背）：write/edit 批准即文件级绑定（任务边界内同文件免重复授权）——
@@ -129,8 +147,14 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
     if (tc.name === 'write' || tc.name === 'edit') addTrust(tc.args)
     patchToolCall(idx, (c) => ({ ...c, status: 'pending' as const }), tc)
     void window.neonforge.tools
-      ?.execute?.(tc.name, tc.args, { approved: true, rootPath: rootPath ?? undefined, sessionId })
+      ?.execute?.(tc.name, tc.args, {
+        approved: true,
+        requestId: id, // ADR-017 B4.2：审批身份随行（main 执行闸——缺 id 旧路径过渡）
+        rootPath: rootPath ?? undefined,
+        sessionId,
+      })
       .then((r) => {
+        if (id) settleApproval(id, r.ok ? 'done' : 'failed') // 执行回写收敛（done 幂等/failed 入窗）
         const data = r.data as { file?: string; snapshot?: boolean } | undefined
         if (r.ok && data?.file) onToolResult?.({ name: tc.name, file: data.file, ok: true })
         applyTool({
@@ -178,9 +202,17 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
 
   const rejectToolCall = (calls: ToolCallMsg[], idx: number): void => {
     const tc = calls[idx]
-    // S7（A0 审校 P1-2 接线）：拒绝记忆登记（§3.4 C6——approvalDecided——同轮同类动作短封——
-    // canExecute 消费 deniedApprovals；pending 清除 + decisionContent 清理由转换承担）
-    if (tc) {
+    if (!tc) return
+    // ADR-017 B4.2（关键改线 3）：有审批身份→窗寻址进门（false＝闸 miss stale 点击——不 patch）；
+    // 无 id＝旧档卡→保持 rejectApproval 兼容线（取窗内最近可决记录——窗空即 no-op）
+    const id = tc.approvalRequestId
+    if (id) {
+      if (!decideApproval({ requestId: id }, { confirm: false, reason: { kind: 'direction' } })) {
+        return
+      }
+    } else {
+      // S7（A0 审校 P1-2 接线）：拒绝记忆登记（§3.4 C6——approvalDecided——同轮同类动作短封——
+      // canExecute 消费 deniedApprovals；pending 清除 + decisionContent 清理由转换承担）
       const subject = String(tc.args?.command ?? tc.args?.path ?? tc.args?.filePath ?? '')
       rejectApproval(
         {
@@ -193,16 +225,14 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
       )
     }
     // 2026-08-15 DDD 重建：授权拒绝事件（G2 缺口——原无打点，卡生命周期不可回放）
-    tlog('tool.rejected', { name: tc?.name, args: tc?.args }, 'system')
-    tlog('card.rejected', { card: 'approval', action: 'reject', name: tc?.name }, 'system')
-    setMessages((prev) => {
-      const last = prev[prev.length - 1]
-      if (!last || last.role !== 'assistant') return prev
-      const updated = (last.toolCalls ?? []).map((c, i) =>
-        i === idx ? { ...c, status: 'error' as const, result: '已拒绝授权——未执行' } : c,
-      )
-      return [...prev.slice(0, -1), { ...last, toolCalls: updated }]
-    })
+    tlog('tool.rejected', { name: tc.name, args: tc.args }, 'system')
+    tlog('card.rejected', { card: 'approval', action: 'reject', name: tc.name }, 'system')
+    // R6：patchToolCall id 定位（tc.id 分支精确定位——旧档无 id 走 name+args 兜底）
+    patchToolCall(
+      idx,
+      (c) => ({ ...c, status: 'error' as const, result: '已拒绝授权——未执行' }),
+      tc,
+    )
   }
 
   // 允许并记住（本次任务内此文件 write/edit 自动）——授权疲劳核心解法
@@ -227,6 +257,9 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
   }
 
   // 批准计划文件清单（追加语义 + 幂等标记 + 通知 main）
+  // ADR-017 B4.2（关键改线 5）：plan-batch 入窗——main 经 approval:issue 签发 id（唯一 id 来源），
+  // 先 requestApproval 建记录、相邻 decideApproval 进门批准（两调用同步相邻＝原子），再走原执行链。
+  // onClick fire-and-forget：链在 .then 内，签名保持 void。
   const approvePlan = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg): void => {
     onApprovalAllow?.()
     tlog(
@@ -238,21 +271,64 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
       'system',
     )
     tlog('card.resolved', { card: 'file-approval', action: 'approve' }, 'system')
-    const files = (tc.args.files ?? []) as Array<{ path: string }>
-    files.forEach((f) => addTrust({ path: f.path }))
-    grantPlan(files.map((f) => trustPath(f.path)))
-    // D3（ADR-005）：PlannedFiles 权威在 main——批准清单同步落盘（取代 tools.filesApproved）
-    void window.neonforge.plannedFiles?.add(files.map((f) => trustPath(f.path)))
-    patchToolCall(
-      idx,
-      (c) => ({
-        ...c,
-        status: 'done' as const,
-        result: `已批准 ${files.length} 个文件（本次任务自动放行）`,
-      }),
-      tc,
-    )
-    setTimeout(() => void maybeContinue(chatRef.current?.depth ?? 0, sessionRef.current), 150)
+    // 原样执行链（grantPlan＋plannedFiles.add 开清单门——G2：窗已记决定，此处只推进执行面）
+    const finish = (): void => {
+      const files = (tc.args.files ?? []) as Array<{ path: string }>
+      files.forEach((f) => addTrust({ path: f.path }))
+      grantPlan(files.map((f) => trustPath(f.path)))
+      // D3（ADR-005）：PlannedFiles 权威在 main——批准清单同步落盘（取代 tools.filesApproved）
+      void window.neonforge.plannedFiles?.add(files.map((f) => trustPath(f.path)))
+      patchToolCall(
+        idx,
+        (c) => ({
+          ...c,
+          status: 'done' as const,
+          result: `已批准 ${files.length} 个文件（本次任务自动放行）`,
+        }),
+        tc,
+      )
+      setTimeout(() => void maybeContinue(chatRef.current?.depth ?? 0, sessionRef.current), 150)
+    }
+    const subject = String(tc.args?.summary ?? '')
+    const issue = window.neonforge.approval?.issue
+    if (!issue) {
+      // 旧档/L3 mock 无签发通道——跳过窗步骤走原样链＋观察打点（与 approve 路径 approval-id-missing 同语义）
+      tlog('conversation.error', { kind: 'approval-id-missing', name: tc.name }, 'system')
+      finish()
+      return
+    }
+    void issue({ toolName: 'approve-files', subject, argsFingerprint: 'planbatch' })
+      .then((r) => {
+        if (!r?.ok || !r.requestId) {
+          tlog('conversation.error', { kind: 'approval-id-missing', name: tc.name }, 'system')
+          finish()
+          return
+        }
+        const id = r.requestId
+        // 顺序硬约束：入窗建立记录→紧接进门批准（闸要求 id∈窗且可决）
+        requestApproval({
+          requestId: id,
+          kind: 'plan-batch',
+          toolName: 'approve-files',
+          subject,
+          argsFingerprint: r.argsFingerprint || 'planbatch',
+          request: {
+            toolName: 'approve-files',
+            subject,
+            reason: '批量批准执行方案文件清单（本次任务内自动放行）',
+            risk: 'low',
+          },
+        })
+        if (decideApproval({ requestId: id }, { confirm: true })) {
+          // 审批身份写回卡（后续定位/恢复观察——patch 与 finish 各自独立寻址）
+          patchToolCall(idx, (c) => ({ ...c, approvalRequestId: id }), tc)
+        }
+        finish()
+      })
+      .catch(() => {
+        tlog('conversation.error', { kind: 'approval-id-missing', name: tc.name }, 'system')
+        finish()
+      })
   }
 
   // 快照回滚（write/edit 写前已快照——按 file 匹配更新）
