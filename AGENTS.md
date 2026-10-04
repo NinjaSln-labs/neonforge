@@ -42,7 +42,7 @@ python3 tools/desens-scan.py --selftest                                  # 脱�
 ## 内容落位
 
 1. 产品与领域设计（段 0–3 工件，现行唯一写入处）→ `docs/neonforgeV1.0.0/`（V1.0.0 射程；工作分支 `docs/neonforge-v1.0.0`）。
-2. 设计提案与阶段契约（段 4/5）→ `docs/design/`（stage-spec 进 `stage-specs/` 子目录）；收口跑 stage-gate。
+2. 设计提案与阶段契约（段 4/5）→ `docs/design/`（stage-spec 进 `stage-specs/` 子目录）。
 3. 实现计划（writing-plans 产物）→ `docs/superpowers/plans/`。
 4. 语义裁定与流程硬闸全文 → `docs/decisions/`（索引 `000-decision-log.md`）。
 5. 审计报告（横切独立审计产物）→ `docs/audits/`。
