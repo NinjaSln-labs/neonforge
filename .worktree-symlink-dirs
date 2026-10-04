@@ -1,9 +1,0 @@
-# neonforge 私有/未追踪目录：setup 时从源仓 symlink 进每个新 worktree（真源此文件在仓根）
-# 一行一个；# 开头注释。加目录后新开 worktree 生效（旧 worktree 手动 ln -s 一次）。
-research
-.scratch
-audit-report
-test-results
-aliment
-docs/design/research
-scripts
