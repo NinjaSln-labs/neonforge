@@ -33,5 +33,5 @@ python3 "$HOME/.agents/skills/project-handoff/scripts/handoff.py" check  # 交�
 4. 阶段契约 → `docs/design/stage-specs/`；收口跑 stage-gate（按对应 DoD）
 5. 语义裁定与流程硬闸全文 → `docs/decisions/`
 6. 覆盖矩阵 → `docs/tests/coverage-matrix.md`
-7. 阶段评审审计 → `docs/audits/`；产品文档审计 → `docs/PRODUCT-DOC-AUDIT.md`（历史同目录 `r*`）；本机审计草稿 → `.scratch/neonforge-v1/audit-items/`
+7. 阶段评审审计 → `docs/audits/`；产品文档审计 → `docs/PRODUCT-DOC-AUDIT.md`（历史同目录 `r*`）；本机审计草稿 → `.scratch/neonforge-v1/audit-items/`；**交接台账经验汇总（只留可迁移部分，属经验不属依据）→ `docs/experience/`**
 8. 私有本机 → `.git/info/exclude`，**`.handoff/` 交接台账在内＝本地私有、禁止入库**（用户 2026-10-05 裁定；调阅走 CLI：`view`／`log`／`next`／`check`）；旧交接 → `.handoff/legacy/`；环境例外 → `.handoff/pitfalls/<domain>.jsonl`（ops / e2e / mac / wsl / uat）
