@@ -1,0 +1,35 @@
+# ADR-014：决策点代次绑定与 C2 输入归属精化（β 修法·领域忠实口径）
+
+- 状态: accepted（用户 Q1-Q4 定方向 + 第八轴依领域模型对余下待决项 §3-D1/D2/D4/D10 自裁；执行修批仍待用户 gate，见 v4 §9）
+- **后继部分反转（2026-10-04·ADR-018）**：**残留①（回声可见性＝保留气泡＋`role:'user'`）被 ADR-018 C1 反转**——回声不再是发言（正文不回改，遵 ADR-016 代价条款）。**#1「保留 C2」仍成立但承载变更**：C2 的「新自由文本 pivot」语义不动，`isConfirmIntent` 词表作为决策入口的资格由 ADR-018 C2／`product/00 §4.5` 收回，改由显式出口承载（`sysPrompt.ts` 规则 ⑳ 早已规定「确认只走按钮」，本次是 ⑳ 的产品化接管）。**#2「回声退用户决策通道」的退通道部分继续有效、保留气泡部分作废**。其余条目不受影响。
+- 日期: 2026-10-02
+- 相关: `docs/design/intent-confirmation-domain-design.md` §3.4（C2 归义 L215）/§3.1（decisionContent）/§4（不变量 1/2/7）/§4.1（协商保护）；`docs/domain/00-domain-authority.md` §3.2/§3.4（不变量 1）；`docs/decisions/001-rejectstreak-semantics.md`（**确认**，非取代）；`docs/decisions/006-goal-reconfirm.md`（**确认**，非取代）；`docs/decisions/013-partner-busy-and-silent-channel.md`（回声通道）；`docs/audits/plan-review-decision-epoch-binding-2026-10-01.md`（四轴）；`docs/audits/ddd-model-review-decision-epoch-binding-2026-10-02.md`（第五轴·领域）；`docs/audits/independent-audit-v3-2026-10-02.md`（第七轴·证伪 v3 五处）；`docs/audits/independent-audit-v4-2026-10-02.md`（第八轴·v4 待决项领域裁定）；现行实现方案 **`docs/superpowers/plans/2026-10-02-decision-point-instance-addressing-fix-v5.md`**（九轴综合·模型修订为主轴，取代 v1/v2/v3/v4）；`docs/superpowers/plans/2026-10-02-decision-input-attribution-fix-v4.md`（v4，历史）；`docs/superpowers/plans/2026-10-02-decision-input-attribution-fix-v3.md`（v3，历史）、`2026-10-01-decision-epoch-binding-fix.md`（v1，历史）、`2026-10-02-decision-input-attribution-fix-v2.md`（v2，历史）；handoff `d000012`–`d000020`、`t000071`
+
+## Context
+
+β（stale 输入冲卡）：点「确认执行」后产品自发的按钮回声「确认，按方案执行」在 busy 期入单槽、迟到 flush，被 `ConversationPanel.tsx:2460-2464` 的 C2 路由判为方向性拒绝，清空刚弹出的决策点，毁收口。四轴审计（`plan-review-...-2026-10-01.md`）判 v1 GO-with-fixes，并建议 ⓪ **废止 C2**（「任意非确认文本＝隐式方向拒」）+ 翻转 S7-1 断言。
+
+第五轴（领域模型）独立取证发现：C2 是领域权威 `intent-confirmation-domain-design.md:215` 明文规定的**「改变意图的新自由文本 → reject(direction) + 新 GoalProposal，全走 userDecided」**，并被两条 accepted ADR 直接依赖——`ADR-006`（打字换目标通道逐字「由现有 C2 分流」）、`ADR-001`（rejectStreak「随新提议重置」定义在 C2 语义上）；且承载不变量 1「用户决策是下一状态唯一输入」。废止 C2 会同时打断这三条契约。
+
+真正的领域级病根是 **C2 分类器的输入越界**：实现把「回声 / 问句 / 新意图」三类塌缩成「任何非确认词＝方向拒」。为回声设计的豁免 `isDecisionCardEcho`（`agentLoop.ts:55-64`，commit `8210c14`）注释逐字写着「迟到时不得走 C2 隐式拒」，却**全仓零消费者＝从未接线**。S7-1（`cards-from-decision-content.interaction.ts:563`）输入 `换个思路，做桌面版` 是教科书级真新意图，其 pivot 断言是领域**正确**行为，翻转即制造回归。
+
+## Decision
+
+用户 Q1-Q4 裁定：采纳领域修订方向。本 ADR 定（**第六轴独立审计 `independent-audit-v2-and-fifth-axis-2026-10-02.md` 已就地修订 #1/#2/#3，见各条「审计修订」注**）：
+
+1. **保留 C2**（不改 `intent-confirmation-domain-design.md:215` 的语义），**不取代** `ADR-006`、`ADR-001`（二者正文零改动，本 ADR 仅确认其成立）。四轴 ⓪「废 C2」判否。
+   - **审计修订（R1 降级）**：第六轴证伪「废 C2 打断三条契约」——不变量 1（文本不改 pending＝无状态转换，平凡成立）、ADR-006（主机制＝模型标记弹卡，C2 仅自由文本子通道）、ADR-001（rejectStreak 源无关、重置侧不依赖 C2）**机制均不受伤**；废 C2 只需**勘误级**文档同步。**保留 C2 的正确依据**改为：领域 `intent-design:215` 显式规定「新意图文本→pivot」是已裁设计选择，四轴废它的理由（外部 harness 无此语义）非领域缺陷——改它才是契约变更。用户 Q1 裁定不变，依据改订。
+2. **Task 0.5 — 回声不进用户决策通道（主刀·零契约风险）**〔**审计修订：由"接线 3 串 `isDecisionCardEcho`"升级为"send 来源标记"**，因第六轴 X1 实证 `DECISION_CARD_ECHO` 仅覆盖 3/6 回声、串表脆弱〕：产品按钮自发的回声（`ConversationPanel.tsx:3000/3018/3075/3095/3134/3436-3439 confirmText`）在**定义上不是用户答复**——其决策已由按钮路径经 `userDecided`/`onPlanConfirmed`（`:3444`）落定，回声纯是告知模型续跑的信息。故：给 `send` 加来源标记（`opts.echo`/`from:'button-echo'`），按钮站点统一打标，路由块以 `if (opts.echo) → 整体旁路用户侧效应：不进 C2 分类、**不写 `conversation.message_sent`（`:2486`）、不调 `noteUserTextReply`（`:2488`——否则虚增 T2 `unresolvedTextReplies`污染`detectUnproductiveDialogue` `:2452-2457`）**，但仍驱动一次续跑轮`（v3 直读补计回声站点为 8 处 `:3000/3018/3075/3095/3134/3446/3468/3496`，含强制卡两按钮）。`isDecisionCardEcho` 串表降为兜底/可删。**处置不能是"丢弃"**（回声驱动续跑，丢弃＝误拒变停滞），须"进系统/续跑通道"；回声是否改 silent（触 `ADR-013` + T-FORCE-2 可见性）留终审。
+3. **代次绑定（decisionEpoch）＝归属精化，非 C2 替代**〔**⚠️ 本 #3 的递增判据已被 ADR-015 v2「取代」**：终审 `final-review-adr015-v5` 判"绑用户行为·setPending 永不递增"自相矛盾、关不上第九轴同 kind 迟到确认命门。ADR-015 v2 改为**双概念**（决策点槽 kind/rejectStreak ⊥ 决策点实例 instanceId），实例只在 `setPending` 按**结构化签名变化**推进，`userDecided`/`approvalDecided`/`clearPending` 不再叠 epoch。014 其余裁定（#1 保留 C2、#2 回声退通道、#5 控件守卫）不变。以下原文保留作历史。〕〔**审计修订：换代判据由"内容实质变化"改绑"用户行为"**，因第六轴 §2 实证原判据与 `ADR-001`「重提议＝同一决策点延续」冲突、且 LLM summary 必变使"同代次"成死代码、误作废有效答复〕：`decisionEpoch` 作 `ConversationState` 单调计数与 `decision.requested` 事件载荷字段；**换代发生在每个 `pending→'none'` 转换**（`userDecided` confirm/reject 含 goal 任务边界，**及 `approvalDecided`/`approvalGranted`/`clearPending`**——第七轴 F-B：仅 userDecided 会漏授权族重开合同致迟到 approval 答复误命中新授权卡）——`setPending` 重提议**永不**换代（对齐 `ADR-001`）。四轴 C3 照样解。应用点 `send` pending 路由加**归属门**：答复目标代次 ≠ 当前代次 → **作废**（不 confirm/reject 当前无关决策点），发可见事件；相符且非回声非问句 → **照旧走 C2**。
+4. **问句不作方向拒（第八轴 §3 已裁·纳入本批）**：`isQuestionLike(text)`（`agentLoop.ts:48-50`，现成 helper，复用优先）命中 → 不判方向拒（问句≠改变意图，领域 `:215` 限定"新自由文本改变意图"）。无附加冻结层——问句轮内模型仍受 `sessionGate`/`pendingBlocked` 按状态强制冻结（不违不变量 1/3）；`noteUserTextReply` 计入问句属 A-024 升级网语义，不改。
+5. **控件守卫（域忠实、零契约风险、可先行）**〔**⚠️ 本 #5 kind 守卫已被 ADR-015 v3 单扇身份门「取代」**：终审判 014#5 与 015 身份门并存＝双源矛盾（X5），且 015 门无 `point!=='system_clarify'` 例外更安全（避 `conversationState.ts:164-165` 递归委派落空 TypeError）、含 `pending!=='none'` 前置放行任务边界 goal-confirm（护 `:748`）。故 userDecided 首行只留 015 单门、不再并列本 kind 守卫。以下原文保留作历史。〕：`conversationState.ts:149-171` `userDecided` 加守卫 `if (s.pending !== 'none' && point !== 'system_clarify' && point !== s.pending) return s`——`pending!=='none'` 前置（第七轴 F-A：否则挡掉 `:748` goal-confirm 任务边界重置，破既有测试）。把控件点击拉回不变量 1（用户决策唯一输入）+ 不变量 7（会话级单一 PENDING）：**有活 pending 时**点旧卡不得清空当前决策点；无活 pending 时任务边界确认照常。
+6. **新事件登记**：`conversation.stale_input_discarded`——**不扩 `domain` 枚举**（`conversation` 已在），但**须加 `TimelineEventType` union 成员 + `TIMELINE_EVENT_SPECS` 一条**（`Record<TimelineEventType,…>` 强制双写，第七轴 F-D），三步登记（union→tlog→测试），载荷 `kind/pending/wantEpoch/curEpoch`；先对齐第五轴审计 R6（名↔载荷一致）再落。
+7. **S7-1 保持不变**；β 回声路径**另立用例 T-ECHO-1**（回声撞新决策点 → 卡不被误拒/误确认）。
+8. **不新增打字拒绝词表**：领域拒绝＝显式三态（卡片按钮 + `RejectReason`，`intent-design §7.1#2`）；C2 保留即已承载「打字『取消/算了』＝ direction pivot」，专门词表冗余（四轴 D1 升格的"词表存在性"裁决 → 判否，答案＝不存在独立词表）。
+
+## Consequences
+
+- **正面**：β 主要生产者（回声，全部 6+ 站点经来源标记）在非用户通道被分流；stale 代次答复被归属门作废而非误杀当前决策点；控件点击回归单一 PENDING；`ADR-001/006`/不变量 1 全链路不受扰动。（第五轴 S7-1 冲突 R2 消解；头号论据 R1「废 C2 打断三契约」经第六轴降级为"改它需勘误/契约同步"——保留 C2 的领域依据独立成立，见 Decision #1 审计修订。）`rejectStreak`/协商保护/换目标通道语义完整保留（v1 D11 的"梯度另立载体"改动作废）。
+- **残留 / 范围（第八轴定）**：① 回声可见性＝保留气泡 + `role:'user'`，仅退 C2/`message_sent`/`noteUserTextReply`（备选完全 silent 否——翻转 ≥4 交互契约）。〔2026-10-04 历史注：本项被 ADR-018 C1 反转；「≥4 交互契约」已实证为 **5 处载体**——`core.interaction.ts:1023`＋:1020 注、`cards-from-decision-content:55` 与 `:80`、`factory.self.interaction.ts:59`、原 `sysPromptConfirmWords.test.ts:26`。〕② **approval「允许」异步旁路**（`useToolApproval.ts:121-177` 不走领域、`ConversationPanel.tsx:317-328` effect 清 pending）＝即存不变量 1 违例，**但非 β 真身**（β＝plan→resolution，`uat-ghost-busy-remeasure:108-116`）→ 另开**叶因批 t000073**（allow 走 `approvalDecided({confirm:true})` 同步领域化；只在 Conversation BC，不碰 main 执行层＝不越 `intent-design:5`）。③ C2 coarse 尾巴（「等下」/问句式改意图）判可接受。回声通道是否改 silent 属契约变更——本批按推荐档不改。
+- **批次（领域最小安全单元）**：Task 0.5 接线 + 控件守卫可**先行且零契约风险**；decisionEpoch 归属门为增量。执行前须补第 3 次 L3 运行达 N≥3 稳定红（`u000010`），`t000069` 是否并入 `core:161`（第 4 稳定红）另裁。
+- **若后续产品仍决意废止 C2**：则本 ADR 作废，须另起领域重设计——重写 `intent-design §3.4` + supersede `ADR-006`、`ADR-001` 重置侧 + 重表达不变量 1 输入路由，超出 β 单批范围（第五轴 §5 回溯：标记需人工介入架构决策）。

@@ -1,14 +1,14 @@
 # UAT 四档任务基线（与人格轴正交）
 
 > 2026-09-28 · 能力 × 旅程 × 真实用户活合成易→难四档；驱动固定 **中性**（`PERSONAS.neutral`）。  
-> 人格轴（急躁/挑剔/越界/查网）见 `run-uat-personas.sh`，**另表保留**，不做 4×4 全矩阵。
+> 人格轴（确认/授权/节奏/意图/收口/边界）见 **`run-uat-persona-pool.sh`**（抽 12，`docs/tests/uat-persona-pool.md`）；legacy 固定轮 `run-uat-persona-rounds.sh` / `run-uat-personas.sh` 保留对照。
 
 ## 两轴关系
 
 | 轴 | 入口 | 测什么 |
 |----|------|--------|
 | **任务**（本基线） | `bash scripts-cdp/run-uat-tiers.sh` | 任务类型难度梯度能否交付 |
-| **人格**（另表） | `bash scripts-cdp/run-uat-personas.sh` | 同一类待办/作品集下人设压力 |
+| **人格**（另表） | `bash scripts-cdp/run-uat-persona-pool.sh` | 确认/授权/节奏/意图/收口/边界（分层抽 12） |
 
 ## 四档
 

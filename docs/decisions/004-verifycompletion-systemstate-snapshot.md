@@ -7,12 +7,14 @@
 ## Context
 
 设计 §3.3 的 verifyCompletion 扩展要求：
+
 - V1a：对 claim.evidence.verification[].command 中声明 passed 的命令，系统重新执行一次只读验证命令核对输出
 - V1b：claim.evidence.diffs 由系统从 plannedFiles/producedFiles 派生比对（非模型自述）
 
 实现时面临签名设计选择：**领域层直接执行代跑（异步）vs 领域层消费系统已核验的同步快照**。
 
 初步尝试前者（`runVerificationCommand` 返回 Promise + fire-and-forget 写入 missing）——发现破坏领域层纯函数性质：
+
 - verifyCompletion 是 L1 可测的纯判定函数（不变量 4 单源——ADR-003），引入异步执行后返回语义分裂（同步对象 + 异步副作用），断言时序不确定
 - 代跑执行是 IO（子进程/网络），按 DDD 分层属应用层/适配器职责，不属领域层
 
