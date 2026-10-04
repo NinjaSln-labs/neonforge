@@ -1,6 +1,6 @@
-# 段2 · 领域战略设计（draft v0.5）
+# 段2 · 领域战略设计（frozen v1.0）
 
-- 状态：**draft v0.5 — U1–U5 用户亲裁（2026-10-05）；三轮独立审计（首轮 G-01–G-18、复审 H-01–H-10、第三轮 K-01–K-06）全部发现已采纳修入；待用户终裁出口**
+- 状态：**frozen v1.0 — U1–U5 用户亲裁（2026-10-05）；三轮独立审计（首轮 G-01–G-18、复审 H-01–H-10、第三轮 K-01–K-06）全部发现已采纳修入；段2 出口＝用户终裁通过（2026-10-05）**
 - 修订对照：`docs/audits/stage2-domain-strategy-independent-audit-2026-10-05.md`（首轮）＋`docs/audits/stage2-domain-strategy-reaudit-2026-10-05.md`（复审）＋`docs/audits/stage2-domain-strategy-audit3-2026-10-05.md`（第三轮）；正文不复述审计编号
 - 上游工件：`01-l0-product-master.md`（段1 frozen v1.0）、`00-problem-and-scope.md`（段0 frozen v1.0，§4 术语种子 12 条谓词定义权在本段）
 - 经验层（只作经验不作依据，引用带 `@be6e299`）：旧树 `00-domain-authority.md` §3.7/§3.8（轮次与焦点两轴）、`10-model-evolution-turn-and-driver.md`（Turn/Round 概念集与病灶成因）
