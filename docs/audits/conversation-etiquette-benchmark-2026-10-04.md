@@ -1,7 +1,7 @@
 # 对话回合礼仪对标证据集（product/00 §4.5 的外部锚点）
 
 日期：2026-10-04 ｜ 触发：§4.5 落笔后用户裁「调研＋审计是否还有缺」
-关系：契约正文＝`docs/product/00-product-design.md` §4.5（C1–C12）；裁定与前提台账＝`docs/decisions/018-conversation-turn-etiquette.md`。**正文不复制本文件的证据细节**（防双源），只引用本附件。
+关系：契约正文＝`docs/product/00-product-design.md` §4.5（C1–C13，版本 2.4）；裁定与前提台账＝`docs/decisions/018-conversation-turn-etiquette.md`。**正文不复制本文件的证据细节**（防双源），只引用本附件。
 
 证据分级：**〔源〕**＝竞品源码 file:line ｜ **〔录〕**＝官方文档/更新日志 ｜ **〔忆〕**＝凭印象（不得作为立据）。
 竞品源码库＝`/mnt/f/neonforge-competitors`（22+ 仓库，本机可达）；仓内既有同源调研＝`research-busy-scope-interrupt-vs-queue-2026-10-01.md`、`approval-model-competitor-source-survey-2026-10-03.md`。
@@ -35,6 +35,8 @@
 | C2  | Claude Code/Codex 把活卡期打字归给当前卡                                               | 打字＝补充信息，改意图须显式出口                         | **有意**——对齐领域原则 `02 §4.6`「非确认词匹配」与 sysPrompt ⑳；同路线有 Cline |
 | C1  | Codex 明示 Decline 后当前回合继续（〔源〕`item.rs:81` "agent will continue the turn"） | 决策落定后不存在"用户该再说一次"的义务；回声退出用户气泡 | **有意**——反转对象是本仓 ADR-014 残留①，非竞品主流                             |
 | C4  | 短状态行/独立面板/通知                                                                 | 对话流内折叠披露条                                       | **超前而非相反**（无先例，形态自担）                                           |
+| C13a | Codex `NotSubmitted` 可"declines the input **without recording or enqueueing** it"；OpenAI Realtime 直接回 "Conversation already has an active response" | 对用户输入**不存在**不受理；作废仅限已失效的内部投递，且必走 `conversation.stale_input_discarded` 可见出口（§4.5 C13a） | **有意**——C3「任何一态都不得丢弃输入」是底线；Codex 该语义的作用域是 agent↔agent 提交面，不是礼仪面 |
+| C13  | Codex `max_concurrent_threads_per_session`、Claude Code Agent Teams、Cursor `/multitask`、A2A 多 Task——多回合序列并发制度化 | V1 **一条链完整解决问题**：会话内单链、准入只有「排队」；折入＝V1.5、子执行与并发＝V2 | **有意（用户裁定 2026-10-04）**——并发合法性的证据只用于确定"约束的单位是回合序列"，**不得当作 V1 范围依据** |
 
 ## 4 审计副产物：仓内冲突面（§4.5 落地会打到的既有断言）
 
