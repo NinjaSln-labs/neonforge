@@ -439,7 +439,7 @@ V1 提供最小上下文控制：
 | a11 | 提交失败（请求被中止/网络变更）→ 该条消息呈失败态＋可重试出口，且**不自动重发**                                                  | L3            |
 | a12 | 压缩发生时对话流有压缩标注 1 条；活卡的决策内容不因压缩丢失                                                                      | L3            |
 
-**派生待办（登记不入本节）**：① 新组件"系统轮披露条"与"排队中徽标"、"过期卡态"、"消息四态指示"的视觉规格待补 `02-components.md`/`05-visual-spec.md`；② `01-user-flows.md` 输入流与 `07-success-metrics.md` 指标口径待随实现同步；③ 阶段 C 的 Turn 建模与身份 doctrine 统一（见 ADR-018 下放清单）；④ C7「转向」为 V1.5 范围项，落地前不进 DoD；⑤ 竞品对标证据见 `docs/audits/conversation-etiquette-benchmark-2026-10-04.md`。
+**派生待办（登记不入本节）**：① 新组件"系统轮披露条"与"排队中徽标"、"过期卡态"、"消息四态指示"的视觉规格待补 `02-components.md`/`05-visual-spec.md`；② `01-user-flows.md` 输入流与 `07-success-metrics.md` 指标口径待随实现同步；③ 阶段 C 的 Turn 建模与身份 doctrine 统一（见 ADR-018 下放清单；拓扑裁定与批次划分见 ADR-019）；④ C7「转向」为 V1.5 范围项，落地前不进 DoD；⑤ 竞品对标证据见 `docs/audits/conversation-etiquette-benchmark-2026-10-04.md`。
 
 ---
 
