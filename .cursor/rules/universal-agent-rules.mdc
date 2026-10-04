@@ -1,12 +1,6 @@
 ---
-description: 流程类规则须落 AGENTS/ADR，禁止只写成 Cursor 私货
+description: 指针——全 agent 规则入口在仓库根 AGENTS.md
 alwaysApply: true
 ---
 
-# 规则落位（写 rule 时先读）
-
-本文件是 Cursor 提醒，不是流程权威正文。
-
-写流程或硬闸时：全文进 docs/decisions/；AGENTS.md 只留引用；本目录只留一行指针到 AGENTS.md。
-
-判定：关掉 Cursor 后约定消失 → 落位错了。见 AGENTS.md 通用规则第 6 条与内容落位第 5 条。测完再修 = ADR-012。
+见仓库根 `AGENTS.md`（规则落位：全文在 AGENTS.md 与 `docs/decisions/`，本目录只留指针）。

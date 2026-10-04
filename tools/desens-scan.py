@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""入库前脱敏闸（AGENTS.md 第 7 条）——只扫本次暂存的**新增行**。
+"""入库前脱敏闸（AGENTS.md 脱敏条）——只扫本次暂存的**新增行**。
 
 用法：python3 tools/desens-scan.py [--selftest]
 命中即 exit 1（lefthook pre-commit 调用）。豁免：docs/frozen-be6e299/ 逐字冻结件、本脚本与 lefthook.yml（规则自身含样本）。
@@ -96,7 +96,7 @@ def main():
     hits = staged_added_lines()
     if not hits:
         return 0
-    print(f'脱敏闸拦下 {len(hits)} 处（AGENTS.md 第 7 条：本仓 PUBLIC，入库前不写机器标识与凭据）：\n')
+    print(f'脱敏闸拦下 {len(hits)} 处（AGENTS.md 脱敏条：本仓 PUBLIC，入库前不写机器标识与凭据）：\n')
     for f, ln, cat, s in hits[:20]:
         print(f'  {f}:{ln}  [{cat}]  {mask(s)}')
     if len(hits) > 20:

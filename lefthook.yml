@@ -9,7 +9,7 @@ pre-commit:
       root: apps/desktop
       glob: '*.{ts,tsx,mjs,js,json,md,yml,yaml}'
       run: npx lint-staged
-    # AGENTS.md 第 7 条脱敏闸：只扫本次暂存的新增行，脚本自取索引（不依赖 {staged_files} 的路径形状）
+    # AGENTS.md 脱敏闸（规则见 AGENTS.md 脱敏条）：只扫本次暂存的新增行，脚本自取索引（不依赖 {staged_files} 的路径形状）
     desens:
       glob: '*.{md,ts,tsx,mjs,cjs,js,json,yml,yaml,py,sh,toml}'
       run: python3 tools/desens-scan.py
