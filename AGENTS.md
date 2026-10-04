@@ -24,6 +24,7 @@ npm run e2e   # 依赖 /tmp/nf-e2e-test（入口会建）；改 main/preload 后
 
 # cwd: 仓库根
 python3 "$HOME/.agents/skills/project-handoff/scripts/handoff.py" check  # 交接门禁
+python3 tools/desens-scan.py --selftest                                # 脱敏闸自检（pre-commit 同一条）
 ```
 
 ## 内容落位
