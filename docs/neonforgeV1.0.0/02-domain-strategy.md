@@ -1,6 +1,6 @@
-# 段2 · 领域战略设计（frozen v1.0）
+# 段2 · 领域战略设计（frozen v1.1）
 
-- 状态：**frozen v1.0 — U1–U5 用户亲裁（2026-10-05）；三轮独立审计（首轮 G-01–G-18、复审 H-01–H-10、第三轮 K-01–K-06）全部发现已采纳修入；段2 出口＝用户终裁通过（2026-10-05）**
+- 状态：**frozen v1.1 — v1.0 于 2026-10-05 用户终裁通过（U1–U5 亲裁＋三轮独立审计 G/H/K 34 条全闭环）；v1.1＝用户授权回补（2026-10-05，来源＝段3 第三轮审计发现的上游缺口：弃委托路径无事件/命令承载，而 §4 委托状态机已列"已放弃"终态）——§1.1 增 X9 DelegationAbandoned、§1.2 增 AbandonDelegation、§1.3 同步，事件闭集 21→22；其余条文与 v1.0 逐字相同。缺口出处＝`docs/audits/stage3-domain-tactics-audit3-2026-10-05.md`**
 - 修订对照：`docs/audits/stage2-domain-strategy-independent-audit-2026-10-05.md`（首轮）＋`docs/audits/stage2-domain-strategy-reaudit-2026-10-05.md`（复审）＋`docs/audits/stage2-domain-strategy-audit3-2026-10-05.md`（第三轮）；正文不复述审计编号
 - 上游工件：`01-l0-product-master.md`（段1 frozen v1.0）、`00-problem-and-scope.md`（段0 frozen v1.0，§4 术语种子 12 条谓词定义权在本段）
 - 经验层（只作经验不作依据，引用带 `@be6e299`）：旧树 `00-domain-authority.md` §3.7/§3.8（轮次与焦点两轴）、`10-model-evolution-turn-and-driver.md`（Turn/Round 概念集与病灶成因）
@@ -37,8 +37,9 @@
 | X5 | StallDetected（卡滞已检出） | DetectStall | 系统 | 无新时间线事件的时间窗→卡滞事件（护栏②采点） | 干预方式归段3（催/停/弃）；转等用户的并入等待项第三类 |
 | X6 | SessionInterrupted（会话已中断） | —（崩溃/重启） | 系统 | 在飞态→中断事实**留痕**（U5 裁定：在飞模型流丢失，中断点与丢失范围作时间线条目） | 恢复→X7 |
 | X7 | DelegationRestored（委托已恢复） | RestoreDelegation | 系统 | 持久化态→断点续（原则3；账本断点续，字节流不承诺） | 恢复失败＝违反原则3 的事故（护栏③采点） |
+| X9 | DelegationAbandoned（委托已放弃） | AbandonDelegation | 用户 | 放弃请求→Delegation 终态"已放弃"；在飞轮终态＝中止（事件驱动消费，战术形状归段3） | 委托已处终态→拒绝（幂等守卫） |
 
-覆盖校验：主路径 M1–M10（含 M3a；**M4 已撤编**）＋异常路径 X1–X8（含 X1a/X3a/X4a）＝**21 事件，与 §1.3 双向对齐**。
+覆盖校验：主路径 M1–M10（含 M3a；**M4 已撤编**）＋异常路径 X1–X9（含 X1a/X3a/X4a）＝**22 事件，与 §1.3 双向对齐**（v1.1 回补 X9 后口径）。
 
 > M4 撤编说明：时间线记录（RecordTimelineEvent）是**持久化机制而非领域事件**——"记录行为自身"若登记为事件将无限自指回归；其"记录失败＝违反原则1 的事故"条款移 §1.4 强一致性点②。M4 编号留空位不复用（稳定两轮历史审计报告的位置引用）。
 
@@ -53,6 +54,7 @@
 | AmendScope | 用户（AI 可提请，批准权仅用户） | 作用域新版本，旧版本可溯 | 幂等（同修正请求 id） |
 | InspectEvidence | 用户 | 核验动作被记录 | 非幂等无所谓（计数类） |
 | AcceptDelegation / RejectAcceptance | 用户 | 收尾/原单重开留痕 | 幂等（终态守卫） |
+| AbandonDelegation | 用户 | 委托终态"已放弃"，在飞轮中止 | 幂等（终态守卫） |
 | ClaimCompletion | AI | 完成声称带证据引用 | 幂等 |
 | ApplyChange | AI（受托人） | 作用域校验通过后的变更产出 | 幂等（同变更 id） |
 | RaiseDecision | AI/系统 | 决策点存在且有归宿 | 幂等（同请求 id） |
@@ -86,8 +88,9 @@
 | StallDetected | 时间窗、最后事件 id | 是（→度量护栏②） | 否 |
 | SessionInterrupted | 中断点、丢失范围 | 是（→度量护栏③） | 否 |
 | DelegationRestored | 恢复结果 | 是（→度量护栏③） | 否 |
+| DelegationAbandoned | 委托 id、放弃时点、在飞轮处置（中止） | 是（→呈现/度量） | 否 |
 
-（"对外发布＝否"全体一致＝L0 原则6 本地优先的领域投影；timeline 事件流为唯一采点面，L0 §4。本清单与 §1.1 双向对齐：21 事件两名一致、无合并行——口径＝§1.1 M4 撤编后。）
+（"对外发布＝否"全体一致＝L0 原则6 本地优先的领域投影；timeline 事件流为唯一采点面，L0 §4。本清单与 §1.1 双向对齐：22 事件两名一致、无合并行——口径＝§1.1 M4 撤编＋v1.1 回补 DelegationAbandoned 后。）
 
 ### 1.4 热点标注（一致性热点为登记性描述，不变量条文归段3）
 

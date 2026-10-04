@@ -1,6 +1,6 @@
-# 段3 · 领域战术设计（draft v0.4）
+# 段3 · 领域战术设计（draft v0.5）
 
-- 状态：**draft v0.4 — 三轮独立审计（首轮 FAIL T-01–T-24／复审 R3-01–05＋T-16 副作用／第三轮 R3B-01–08）全部采纳修入；R3B-04 弃委托事件缺口＝段2 上游缺口已报用户裁定；待用户裁审计结论＋AI 过闸备案**
+- 状态：**draft v0.5 — 三轮独立审计（首轮 FAIL T-01–T-24／复审 R3-01–05＋T-16 副作用／第三轮 R3B-01–08）全部采纳修入；R3B-04 弃委托缺口经用户授权已回补段2（frozen v1.1，事件 21→22）并同步本稿；待用户裁审计结论＋AI 过闸备案**
 - 修订对照：`docs/audits/stage3-domain-tactics-independent-audit-2026-10-05.md`（首轮）＋`docs/audits/stage3-domain-tactics-reaudit-2026-10-05.md`（复审）＋`docs/audits/stage3-domain-tactics-audit3-2026-10-05.md`（第三轮）；正文不复述审计编号
 - 上游工件：`02-domain-strategy.md`（段2 frozen v1.0）、`01-l0-product-master.md`（段1 frozen）、`00-problem-and-scope.md`（段0 frozen）
 - 经验层（只作经验不作依据，引用带 `@be6e299`）：旧树 ADR-021 Turn/DriverLease 概念集、ADR-019 同步取消令牌与"已作废链写入计数为 0"判据、`00-domain-authority.md` §3.7/§3.8
@@ -17,16 +17,16 @@
 | 3 | 焦点派生规则 | **deriveFocus 纯函数**：焦点候选＝前三类等待项（待拍板＞待核验＞待用户指令），同类取创建序最早者；**排队中不占焦点**（等的是系统空槽非用户动作，只保可见位置）；三类皆空时**焦点为空**（不退化指排队中）。焦点＝"下一步用户动作"的呈现指向（段2 谓词），派生不落存储 | §8 领域服务 |
 | 4 | 等待项四类聚合归属 | **无独立聚合**：等待项＝派生读模型（待拍板←DecisionPoint 未决、待核验←Delegation 有效声称、待用户指令←Turn 拒绝态/中断态/**卡滞待指令态**、排队中←InstructionQueue 未准入）。**等待闭集计算上提为共用纯函数模块**（无状态、不属任一子域；呈现投影与度量采点各自调用，两域互不依赖——段2"互不依赖"约定的落实）；I-9 在该投影上校验 | §8 deriveWaitingItems |
 | 5 | 卡滞窗实现位 | **推进驱动域 StallDetector**（领域服务）：周期性检视，StallSpec＝在飞轮存在且窗内零新 timeline 事件⇒发布卡滞；实现位（定时器形态/进程落点）归段5/6 详设；阈值常量由段4 stage-spec 校准（L0 §4 既定） | §8、§9 |
-| 6 | 事件载荷字段与不变量条文 | §5 事件目录（21 事件逐条载荷键）＋§4 不变量表（I-1–I-17）成文 | §4/§5 |
+| 6 | 事件载荷字段与不变量条文 | §5 事件目录（22 事件逐条载荷键）＋§4 不变量表（I-1–I-17）成文 | §4/§5 |
 | 7 | 环上事务边界锚定 | **以委托单为锚**：delegationId＝环上全部事件的关联键；环内事件驱动最终一致；验收读证据＝生命周期对 EvidenceRepo 的**只读查询**，谓词化＝`AcceptanceSpec`（§8），无反向写路径 | §6/§8 |
 | 8 | 对话通道聚合归属 | **无聚合**：承载面＝呈现投影域对 timeline＋等待项的只读投影；输入语义＝SubmitInput→进轮/入队（推进驱动域）。对话不持有状态（零写路径），"委托单持有对话"落地为：对话视图按 delegationId 过滤 timeline | §8、§6 |
-| 9 | **卡滞干预方式（段2 X5 移交"催/停/弃"）** | **V1 检出不自动催**：StallDetected 后该轮转"卡滞待指令"（非终态），等待项归第三类（待用户指令）；用户**催**＝下一条用户指令开新轮（**TriggerSource＝用户输入**；先收口在飞轮——原轮终态＝中止，I-10 守恒——再准入）；**卡滞待指令期 TriggerSource 准入＝{用户输入, 队列准入}**（排队项是用户在先意志，非自动催；自动催所禁的是系统自发重试）；用户**弃**＝放弃委托（Delegation 终态"已放弃"已列；**弃委托时在飞轮终态＝中止，I-10 守恒**，与催路径对称；弃路径的命令与事件承载＝段2 上游缺口，已报用户裁定回补，回补前本裁定仅状态机层面生效）；自动催（系统自发重试推进）**登记射程外**——自动干预与"假象自主"反指标同向，异常时推进权交还用户（与 U2 哲学同构） | §4 I-9/I-15、§8 |
+| 9 | **卡滞干预方式（段2 X5 移交"催/停/弃"）** | **V1 检出不自动催**：StallDetected 后该轮转"卡滞待指令"（非终态），等待项归第三类（待用户指令）；用户**催**＝下一条用户指令开新轮（**TriggerSource＝用户输入**；先收口在飞轮——原轮终态＝中止，I-10 守恒——再准入）；**卡滞待指令期 TriggerSource 准入＝{用户输入, 队列准入}**（排队项是用户在先意志，非自动催；自动催所禁的是系统自发重试）；用户**弃**＝放弃委托（AbandonDelegation→DelegationAbandoned，段2 v1.1 已回补；Delegation 终态"已放弃"；**弃委托时在飞轮终态＝中止，I-10 守恒**，事件驱动消费，与催路径对称）；自动催（系统自发重试推进）**登记射程外**——自动干预与"假象自主"反指标同向，异常时推进权交还用户（与 U2 哲学同构） | §4 I-9/I-15、§8 |
 
 ## 2. 聚合目录（7 聚合，聚合＝事务边界，外部只持根引用、跨聚合引用用 id）
 
 | 聚合 | 上下文 | 聚合根 | 包含实体 | 包含值对象 | 关键不变量 | 关键命令 |
 |---|---|---|---|---|---|---|
-| **Delegation（委托单）** | 委托生命周期 | Delegation | —（状态机单实体） | Intent、Claim、TerminalState、ReopenCount | I-6 无据不核、I-10 终态唯一、I-14 重开挂原单、I-16 验收前置 | CreateDelegation、AcceptDelegation、RejectAcceptance、CloseDelegation、ClaimCompletion |
+| **Delegation（委托单）** | 委托生命周期 | Delegation | —（状态机单实体） | Intent、Claim、TerminalState、ReopenCount | I-6 无据不核、I-10 终态唯一、I-14 重开挂原单、I-16 验收前置 | CreateDelegation、AcceptDelegation、RejectAcceptance、AbandonDelegation、CloseDelegation、ClaimCompletion |
 | **Scope（作用域）** | 授权拍板 | Scope | —（版本链单实体） | ScopeEntry、ScopeVersion（含 amendmentRef 字段） | I-8 版本单调＋决议绑定、I-17 无决议不产版本 | AmendScope（经决策点） |
 | **DecisionPoint（决策点）** | 授权拍板 | DecisionPoint | — | RequestReason、Resolution | I-3 归属唯一、I-7 无拍板不执行、决议幂等（机制侧约束，非 I 表条目：聚合命令前置承载） | RaiseDecision、ResolveDecision |
 | **Turn（轮次）** | 推进驱动 | Turn | — | TurnToken、TriggerSource、TurnTerminal | I-1 单飞、I-10 每轮恰一终态、I-12 中断态标记、I-13 过期令牌写入＝0、I-15 拒绝守卫 | StartTurn、（机制侧 EndTurn/MarkInterrupted/MarkStalled） |
@@ -97,7 +97,7 @@ VO 无 id 核查：上表 VO 均按值比较、无独立生命周期（PayloadRe
 
 不变量↔聚合覆盖核查：7 聚合每个至少 1 条显式不变量（Delegation→I-6/10/14/16、Scope→I-8/17、DecisionPoint→I-3/7、Turn→I-1/10/12/13/15、InstructionQueue→I-4/9、EvidenceItem→I-5、TimelineLog→I-2/11）。
 
-## 5. 事件目录（21 事件，与段2 §1.3 逐名一致；载荷键为登记义务，实现位 `apps/desktop/src/domain/timeline.ts` 段6 接线）
+## 5. 事件目录（22 事件，与段2 v1.1 §1.3 逐名一致；载荷键为登记义务，实现位 `apps/desktop/src/domain/timeline.ts` 段6 接线）
 
 发布者列语义＝**聚合／机制口／领域服务**三种；归属注逐行登记（聚合发布者可带归属说明括注，非聚合发布者必注形态），保证"每事件发布者已登记"可机械核对。
 
@@ -124,9 +124,10 @@ VO 无 id 核查：上表 VO 均按值比较、无独立生命周期（PayloadRe
 | StallDetected | stallWindowId(幂等键), delegationId, turnId, 窗阈值, lastEventSeq | StallDetector（领域服务，经机制口） | 呈现/度量（护栏②采点） |
 | SessionInterrupted | delegationId, turnId, 中断点, 丢失范围(派生定义见 I-12) | TimelineLog（恢复机制） | 呈现/度量（护栏③采点） |
 | DelegationRestored | delegationId, 恢复结果(成功/失败+原因) | Delegation（恢复机制） | 呈现/度量（护栏③采点；恢复失败由本事件承载，不另立事件） |
+| DelegationAbandoned | delegationId, 放弃时点, 在飞轮处置(中止) | Delegation | 呈现/度量；轮侧事件驱动消费（TurnEnded 中止） |
 
 发布纪律：全部事件先入 TimelineLog（I-2 单一写者）再进程内分发（呈现/度量为只读订阅者）；对外发布＝无（L0 原则6）。
-**留痕口径（V1）**：timeline 事实＝21 事件闭集；不在闭集内的否定情形留痕位——过期令牌写入＝聚合计数器（I-13）、声称被拒/触发源违规＝命令回执（I-5/I-15）、恢复失败＝DelegationRestored 恢复结果键。均不进 timeline 闭集（保 21 计数与段2 对齐）；若段4 DoD 需要独立事件承载，须回段2 改事件全集（铁律②），不在本段就地扩。
+**留痕口径（V1）**：timeline 事实＝22 事件闭集；不在闭集内的否定情形留痕位——过期令牌写入＝聚合计数器（I-13）、声称被拒/触发源违规＝命令回执（I-5/I-15）、恢复失败＝DelegationRestored 恢复结果键。均不进 timeline 闭集（保 22 计数与段2 v1.1 对齐）；若段4 DoD 需要独立事件承载，须回段2 改事件全集（铁律②），不在本段就地扩。
 
 ## 6. 事务边界与跨聚合一致性
 
@@ -140,7 +141,7 @@ VO 无 id 核查：上表 VO 均按值比较、无独立生命周期（PayloadRe
 | 变更→证据 | ChangeProduced | 事件驱动（证据域订阅采集） | 证据聚合＋timeline | evidenceId 去重 | 证据缺失→ValidClaimSpec 拦声称（闭环兜底） |
 | 验收读证据 | AcceptDelegation 前置 | **只读查询**（AcceptanceSpec，环收敛点） | 委托聚合＋timeline（验收事件） | 查询无副作用 | 证据不可核→验收拒绝（DelegationRejected 路径） |
 | 崩溃恢复 | SessionInterrupted→DelegationRestored | 账本重放（RecoverableSpec） | 委托/轮聚合＋timeline | 重复恢复＝no-op | 恢复失败＝DelegationRestored(失败) 留痕（护栏③） |
-| 卡滞→干预 | StallDetected→（用户输入催｜队列准入）InstructionAdmitted/新 TurnStarted；（用户弃→放弃委托，**弃路径命令与事件承载待段2 上游缺口回补后落表**） | 检出即转待用户指令（裁定 9）；不自动催；先收口在飞轮再准入 | 轮聚合（卡滞待指令标记）＋timeline | stallWindowId 幂等 | 原轮在新轮准入时终态＝中止（I-10 守恒） |
+| 卡滞→干预 | StallDetected→（用户输入催｜队列准入）InstructionAdmitted/新 TurnStarted；（用户弃）AbandonDelegation→DelegationAbandoned | 检出即转待用户指令（裁定 9）；不自动催；催＝先收口在飞轮再准入；弃＝委托终态"已放弃"，在飞轮经事件驱动消费转中止（I-10 守恒） | 催：轮聚合＋timeline；弃：委托聚合＋timeline（轮中止为事件驱动第二事务，补偿＝轮未中止则 I-10 事故呈现） | stallWindowId 幂等；AbandonDelegation 终态守卫幂等 | 原轮在新轮准入时终态＝中止（I-10 守恒） |
 | 重开 | DelegationRejected→DelegationReopened | Delegation 聚合内 | 委托聚合＋timeline | reopenCount 单调 | — |
 
 并发口径（领域谓词）：V1 单件推进（L0 6a）＋timeline 单一写者 ⇒ 状态写入天然串行，无需并发控制裁决；运行时串行由 I-1/I-13 的计数判据在段4 落 DoD（不依赖静态检查）。
@@ -176,7 +177,7 @@ VO 无 id 核查：上表 VO 均按值比较、无独立生命周期（PayloadRe
 ## 9. 对段4 的移交
 
 - stage-spec DoD 断言候选：I-1–I-17 逐条可测判据（最硬四条：I-13 过期令牌写入计数＝0、I-9 无归宿等待＝0【检测式，计数判据】、I-11 否定事实四事件必有痕、I-15 拒绝待决期 TriggerSource≠用户输入的自发开轮计数＝0）＋S-1–S-4 静态检查（CI 红判据）。
-- 遗留账（显式登记移交）：①**产物谓词与 N3 OUT 判定**（"什么算有产物的委托"）移交段4——语言表 17 词中唯一无战术判定落点的词，段4 决定是否立 DoD 断言（如"收尾必有变更集类证据"）；②**弃委托路径事件化**（AbandonDelegation/DelegationAbandoned，段2 事件 21→22）待用户授权回补段2 后同步本稿 §2/§5/§6。
+- 遗留账（显式登记移交）：**产物谓词与 N3 OUT 判定**（"什么算有产物的委托"）移交段4——语言表 17 词中唯一无战术判定落点的词，段4 决定是否立 DoD 断言（如"收尾必有变更集类证据"）。（原登记项②弃委托路径事件化已经用户授权回补段2 v1.1 并同步本稿 §1/§2/§5/§6，账目关闭。）
 - 采点映射表：§5 事件目录×L0 §4 三层指标（北极星←DelegationAccepted 收尾态；过程①←Accepted/Rejected/Reopened；过程②←EvidenceInspected 首次打开标志；过程③←等待闭集共用模块【度量域自行调用，不经呈现】；护栏①←DecisionRaised；护栏②←StallDetected；护栏③←SessionInterrupted/DelegationRestored 恢复结果）。
 - 卡滞窗阈值、二次委托率 7 天窗校准：段4 定常量（L0 唯一源条款不变）。
 - 风险账：R3→S-2；R4→S-1＋I-2 单一写者；**C3→S-4＋PayloadRef 构成约束**（全域纪律的领域侧防线）。
