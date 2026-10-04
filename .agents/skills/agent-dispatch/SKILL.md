@@ -17,18 +17,19 @@ description: >-
 |---|---|---|
 | `mcode` | M3.1-Flash-Preview | `mcode exec "<任务书>"`（可加工作目录参数，首派时 `mcode exec --help` 复核） |
 | `command-code` | DeepSeek v4.1 Flash | `command-code -p "<任务书>"`（`--no-session` 免落盘；`--max-turns` 限轮） |
-| `pi` | SenseNova-6.8-flash-lite／Agnes-3.0-flash | `pi -p "<任务书>"`（`--mode json` 可取结构化输出） |
+| `pi` | SenseNova-6.8-flash-lite／Agnes-3.0-flash | `pi -p "<任务书>"`（`--mode json` 可取结构化输出）。**限制**：模型能力弱（用户裁定 2026-10-05），不派审计类任务；只派低强度活（批量扫描/简单定位/格式整理） |
 | `qodercn` | Qwen3.8-Flash | 旗标首派时验证（预期 `-p` 同族）。**限制**：不派它审「主会话亲笔」的产出（同源偏见） |
 
 长任务书一律写入临时文件再引用/传入，防 shell 引号与反引号坑（p000112/p000157）。
 
-## 两条硬约束
+## 三条硬约束
 
 1. **不自审**：干活者与审其产出者必须是不同执行者。示例合法链：mcode 实现→command-code 审计；pi 定位→command-code 修复→mcode 审计。
 2. **产出过闸才入库**：
    - 代码类：在独立 worktree/分支生成（`git worktree add`），主会话复核 diff＋跑段6 闸（双 tsc＋L1＋lint＋脱敏）后才合入；
    - 报告类：落 `.scratch/`（草稿）或 `docs/audits/`（审计），主会话署名采纳意见后才算数；
    - 任何产出**不得由外部 agent 直接 commit 到工作分支**。
+3. **审计须强模型**（用户裁定 2026-10-05）：独立审计执行者只从 `mcode`／`command-code` 中选（pi 两模型能力弱不派审计；qodercn 另受同源限制）。审计已派出后发现执行者不合资格：产出作废不入 `docs/audits/`，换合格执行者重派。
 
 ## 任务书格式（＝冻结工件＋产出格式，不给会话上下文）
 
