@@ -1,7 +1,7 @@
-# 段3 · 领域战术设计（draft v0.5）
+# 段3 · 领域战术设计（draft v0.6）
 
-- 状态：**draft v0.5 — 三轮独立审计（首轮 FAIL T-01–T-24／复审 R3-01–05＋T-16 副作用／第三轮 R3B-01–08）全部采纳修入；R3B-04 弃委托缺口经用户授权已回补段2（frozen v1.1，事件 21→22）并同步本稿；待用户裁审计结论＋AI 过闸备案**
-- 修订对照：`docs/audits/stage3-domain-tactics-independent-audit-2026-10-05.md`（首轮）＋`docs/audits/stage3-domain-tactics-reaudit-2026-10-05.md`（复审）＋`docs/audits/stage3-domain-tactics-audit3-2026-10-05.md`（第三轮）；正文不复述审计编号
+- 状态：**draft v0.6 — 三轮独立审计＋回补增量复审（T-01–T-24／R3-01–05＋T-16 副作用／R3B-01–08／RB-01–04）全部采纳修入；R3B-04 弃委托缺口经用户授权回补段2（frozen v1.1，事件 21→22）并同步；待用户裁审计结论＋AI 过闸备案**
+- 修订对照：`docs/audits/stage3-domain-tactics-independent-audit-2026-10-05.md`（首轮）＋`docs/audits/stage3-domain-tactics-reaudit-2026-10-05.md`（复审）＋`docs/audits/stage3-domain-tactics-audit3-2026-10-05.md`（第三轮）＋`docs/audits/stage3-backfill-increment-audit-2026-10-05.md`（回补增量）；正文不复述审计编号
 - 上游工件：`02-domain-strategy.md`（段2 frozen v1.0）、`01-l0-product-master.md`（段1 frozen）、`00-problem-and-scope.md`（段0 frozen）
 - 经验层（只作经验不作依据，引用带 `@be6e299`）：旧树 ADR-021 Turn/DriverLease 概念集、ADR-019 同步取消令牌与"已作废链写入计数为 0"判据、`00-domain-authority.md` §3.7/§3.8
 - 纪律：退役词（假推进/沙箱/高危/越界/同签名/仓内/破坏性操作/Round）不进任何条文；本稿全部名词以段2 §4 语言表为谓词源；实现命名与代码归段6，本稿只定领域形状。
@@ -52,13 +52,13 @@
 | ScopeEntry | VO | Scope | 按值（资源类型∈{仓库,目录,命令,网络}＋路径/模式） | 白名单条目 |
 | DecisionPoint | Entity（根） | DecisionPoint | decisionPointId | 有生命周期（未决→已决） |
 | RequestReason | VO | DecisionPoint | 按值（缘由∈{作用域外, 高影响清单命中项, **作用域修正**}＋操作描述＋requestedBy∈{AI 提请, 用户提请}） | 不可变事实；作用域修正缘由承载 U3 路径 |
-| Resolution | VO | DecisionPoint | 按值（批准/拒绝/选项＋时刻） | 决议不可变，首次生效 |
+| Resolution | VO | DecisionPoint | 按值（批准/拒绝/选项/**作废（委托放弃，事件驱动非用户决议）**＋时刻） | 决议不可变，首次生效 |
 | Turn | Entity（根） | Turn | turnId（**委托内单调**，仅作业务引用；全局可判定性由 TurnToken 复合值承担） | 有生命周期（在飞→卡滞待指令?→终态） |
 | TurnToken | VO（**标识型，例外见尾注**） | Turn | 按值＝复合 (delegationId, turnId) | 令牌不可变；复核＝与当前在飞轮复合值比对 |
 | TriggerSource | VO | Turn | 按值（**闭集三种**：用户输入/系统恢复/队列准入） | 不可变事实；I-15 守卫的判定输入（拒绝待决期/卡滞待指令期的准入窗口见 I-15 与 §1 裁定9；本词与段2 语言表"驱动＝机制归属"为相邻概念非同义） |
 | TurnTerminal | VO | Turn | 按值（收口/中止/中断） | 终态不可变 |
 | InstructionQueue | Entity（根） | InstructionQueue | queueId（V1 单队列＝全局一个） | 队列有生命周期 |
-| QueueItem | Entity | InstructionQueue | itemId | 项有生命周期（排队→准入/撤回） |
+| QueueItem | Entity | InstructionQueue | itemId | 项有生命周期（排队→准入/撤回；**撤回的唯一触发＝所属委托 DelegationAbandoned 的事件驱动消费**，见 §6） |
 | ItemOrigin | VO | QueueItem | 按值 | 不可变事实 |
 | EvidenceItem | Entity（根） | EvidenceItem | evidenceId | 有生命周期（落账→被引用→被核验） |
 | EvidenceType | VO | EvidenceItem | 枚举（变更集/命令输出/测试结果） | 载荷多态标记 |
@@ -83,7 +83,7 @@ VO 无 id 核查：上表 VO 均按值比较、无独立生命周期（PayloadRe
 | I-8 | Scope 版本 seq 单调；每新版本绑定恰一个 DecisionPoint 决议；旧版本只读可溯 | AmendScope | Scope 聚合 | 修正拒绝（无决议不产版本） |
 | I-9 | 等待项闭集四类，每实例属且仅属一类且有可见位置（无归宿等待＝0）。**检测式（非阻断式）断言**：违反不可阻断、只能被发现，DoD 以计数为 0 为判据 | 一切产生等待的状态转移（含卡滞待指令态） | deriveWaitingItems 共用投影 | 投影缺陷事故（呈现层不得吞项） |
 | I-10 | 每 Turn 恰一个终态事件；每 Delegation 恰一个当前终态（重开回推进中，终态清空重计） | EndTurn/Accept/Reject/Close | Turn/Delegation 聚合 | 重复终态拒绝（幂等） |
-| I-11 | 每个否定性事实（DecisionDenied/DelegationRejected/SessionInterrupted/StallDetected）必有 timeline 条目（四事件闭集；其余否定情形留痕口径见 §5 尾注） | 各否定事件发生时 | TimelineLog（同事务追加） | 违反原则1 事故 |
+| I-11 | 每个否定性事实（DecisionDenied/DelegationRejected/SessionInterrupted/StallDetected）必有 timeline 条目（四事件闭集；DelegationAbandoned 属用户侧否定性收束，由 22 事件闭集覆盖必落 timeline，不重复枚举；其余否定情形留痕口径见 §5 尾注） | 各否定事件发生时 | TimelineLog（同事务追加） | 违反原则1 事故 |
 | I-12 | 恢复只还原账本（持久化态）；在飞字节流不重放；中断必留丢失范围痕。**丢失范围派生定义**：下界＝持久化 timeline 最后落账 seq，上界＝恢复重做起点；不可计算时值＝"不可判定"（枚举值之一，不得留空）。**写时点声明**：SessionInterrupted 由恢复机制在**发现未收口在飞轮之时**追加（崩溃瞬间物理不可写）——该时点下界与上界均可算，定义与载体时点一致 | RestoreDelegation | RecoverableSpec＋Turn（标中断态） | 恢复拒绝并留痕（不假装修复；恢复失败由 DelegationRestored 恢复结果键承载，见 §5） |
 | I-13 | 过期 TurnToken 的状态写入计数＝0。**比较基准**：令牌复合值 (delegationId, turnId) ≠ 当前在飞轮复合值 ⇒ 过期 | 每个推进恢复点写前 | 令牌复核（推进驱动全域横切） | 写丢弃＋**过期令牌写入计数器**留证（聚合状态字段，DoD 判据＝计数 0；不入 timeline 闭集） |
 | I-14 | DelegationReopened 挂原 delegationId（重开不新建委托） | RejectAcceptance | Delegation 聚合 | 新建拒绝（北极星口径守卫，U4） |
@@ -124,7 +124,7 @@ VO 无 id 核查：上表 VO 均按值比较、无独立生命周期（PayloadRe
 | StallDetected | stallWindowId(幂等键), delegationId, turnId, 窗阈值, lastEventSeq | StallDetector（领域服务，经机制口） | 呈现/度量（护栏②采点） |
 | SessionInterrupted | delegationId, turnId, 中断点, 丢失范围(派生定义见 I-12) | TimelineLog（恢复机制） | 呈现/度量（护栏③采点） |
 | DelegationRestored | delegationId, 恢复结果(成功/失败+原因) | Delegation（恢复机制） | 呈现/度量（护栏③采点；恢复失败由本事件承载，不另立事件） |
-| DelegationAbandoned | delegationId, 放弃时点, 在飞轮处置(中止) | Delegation | 呈现/度量；轮侧事件驱动消费（TurnEnded 中止） |
+| DelegationAbandoned | delegationId, 放弃时点, 在飞轮处置(**指令＝中止，待轮侧消费**——发布时点该事实尚未物质化，第二事务产生 TurnEnded) | Delegation | 呈现/度量；事件驱动消费面见 §6 |
 
 发布纪律：全部事件先入 TimelineLog（I-2 单一写者）再进程内分发（呈现/度量为只读订阅者）；对外发布＝无（L0 原则6）。
 **留痕口径（V1）**：timeline 事实＝22 事件闭集；不在闭集内的否定情形留痕位——过期令牌写入＝聚合计数器（I-13）、声称被拒/触发源违规＝命令回执（I-5/I-15）、恢复失败＝DelegationRestored 恢复结果键。均不进 timeline 闭集（保 22 计数与段2 v1.1 对齐）；若段4 DoD 需要独立事件承载，须回段2 改事件全集（铁律②），不在本段就地扩。
@@ -141,7 +141,7 @@ VO 无 id 核查：上表 VO 均按值比较、无独立生命周期（PayloadRe
 | 变更→证据 | ChangeProduced | 事件驱动（证据域订阅采集） | 证据聚合＋timeline | evidenceId 去重 | 证据缺失→ValidClaimSpec 拦声称（闭环兜底） |
 | 验收读证据 | AcceptDelegation 前置 | **只读查询**（AcceptanceSpec，环收敛点） | 委托聚合＋timeline（验收事件） | 查询无副作用 | 证据不可核→验收拒绝（DelegationRejected 路径） |
 | 崩溃恢复 | SessionInterrupted→DelegationRestored | 账本重放（RecoverableSpec） | 委托/轮聚合＋timeline | 重复恢复＝no-op | 恢复失败＝DelegationRestored(失败) 留痕（护栏③） |
-| 卡滞→干预 | StallDetected→（用户输入催｜队列准入）InstructionAdmitted/新 TurnStarted；（用户弃）AbandonDelegation→DelegationAbandoned | 检出即转待用户指令（裁定 9）；不自动催；催＝先收口在飞轮再准入；弃＝委托终态"已放弃"，在飞轮经事件驱动消费转中止（I-10 守恒） | 催：轮聚合＋timeline；弃：委托聚合＋timeline（轮中止为事件驱动第二事务，补偿＝轮未中止则 I-10 事故呈现） | stallWindowId 幂等；AbandonDelegation 终态守卫幂等 | 原轮在新轮准入时终态＝中止（I-10 守恒） |
+| 卡滞→干预 | StallDetected→（用户输入催｜队列准入）InstructionAdmitted/新 TurnStarted；（用户弃）AbandonDelegation→DelegationAbandoned | 检出即转待用户指令（裁定 9）；不自动催；催＝先收口在飞轮再准入；弃＝委托终态"已放弃"，**DelegationAbandoned 的事件驱动消费面＝三处：在飞轮中止（TurnEnded）＋未决 DecisionPoint 作废（Resolution＝作废）＋该委托排队 QueueItem 撤回**（各消费＝其所属聚合的独立事务；I-9 守恒：终态委托不再产生等待项，见 §8 终态过滤） | 催：轮聚合＋timeline；弃：委托聚合＋timeline（三处消费为事件驱动后续事务，补偿＝任一消费未达则 I-9/I-10 计数事故呈现） | stallWindowId 幂等；AbandonDelegation 终态守卫幂等 | 原轮在新轮准入时终态＝中止（I-10 守恒） |
 | 重开 | DelegationRejected→DelegationReopened | Delegation 聚合内 | 委托聚合＋timeline | reopenCount 单调 | — |
 
 并发口径（领域谓词）：V1 单件推进（L0 6a）＋timeline 单一写者 ⇒ 状态写入天然串行，无需并发控制裁决；运行时串行由 I-1/I-13 的计数判据在段4 落 DoD（不依赖静态检查）。
@@ -171,14 +171,14 @@ VO 无 id 核查：上表 VO 均按值比较、无独立生命周期（PayloadRe
 - `AdmissionCheck`（授权拍板域）：操作入口前置闸＝RequiresApprovalSpec 判定，校验先于产出（I-7）
 - `ApplyChange`（推进驱动域服务面）：经 AdmissionCheck 通过后的变更操作入口；产物以 PayloadRef 入证据（§2 归属声明）
 - `StallDetector`（推进驱动域）：周期性检视＋StallSpec→发布 StallDetected；检出后轮次转卡滞待指令（裁定 9，无自动干预）
-- `deriveWaitingItems`（**共用纯函数模块**，不属任一子域）：四聚合事实（DecisionPoint 未决集/Delegation 待核验态/Turn 拒绝·中断·**卡滞待指令**态/Queue pending）→闭集四类投影；呈现投影域与度量采点域各自调用（I-9 校验位）
+- `deriveWaitingItems`（**共用纯函数模块**，不属任一子域）：四聚合事实（DecisionPoint 未决集/Delegation 待核验态/Turn 拒绝·中断·**卡滞待指令**态/Queue pending）→闭集四类投影；**终态过滤谓词：仅统计所属委托处于非终态的实例**（终态——已收尾/已归档/已放弃——委托的实例随终态消解，"随终态消解"即 I-9 的可判定归宿位，弃路径不产生无归宿等待）；呈现投影域与度量采点域各自调用（I-9 校验位）
 - `deriveFocus`（呈现投影域读模型，纯函数）：候选＝前三类（待拍板＞待核验＞待用户指令）×同类创建序→唯一焦点或空；排队中不占焦点；不落存储。**口径边界**：焦点只指向等待项，不携带动作类型（"下一步动作是什么"由等待项类别自明，段4/段6 不得要求焦点输出动作指令）
 
 ## 9. 对段4 的移交
 
 - stage-spec DoD 断言候选：I-1–I-17 逐条可测判据（最硬四条：I-13 过期令牌写入计数＝0、I-9 无归宿等待＝0【检测式，计数判据】、I-11 否定事实四事件必有痕、I-15 拒绝待决期 TriggerSource≠用户输入的自发开轮计数＝0）＋S-1–S-4 静态检查（CI 红判据）。
 - 遗留账（显式登记移交）：**产物谓词与 N3 OUT 判定**（"什么算有产物的委托"）移交段4——语言表 17 词中唯一无战术判定落点的词，段4 决定是否立 DoD 断言（如"收尾必有变更集类证据"）。（原登记项②弃委托路径事件化已经用户授权回补段2 v1.1 并同步本稿 §1/§2/§5/§6，账目关闭。）
-- 采点映射表：§5 事件目录×L0 §4 三层指标（北极星←DelegationAccepted 收尾态；过程①←Accepted/Rejected/Reopened；过程②←EvidenceInspected 首次打开标志；过程③←等待闭集共用模块【度量域自行调用，不经呈现】；护栏①←DecisionRaised；护栏②←StallDetected；护栏③←SessionInterrupted/DelegationRestored 恢复结果）。
+- 采点映射表：§5 事件目录×L0 §4 三层指标（北极星←DelegationAccepted 收尾态【**分母＝已收尾件；已放弃件不进分母**】；过程①←Accepted/Rejected/Reopened/**Abandoned（未关闭侧）**；过程②←EvidenceInspected 首次打开标志；过程③←等待闭集共用模块【度量域自行调用，不经呈现；终态过滤后计数】；护栏①←DecisionRaised；护栏②←StallDetected；护栏③←SessionInterrupted/DelegationRestored 恢复结果）。
 - 卡滞窗阈值、二次委托率 7 天窗校准：段4 定常量（L0 唯一源条款不变）。
 - 风险账：R3→S-2；R4→S-1＋I-2 单一写者；**C3→S-4＋PayloadRef 构成约束**（全域纪律的领域侧防线）。
 - 段6 接线位：事件注册表 `apps/desktop/src/domain/timeline.ts`（现实现仅参考，按 §5 目录重写）；StallDetector 实现位（定时器形态/进程落点）段5/6 定。
