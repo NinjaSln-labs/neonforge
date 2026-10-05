@@ -1,8 +1,8 @@
-# S1a 实现计划：归档＋领域内核＋假网关（段6）
+# S1a 实现计划：领域内核＋假网关（段6 · 只增不删）
 
-> 由 writing-plans 出，2026-10-05。契约源（不得超其边界）＝`docs/design/stage-specs/V1-S1-legacy-freeze-vertical-skeleton.md`（DoD A–G，本 plan 只承 **S1a 面**＝A/B/C/D＋E 假轨＋F3；A2.5/E2/F1/F2 真网关面归 S1b）＋接口 `docs/design/v1.0.0-s1-detailed-design.md` v0.3（签名以此为准）＋段3 `03-domain-tactics.md` frozen v1.2。执行走 executing-plans，逐任务 TDD。
+> 由 writing-plans 出，2026-10-05。契约源（不得超其边界）＝`docs/design/stage-specs/V1-S1-legacy-freeze-vertical-skeleton.md`（DoD A–G，本 plan 只承 **S1a 面**＝A1 tag＋B/C/D＋E 假轨＋F3 域面；**物理归档 A2–A6＋入口 rewire＋复用文件去旧域依赖＋E2/F 真网关面全归 S1b，S1 出口闸在 S1b 完成时跑**）＋接口 `docs/design/v1.0.0-s1-detailed-design.md` v0.3（签名以此为准）＋段3 `03-domain-tactics.md` frozen v1.2。执行走 executing-plans，逐任务 TDD。
 
-**Goal:** S1a 落新树领域内核（7 聚合＋7 仓储＋3 Spec＋领域服务＋`timeline.ts` 22 事件闭集）＋归档旧实现，L1 端到端用**假网关**跑通「发起→推进→拍板→核验→收尾」最小闭环，全 DoD A–D＋E假轨＋F3 逐条绿。
+**Goal:** S1a 只**增/重写新领域树**（7 聚合＋7 仓储＋3 Spec＋领域服务＋`timeline.ts` 22 事件闭集），L1 端到端用**假网关**跑通「发起→推进→拍板→核验→收尾」最小闭环；**不删旧文件**（归档与 rewire 在 S1b）。S1a 内 DoD B/C/D＋E 假轨＋F3 域面逐条绿。
 
 **Architecture:** DDD 四上下文＋机制层，纯领域无 React（现 `src/domain/*.ts` 范式，ESM `.js` import）；内存态（重启即失，真持久化＝S3）；事件经 `TimelineLog` 聚合唯一写者口落账后进程内只读分发；Spec＝纯谓词。
 
@@ -18,7 +18,7 @@
 - 事务：聚合状态写入与 `TimelineRepo.append` **同事务**，追加失败⇒整事务回滚（段3 §6）。
 - 归档＝`git rm` 落地、不留死目录；复用面不反向 import 归档文件（G-1）；renderer 扁平无 `components/`。
 - 退役词（假推进/沙箱/高危/越界/同签名/仓内/破坏性操作/Round）不入代码/注释。凭据只走 env/系统库，`desens-scan` rc=0。
-- 段6 闸每任务末跑相关项；S1a 出口＝双 tsc＋L1＋eslint flat＋desens＋DoD A–D/E假轨/F3 逐条。
+- 段6 闸每任务末跑相关项；**S1a 出口＝域内**（新域单测＋静态闸＋desens，DoD B/C/D＋E假轨＋F3 逐条）——**不跑全项目双 tsc／全量 vitest**（旧 app 与新树并存期部分红属预期，全项目闸归 S1 出口＝S1b）。
 
 ## File Structure（S1a 新建/改）
 
@@ -37,29 +37,27 @@ apps/desktop/eslint.config.js    # 追加 renderer 禁 import 聚合写面（fla
 
 ---
 
-## Task 1：归档批（A1–A4）
+## Task 1：基线 tag（A1）＋确立「只增不删」原则
 
-**Files:** 删除（`git rm`）＝5 旧领域（`src/domain/{conversationState,agentLoop,protocolTools,planProposalParser,completionClaimParser}.ts`）＋stage-spec A2.2 所列 24 旧呈现＋A2.3 旧测试（`tests/unit/**` 旧 45、`tests/interaction/**`、`tests/visual/**`、`snapshots/**`）＋A2.4（`scripts-cdp/`、`apps/desktop/e2e-*.mjs`、`e2e-sim/`）。基线 tag＝`legacy-freeze-v0.1.0`。
+> **S1a 全程不 `git rm` 任何旧文件**——新领域树与旧 app 并存（ADR-028 负面①「归档批至骨架接线前非编译窗」；全项目双 tsc 与物理归档归 **S1 出口＝S1b 完成后**跑）。归档批 `git rm`（A2/A2.3/A2.4/A2.5）＋入口 rewire（App/ipc/main/preload）＋复用文件去旧域依赖（gateway/tools/verification 现 import `conversationState`/`protocolTools`）**全部在 S1b**。S1a 只建/重写 `src/domain/**` 新文件＋新测，旧 app 文件不碰（旧呈现/main 引用新改写 timeline.ts 的残留会在 S1b 随归档一并清除）。
 
-**Interfaces:** Produces 干净工作树（保留面 `main.ts`/`preload.ts`/`gateway.ts`/`providers/**`/`configStore.ts`/`envManager.ts`/`applyDiff.ts`/`workspace.ts`/`sandboxPath.ts`/`diffRender.ts`/`styles.css`/`icons.tsx`/`ConfigPage.tsx`/壳入口 仍在，`test -e`）。
+**Files:** 无删除；仅打基线 tag＝`legacy-freeze-v0.1.0`（轻量 tag 无署名面＝C3/C4，指向含旧实现的当前 commit，供 S1b 归档前冻结、`git show` 调阅）。
+**Interfaces:** Produces tag；不产/删代码文件。
 
-- [ ] **Step 1：打基线 tag（删前）** — Run：`cd apps/desktop && git tag legacy-freeze-v0.1.0` ；预期：`git rev-parse legacy-freeze-v0.1.0` 返 sha。
-- [ ] **Step 2：核 A1 可调阅** — Run：`git show legacy-freeze-v0.1.0:apps/desktop/src/domain/conversationState.ts | wc -l` ；预期：>0。
-- [ ] **Step 3：`git rm` 归档面** — 逐条 `git rm <5领域> <A2.2 24呈现> -r tests/unit tests/interaction tests/visual snapshots -r scripts-cdp` ＋ `git rm apps/desktop/e2e-*.mjs -r e2e-sim` ；A2.5 `git rm src/main/timelineLogger.ts`（→ S1b 接线期移除 `ipc.ts` 里 `timeline:log`/`timeline:query` handler，本 S1a 任务先删文件后跑 tsc 抓悬空 import 并在 `ipc.ts` 注释标 S1b 移除）。
-- [ ] **Step 4：核 A2 全部不在树** — Run：`cd apps/desktop && for f in src/domain/conversationState.ts src/renderer/ConversationPanel.tsx; do test ! -e "$f" && echo OK; done` ；预期：OK。
-- [ ] **Step 5：核 A3 保留面在位** — Run：`test -e src/main/gateway.ts && test -e src/main/sandboxPath.ts && test -e src/renderer/ConfigPage.tsx && echo KEEP_OK` ；预期：KEEP_OK。
-- [ ] **Step 6：commit** — `git commit -m "chore(S1a): 归档旧实现至 legacy-freeze-v0.1.0 + git rm 领域/呈现/测试/UAT 面（A1-A4）"`。
+- [ ] **Step 1：打基线 tag** — `cd apps/desktop && git tag legacy-freeze-v0.1.0` ；预期：`git rev-parse legacy-freeze-v0.1.0` 返 sha（A1）。
+- [ ] **Step 2：核 A1 可调阅** — `git show legacy-freeze-v0.1.0:apps/desktop/src/domain/conversationState.ts | wc -l` ；预期：>0。
+- [ ] **Step 3：S1a 无代码 commit**（tag 即本任务产物；无文件改动则跳过 commit，或 `git commit --allow-empty -m "chore(S1a): 基线 tag legacy-freeze-v0.1.0，确立只增不删"`）。
 
 ## Task 2：G-1 防回流依赖闸（A5）
 
 **Files:** Test `tests/static/noLegacyImport.test.ts`。
-**Interfaces:** Consumes 归档路径黑名单（5 领域名＋A2.2 24 呈现路径，24 名引 stage-spec 不复制）；Produces `assertNoLegacyImport(rootDir): string[]`（命中列表）。
+**Interfaces:** Consumes 归档路径黑名单（5 旧领域名＋A2.2 24 旧呈现路径，24 名引 stage-spec 不复制）；Produces `assertNoLegacyImport(NEW_FILE_SET): string[]`。**S1a 扫描范围＝新领域树文件（`src/domain/{delegation,authorization,turn,queue,evidence,projection,spec,service,repos}/**` ＋ `src/domain/timeline.ts` ＋ `src/renderer` 新六件）**——旧文件（`src/main/tools.ts`/`gateway.ts`/`verification.ts` 现 import `conversationState`/`protocolTools`）在 S1a 仍存在、**不属本闸范围**（S1b 移植去依赖后由全树 G-1 覆盖）。
 
-- [ ] **Step 1：写失败测** — 遍历 `src/**`，正则匹配 `from ['"].*(conversationState|agentLoop|protocolTools|planProposalParser|completionClaimParser|<A2.2 旧呈现>)`；断言当前树命中＝0；fixture 子测：临时写 `import '../domain/conversationState.js'` 的文件→断言命中>0（可红自证 A5.2）。
+- [ ] **Step 1：写失败测** — 遍历新领域文件集，正则匹配 `from ['"].*(conversationState|agentLoop|protocolTools|planProposalParser|completionClaimParser|<A2.2 旧呈现>)`；断言新树命中＝0；fixture 子测：临时新文件 `import '../conversationState.js'`→断言命中>0（可红自证 A5.2）。
 - [ ] **Step 2：跑 FAIL** — `npx vitest run tests/static/noLegacyImport.test.ts` ；预期：fixture 断言先红（未写实现时）。
-- [ ] **Step 3：实现 `assertNoLegacyImport`** — `fs.readdirSync` 递归＋`import` 语句匹配；命中返路径数组。
-- [ ] **Step 4：跑 PASS** — 同命令；预期：主断言 0 命中绿、fixture 断言 >0 绿。
-- [ ] **Step 5：commit** — `test(S1a): G-1 防回流依赖闸 + fixture 可红自证（A5）`。
+- [ ] **Step 3：实现 `assertNoLegacyImport`** — 对新文件集 `fs.readdirSync` 递归＋`import` 语句匹配；命中返路径数组。
+- [ ] **Step 4：跑 PASS** — 同命令；预期：新树主断言 0 命中绿、fixture 断言 >0 绿。
+- [ ] **Step 5：commit** — `test(S1a): G-1 防回流依赖闸（新域不 import 旧域）+ fixture 可红自证（A5）`。
 
 ## Task 3：timeline.ts 22 事件闭集重写（B1/B2）
 
@@ -216,12 +214,13 @@ apps/desktop/eslint.config.js    # 追加 renderer 禁 import 聚合写面（fla
 
 ---
 
-## S1a 出口闸（全任务末一次性过）
+## S1a 出口闸（域内，非全项目）
 
-1. `npx vitest run`（L1 全绿，含 static/端到端）。
-2. `npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit`（双 tsc 0 error）。
-3. `npx eslint .`（flat config 0 error）。
-4. `python3 tools/desens-scan.py`（rc=0）。
-5. stage-spec DoD A–D＋E假轨＋F3 逐条绿（`stage-gate` 执行）；A2.5 的 `ipc.ts` timeline handler 移除留 S1b（本 S1a 仅删文件＋注释标位）。
+> **S1a 不跑全项目双 tsc／全量 vitest**——旧 app 与新树并存期，旧 `timeline`/`main`/`App` 会因 `timeline.ts` 重写与旧文件未删而部分红，属 ADR-028 负面①「非编译窗」；全项目闸与物理归档归 **S1 出口＝S1b 完成后**。S1a 只验**新领域树**：
+1. `npx vitest run tests/unit/timeline.eventCatalog.test.ts tests/unit/timeline.payloadKeys.test.ts tests/unit/timeline.append.test.ts tests/unit/timeline.publishDiscipline.test.ts tests/unit/delegation.*.test.ts tests/unit/turn*.test.ts tests/unit/instructionQueue.test.ts tests/unit/decisionPoint.test.ts tests/unit/evidence.*.test.ts tests/unit/payloadRef.desens.test.ts tests/unit/requiresApproval.test.ts tests/unit/acceptance.test.ts tests/unit/applyChange.test.ts tests/unit/waitingItems.test.ts tests/unit/focus.test.ts tests/unit/e2eDomainLoop.test.ts`（新域单测全绿）。
+2. `npx vitest run tests/static/noLegacyImport.test.ts tests/static/appendSingleWriter.test.ts tests/static/s1WritePath.test.ts tests/static/s2ProviderName.test.ts`（新域静态闸绿＋fixture 可红）。
+3. `python3 tools/desens-scan.py`（rc=0）。
+4. 新域类型面由 vitest(esbuild) 加载即验；全项目 `tsc -p tsconfig.json/tsconfig.main.json` 双 tsc → **S1 出口（S1b）**。
+5. DoD **B/C/D＋E 假轨＋F3 域面**逐条绿（新测覆盖）；**A2/A3/A4/A5 物理归档＋A6＋G 类 → S1 出口（S1b）**。
 
-**S1a 不含**（→S1b/S2–S7）：真网关 port、E1 真轨 AbortController、IPC 通道桥、renderer 委托单中心、`npm run e2e`、产物谓词两条款(S4)、收束态过滤(S5)、StallDetector(S5)、持久化(S3)、作用域修正(S2)。
+**S1a 不含**（→S1b/S2–S7）：**归档 `git rm`（A2/A2.3/A2.4/A2.5）、入口 rewire（App/ipc/main/preload）、复用文件去旧域依赖（gateway/tools/verification 现 import conversationState/protocolTools）**、真网关 port、E1 真轨 AbortController、IPC 通道桥、renderer 委托单中心、`npm run e2e`、产物谓词两条款(S4)、收束态过滤(S5)、StallDetector(S5)、持久化(S3)、作用域修正(S2)。

@@ -1,8 +1,8 @@
-# S1b 实现计划：真网关移植 + 流级取消令牌 + IPC 桥 + 委托单中心呈现（段6）
+# S1b 实现计划：真网关 port + 流级取消令牌 + IPC 桥 + 委托单中心呈现 + 归档批 + rewire（段6 · S1 出口闸在此）
 
-> 由 writing-plans 出，2026-10-05。契约源＝stage-spec V1-S1（DoD **E2/F**＋A2.5 收尾＋E1 真轨）＋接口 `docs/design/v1.0.0-s1-detailed-design.md` v0.3（§7 IPC/renderer、§8 机制落点、§9 时序）＋段3 v1.2。**前置**：S1a 已落（领域内核＋假网关 L1 端到端绿）。执行走 executing-plans，逐任务 TDD。
+> 由 writing-plans 出，2026-10-05。契约源＝stage-spec V1-S1（DoD **A2–A6/E2/F**＋A2.5 归档＋E1 真轨）＋接口 `docs/design/v1.0.0-s1-detailed-design.md` v0.3（§7 IPC/renderer、§8 机制落点、§9 时序）＋段3 v1.2＋ADR-028。**前置**：S1a 已落（新领域树＋假网关新测绿，旧 app 未删）。**S1b 额外承接 S1a 未做的物理层**：归档批 `git rm`（A2/A2.3/A2.4/A2.5）、复用文件去旧域依赖（gateway/tools/verification 现 import `conversationState`/`protocolTools`）、入口 rewire（App/ipc/main/preload）。**S1 全出口闸（双 tsc／全量 L1／eslint／desens／DoD A–G）在 S1b 末尾跑**（ADR-028「同批过闸」真意）。
 
-**Goal:** 把 S1a 的假网关换成**真网关**（复用现 `gateway.ts`/`providers/**`）＋新建**流级取消令牌**（E1，现仓库零取消管道）＋接线**委托单中心最简呈现**（IPC 通道桥＋renderer 六件），L3 interaction＋`npm run e2e` 双轨（真/假网关）跑通 §9 happy path＋Stop 路径。
+**Goal:** 把 S1a 假网关换**真网关**（复用现 `gateway.ts`/`providers/**`，先**去旧域依赖**）＋新建**流级取消令牌**（E1）＋接线**委托单中心呈现**（IPC 桥＋renderer 六件＋App rewire）＋**物理归档旧实现 `git rm`**（A2–A4/A2.5）；L3 interaction＋`npm run e2e` 双轨跑通 §9 happy path＋Stop 路径；S1 出口闸全绿。
 
 **Architecture:** main 进程持领域单例（聚合＋Repo＋服务，S1a 产物）＝新树接线位；renderer 经 `window.neonforge.<m>` 调 `ipcMain.handle`；流式＝`gateway.streamChat(apiKey,{…,onDelta})`→`event.sender.send('gateway:stream-chunk')`→preload `onStream`；取消＝streamId→`Map<string,AbortController>`→`gateway.abort(streamId)`→在飞轮复合值变更（联动 I-13 丢弃后续写）。
 
@@ -16,7 +16,7 @@
 - 呈现/度量只读投影，禁 import 核心聚合写命令（S-1，T17 已立闸）。
 - A2.5：本阶段移除 `ipc.ts` 的 `timeline:log`/`timeline:query` handler（`timelineLogger.ts` S1a 已删文件，此处清 handler 悬空 import），新读面＝`timeline:query-by-delegation`。
 - 未持久化态须 UI 显式呈现（F2，原则1 诚实面）——内存态、重启即失，不得静默装作已存。
-- 段6 闸每任务末跑；S1b 出口＝双 tsc＋L1＋eslint flat＋desens＋DoD E2/F1/F2/F3＋G 类。
+- 段6 闸每任务末跑；**S1 全出口闸在 S1b 末尾单次过**（双 tsc＋L1＋playwright＋e2e＋eslint flat＋desens＋DoD A–G 逐条＋独立审计）——S1a 只跑领域面scoped 测，全项目编译要等归档 rm＋rewire 断净后才成立。
 
 ## File Structure（S1b 新建/改）
 
@@ -32,6 +32,17 @@ tests/interaction/{delegationLifecycle,stopInflight,decisionCard,unpersistedStat
 ```
 
 ---
+
+## Task 0：复用文件去旧域依赖（归档前置，否则 `git rm` 后 main 编译断）
+
+**Files:** Modify `src/main/gateway.ts`（去 `import { PROTOCOL_TOOL_DEFS } from '../domain/protocolTools.js'`）、`src/main/tools.ts`（去 `import { classifyReadonly, isLocalhostCommand } from '../domain/conversationState.js'`）、`src/main/verification.ts`（同）。
+**Interfaces:** Produces 这些复用文件的旧域依赖迁到**新树**——`isLocalhostCommand`/`classifyReadonly`（只读/本地命令判定）落 `src/domain/authorization/` 高影响清单侧或新 `src/main/toolClassify.ts`（自包含，不 import 旧域）；`PROTOCOL_TOOL_DEFS` 迁新工具面或本地常量表。**不改** gateway 重试/分类/修复逻辑本体，只断旧域 import。
+
+- [ ] **Step 1：定位符号消费点** — `grep -rn "classifyReadonly\|isLocalhostCommand\|PROTOCOL_TOOL_DEFS" src/main`；记录每处调用。
+- [ ] **Step 2：写失败测** — `tests/unit/toolClassify.test.ts`：新落点函数按旧语义判 localhost/只读（等价回归，取自 tag 版旧实现）。
+- [ ] **Step 3：迁实现** — 把这几个纯判定函数复制到新树自包含模块（不 import 旧域），`gateway.ts`/`tools.ts`/`verification.ts` 改 import 到新落点。
+- [ ] **Step 4：跑 PASS** — `npx vitest run tests/unit/toolClassify.test.ts`；`grep "domain/conversationState\|domain/protocolTools" src/main/{gateway,tools,verification}.ts` 命中＝0。
+- [ ] **Step 5：commit** — `refactor(S1b): 复用文件 gateway/tools/verification 去旧域依赖（迁纯判定到新树，为归档铺路）`。
 
 ## Task 1：领域运行时装配（main 持 S1a 单例）
 
@@ -121,14 +132,28 @@ tests/interaction/{delegationLifecycle,stopInflight,decisionCard,unpersistedStat
 - [ ] **Step 4：核 Key 不入库** — `python3 tools/desens-scan.py` rc=0。
 - [ ] **Step 5：commit** — `test(S1b): npm run e2e 双轨 happy path（E2，真/假网关）`。
 
+## Task 9：物理归档批（A2/A2.3/A2.4/A2.5，rewire 后执行）
+
+**Files：** `git rm` 归档面（清单唯一源＝stage-spec `V1-S1-...md` DoD **A2.2 的 24 名 renderer** ＋ **ADR-028 Decision 3** 领域/测试/UAT 面；调阅＝`git show legacy-freeze-v0.1.0:<路径>`）。**前置**＝Task 0/3/6 已断开所有 kept 文件对归档面的 import。
+**Interfaces：** Produces 归档后以下均不在树：旧领域 `src/domain/{conversationState,agentLoop,protocolTools,planProposalParser,completionClaimParser}.ts`、旧 `src/main/timelineLogger.ts`、旧 24 renderer、`tests/**` 旧测、`snapshots/**`、`scripts-cdp/`、`e2e-sim/`、`apps/desktop/e2e-*.mjs`。**保留面不动**（`ConfigPage.tsx`/`icons.tsx`/`diffRender.tsx`/`styles.css`/`sandboxPath.ts`）。
+
+- [ ] **Step 1：核 kept 文件零残留引用** — `grep -rn "conversationState\|protocolTools\|agentLoop\|planProposalParser\|completionClaimParser\|timelineLogger\|ConversationPanel\|MainWorkspace\|StartPage" src/main src/preload src/renderer --include=*.ts --include=*.tsx`；命中＝0（>0 说明 rewire 未断净，回 Task 0/3/6 补，不得带引用直接 rm）。
+- [ ] **Step 2：git rm 领域面＋旧时间线读面** — `git rm src/domain/{conversationState,agentLoop,protocolTools,planProposalParser,completionClaimParser}.ts src/main/timelineLogger.ts`。
+- [ ] **Step 3：git rm 旧呈现 24 件** — 逐名 rm stage-spec A2.2 所列 24 个 `src/renderer/*`（**不含**保留面 `ConfigPage.tsx`/`icons.tsx`/`diffRender.tsx`）。
+- [ ] **Step 4：git rm 旧测试/UAT/视觉基线面（tag 驱动，绝不误删新测）** — 以冻结 tag 为唯一清单源：`git ls-tree -r --name-only legacy-freeze-v0.1.0 -- apps/desktop/tests apps/desktop/snapshots apps/desktop/scripts-cdp apps/desktop/e2e-sim 'apps/desktop/e2-*.mjs' 'apps/desktop/e2e-*.mjs'` 所得＝待删旧文件（S1a/S1b 新测不在 tag＝天然排除）；`git rm` 之。
+- [ ] **Step 5：跑全测确认新树自洽** — `npx vitest run`（旧测已退，仅剩 S1a＋S1b 新测）全绿；`test ! -e apps/desktop/src/domain/conversationState.ts && test ! -e apps/desktop/src/main/timelineLogger.ts && echo ARCHIVED_OK`。
+- [ ] **Step 6：commit** — `chore(S1b): 物理归档旧实现（A2/A2.3/A2.4/A2.5，git rm，rewire 后断净）`。
+
 ---
 
-## S1b 出口闸（全任务末一次性过）
+## S1 出口闸（＝S1b 末尾，全项目单次过；ADR-028「同批过闸」真意）
 
-1. `npx vitest run`（L1 全绿）。
-2. `npx playwright test --project=interaction`（F1/C6/E1 L3 全绿）。
-3. `cd apps/desktop && npm run e2e`（假轨绿；真轨有 Key 才跑否则 blocked）。
-4. `npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit`；`npx eslint .`；`python3 tools/desens-scan.py`。
-5. stage-spec DoD **E2/F1/F2/F3＋A2.5＋G 类** 逐条（`stage-gate`）。
+1. `npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit`（双 tsc 全绿——旧域依赖已断净、归档面已 rm，此处首次全项目编译通过）。
+2. `npx vitest run`（L1 全绿＝S1a 领域测＋S1b 新测；旧 769 归零重建后不留旧测充覆盖，ADR-028 D8）。
+3. `npx playwright test --project=interaction`（F1/C6/E1 L3 全绿）。
+4. `cd apps/desktop && npm run e2e`（假轨绿；真轨有 Key 才跑否则记 blocked，不判红不预绿，G5 式）。
+5. `npx eslint .`（含 S-1 呈现禁 import 写命令＋G-1 防回流 flat 配置）；`python3 tools/desens-scan.py` rc=0（Key 不入库，C3）。
+6. stage-spec DoD **A1–A6／B／C／D／E／F／G 逐条**过（A1 tag 存在、A2–A6 归档面不在 `src/`；B 领域内核；C 15 不变量测；D 事件闭集；E 双轨 e2e＋E1 取消；F 呈现＋未持久化态显式；G 各闸）——A2.5 归档项经用户裁定已入 ADR-028 Decision 3。
+7. 出口经 `agent-dispatch` 派**异构执行者**独立审计 S1 产出（不自审；强模型池轮替 mcode／command-code／qodercn，避开 currentTool），报告落 `docs/audits/`，结论回用户。闸红不放行（铁律④）。
 
-**S1a＋S1b 合起来＝S1 全 DoD A–G**。S1 出口一次过闸（段6 闸＋S1 spec DoD），经 `agent-dispatch` 派异构执行者独立审计 S1 产出（H/M/L），结论回用户。**后续 S2–S7 不在本 plan**（作用域修正/持久化/证据三类型/产物谓词/卡滞催弃/呈现完整/指标）。
+**S1a＋S1b 合起来＝S1 全 DoD A–G**（S1a 建域＋假网关、S1b port 真网关＋呈现＋物理归档＋rewire，出口闸在 S1b 末尾单次过）。**后续 S2–S7 不在本 plan**（作用域修正/持久化/证据三类型/产物谓词/卡滞催弃/呈现完整/指标）。
