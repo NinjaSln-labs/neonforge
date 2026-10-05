@@ -2,8 +2,8 @@
 // 网络侧收敛在 Main Process（A0 §6 裁决 D-M8）；renderer 经 IPC 调用
 
 import { TEST_HOOKS } from './testHooks.js'
-// V1.5 S1 Task 1.3：协议工具接入模型工具面（schema 单源——domain/protocolTools.ts）
-import { PROTOCOL_TOOL_DEFS } from '../domain/protocolTools.js'
+// V1.5 S1 Task 1.3：协议工具接入模型工具面（S1b Task 0：schema 表迁 main 本地常量，断旧域 import）
+import { PROTOCOL_TOOL_DEFS } from './protocolToolDefs.js'
 import {
   type ModelID,
   type ModelTier,

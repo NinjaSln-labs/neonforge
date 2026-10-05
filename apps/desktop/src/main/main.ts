@@ -8,7 +8,6 @@ import { killAllSubprocesses } from './tools.js'
 import { stopAllServices } from './serviceManager.js'
 import { TEST_HOOKS } from './testHooks.js'
 import { configStore } from './configStore.js'
-import { setTimelineUserData } from './timelineLogger.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -33,7 +32,6 @@ if (TEST_HOOKS.testUserData) {
   app.setPath('userData', TEST_HOOKS.testUserData)
   configStore.reload()
 }
-setTimelineUserData(app.getPath('userData'))
 const gotTheLock = app.requestSingleInstanceLock()
 
 if (!gotTheLock) {

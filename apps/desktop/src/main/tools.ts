@@ -19,8 +19,7 @@ import {
 } from './serviceManager.js'
 // 2026-08-06 能力模型（坑 83）：check-env 返回能力视图（平台原生 + 外部扩展 Status——模型按需求选能力）
 import { detectCapabilities, attributeCommandFailure } from './envManager.js'
-import { logTimeline } from './timelineLogger.js'
-import { classifyReadonly, isLocalhostCommand } from '../domain/conversationState.js'
+import { classifyReadonly, isLocalhostCommand } from './toolClassify.js'
 import { configStore } from './configStore.js'
 import { webSearch, webFetch } from './webTools.js'
 
@@ -130,14 +129,6 @@ class ToolRegistry {
     opts: { approved?: boolean; rootPath?: string; sessionId?: string } = {},
   ): Promise<ToolResult> {
     console.log('[tools] execute', name, 'rootPath=' + (opts.rootPath ?? 'NONE'))
-    // 2026-08-07 会话时间线（Session Timeline BC——main 侧工具执行记录兜底：renderer 崩溃也有工具时间线）
-    // 2026-08-08 会话归属：sessionId（会话 UUID）优先——工具执行写入对应会话文件
-    logTimeline({
-      session: opts.sessionId ?? opts.rootPath ?? undefined,
-      type: 'tool.executing',
-      role: 'tool',
-      detail: { name, args, approved: opts.approved },
-    })
     const tool = this.tools.get(name)
     if (!tool) return { ok: false, error: `未知工具：${name}` }
     // 2026-08-04 规划级授权强制（用户实测：模型说了调 approve-files 但没调——指令不可靠，机制兜底）：
@@ -386,26 +377,10 @@ async function bashExecutor(
       else if (code !== 0) {
         // 2026-08-07 Ledger（坑 83 ⑥）：bash 失败归因到能力（node/python/dev-tools）——check-capability 后续降级 failed（自学习）
         try {
-          const attr = attributeCommandFailure(ctx.rootPath ?? '', cmd)
-          logTimeline({
-            session: ctx.sessionId ?? ctx.rootPath ?? undefined,
-            type: 'capability.ledger_updated',
-            role: 'tool',
-            detail: { capabilityId: String(attr ?? ''), ok: false },
-          })
+          attributeCommandFailure(ctx.rootPath ?? '', cmd)
         } catch {
           /* 归因失败不影响命令错误返回 */
         }
-        logTimeline({
-          session: ctx.sessionId ?? ctx.rootPath ?? undefined,
-          type: 'tool.failed',
-          role: 'tool',
-          detail: {
-            name: 'bash',
-            error: `exit-${code}: ${stderr.slice(0, 300)}`,
-            command: cmd.slice(0, 200),
-          },
-        })
         reject(new Error(stderr ? `exit-${code}: ${stderr.slice(0, 500)}` : `exit-${code}`))
       } else {
         // 2026-08-05 ServiceState（轻量服务记忆）：起服务类命令且 stdout 含实际地址 → 结果注一条（模型跨轮记得，不用重新探查端口）

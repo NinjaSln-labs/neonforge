@@ -4,7 +4,7 @@
 // 安全护栏：fail-closed（非只读命令不执行——判定由领域层 unverifiable 承担）+ 超时 5s + 输出截断 4KB + 串行执行
 // 进程清理（坑 54 模式——S4 复审修正）：spawn detached 新进程组——超时/结束统一杀进程组（含 &/nohup 后代），不留孤儿
 import { spawn } from 'node:child_process'
-import { classifyReadonly } from '../domain/conversationState.js'
+import { classifyReadonly } from './toolClassify.js'
 
 /** 命令是否系统可代跑（只读——与领域层 isSystemVerifiable 同源判定——main 侧再校验 fail-closed） */
 function isSystemVerifiable(command: string): boolean {
