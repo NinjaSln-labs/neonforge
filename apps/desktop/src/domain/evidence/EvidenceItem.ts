@@ -25,6 +25,22 @@ function fnv1a(s: string): string {
   return (h >>> 0).toString(16).padStart(8, '0')
 }
 
+/** 内容摘要（证据域单源；ApplyChange 的去重键复用同一算法）。 */
+export function digest(content: string): string {
+  return fnv1a(content)
+}
+
+const PTR_PREFIX = 'mem://evidence/'
+
+/** S1 内存态指针（落账与 ChangeProduced 载荷的变更集ref 同源）。 */
+export function evidencePtr(evidenceId: string): string {
+  return `${PTR_PREFIX}${evidenceId}`
+}
+
+export function evidenceIdFromPtr(ptr: string): string {
+  return ptr.slice(PTR_PREFIX.length)
+}
+
 // 落账前脱敏判据：含凭据形态串 ⇒ 拒（S-4）。
 export function assertNoCredentialShape(content: string): void {
   if (CREDENTIAL_SHAPE.test(content) || PRIVATE_KEY_BLOCK.test(content)) {
@@ -34,8 +50,7 @@ export function assertNoCredentialShape(content: string): void {
 
 function makePayloadRef(evidenceId: string, content: string): PayloadRef {
   assertNoCredentialShape(content)
-  const digest = fnv1a(content)
-  return { ptr: `mem://evidence/${evidenceId}`, digest }
+  return { ptr: evidencePtr(evidenceId), digest: digest(content) }
 }
 
 export interface EvidenceRecordInput {
