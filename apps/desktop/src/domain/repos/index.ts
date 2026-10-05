@@ -1,5 +1,6 @@
 import type { AppendInput, TimelineEvent } from '../timeline.js'
 import type { EvidenceItem } from '../evidence/EvidenceItem.js'
+import type { Delegation } from '../delegation/Delegation.js'
 
 // 仓储面（详设 §3／段3 §7，S1 内存实现）。seq 单调与单写者由 TimelineLog 聚合维护，非仓储（M-02）。
 // append＝唯一机制口（S-1）：追加与聚合状态写入同事务，失败⇒整事务回滚（§6 例外条款）。
@@ -17,4 +18,12 @@ export interface EvidenceRepo {
   findByIds(ids: string[]): EvidenceItem[]
   findByDelegation(delegationId: string): EvidenceItem[]
   markFirstInspection(id: string): void
+}
+
+// 委托仓储（详设 §3／段3 §7）：findActive＝非归档非放弃（含已收尾，I-9 读侧）；listArchived 供归档面。
+export interface DelegationRepo {
+  save(d: Delegation): void
+  findById(id: string): Delegation | undefined
+  findActive(): Delegation[]
+  listArchived(): Delegation[]
 }
