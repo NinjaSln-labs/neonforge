@@ -51,14 +51,40 @@ export default tseslint.config(
       'react-hooks/exhaustive-deps': 'warn',
     },
   },
+  // S-1 即时红面（详设 §8 M-04：flat config 分块；真判据＝tests/static/s1WritePath.test.ts，本块只是快反馈）
+  // 呈现投影禁 import 聚合写命令面与写服务面——只读投影走 IPC（S-1 唯一例外 EvidenceInspected 经机制口）
+  {
+    files: ['src/renderer/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '**/domain/delegation/*',
+                '**/domain/turn/*',
+                '**/domain/queue/*',
+                '**/domain/evidence/*',
+                '**/domain/authorization/*',
+                '**/domain/service/*',
+                '**/domain/repos/memory/*',
+              ],
+              message:
+                'S-1：呈现侧禁 import 聚合写命令面与写服务面，只读投影经 IPC（判据 s1WritePath.test.ts）。',
+            },
+          ],
+        },
+      ],
+    },
+  },
   // Node 环境脚本（e2e 驱动 Electron——非浏览器代码）
   {
     files: ['**/*.mjs'],
     languageOptions: {
       globals: globals.node,
     },
-  },
-  // Playwright page.evaluate 回调运行在浏览器上下文——仅实际使用 window 的 e2e 文件放行
+  }, // Playwright page.evaluate 回调运行在浏览器上下文——仅实际使用 window 的 e2e 文件放行
   {
     files: ['e2e-*.mjs'],
     languageOptions: {
