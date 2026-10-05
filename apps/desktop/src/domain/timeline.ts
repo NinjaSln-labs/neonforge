@@ -245,24 +245,47 @@ export interface EventEntry {
   readonly event: TimelineEvent
 }
 
+// append 机制口的输入＝事件主体（无 seq，seq 由聚合落）。
+export interface AppendInput {
+  ts: string
+  delegationId: string
+  type: EventType
+  detail: AnyPayload
+}
+
 // ─────────────────────────────────────────────────────────────
-// TimelineLog 聚合根：唯一写者口 record（seq 单调、无重号无跳号）
-// S-1 机制口 append（TimelineRepo）取此 record 落 seq；追加失败⇒整事务回滚（§6 例外条款）。
+// TimelineLog 聚合根：唯一写者口 record（seq 单调、无重号无跳号）。
+// TimelineRepo.append 为其机制口（M-02：seq/单写者由聚合维护，非仓储）；
+// 追加与聚合状态写入同事务，失败⇒回滚（§6 例外条款）。
 // ─────────────────────────────────────────────────────────────
 export class TimelineLog {
   private entries: EventEntry[] = []
   private nextSeq = 1
 
-  // 唯一写者口：给定事件主体（无 seq），落全局单调 seq 后入序列，返回落账事件。
-  record(input: {
-    ts: string
-    delegationId: string
-    type: EventType
-    detail: AnyPayload
-  }): TimelineEvent {
+  // 唯一写者口：落全局单调 seq 入序列，返回 EventEntry（seq＋event）。
+  record(input: AppendInput): EventEntry {
     const event: TimelineEvent = { ...input, seq: this.nextSeq }
-    this.entries.push({ seq: this.nextSeq, event })
+    const entry: EventEntry = { seq: this.nextSeq, event }
+    this.entries.push(entry)
     this.nextSeq += 1
-    return event
+    return entry
+  }
+
+  // 同事务回滚：丢弃 seq > uptoLastSeq 的追加、复位游标（append 内 tx throw 时调）。
+  rollbackTo(uptoLastSeq: number): void {
+    this.entries = this.entries.filter((e) => e.seq <= uptoLastSeq)
+    this.nextSeq = uptoLastSeq + 1
+  }
+
+  lastSeq(): number {
+    return this.entries.length === 0 ? 0 : this.entries[this.entries.length - 1].seq
+  }
+
+  since(seq: number): TimelineEvent[] {
+    return this.entries.filter((e) => e.seq >= seq).map((e) => e.event)
+  }
+
+  findByDelegation(id: string): TimelineEvent[] {
+    return this.entries.filter((e) => e.event.delegationId === id).map((e) => e.event)
   }
 }
