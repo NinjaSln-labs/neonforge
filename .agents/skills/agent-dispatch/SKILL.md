@@ -30,7 +30,7 @@ description: >-
    - 报告类：落 `.scratch/`（草稿）或 `docs/audits/`（审计），主会话署名采纳意见后才算数；
    - 任何产出**不得由外部 agent 直接 commit 到工作分支**。
 3. **审计须强模型**（用户裁定 2026-10-05）：独立审计执行者从 `mcode`／`command-code`／`qodercn` 中选——qodercn 受同源限制（不审主会话亲笔产出；其它模型/执行者干活时可审）；pi 两模型能力弱不派审计。审计已派出后发现执行者不合资格：产出作废不入 `docs/audits/`，换合格执行者重派。
-4. **当前主 ≠ 派单目标**（用户 2026-10-05 裁定）：派单前主会话须从用户最近的明文表达（"我在 X"/"档期在 X"/"当前主 X" 等）或上下文识别「当前主」是 `mcode`／`command-code`／`qodercn` 中的哪一个（pi 不计入），派单目标须排除当前主，并满足硬约束 1/3（不自审＋强模型＋qodercn 同源限制）。**默认池收敛**（当前主=mcode ⇒ 实际仅 command-code，因 qodercn 同源限制避开主会话亲笔；当前主=command-code ⇒ 默认 mcode；当前主=qodercn ⇒ 默认 mcode 或 command-code）。无法识别当前主时，询问用户「当前主？」，未答不得起 run_in_background；池空则收回主会话自做并记坑。**通用化**：当前主可能是任意一个强模型（用户档期可在三者间切），本约束不绑死单一执行者。
+4. **当前主 ≠ 派单目标**（用户 2026-10-05 裁定）：调用方派单时须传入两个参数——`currentTool`（当前 CLI：mcode/command-code/qodercn，pi 不计入——不派审计且不构成主占用）与 `currentModel`（其模型：M3.1-Flash-Preview/DeepSeek v4.1 Flash/Qwen3.8-Flash 等），派单目标自动排除 currentTool，并满足硬约束 1/3（不自审＋强模型＋qodercn 同源限制）。**默认池收敛**（currentTool=mcode ⇒ 实际仅 command-code，因 qodercn 同源限制避开主会话亲笔；currentTool=command-code ⇒ 默认 mcode；currentTool=qodercn ⇒ 默认 mcode 或 command-code）。调用方未传参 ⇒ 起 run_in_background 起手前必问用户「当前主？」，未答不得起跑；池空则收回主会话自做并记坑。**通用化**：currentTool 可能是任意一个强模型（用户档期可在三者间切），本约束不绑死单一执行者。
 
 ## 任务书格式（＝冻结工件＋产出格式，不给会话上下文）
 
@@ -52,9 +52,9 @@ description: >-
 
 ## 首派流程
 
-1. **当前主识别**——从用户最近明文表达或上下文识别「当前主」（X ∈ {mcode, command-code, qodercn}，pi 不计入）；无法识别时询问用户，未答不得起 run_in_background。
-2. **挑执行者**——按硬约束 1（不自审）／3（强模型）／4（当前主 ≠ 派单目标）／qodercn 同源限制四交集求候选池；池空则记坑＋收回主会话自做。
-3. 写任务书到 `/tmp/nf-dispatch-<id>.txt`（含「当前主＝X」声明，让执行者知其角色边界）；
+1. **当前主入参**——调用方传入 `currentTool`（mcode/command-code/qodercn，pi 不计入）＋ `currentModel`（其模型）；未传时必问用户「当前主是？」，未答不得起 run_in_background。
+2. **挑执行者**——按硬约束 1（不自审）／3（强模型）／4（currentTool ≠ 派单目标）／qodercn 同源限制四交集求候选池；池空则记坑＋收回主会话自做。
+3. 写任务书到 `/tmp/nf-dispatch-<id>.txt`（含「currentTool＝X / currentModel＝Y」声明，让执行者知其角色边界）；
 4. 后台运行 CLI（长任务 `run_in_background`）；
 5. 收产出→按类型过闸（代码类：主会话复核 diff＋跑段6 闸；报告类：主会话署名采纳意见）；
 6. 结果与闸判定经 handoff CLI 记录；
