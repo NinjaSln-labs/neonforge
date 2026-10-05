@@ -35,4 +35,16 @@ export class Scope {
   get entries(): ScopeEntry[] {
     return this.chain[this.chain.length - 1].entries
   }
+
+  // 作用域内读数（RequiresApprovalSpec 的①类判据输入）：条目资源类型相等 ∧ 模式命中。
+  covers(kind: ResourceKind, resource: string): boolean {
+    return this.entries.some((e) => e.kind === kind && matches(e.pattern, resource))
+  }
+}
+
+// ponytail: S1 命中判据＝'**' 全放行 ∨ 尾随 '/**' 前缀 ∨ 字面相等；正式 glob 语义随 S2 作用域修正批落地。
+function matches(pattern: string, resource: string): boolean {
+  if (pattern === '**') return true
+  if (pattern.endsWith('/**')) return resource.startsWith(pattern.slice(0, -2))
+  return resource === pattern
 }
