@@ -35,14 +35,14 @@ tests/interaction/{delegationLifecycle,stopInflight,decisionCard,unpersistedStat
 
 ## Task 0：复用文件去旧域依赖（归档前置，否则 `git rm` 后 main 编译断）
 
-**Files:** Modify `src/main/gateway.ts`（去 `import { PROTOCOL_TOOL_DEFS } from '../domain/protocolTools.js'`）、`src/main/tools.ts`（去 `import { classifyReadonly, isLocalhostCommand } from '../domain/conversationState.js'`）、`src/main/verification.ts`（同）。
-**Interfaces:** Produces 这些复用文件的旧域依赖迁到**新树**——`isLocalhostCommand`/`classifyReadonly`（只读/本地命令判定）落 `src/domain/authorization/` 高影响清单侧或新 `src/main/toolClassify.ts`（自包含，不 import 旧域）；`PROTOCOL_TOOL_DEFS` 迁新工具面或本地常量表。**不改** gateway 重试/分类/修复逻辑本体，只断旧域 import。
+**Files:** Modify `src/main/gateway.ts`（去 `import { PROTOCOL_TOOL_DEFS } from '../domain/protocolTools.js'`）、`src/main/tools.ts`（去 `import { classifyReadonly, isLocalhostCommand } from '../domain/conversationState.js'`）、`src/main/verification.ts`（同）、`src/main/main.ts`（去 `import { setTimelineUserData } from './timelineLogger.js'` ＋ 其调用 `setTimelineUserData(app.getPath('userData'))`＝旧 JSONL timeline 接线，属 A2.5 归档面）。
+**Interfaces:** Produces 这些复用文件的旧域依赖迁到**新树**——`isLocalhostCommand`/`classifyReadonly`（只读/本地命令判定）落 `src/domain/authorization/` 高影响清单侧或新 `src/main/toolClassify.ts`（自包含，不 import 旧域）；`PROTOCOL_TOOL_DEFS` 迁新工具面或本地常量表；`main.ts` 的 `setTimelineUserData` **直接删、不迁移**（新树 timeline 走 TimelineRepo 内存态，无 JSONL userData 接线）。**不改** gateway 重试/分类/修复逻辑本体，只断旧域 import。
 
-- [ ] **Step 1：定位符号消费点** — `grep -rn "classifyReadonly\|isLocalhostCommand\|PROTOCOL_TOOL_DEFS" src/main`；记录每处调用。
+- [ ] **Step 1：定位符号消费点** — `grep -rn "classifyReadonly\|isLocalhostCommand\|PROTOCOL_TOOL_DEFS" src/main`；`grep -rn "setTimelineUserData\|timelineLogger" src/main/main.ts`；记录每处调用。
 - [ ] **Step 2：写失败测** — `tests/unit/toolClassify.test.ts`：新落点函数按旧语义判 localhost/只读（等价回归，取自 tag 版旧实现）。
-- [ ] **Step 3：迁实现** — 把这几个纯判定函数复制到新树自包含模块（不 import 旧域），`gateway.ts`/`tools.ts`/`verification.ts` 改 import 到新落点。
-- [ ] **Step 4：跑 PASS** — `npx vitest run tests/unit/toolClassify.test.ts`；`grep "domain/conversationState\|domain/protocolTools" src/main/{gateway,tools,verification}.ts` 命中＝0。
-- [ ] **Step 5：commit** — `refactor(S1b): 复用文件 gateway/tools/verification 去旧域依赖（迁纯判定到新树，为归档铺路）`。
+- [ ] **Step 3：迁实现** — 把纯判定函数复制到新树自包含模块（不 import 旧域），`gateway.ts`/`tools.ts`/`verification.ts` 改 import 到新落点；`main.ts` 删 `setTimelineUserData` 的 import＋调用（不迁移）。
+- [ ] **Step 4：跑 PASS** — `npx vitest run tests/unit/toolClassify.test.ts`；`grep "domain/conversationState\|domain/protocolTools" src/main/{gateway,tools,verification}.ts` 与 `grep "timelineLogger\|setTimelineUserData" src/main/main.ts` 命中皆＝0。
+- [ ] **Step 5：commit** — `refactor(S1b): 复用文件 gateway/tools/verification/main 去旧域依赖（迁纯判定到新树＋删 main 旧 JSONL 接线，为归档铺路）`。
 
 ## Task 1：领域运行时装配（main 持 S1a 单例）
 
@@ -135,13 +135,13 @@ tests/interaction/{delegationLifecycle,stopInflight,decisionCard,unpersistedStat
 ## Task 9：物理归档批（A2/A2.3/A2.4/A2.5，rewire 后执行）
 
 **Files：** `git rm` 归档面（清单唯一源＝stage-spec `V1-S1-...md` DoD **A2.2 的 24 名 renderer** ＋ **ADR-028 Decision 3** 领域/测试/UAT 面；调阅＝`git show legacy-freeze-v0.1.0:<路径>`）。**前置**＝Task 0/3/6 已断开所有 kept 文件对归档面的 import。
-**Interfaces：** Produces 归档后以下均不在树：旧领域 `src/domain/{conversationState,agentLoop,protocolTools,planProposalParser,completionClaimParser}.ts`、旧 `src/main/timelineLogger.ts`、旧 24 renderer、`tests/**` 旧测、`snapshots/**`、`scripts-cdp/`、`e2e-sim/`、`apps/desktop/e2e-*.mjs`。**保留面不动**（`ConfigPage.tsx`/`icons.tsx`/`diffRender.tsx`/`styles.css`/`sandboxPath.ts`）。
+**Interfaces：** Produces 归档后以下均不在树：旧领域 `src/domain/{conversationState,agentLoop,protocolTools,planProposalParser,completionClaimParser}.ts`、旧 `src/main/timelineLogger.ts`、旧 24 renderer、`tests/{unit,interaction,visual}/**` 旧测（**不收整棵 `tests/`——`tests/helpers/**` 不在 A2.3/ADR-028 D3 清单，保留**）、`snapshots/**`、`scripts-cdp/`、`e2e-sim/`、`apps/desktop/e2e-*.mjs`。**保留面不动**（`ConfigPage.tsx`/`icons.tsx`/`diffRender.ts`/`styles.css`/`sandboxPath.ts`）。
 
-- [ ] **Step 1：核 kept 文件零残留引用** — `grep -rn "conversationState\|protocolTools\|agentLoop\|planProposalParser\|completionClaimParser\|timelineLogger\|ConversationPanel\|MainWorkspace\|StartPage" src/main src/preload src/renderer --include=*.ts --include=*.tsx`；命中＝0（>0 说明 rewire 未断净，回 Task 0/3/6 补，不得带引用直接 rm）。
+- [ ] **Step 1：核 kept 文件零残留引用** — `grep -rn "conversationState\|protocolTools\|agentLoop\|planProposalParser\|completionClaimParser\|timelineLogger\|ConversationPanel\|MainWorkspace\|StartPage" src/main src/preload src/renderer --include=*.ts --include=*.tsx`；命中＝0（>0 说明 rewire 未断净，回 Task 0（含 main.ts）/3/6 补，不得带引用直接 rm）。
 - [ ] **Step 2：git rm 领域面＋旧时间线读面** — `git rm src/domain/{conversationState,agentLoop,protocolTools,planProposalParser,completionClaimParser}.ts src/main/timelineLogger.ts`。
-- [ ] **Step 3：git rm 旧呈现 24 件** — 逐名 rm stage-spec A2.2 所列 24 个 `src/renderer/*`（**不含**保留面 `ConfigPage.tsx`/`icons.tsx`/`diffRender.tsx`）。
-- [ ] **Step 4：git rm 旧测试/UAT/视觉基线面（tag 驱动，绝不误删新测）** — 以冻结 tag 为唯一清单源：`git ls-tree -r --name-only legacy-freeze-v0.1.0 -- apps/desktop/tests apps/desktop/snapshots apps/desktop/scripts-cdp apps/desktop/e2e-sim 'apps/desktop/e2-*.mjs' 'apps/desktop/e2e-*.mjs'` 所得＝待删旧文件（S1a/S1b 新测不在 tag＝天然排除）；`git rm` 之。
-- [ ] **Step 5：跑全测确认新树自洽** — `npx vitest run`（旧测已退，仅剩 S1a＋S1b 新测）全绿；`test ! -e apps/desktop/src/domain/conversationState.ts && test ! -e apps/desktop/src/main/timelineLogger.ts && echo ARCHIVED_OK`。
+- [ ] **Step 3：git rm 旧呈现 24 件** — 逐名 rm stage-spec A2.2 所列 24 个 `src/renderer/*`（**不含**保留面 `ConfigPage.tsx`/`icons.tsx`/`diffRender.ts`）。
+- [ ] **Step 4：git rm 旧测试/UAT/视觉基线面（tag 驱动，绝不误删新测/helpers）** — `git ls-tree -r --name-only legacy-freeze-v0.1.0 -- apps/desktop/tests/unit apps/desktop/tests/interaction apps/desktop/tests/visual apps/desktop/snapshots apps/desktop/scripts-cdp apps/desktop/e2e-sim 'apps/desktop/e2e-*.mjs'` 所得＝待删旧文件（S1a/S1b 新测与 `tests/helpers/**` 不在这些 glob＝天然排除）；`git rm` 之。
+- [ ] **Step 5：跑全测确认新树自洽＋G-1 全树覆盖** — `npx vitest run`（旧测已退，仅剩 S1a＋S1b 新测）全绿；`test ! -e apps/desktop/src/domain/conversationState.ts && test ! -e apps/desktop/src/main/timelineLogger.ts && echo ARCHIVED_OK`；**把 G-1 `noLegacyImport.test.ts` 扫描集从新树扩到 `src/**` 全树再跑绿**（旧面 rm 后全树命中＝0＝承载 stage-spec A5.1 全树判据，堵 G-1 覆盖空档）。
 - [ ] **Step 6：commit** — `chore(S1b): 物理归档旧实现（A2/A2.3/A2.4/A2.5，git rm，rewire 后断净）`。
 
 ---
@@ -152,7 +152,7 @@ tests/interaction/{delegationLifecycle,stopInflight,decisionCard,unpersistedStat
 2. `npx vitest run`（L1 全绿＝S1a 领域测＋S1b 新测；旧 769 归零重建后不留旧测充覆盖，ADR-028 D8）。
 3. `npx playwright test --project=interaction`（F1/C6/E1 L3 全绿）。
 4. `cd apps/desktop && npm run e2e`（假轨绿；真轨有 Key 才跑否则记 blocked，不判红不预绿，G5 式）。
-5. `npx eslint .`（含 S-1 呈现禁 import 写命令＋G-1 防回流 flat 配置）；`python3 tools/desens-scan.py` rc=0（Key 不入库，C3）。
+5. `npx eslint .`（含 S-1 呈现禁 import 写命令＋S-2 承载体，G-1 防回流归 A5.1 vitest 静态测非 eslint）；`python3 tools/desens-scan.py` rc=0（Key 不入库，C3）。
 6. stage-spec DoD **A1–A6／B／C／D／E／F／G 逐条**过（A1 tag 存在、A2–A6 归档面不在 `src/`；B 领域内核；C 15 不变量测；D 事件闭集；E 双轨 e2e＋E1 取消；F 呈现＋未持久化态显式；G 各闸）——A2.5 归档项经用户裁定已入 ADR-028 Decision 3。
 7. 出口经 `agent-dispatch` 派**异构执行者**独立审计 S1 产出（不自审；强模型池轮替 mcode／command-code／qodercn，避开 currentTool），报告落 `docs/audits/`，结论回用户。闸红不放行（铁律④）。
 
