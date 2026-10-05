@@ -1,8 +1,8 @@
-# 段3 · 领域战术设计（frozen v1.0）
+# 段3 · 领域战术设计（frozen v1.1）
 
-- 状态：**frozen v1.0 — 五轮独立审计（T-01–T-24／R3-01–05＋T-16 副作用／R3B-01–08／RB-01–04／RB2-01–09，共 51 条）全部采纳修入；弃委托缺口经用户授权回补段2（frozen v1.1，事件 21→22）；段3 出口＝用户终裁通过（2026-10-05）＋AI 过闸备案**
-- 修订对照：`docs/audits/` 下段3 系列四份（首轮/复审/第三轮/回补增量）＋`stage3-domain-tactics-audit5-2026-10-05.md`（第五轮）；正文不复述审计编号
-- 上游工件：`02-domain-strategy.md`（段2 frozen v1.0）、`01-l0-product-master.md`（段1 frozen）、`00-problem-and-scope.md`（段0 frozen）
+- 状态：**frozen v1.1 — v1.0 于 2026-10-05 用户终裁通过＋AI 过闸备案（五轮独立审计 T-01–T-24／R3-01–05＋T-16 副作用／R3B-01–08／RB-01–04／RB2-01–09，共 51 条全部采纳修入；弃委托缺口经用户授权回补段2 frozen v1.1，事件 21→22）；v1.1＝用户裁定触发的铁律②回退增量修订（2026-10-05，ADR-027）——段4 就 §9 遗留账「产物谓词」裁定"立 DoD：收尾必有变更集类证据"，其判据落点在 `AcceptanceSpec` 正文内 ⇒ 回退本段修订，改动面＝§4 I-16 行、§8 AcceptanceSpec 行、§9 遗留账关闭、状态头与上游版本行；不新立不变量编号（I-16 编号与位置不变），谓词源＝段2 §4「产物」行（V1＝软件工程变更集＋其验证结果），属既成谓词的可执行化而非新语义。其余条文与 v1.0 逐字相同。按段2 v1.1 先例派回补增量复审（异构执行者，只审增量面），报告落 `docs/audits/`**
+- 修订对照：`docs/audits/` 下段3 系列四份（首轮/复审/第三轮/回补增量）＋`stage3-domain-tactics-audit5-2026-10-05.md`（第五轮）＋v1.1 回补增量复审；正文不复述审计编号
+- 上游工件：`02-domain-strategy.md`（段2 frozen v1.1）、`01-l0-product-master.md`（段1 frozen v1.0）、`00-problem-and-scope.md`（段0 frozen v1.0）
 - 经验层（只作经验不作依据，引用带 `@be6e299`）：旧树 ADR-021 Turn/DriverLease 概念集、ADR-019 同步取消令牌与"已作废链写入计数为 0"判据、`00-domain-authority.md` §3.7/§3.8
 - 纪律：退役词（假推进/沙箱/高危/越界/同签名/仓内/破坏性操作/Round）不进任何条文；本稿全部名词以段2 §4 语言表为谓词源；实现命名与代码归段6，本稿只定领域形状。
 
@@ -88,7 +88,7 @@ VO 无 id 核查：上表 VO 均按值比较、无独立生命周期（PayloadRe
 | I-13 | 过期 TurnToken 的状态写入计数＝0。**比较基准**：令牌复合值 (delegationId, turnId) ≠ 当前在飞轮复合值 ⇒ 过期 | 每个推进恢复点写前 | 令牌复核（推进驱动全域横切） | 写丢弃＋**过期令牌写入计数器**留证（聚合状态字段，DoD 判据＝计数 0；不入 timeline 闭集） |
 | I-14 | DelegationReopened 挂原 delegationId（重开不新建委托） | RejectAcceptance | Delegation 聚合 | 新建拒绝（北极星口径守卫，U4） |
 | I-15 | **U2 守卫**：**拒绝待决期**（可判定边界＝该委托 DecisionDenied 发生起，至下一次 TriggerSource＝用户输入的 StartTurn 成功止）内，StartTurn 仅"用户输入"可触发——"系统恢复""队列准入"两源对该委托不可用（刻意收敛：拒绝＝用户收回推进权，用户在先意志的队列项亦不得替用户消化拒绝；解除后队列按序恢复消费）；卡滞待指令期准入＝{用户输入, 队列准入}（裁定9，与拒绝待决期口径不同源为有意设计） | StartTurn | Turn 聚合（以 Delegation 只读查询取被拒标记） | 命令拒绝＋留痕（命令回执，与 I-5 同口径，不入 timeline 闭集——§5 留痕口径） |
-| I-16 | 验收前置：Delegation 处于待核验态∧AcceptanceSpec 过（存在可打开核验且 Provenance＝系统采集的证据引用） | AcceptDelegation | Delegation 聚合（AcceptanceSpec 只读查询） | 验收拒绝（DelegationRejected 路径可用：拒绝→原单重开） |
+| I-16 | 验收前置：Delegation 处于待核验态∧AcceptanceSpec 过（存在可打开核验且 Provenance＝系统采集的证据引用，**且其中至少一条 EvidenceType＝变更集**【v1.1，ADR-027】） | AcceptDelegation | Delegation 聚合（AcceptanceSpec 只读查询） | 验收拒绝（DelegationRejected 路径可用：拒绝→原单重开） |
 | I-17 | AmendScope 产生新版本前必存在绑定该修正的已决 DecisionPoint（缘由＝作用域修正，批准权仅用户） | AmendScope | Scope 聚合命令前置 | 修正拒绝 |
 | S-1 | 呈现投影/度量采点**不得直接引用四核心聚合的写命令**；timeline 追加仅经 `TimelineRepo.append` 唯一机制口（呈现侧用户动作回流仅限 EvidenceInspected 经机制口落账） | 静态（段6 lint/依赖检查） | 结构检查项 | CI 红 |
 | S-2 | 核心域代码零 provider 专名 | 静态（grep 断言） | 结构检查项 | CI 红 |
@@ -163,7 +163,7 @@ VO 无 id 核查：上表 VO 均按值比较、无独立生命周期（PayloadRe
 **Specifications**（纯谓词，可独立测试）：
 - `RequiresApprovalSpec(operation, scopeVersion, 高影响清单)`：操作类别∈{资源访问, 命令执行, **作用域修正**}；作用域外 ∪ 清单命中 ∪ 作用域修正 → true（I-7/I-17 执行点；清单唯一源见 §2 外部引用再审视，S-3）
 - `ValidClaimSpec(claim, evidenceRepo)`：evidenceRefs 非空 ∧ 全部 Provenance＝系统采集 ∧ 同 delegationId（I-5）
-- `AcceptanceSpec(evidenceRepo, delegationId)`：委托待核验态下存在可打开核验且 Provenance＝系统采集的证据引用 ⇒ 可验收（I-16；环收敛点的谓词形状，§6 验收行消费）
+- `AcceptanceSpec(evidenceRepo, delegationId)`：委托待核验态下存在可打开核验且 Provenance＝系统采集的证据引用，**且该证据集中至少一条 EvidenceType＝变更集** ⇒ 可验收（I-16；环收敛点的谓词形状，§6 验收行消费）。**v1.1 加严（ADR-027）**：变更集条款＝段2 §4「产物（Artifact）」谓词（V1＝软件工程变更集＋其验证结果）的可执行化落点，即 §9 遗留账「产物谓词」的关闭形态；不新立不变量编号、不扩事件闭集。**射程后果（有意，非缺口）**：无变更集类产物的委托（纯调研/纯解释）在 V1 不可验收收尾，与段0 裁定 B（V1 锚软件工程委托）＋N3 OUT 同向；此类需求属射程外，不得在下游（计划/实现）就地放宽本谓词（铁律②）。
 - `StallSpec(inFlightTurn, timeline, window)`：窗内零新事件（窗阈值＝段4 校准常量）
 - `RecoverableSpec(persistedState)`：账本完整可重放（I-12）
 
@@ -177,7 +177,7 @@ VO 无 id 核查：上表 VO 均按值比较、无独立生命周期（PayloadRe
 ## 9. 对段4 的移交
 
 - stage-spec DoD 断言候选：I-1–I-17 逐条可测判据（最硬四条：I-13 过期令牌写入计数＝0、I-9 无归宿等待＝0【检测式，计数判据】、I-11 否定事实四事件必有痕、I-15 拒绝待决期 TriggerSource≠用户输入的自发开轮计数＝0）＋S-1–S-4 静态检查（CI 红判据）。
-- 遗留账（显式登记移交）：**产物谓词与 N3 OUT 判定**（"什么算有产物的委托"）移交段4——语言表 17 词中唯一无战术判定落点的词，段4 决定是否立 DoD 断言（如"收尾必有变更集类证据"）。（原登记项②弃委托路径事件化已经用户授权回补段2 v1.1 并同步本稿 §1/§2/§5/§6，账目关闭。）
+- 遗留账（显式登记移交）：**已全数关闭**。（原登记项①**产物谓词与 N3 OUT 判定**：用户 2026-10-05 裁定"立 DoD：收尾必有变更集类证据"⇒ 铁律②回退本段 v1.1，判据落 §4 I-16＋§8 AcceptanceSpec，裁定全文＝ADR-027，DoD 断言归属段4 计划的实现阶段 S4；原登记项②弃委托路径事件化已经用户授权回补段2 v1.1 并同步本稿 §1/§2/§5/§6，账目关闭。）
 - 采点映射表：§5 事件目录×L0 §4 三层指标（北极星←DelegationAccepted 收尾态【**分母＝已收尾件；已放弃件不进分母**】；过程①←Accepted/Rejected/Reopened/**Abandoned（未关闭侧）**【7 天窗与北极星同源，窗内 Reopened 件不计成功——窗常量段4 校准，唯一源＝L0 §4】；过程②←EvidenceInspected 首次打开标志；过程③←等待闭集共用模块【度量域自行调用，不经呈现；终态过滤后计数】；护栏①←DecisionRaised；护栏②←StallDetected；护栏③←SessionInterrupted/DelegationRestored 恢复结果）。
 - 卡滞窗阈值、二次委托率 7 天窗校准：段4 定常量（L0 唯一源条款不变）。
 - 风险账：R3→S-2；R4→S-1＋I-2 单一写者；**C3→S-4＋PayloadRef 构成约束**（全域纪律的领域侧防线）。
