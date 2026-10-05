@@ -4,15 +4,15 @@ import { Delegation } from '../../src/domain/delegation/Delegation'
 import { EvidenceItem } from '../../src/domain/evidence/EvidenceItem'
 import { InMemoryTimelineRepo } from '../../src/domain/repos/memory/timelineRepo'
 import { InMemoryEvidenceRepo } from '../../src/domain/repos/memory/evidenceRepo'
-import type { AppendInput, EventDraft } from '../../src/domain/timeline'
+import type { EventDraft } from '../../src/domain/timeline'
 
 // C9／I-11 S1 面＝两事件：DecisionDenied 与 DelegationRejected 一旦发生，timeline 条目计数 ≥1。
 // 留痕机制面（谁发射）＝聚合出草稿、经 TimelineRepo.append 唯一机制口落账；不落账＝判红（见非空跑用例）。
 
 const TS = '2026-10-05T00:00:00.000Z'
 const appendAll = (repo: InMemoryTimelineRepo, drafts: EventDraft[]): void => {
-  // 草稿的 type↔detail 配对在聚合构造处已由判别联合钉住，转发只补 ts（联合相关性 TS 不自证）。
-  for (const d of drafts) repo.append({ ts: TS, ...d } as AppendInput)
+  // 草稿的 type↔detail 配对在聚合构造处已由判别联合钉住，展开只补 ts。
+  for (const d of drafts) repo.append({ ts: TS, ...d })
 }
 const raiseDeny = (repo: InMemoryTimelineRepo): void => {
   const dp = DecisionPoint.raise({

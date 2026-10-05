@@ -19,7 +19,7 @@ import { InMemoryDelegationRepo } from '../../src/domain/repos/memory/delegation
 import { InMemoryEvidenceRepo } from '../../src/domain/repos/memory/evidenceRepo'
 import { InMemoryDecisionPointRepo } from '../../src/domain/repos/memory/decisionPointRepo'
 import { InMemoryTurnRepo } from '../../src/domain/repos/memory/turnRepo'
-import type { AppendInput, EventDraft } from '../../src/domain/timeline'
+import type { EventDraft } from '../../src/domain/timeline'
 
 // Task 18＝S1a 域内出口：假网关 L1 端到端领域闭环（详设 §9 步1–5＋步7，E1 假轨）。
 // 本文件即「装配面」：7 聚合＋7 内存仓储＋3 Spec＋2 服务＋2 投影全部在场，无真网关、无真 Key、无网络。
@@ -46,8 +46,8 @@ function createWorld(gateway: GatewayLike = fakeGateway('-old\n+new')) {
   let clock = 0
   const ts = () => new Date(Date.UTC(2026, 9, 5, 0, 0, clock++)).toISOString()
   const log = (draft: EventDraft, tx?: () => void): void => {
-    // 草稿的 type↔detail 配对在聚合构造处已由判别联合钉住，转发只补 ts（联合相关性 TS 不自证）。
-    timeline.append({ ts: ts(), ...draft } as AppendInput, tx)
+    // 草稿的 type↔detail 配对在聚合构造处已由判别联合钉住，展开只补 ts。
+    timeline.append({ ts: ts(), ...draft }, tx)
   }
 
   let delegation: Delegation | undefined

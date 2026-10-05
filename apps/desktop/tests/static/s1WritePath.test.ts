@@ -4,13 +4,17 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
 // S-1 写路径闸（段3 S-1／详设 §8 M-04／stage-spec D1）：呈现投影与度量采点不得直接引用聚合写命令面与写服务面。
+// 射程＝呈现面（src/renderer/**）＋只读投影面（src/domain/projection/**）。
+// src/main/** 不在射程＝详设 §7 明文「main 持领域单例」——wiring 侧（domainRuntime／ipc）本就须引用聚合与
+// 服务，把它列进来会把 §7 自己的接线判成违例（S1a 期无 wiring 文件故未暴露；S1b Task 1 建 domainRuntime 时现形）。
+// 与 eslint flat 的 renderer 分块同射程（CC-07：真判据以本测为准，flat 只作即时红示意）。
 // 禁列＝src/domain/{delegation,turn,queue,evidence,authorization,service}/** ＋ src/domain/repos/memory/**；
 // 允许＝src/domain/timeline.ts 只读类型与 projection/ 读模型（timeline 追加唯一机制口的守卫见
-// tests/static/appendSingleWriter.test.ts，本闸不重复计数）。真判据以本测为准，eslint flat 分块只作即时红示意（CC-07）。
+// tests/static/appendSingleWriter.test.ts，本闸不重复计数）。
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const DESKTOP = path.resolve(HERE, '../..')
-const SCAN_ROOTS = [path.join(DESKTOP, 'src/renderer'), path.join(DESKTOP, 'src/main')]
+const SCAN_ROOTS = [path.join(DESKTOP, 'src/renderer'), path.join(DESKTOP, 'src/domain/projection')]
 
 const FORBIDDEN = [
   /domain\/(?:delegation|turn|queue|evidence|authorization|service)\//,
