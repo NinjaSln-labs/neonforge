@@ -74,7 +74,7 @@ tests/interaction/{delegationLifecycle,stopInflight,decisionCard,unpersistedStat
 - [ ] **Step 1：写失败测** — 调 `delegation:create`→返 delegationId＋落账；`decision:resolve` 未决对⇒幂等；`evidence:inspect`⇒落 EvidenceInspected；旧 `timeline:query` handler 不在注册表。
 - [ ] **Step 2：跑 FAIL**。
 - [ ] **Step 3：实现** — 每 handler 经 `getRuntime()` 调聚合命令/Spec/服务，结果先 `TimelineRepo.append` 再返（同事务）；删旧两 handler＋其 import。
-- [ ] **Step 4：跑 PASS** — `npx vitest run tests/unit/ipc.channels.test.ts`。
+- [ ] **Step 4：跑 PASS** — `npx vitest run tests/unit/ipc.channels.test.ts`；**并须让 `tests/static/noLegacyImport.test.ts` 转绿**（G-1 扫描面已于 commit 70014a3 扩到 A3 复用面，现判红唯一命中＝`src/main/ipc.ts → ./timelineLogger.js`；本任务的「删旧两 handler＋去 import」即其转绿条件，出口判据＝`npx vitest run tests/static/noLegacyImport.test.ts` rc=0）。
 - [ ] **Step 5：commit** — `feat(S1b): 委托单中心 IPC 通道 handler + 移除旧 timeline 面（A2.5）`。
 
 ## Task 4：preload 桥 + NeonforgeBridge 类型
