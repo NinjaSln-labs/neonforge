@@ -54,16 +54,18 @@ export function attachEvidenceCollector(deps: ApplyChangeDeps): () => void {
     const evidenceId = evidenceIdFromPtr(changeSetRef)
     const content = deps.changeSets.get(evidenceId)
     if (content === undefined) return
-    deps.changeSets.delete(evidenceId)
     if (deps.evidence.findByIds([evidenceId]).length > 0) return
     const item = EvidenceItem.record({ evidenceId, delegationId, type: '变更集', content })
-    deps.evidence.save(item)
     const detail: PayloadOf<'EvidenceRecorded'> = {
       evidenceId,
       type: item.type,
       delegationId,
       payloadRef: item.payloadRef.ptr,
     }
-    deps.timeline.append({ ts: event.ts, delegationId, type: 'EvidenceRecorded', detail })
+    // 证据聚合写入与 EvidenceRecorded 追加同事务（段3 §6；失败⇒回滚且缓冲内容不丢，可重试采集）。
+    deps.timeline.append({ ts: event.ts, delegationId, type: 'EvidenceRecorded', detail }, () => {
+      deps.evidence.save(item)
+      deps.changeSets.delete(evidenceId)
+    })
   })
 }
