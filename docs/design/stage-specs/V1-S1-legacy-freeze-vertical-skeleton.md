@@ -17,7 +17,7 @@
     - **不删（保留面，`test -e` 反向断言）**：复用原语 `icons.tsx`／`styles.css`／`diffRender.ts`（ADR-028 Decision 4）；凭据配置 UI `ConfigPage.tsx`（非对话中心，S1 真网关移植需要它，ADR-028 Decision 4 同批登记）；壳与入口 `main.tsx`／`index.html`／`App.tsx`／`types.d.ts`／`assets/`（S1 ⑥ **就地重写**为委托单中心，不属归档面）
   - [ ] A2.3 旧测试：`tests/unit/**`（旧 45 文件全数）、`tests/interaction/**`、`tests/visual/**`、视觉基线目录 `snapshots/**`（`playwright.config.ts` 的 `snapshotDir: './snapshots'`，即 `apps/desktop/snapshots/`，**不在 tests/ 下**）
   - [ ] A2.4 旧 UAT/e2e 面：`scripts-cdp/`、`e2e-*.mjs`（6 个，均在 `apps/desktop/` 下，非仓库根）、`e2e-sim/`
-  - [ ] A2.5 旧 main 时间线读面：`src/main/timelineLogger.ts`（JSONL 会话日志）＋通道 `timeline:log`/`timeline:query`——**ADR-028 Decision 3 归档清单漏项，段5 mcode 复审发现**（旧域形状＝计划 §8.6 不复用命名；不在复用清单 ADR-028 D4；与 F2 未持久化诚实面冲突）。待用户定：回 ADR-028 补 Decision 3 使本行与清单唯一源一致，段6 随归档批 `git rm`
+  - [ ] A2.5 旧 main 时间线读面：`src/main/timelineLogger.ts`（JSONL 会话日志）＋通道 `timeline:log`/`timeline:query`——段5 mcode 复审 M-13 暴露原 ADR-028 D3 漏项，**用户 2026-10-05 裁定已补入 ADR-028 Decision 3 归档范围**（旧域形状＝计划 §8.6 不复用命名；非复用清单 D4；与 F2 冲突）；清单源＝ADR-028 D3（本行与 A2.1 同源，段6 随归档批 `git rm`）
 - [ ] A3 复用面已移植且**未反向依赖归档文件**：G-1 静态闸对当前树判绿（见 A5），复用清单＝ADR-028 Decision 4（`main.ts`／`preload.ts`／`gateway.ts`＋`providers/**`／`configStore.ts`＋`envManager.ts`／`applyDiff.ts`＋`workspace.ts`＋`sandboxPath.ts`＋`diffRender.ts`／`styles.css`＋`icons.tsx`＋`ConfigPage.tsx`（凭据配置 UI））
 - [ ] A4 **L1 基线诚实重建**：`npx vitest run`（cwd `apps/desktop`）全绿，用例总数 **≥ 60 条**且**全部来自本 spec TDD 网格登记的新树测试文件**（旧基线 769 条随归档清零，不以旧数充新数——ADR-028 Decision 8）
 - [ ] A5 G-1 归档防回流依赖闸**已建立且自证可红可绿**：
