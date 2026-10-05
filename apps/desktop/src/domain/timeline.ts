@@ -1,376 +1,268 @@
-// Session Timeline BC 领域层（2026-08-15 重建——领域事件体系，非日志打点）
-// 原则（DDD）：领域事件 = 聚合状态变化的事实——转换（命令）后 diff 派生（Event Sourcing-lite），
-// 任意状态转换自动产生对应事件——替代「散落打点」（组件 tlog 30+ 处逐个手写事件）。
-// 事件目录对齐 docs/domain/06-domain-events.md（task.*/plan.*/tool.*/capability.*/execution.*/stuck.*/conversation.*/problem.*）
-// 纯逻辑无 React 依赖——L1 可测。
+// TimelineLog 机制聚合 ＋ 22 事件闭集注册表
+// 契约源＝段3 `03-domain-tactics.md` §5（frozen v1.2，事件名/载荷键逐字）＋ 详设 v1.0.0-s1-detailed-design.md §6
+// I-2 单一写者：record 为唯一写者口，seq 全局单调无重号无跳号；追加失败⇒同事务回滚。
+// 本文件不 import 任何归档面（conversationState/agentLoop/protocolTools/…/timelineLogger）——G-1 防回流。
 
-import type { ConversationState } from './conversationState.js'
+// ─────────────────────────────────────────────────────────────
+// EventType 闭集（22 名，顺序＝段3 §5 表；禁增禁减）
+// S1 发射 17，另 5（ScopeAmended/StallDetected/SessionInterrupted/DelegationRestored/DelegationAbandoned）
+//   类型先入联合占位、发射逻辑分阶段接线（S2/S3/S5）。
+// ─────────────────────────────────────────────────────────────
+export type EventType =
+  | 'DelegationCreated'
+  | 'InputAcknowledged'
+  | 'TurnStarted'
+  | 'TurnEnded'
+  | 'DecisionRaised'
+  | 'DecisionResolved'
+  | 'DecisionDenied'
+  | 'ScopeAmended'
+  | 'ChangeProduced'
+  | 'EvidenceRecorded'
+  | 'EvidenceInspected'
+  | 'CompletionClaimed'
+  | 'DelegationAccepted'
+  | 'DelegationRejected'
+  | 'DelegationReopened'
+  | 'DelegationClosed'
+  | 'InstructionQueued'
+  | 'InstructionAdmitted'
+  | 'StallDetected'
+  | 'SessionInterrupted'
+  | 'DelegationRestored'
+  | 'DelegationAbandoned'
 
-// === Value Object: TimelineEvent（统一事件结构——对齐 04 §2.6 / session-timeline-domain §2.1） ===
+/** 22 事件闭集名单快照＝段3 §5（`timeline.eventCatalog.test.ts` 比对此序，改动回段3 不改测试）。 */
+export const EVENT_NAMES: readonly EventType[] = [
+  'DelegationCreated',
+  'InputAcknowledged',
+  'TurnStarted',
+  'TurnEnded',
+  'DecisionRaised',
+  'DecisionResolved',
+  'DecisionDenied',
+  'ScopeAmended',
+  'ChangeProduced',
+  'EvidenceRecorded',
+  'EvidenceInspected',
+  'CompletionClaimed',
+  'DelegationAccepted',
+  'DelegationRejected',
+  'DelegationReopened',
+  'DelegationClosed',
+  'InstructionQueued',
+  'InstructionAdmitted',
+  'StallDetected',
+  'SessionInterrupted',
+  'DelegationRestored',
+  'DelegationAbandoned',
+] as const
+
+/** S1 不发射的 5 事件（详设 §6 M-01/M-11/M-13：类型先入联合、发射逻辑分阶段接线）。 */
+const NON_EMIT: readonly EventType[] = [
+  'ScopeAmended',
+  'StallDetected',
+  'SessionInterrupted',
+  'DelegationRestored',
+  'DelegationAbandoned',
+] as const
+
+/** S1 发射子集（17）＝22 闭集去掉上述 5 个。 */
+export const S1_EMIT_EVENT_NAMES: readonly EventType[] = EVENT_NAMES.filter(
+  (n) => !NON_EMIT.includes(n),
+) as readonly EventType[]
+
+// ─────────────────────────────────────────────────────────────
+// 载荷接口（键名 camelCase 系段6 接线权，语义逐一对齐段3 §5 描述符；禁增禁减）
+// 未发射 5 事件的载荷类型先收口 never（详设 §6 CC-04，接线阶段替换）。
+// ─────────────────────────────────────────────────────────────
+export interface DelegationCreatedPayload {
+  delegationId: string
+  intent: string
+  scopeVersion: number // =1
+}
+
+// 段3 §5「归宿(进轮 turnId/入队 itemId)」＝单键，值域按进轮/入队二选一（不拆成两键）。
+export type InputDisposition = { into: 'turn'; turnId: string } | { into: 'queue'; itemId: string }
+export interface InputAcknowledgedPayload {
+  inputId: string
+  delegationId: string
+  disposition: InputDisposition // 归宿
+  silentlyDropped: false // 静默丢弃标志（恒否）
+}
+
+export interface TurnStartedPayload {
+  turnId: string
+  delegationId: string
+  triggerSource: string
+}
+
+// terminal 三值＝段3 §5「收口/中止/中断」
+export interface TurnEndedPayload {
+  turnId: string
+  terminal: 'closed' | 'aborted' | 'interrupted'
+}
+
+// requestReason＝段3 §5「缘由+requestedBy」（单键承载二面）
+export interface DecisionRaisedPayload {
+  decisionPointId: string
+  delegationId: string
+  turnId: string
+  requestReason: { reason: string; requestedBy: string }
+}
+
+export interface DecisionResolvedPayload {
+  decisionPointId: string
+  resolution: string
+}
+
+// 理由(可选) → reason?: string（§5 明标「可选」，键可缺省）
+export interface DecisionDeniedPayload {
+  decisionPointId: string
+  delegationId: string
+  turnId: string
+  reason?: string
+}
+
+// 变更集ref(=PayloadRef)→changeSetRef；作用域校验结果→scopeCheckResult
+export interface ChangeProducedPayload {
+  delegationId: string
+  turnId: string
+  changeSetRef: string
+  scopeCheckResult: string
+}
+
+export interface EvidenceRecordedPayload {
+  evidenceId: string
+  type: string // EvidenceType 四值（段3 §3）
+  delegationId: string
+  payloadRef: string
+}
+
+// 核验动作(打开)→inspectAction；首次打开标志→firstInspection
+export interface EvidenceInspectedPayload {
+  evidenceId: string
+  delegationId: string
+  inspectAction: 'open'
+  firstInspection: boolean
+}
+
+export interface CompletionClaimedPayload {
+  delegationId: string
+  turnId: string
+  claim: string
+  evidenceRefs: string[]
+}
+
+// 收尾态→closeState（段3 §8 收束态三值）
+export interface DelegationAcceptedPayload {
+  delegationId: string
+  closeState: string
+}
+
+// 去向→outcome
+export interface DelegationRejectedPayload {
+  delegationId: string
+  outcome: string
+}
+
+export interface DelegationReopenedPayload {
+  delegationId: string
+  reopenCount: number
+}
+
+// 归档态→archivedState
+export interface DelegationClosedPayload {
+  delegationId: string
+  archivedState: string
+}
+
+export interface InstructionQueuedPayload {
+  itemId: string
+  delegationId: string
+  origin: string
+}
+
+// 准入 turnId→admittedTurnId
+export interface InstructionAdmittedPayload {
+  itemId: string
+  admittedTurnId: string
+}
+
+// 未发射 5 事件：类型入联合、载荷 never（S2/S3/S5 接线时替换）
+export type ScopeAmendedPayload = never
+export type StallDetectedPayload = never
+export type SessionInterruptedPayload = never
+export type DelegationRestoredPayload = never
+export type DelegationAbandonedPayload = never
+
+// ─────────────────────────────────────────────────────────────
+// PayloadOf 判别联合（详设 §6：detail 由此收口；TS 类型面＝契约面）
+// ─────────────────────────────────────────────────────────────
+export interface PayloadMap {
+  DelegationCreated: DelegationCreatedPayload
+  InputAcknowledged: InputAcknowledgedPayload
+  TurnStarted: TurnStartedPayload
+  TurnEnded: TurnEndedPayload
+  DecisionRaised: DecisionRaisedPayload
+  DecisionResolved: DecisionResolvedPayload
+  DecisionDenied: DecisionDeniedPayload
+  ScopeAmended: ScopeAmendedPayload
+  ChangeProduced: ChangeProducedPayload
+  EvidenceRecorded: EvidenceRecordedPayload
+  EvidenceInspected: EvidenceInspectedPayload
+  CompletionClaimed: CompletionClaimedPayload
+  DelegationAccepted: DelegationAcceptedPayload
+  DelegationRejected: DelegationRejectedPayload
+  DelegationReopened: DelegationReopenedPayload
+  DelegationClosed: DelegationClosedPayload
+  InstructionQueued: InstructionQueuedPayload
+  InstructionAdmitted: InstructionAdmittedPayload
+  StallDetected: StallDetectedPayload
+  SessionInterrupted: SessionInterruptedPayload
+  DelegationRestored: DelegationRestoredPayload
+  DelegationAbandoned: DelegationAbandonedPayload
+}
+
+export type PayloadOf<T extends EventType> = PayloadMap[T]
+
+// ─────────────────────────────────────────────────────────────
+// 事件与 VO
+// ─────────────────────────────────────────────────────────────
+export type AnyPayload = PayloadMap[EventType]
+
 export interface TimelineEvent {
-  ts: string // ISO 时间戳（UTC）
-  seq: number // 会话内序号（单调递增）
-  session: string // 会话标识（UUID——多会话隔离）
-  type: TimelineEventType
-  role?: 'user' | 'assistant' | 'system' | 'tool'
-  detail: Record<string, unknown>
+  ts: string // ISO
+  seq: number // 全局单调
+  delegationId: string
+  type: EventType
+  detail: AnyPayload
 }
 
-// === 事件目录（领域事件穷举——新增事件必须在此登记，06 文档同步） ===
-export type TimelineEventType =
-  // —— Conversation 聚合：消息/会话 ——
-  | 'conversation.message_sent' // 用户消息（含确认词/候选点选）
-  | 'conversation.system_nudge' // 系统引导/提示注入（非用户通道——时间线取证）
-  | 'conversation.assistant_start' // 模型轮开始（载荷：forceTool 判定）
-  | 'conversation.assistant_done' // 模型轮完成（载荷：content/error）
-  | 'conversation.interrupted' // 打断（停止按钮/silent）
-  // —— Task 聚合：确认点（06 §1.1）——
-  | 'task.goal_proposed' // 模型提议目标（【目标确认】标记）
-  | 'task.goal_confirmed' // 用户确认目标
-  | 'task.goal_rejected' // 用户重新描述
-  | 'task.execution_proposed' // 模型给出执行方案
-  | 'task.execution_confirmed' // 用户确认执行
-  | 'task.execution_rejected' // 用户修改方案
-  | 'task.achievement_proposed' // 模型汇报达成
-  | 'task.achievement_confirmed' // 用户确认解决
-  | 'task.achievement_rejected' // 用户还要改
-  // —— Conversation 聚合：会话级单一 PENDING（06 §3.2 核心）——
-  | 'session.pending_set' // 卡弹出 → 会话进入 PENDING（载荷：kind）
-  | 'session.pending_cleared' // 用户决策 → PENDING 解除
-  // —— Dialogue 聚合：无进展对话强制澄清（ADR-010——UAT-Sim A-024/A-025）——
-  | 'dialogue.loop_guard' // 一级介入：loop guard 指令注入模型（载荷：rounds）
-  | 'dialogue.forced_clarify' // 二级介入：系统强制澄清卡弹出（载荷：underlying）
-  | 'dialogue.needs_human' // 三级兜底：强制卡也被拒 → 人工接管（载荷：reason）
-  // —— PlannedFiles：宿主边界（06 §1.2）——
-  | 'plan.approved' // approve-files 批准（载荷：files 新增清单——追加语义）
-  | 'plan.rejected' // 写清单外被拒（载荷：file/approvedList——拒绝带边界）
-  // —— ToolRegistry：工具（06 §1.3）——
-  | 'tool.requested' // 模型请求工具（载荷：name/args）
-  | 'tool.blocked' // 工具被拦（载荷：gate——pending/confirm/out-of-plan/policy + reason）
-  | 'tool.executing' // 开始执行（载荷：name/approved）
-  | 'tool.executed' // 成功（载荷：name/file?）
-  | 'tool.failed' // 失败（载荷：name/error）
-  | 'tool.approved' // 授权批准
-  | 'tool.rejected' // 授权拒绝
-  | 'tool.remembered' // 允许并记住（任务信任）
-  // —— Capability/Environment（06 §1.4）——
-  | 'capability.checked' // 能力检查（载荷：capabilities/missing）
-  | 'capability.ledger_updated' // Ledger 回填（载荷：capabilityId/ok——bash 失败归因降级）
-  | 'environment.injected' // 环境快照注入模型
-  // —— Conversation 聚合：会话生命周期（06 §1.6）——
-  | 'conversation.created' // 会话创建（sessionId 生成）
-  // —— 执行保障（06 §1.5）——
-  | 'execution.forced' // forceTool=true（确认后无产出强制）
-  | 'execution.released' // forceTool 释放
-  | 'stuck.escalated' // 连续无产出升级
-  | 'stuck.needs_human' // 升级仍无效转用户
-  // —— Problem：问题台账（06 §1.7——2026-08-15 M3 建模）——
-  | 'problem.created' // 问题实例创建/复跑
-  | 'problem.rerun' // closed 复开 → 复跑（新 Task 关联同一 Problem）
-  | 'problem.snapshot_updated' // 快照回写（goal/authorized/pending）
-  | 'problem.closed' // 确认关闭（终态）
-  // —— Card：确认/授权卡 UI 生命周期（用户交互路径可观测——2026-08-15 补全）——
-  | 'card.shown' // 卡弹出（载荷：card/name?/args?）
-  | 'card.resolved' // 卡被确认/批准（载荷：card/action）
-  | 'card.rejected' // 卡被拒绝（载荷：card/action）
-  | 'card.dismissed' // 卡消失/任务重置（载荷：card/cause）
-  // —— Decision：领域决策点（意图确认重设计 §3.5——与 card.* 并存：card=UI 卡生命周期，decision=领域决策点）——
-  | 'decision.requested' // 决策点出现（载荷：kind/since——决策点内容快照随 S3 增强）
-  | 'decision.resolved' // 决策被确认/拒绝（载荷：point/action——reason 随 S3 回填）
-  // —— Proposal：模型提议解析（S2 登记——§8.2 D；结构化提议事件——决策点产生前的解析层事实）——
-  | 'proposal.goal' // 目标提议结构化事件（S7 A0 审校 P1-3 补登——§3.5：statement+assumptions）
-  | 'proposal.plan' // 方案提议解析结果（载荷：ok/files/summary——parse-error: reason 打点）
-  | 'proposal.completion' // 完成声明解析结果（载荷：ok/summary/evidence 计数）
-  | 'proposal.clarify' // ask_user 会话级澄清（V1.5 S1 Task 1.3——载荷：question/type/options）
-  // —— Protocol：协议工具化（V1.5——文本标记降级打点；S5 兜底率统计基线）——
-  | 'protocol.text_fallback' // 文本标记降级命中（载荷：marker/goal|plan|completion + content_snip——S3 打点）
-  // —— Completion：完成对账（S4 登记——§3.5；证据不足诊断事件）——
-  | 'completion.evidence_missing' // 完成声明被拒原因（载荷：ok/missing/unverifiable 清单——S4 打点）
-  // —— 元事件（运行时可观测——诊断/状态）——
-  | 'conversation.status_change' // working/ready/approval-pending 变化
-  | 'conversation.error' // 错误链路（errorType/message）
-  | 'execution.force_input' // forceTool 输入快照（取证——planned/produced/projectFiles 三集合）
-
-// === 事件注册表（schema——新增事件三步：登记 → emit → 测试；dev 校验防散落） ===
-export interface TimelineEventSpec {
-  domain:
-    | 'conversation'
-    | 'task'
-    | 'session'
-    | 'plan'
-    | 'tool'
-    | 'capability'
-    | 'execution'
-    | 'stuck'
-    | 'problem'
-    | 'card'
-    | 'decision'
-    | 'proposal'
-    | 'completion'
-    | 'protocol'
-  role?: 'user' | 'assistant' | 'system' | 'tool'
-  detailKeys?: string[] // 期望载荷字段（宽松约定——不强制全有，用于 dev 校验提示）
-  dedupe?: boolean // 同会话同 detail 只记一次（卡 shown 等）
+// EventEntry VO＝seq＋事件，追加不可变（段3 §3）。
+export interface EventEntry {
+  readonly seq: number
+  readonly event: TimelineEvent
 }
 
-export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> = {
-  'conversation.message_sent': { domain: 'conversation', role: 'user', detailKeys: ['content'] },
-  'conversation.system_nudge': {
-    domain: 'conversation',
-    role: 'system',
-    detailKeys: ['content', 'kind'],
-  },
-  'conversation.assistant_start': {
-    domain: 'conversation',
-    role: 'assistant',
-    detailKeys: ['forceTool'],
-  },
-  'conversation.assistant_done': {
-    domain: 'conversation',
-    role: 'assistant',
-    detailKeys: ['content'],
-  },
-  'conversation.interrupted': { domain: 'conversation', role: 'system', detailKeys: ['source'] },
-  'task.goal_proposed': { domain: 'task', role: 'assistant', detailKeys: ['goalText'] },
-  'task.goal_confirmed': { domain: 'task', role: 'system', detailKeys: ['point'] },
-  'task.goal_rejected': { domain: 'task', role: 'system', detailKeys: ['point'] },
-  'task.execution_proposed': { domain: 'task', role: 'assistant', detailKeys: ['plan', 'files'] },
-  'task.execution_confirmed': { domain: 'task', role: 'system', detailKeys: ['point'] },
-  'task.execution_rejected': { domain: 'task', role: 'system', detailKeys: ['point'] },
-  'task.achievement_proposed': { domain: 'task', role: 'assistant', detailKeys: ['summary'] },
-  'task.achievement_confirmed': { domain: 'task', role: 'system', detailKeys: ['point'] },
-  'task.achievement_rejected': { domain: 'task', role: 'system', detailKeys: ['point'] },
-  'session.pending_set': { domain: 'session', role: 'system', detailKeys: ['kind'] },
-  'session.pending_cleared': { domain: 'session', role: 'system', detailKeys: ['kind'] },
-  'dialogue.loop_guard': { domain: 'session', role: 'system', detailKeys: ['rounds'] },
-  'dialogue.forced_clarify': { domain: 'session', role: 'system', detailKeys: ['underlying'] },
-  'dialogue.needs_human': { domain: 'session', role: 'system', detailKeys: ['reason'] },
-  'plan.approved': { domain: 'plan', role: 'system', detailKeys: ['files'] },
-  'plan.rejected': { domain: 'plan', role: 'tool', detailKeys: ['file'] },
-  'tool.requested': { domain: 'tool', role: 'tool', detailKeys: ['name', 'args'] },
-  'tool.blocked': { domain: 'tool', role: 'tool', detailKeys: ['name', 'gate', 'reason'] },
-  'tool.executing': { domain: 'tool', role: 'tool', detailKeys: ['name', 'approved'] },
-  'tool.executed': { domain: 'tool', role: 'tool', detailKeys: ['name', 'file'] },
-  'tool.failed': { domain: 'tool', role: 'tool', detailKeys: ['name', 'error'] },
-  'tool.approved': { domain: 'tool', role: 'system', detailKeys: ['name'] },
-  'tool.rejected': { domain: 'tool', role: 'system', detailKeys: ['name'] },
-  'tool.remembered': { domain: 'tool', role: 'system', detailKeys: ['name', 'file'] },
-  'capability.checked': {
-    domain: 'capability',
-    role: 'tool',
-    detailKeys: ['capabilities', 'missing'],
-  },
-  'capability.ledger_updated': {
-    domain: 'capability',
-    role: 'tool',
-    detailKeys: ['capabilityId', 'ok'],
-  },
-  'environment.injected': { domain: 'capability', role: 'system', detailKeys: ['rootPath'] },
-  'conversation.created': { domain: 'conversation', role: 'system', detailKeys: ['session'] },
-  'execution.forced': { domain: 'execution', role: 'system', detailKeys: ['reason', '?mode'] },
-  'execution.released': { domain: 'execution', role: 'system', detailKeys: ['reason', '?mode'] },
-  'stuck.escalated': { domain: 'stuck', role: 'system', detailKeys: ['message'] },
-  'stuck.needs_human': { domain: 'stuck', role: 'system', detailKeys: ['message'] },
-  'problem.created': { domain: 'problem', role: 'system', detailKeys: ['problemId', 'title'] },
-  'problem.rerun': { domain: 'problem', role: 'system', detailKeys: ['problemId', 'title'] },
-  'problem.snapshot_updated': { domain: 'problem', role: 'system', detailKeys: ['problemId'] },
-  'problem.closed': { domain: 'problem', role: 'system', detailKeys: ['problemId'] },
-  'card.shown': { domain: 'card', role: 'system', detailKeys: ['card'], dedupe: true },
-  'card.resolved': { domain: 'card', role: 'system', detailKeys: ['card', 'action'] },
-  'card.rejected': { domain: 'card', role: 'system', detailKeys: ['card', 'action'] },
-  'card.dismissed': { domain: 'card', role: 'system', detailKeys: ['card', 'cause'] },
-  'decision.requested': { domain: 'decision', role: 'system', detailKeys: ['kind', 'since'] },
-  'decision.resolved': {
-    domain: 'decision',
-    role: 'system',
-    // S7（A0 审校 P1-4）：detailKeys 加 ?reason——reject 载荷带 RejectReason（设计 §3.5——reason 随 S7 回填落地）
-    detailKeys: ['point', 'action', '?reason'],
-  },
-  'proposal.goal': {
-    domain: 'proposal',
-    role: 'assistant',
-    // S7（A0 审校 P1-3 补登——设计 §3.5：GoalProposal 完整内容 statement+assumptions——替代 task.goal_proposed 文本摘要；
-    // task.goal_proposed 保留（§8.2 D 兼容审计——解析层事实）；proposal.goal = 结构化提议事件（决策点产生前的解析层事实）
-    detailKeys: ['statement', '?assumptions'],
-  },
-  'proposal.plan': {
-    domain: 'proposal',
-    role: 'assistant',
-    // A-007：两形态载荷精确表达——ok 必选；成功 { summary, files } / 失败 { reason } 形态字段可选
-    detailKeys: ['ok', '?summary', '?files', '?reason'],
-  },
-  'proposal.completion': {
-    domain: 'proposal',
-    role: 'assistant',
-    detailKeys: ['ok', '?summary', '?verification', '?pendingQuestions'],
-  },
-  // V1.5 S1 Task 1.3：ask_user 会话级澄清（Task 1.2b 裁定——等价旧 <candidates> 文本块：
-  // 不置 DecisionPoint，模型停轮等用户正文回复；options 可选）
-  'proposal.clarify': {
-    domain: 'proposal',
-    role: 'assistant',
-    detailKeys: ['question', 'type', '?options'],
-  },
-  // V1.5 S3：文本标记降级命中（模型未走协议工具——done 分支探测到标记 → 打点 + 合成引导）
-  'protocol.text_fallback': {
-    domain: 'protocol',
-    role: 'system',
-    detailKeys: ['marker', '?content_snip'],
-  },
-  'completion.evidence_missing': {
-    domain: 'completion',
-    role: 'system',
-    // S4：ok 必选（false——被拒）+ missing/unverifiable 清单（两形态可缺省）
-    detailKeys: ['ok', '?missing', '?unverifiable'],
-  },
-  'conversation.status_change': { domain: 'conversation', role: 'system', detailKeys: ['status'] },
-  'conversation.error': { domain: 'conversation', role: 'system', detailKeys: ['errorType'] },
-  'execution.force_input': {
-    domain: 'execution',
-    role: 'system',
-    detailKeys: ['planned', 'produced'],
-  },
-}
+// ─────────────────────────────────────────────────────────────
+// TimelineLog 聚合根：唯一写者口 record（seq 单调、无重号无跳号）
+// S-1 机制口 append（TimelineRepo）取此 record 落 seq；追加失败⇒整事务回滚（§6 例外条款）。
+// ─────────────────────────────────────────────────────────────
+export class TimelineLog {
+  private entries: EventEntry[] = []
+  private nextSeq = 1
 
-// dev 校验（纯函数——未登记 type / 缺关键载荷字段 → warn 提示；消费方不阻断）
-// A-007：detailKeys 支持 `?` 前缀可选标记（两形态载荷的公共字段必选、形态字段可选——schema 与载荷对齐）
-export function validateTimelineEvent(type: string, detail: Record<string, unknown>): string[] {
-  const warns: string[] = []
-  const spec = TIMELINE_EVENT_SPECS[type as TimelineEventType]
-  if (!spec) {
-    warns.push(`timeline 事件未登记：${type}——按 A2 三步登记（TIMELINE_EVENT_SPECS → emit → 测试）`)
-    return warns
+  // 唯一写者口：给定事件主体（无 seq），落全局单调 seq 后入序列，返回落账事件。
+  record(input: {
+    ts: string
+    delegationId: string
+    type: EventType
+    detail: AnyPayload
+  }): TimelineEvent {
+    const event: TimelineEvent = { ...input, seq: this.nextSeq }
+    this.entries.push({ seq: this.nextSeq, event })
+    this.nextSeq += 1
+    return event
   }
-  for (const k of spec.detailKeys ?? []) {
-    const optional = k.startsWith('?')
-    const key = optional ? k.slice(1) : k
-    if (!(key in detail) && !optional) warns.push(`timeline 事件 ${type} 缺载荷字段：${key}`)
-  }
-  return warns
-}
-
-// === 事件派生（Event Sourcing-lite）：转换前后状态 diff → 领域事件 ===
-// 纯函数：任何 ConversationState 转换（userConfirmed/userRejected/approvalGranted/applyToolResult/setPending/clearPending）
-// 自动产生对应事件——应用层在转换单点（useConversationState.transition）收集后发送。
-export interface DerivedStateEvent {
-  type: TimelineEventType
-  detail: Record<string, unknown>
-}
-
-export function deriveStateEvents(
-  prev: ConversationState,
-  next: ConversationState,
-): DerivedStateEvent[] {
-  const events: DerivedStateEvent[] = []
-  // —— 确认点（Task 聚合——意图确认重设计 S1：execution→plan / achievement→resolution 语义更名）——
-  if (!prev.goalConfirmed && next.goalConfirmed)
-    events.push({ type: 'task.goal_confirmed', detail: { point: 'goal' } })
-  if (prev.goalConfirmed && !next.goalConfirmed)
-    events.push({ type: 'task.goal_rejected', detail: { point: 'goal' } })
-  if (!prev.planConfirmed && next.planConfirmed)
-    events.push({ type: 'task.execution_confirmed', detail: { point: 'plan' } })
-  if (prev.planConfirmed && !next.planConfirmed)
-    events.push({ type: 'task.execution_rejected', detail: { point: 'plan' } })
-  if (!prev.resolutionConfirmed && next.resolutionConfirmed)
-    events.push({ type: 'task.achievement_confirmed', detail: { point: 'resolution' } })
-  if (prev.resolutionConfirmed && !next.resolutionConfirmed)
-    events.push({ type: 'task.achievement_rejected', detail: { point: 'resolution' } })
-  // —— 决策点（领域视图——设计 §3.5；与 card.* 并存：card=UI 卡生命周期，decision=领域决策点）——
-  if (prev.pending === 'none' && next.pending !== 'none') {
-    events.push({ type: 'session.pending_set', detail: { kind: next.pending } })
-    events.push({
-      type: 'decision.requested',
-      detail: { kind: next.pending, since: next.decisionContent?.since ?? '' },
-    })
-  }
-  if (prev.pending !== 'none' && next.pending === 'none') {
-    events.push({ type: 'session.pending_cleared', detail: { kind: prev.pending } })
-    // decision.resolved：确认/拒绝由状态 diff 推断（拒绝记忆新增 = approval 拒绝；否则按确认位变化）
-    // S7（P1-4）：reject 载荷带 next.lastRejectReason（设计 §3.5——拒绝原因审计）
-    if (prev.deniedApprovals.length < next.deniedApprovals.length) {
-      events.push({
-        type: 'decision.resolved',
-        detail: {
-          point: 'approval',
-          action: 'reject',
-          ...(next.lastRejectReason ? { reason: next.lastRejectReason } : {}),
-        },
-      })
-    } else if (prev.pending === 'approval') {
-      events.push({ type: 'decision.resolved', detail: { point: 'approval', action: 'confirm' } })
-    } else {
-      // ADR-010 UAT 二轮修复：system_clarify 的确认/拒绝按 underlying 确认位推断——
-      // 原逻辑落 resolutionConfirmed 兜底，委派确认 goal 时被误记为 reject（真机 seq 97 实证）
-      const point = prev.pending
-      const underlying =
-        point === 'system_clarify' && prev.decisionContent?.kind === 'system_clarify'
-          ? (prev.decisionContent.proposal as { underlying?: 'goal' | 'plan' | 'resolution' })
-              .underlying
-          : undefined
-      const effective = underlying ?? point
-      const confirmed =
-        effective === 'goal'
-          ? next.goalConfirmed
-          : effective === 'plan'
-            ? next.planConfirmed
-            : next.resolutionConfirmed
-      events.push({
-        type: 'decision.resolved',
-        detail: {
-          point,
-          action: confirmed ? 'confirm' : 'reject',
-          ...(!confirmed && next.lastRejectReason ? { reason: next.lastRejectReason } : {}),
-        },
-      })
-    }
-  }
-  // —— PlannedFiles：批准清单追加（plan.approved）——
-  const addedFiles = [...next.plannedFiles].filter((f) => !prev.plannedFiles.has(f))
-  if (addedFiles.length > 0) events.push({ type: 'plan.approved', detail: { files: addedFiles } })
-  // —— 产出进度（producedFiles 新增——配合 tool.executed 的 file 载荷，此处记增量）——
-  const addedProduced = [...next.producedFiles].filter((f) => !prev.producedFiles.has(f))
-  if (addedProduced.length > 0)
-    events.push({ type: 'tool.executed', detail: { files: addedProduced } })
-  return events
-}
-
-// === Domain Service 接口：TimelineLogger（append + query——基础设施实现） ===
-// 对齐 04 §3.5（append 便捷方法）+ 通用接入（A3 查询层——本规划 §二-A）
-export interface TimelineLogger {
-  append(event: Omit<TimelineEvent, 'ts' | 'seq'>): void
-  query(filter: {
-    session?: string
-    type?: TimelineEventType | TimelineEventType[]
-    from?: string
-    to?: string
-    limit?: number
-  }): TimelineEvent[]
-}
-
-// === A6 去重键（dedupe 事件——同会话同 detail 签名只记一次；纯函数 L1 可测） ===
-export function dedupeKey(type: string, detail: Record<string, unknown>): string {
-  return `${type}:${JSON.stringify(detail)}`
-}
-
-// === 模型提议检测（task.*_proposed——assistant_done content 标记 → 提议事件；纯函数 L1 可测） ===
-// 06 §1.1：task.goal_proposed（【目标确认】标记）/ task.execution_proposed（【执行方案】）/ task.achievement_proposed（【已达成】）
-// 与渲染层 pendingCardToShow 同源判定（标记检测——但独立函数，避免 UI 依赖）
-export function detectProposed(content: string): Array<{
-  type: 'task.goal_proposed' | 'task.execution_proposed' | 'task.achievement_proposed'
-  detail: Record<string, unknown>
-}> {
-  const out: Array<{
-    type: 'task.goal_proposed' | 'task.execution_proposed' | 'task.achievement_proposed'
-    detail: Record<string, unknown>
-  }> = []
-  const t = String(content ?? '')
-  if (/【目标确认[:：]/.test(t))
-    out.push({
-      type: 'task.goal_proposed',
-      detail: { goalText: t.match(/【目标确认[:：]\s*([^】]+)/)?.[1]?.trim() ?? '' },
-    })
-  if (t.includes('【执行方案')) out.push({ type: 'task.execution_proposed', detail: { plan: t } })
-  if (t.includes('【已达成'))
-    out.push({ type: 'task.achievement_proposed', detail: { summary: t } })
-  return out
 }
