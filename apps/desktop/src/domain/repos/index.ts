@@ -3,6 +3,7 @@ import type { EvidenceItem } from '../evidence/EvidenceItem.js'
 import type { Delegation } from '../delegation/Delegation.js'
 import type { DecisionPoint } from '../authorization/DecisionPoint.js'
 import type { Scope } from '../authorization/Scope.js'
+import type { InstructionQueue } from '../queue/InstructionQueue.js'
 
 // 仓储面（详设 §3／段3 §7，S1 内存实现）。seq 单调与单写者由 TimelineLog 聚合维护，非仓储（M-02）。
 // append＝唯一机制口（S-1）：追加与聚合状态写入同事务，失败⇒整事务回滚（§6 例外条款）。
@@ -41,4 +42,11 @@ export interface DecisionPointRepo {
 export interface ScopeRepo {
   save(scope: Scope): void
   findByDelegation(delegationId: string): Scope | undefined
+}
+
+// 指令队列仓储（详设 §3）：V1 单队列＝全局一个，仓储只持队列本体。
+// 详设 §3 的 enqueue/pending/admit/markWithdrawn 面归 InstructionQueue 聚合（I-4 校验位置＝聚合，段3 §4）。
+export interface InstructionQueueRepo {
+  save(q: InstructionQueue): void
+  find(): InstructionQueue | undefined
 }
