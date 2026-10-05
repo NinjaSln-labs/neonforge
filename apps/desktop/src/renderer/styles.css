@@ -1073,3 +1073,24 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   text-align: center;
   letter-spacing: 0.02em;
 }
+
+/* S1b Task 7（E1）：流状态条——发起/停止流（Stop 转投 gateway:cancel-stream） */
+.nf-streambar {
+  display: flex;
+  gap: 8px;
+  padding: 4px 0;
+}
+.nf-streambar__start,
+.nf-streambar__stop {
+  padding: 4px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+}
+.nf-streambar__stop {
+  border-color: rgba(255, 96, 96, 0.5);
+  color: #ff6060;
+}

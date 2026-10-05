@@ -7,6 +7,7 @@ import DecisionCard from './DecisionCard'
 import EvidenceList from './EvidenceList'
 import AcceptRejectBar from './AcceptRejectBar'
 import QueueList from './QueueList'
+import StreamBar from './StreamBar'
 import { useDomainView } from './useDomainView'
 
 export default function DelegationCenter() {
@@ -42,6 +43,7 @@ export default function DelegationCenter() {
         onSelect={setSelectedId}
       />
       <div className="nf-delegationcenter__main">
+        <StreamBar />
         <TimelineView rows={view.timeline} />
         <DecisionCard decision={view.decision} onResolve={resolveDecision} />
         <EvidenceList evidence={view.evidence} onInspect={inspectEvidence} />
