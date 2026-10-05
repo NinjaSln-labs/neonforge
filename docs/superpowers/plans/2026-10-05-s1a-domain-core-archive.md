@@ -39,7 +39,7 @@ apps/desktop/eslint.config.js    # 追加 renderer 禁 import 聚合写面（fla
 
 ## Task 1：基线 tag（A1）＋确立「只增不删」原则
 
-> **S1a 全程不 `git rm` 任何旧文件**——新领域树与旧 app 并存（ADR-028 负面①「归档批至骨架接线前非编译窗」；全项目双 tsc 与物理归档归 **S1 出口＝S1b 完成后**跑）。归档批 `git rm`（A2/A2.3/A2.4/A2.5）＋入口 rewire（App/ipc/main/preload）＋复用文件去旧域依赖（gateway/tools/verification 现 import `conversationState`/`protocolTools`、main.ts 现 import `timelineLogger`）**全部在 S1b**。S1a 只建/重写 `src/domain/**` 新文件＋新测，旧 app 文件不碰（旧呈现/main 引用新改写 timeline.ts 的残留会在 S1b 随归档一并清除）。
+> **S1a 全程不 `git rm` 任何旧文件**——新领域树与旧 app 并存（ADR-028 负面①「归档批至骨架接线前非编译窗」；全项目双 tsc 与物理归档归 **S1 出口＝S1b 完成后**跑）。归档批 `git rm`（A2/A2.3/A2.4/A2.5）＋入口 rewire（App/ipc/main/preload）＋复用文件去旧域依赖（gateway/tools/verification 现 import `conversationState`/`protocolTools`、main/tools 现 import `timelineLogger`）**全部在 S1b**。S1a 只建/重写 `src/domain/**` 新文件＋新测，旧 app 文件不碰（旧呈现/main 引用新改写 timeline.ts 的残留会在 S1b 随归档一并清除）。
 
 **Files:** 无删除；仅打基线 tag＝`legacy-freeze-v0.1.0`（轻量 tag 无署名面＝C3/C4，指向含旧实现的当前 commit，供 S1b 归档前冻结、`git show` 调阅）。
 **Interfaces:** Produces tag；不产/删代码文件。
@@ -223,4 +223,4 @@ apps/desktop/eslint.config.js    # 追加 renderer 禁 import 聚合写面（fla
 4. 新域类型面由 vitest(esbuild) 加载即验；全项目 `tsc -p tsconfig.json/tsconfig.main.json` 双 tsc → **S1 出口（S1b）**。
 5. DoD **B/C/D＋E 假轨＋F3 域面**逐条绿（新测覆盖）；**A2/A3/A4/A5 物理归档＋A6＋G 类 → S1 出口（S1b）**。
 
-**S1a 不含**（→S1b/S2–S7）：**归档 `git rm`（A2/A2.3/A2.4/A2.5）、入口 rewire（App/ipc/main/preload）、复用文件去旧域依赖（gateway/tools/verification 现 import conversationState/protocolTools、main.ts 现 import timelineLogger）**、真网关 port、E1 真轨 AbortController、IPC 通道桥、renderer 委托单中心、`npm run e2e`、产物谓词两条款(S4)、收束态过滤(S5)、StallDetector(S5)、持久化(S3)、作用域修正(S2)。
+**S1a 不含**（→S1b/S2–S7）：**归档 `git rm`（A2/A2.3/A2.4/A2.5）、入口 rewire（App/ipc/main/preload）、复用文件去旧域依赖（gateway/tools/verification 现 import conversationState/protocolTools、main/tools 现 import timelineLogger）**、真网关 port、E1 真轨 AbortController、IPC 通道桥、renderer 委托单中心、`npm run e2e`、产物谓词两条款(S4)、收束态过滤(S5)、StallDetector(S5)、持久化(S3)、作用域修正(S2)。

@@ -1,6 +1,6 @@
 # S1b 实现计划：真网关 port + 流级取消令牌 + IPC 桥 + 委托单中心呈现 + 归档批 + rewire（段6 · S1 出口闸在此）
 
-> 由 writing-plans 出，2026-10-05。契约源＝stage-spec V1-S1（DoD **A2–A6/E2/F**＋A2.5 归档＋E1 真轨）＋接口 `docs/design/v1.0.0-s1-detailed-design.md` v0.3（§7 IPC/renderer、§8 机制落点、§9 时序）＋段3 v1.2＋ADR-028。**前置**：S1a 已落（新领域树＋假网关新测绿，旧 app 未删）。**S1b 额外承接 S1a 未做的物理层**：归档批 `git rm`（A2/A2.3/A2.4/A2.5）、复用文件去旧域依赖（gateway/tools/verification 现 import `conversationState`/`protocolTools`）、入口 rewire（App/ipc/main/preload）。**S1 全出口闸（双 tsc／全量 L1／eslint／desens／DoD A–G）在 S1b 末尾跑**（ADR-028「同批过闸」真意）。
+> 由 writing-plans 出，2026-10-05。契约源＝stage-spec V1-S1（DoD **A2–A6/E2/F**＋A2.5 归档＋E1 真轨）＋接口 `docs/design/v1.0.0-s1-detailed-design.md` v0.3（§7 IPC/renderer、§8 机制落点、§9 时序）＋段3 v1.2＋ADR-028。**前置**：S1a 已落（新领域树＋假网关新测绿，旧 app 未删）。**S1b 额外承接 S1a 未做的物理层**：归档批 `git rm`（A2/A2.3/A2.4/A2.5）、复用文件去旧域依赖（gateway/tools/verification 现 import `conversationState`/`protocolTools`，tools/main 现 import `timelineLogger`）、入口 rewire（App/ipc/main/preload）。**S1 全出口闸（双 tsc／全量 L1／eslint／desens／DoD A–G）在 S1b 末尾跑**（ADR-028「同批过闸」真意）。
 
 **Goal:** 把 S1a 假网关换**真网关**（复用现 `gateway.ts`/`providers/**`，先**去旧域依赖**）＋新建**流级取消令牌**（E1）＋接线**委托单中心呈现**（IPC 桥＋renderer 六件＋App rewire）＋**物理归档旧实现 `git rm`**（A2–A4/A2.5）；L3 interaction＋`npm run e2e` 双轨跑通 §9 happy path＋Stop 路径；S1 出口闸全绿。
 
@@ -35,14 +35,14 @@ tests/interaction/{delegationLifecycle,stopInflight,decisionCard,unpersistedStat
 
 ## Task 0：复用文件去旧域依赖（归档前置，否则 `git rm` 后 main 编译断）
 
-**Files:** Modify `src/main/gateway.ts`（去 `import { PROTOCOL_TOOL_DEFS } from '../domain/protocolTools.js'`）、`src/main/tools.ts`（去 `import { classifyReadonly, isLocalhostCommand } from '../domain/conversationState.js'`）、`src/main/verification.ts`（同）、`src/main/main.ts`（去 `import { setTimelineUserData } from './timelineLogger.js'` ＋ 其调用 `setTimelineUserData(app.getPath('userData'))`＝旧 JSONL timeline 接线，属 A2.5 归档面）。
-**Interfaces:** Produces 这些复用文件的旧域依赖迁到**新树**——`isLocalhostCommand`/`classifyReadonly`（只读/本地命令判定）落 `src/domain/authorization/` 高影响清单侧或新 `src/main/toolClassify.ts`（自包含，不 import 旧域）；`PROTOCOL_TOOL_DEFS` 迁新工具面或本地常量表；`main.ts` 的 `setTimelineUserData` **直接删、不迁移**（新树 timeline 走 TimelineRepo 内存态，无 JSONL userData 接线）。**不改** gateway 重试/分类/修复逻辑本体，只断旧域 import。
+**Files:** Modify `src/main/gateway.ts`（去 `import { PROTOCOL_TOOL_DEFS } from '../domain/protocolTools.js'`）、`src/main/tools.ts`（去 `import { classifyReadonly, isLocalhostCommand } from '../domain/conversationState.js'` ＋ 去 `import { logTimeline } from './timelineLogger.js'` 与其 3 处调用 `:135/:390/:399`＝旧 JSONL timeline 接线，属 A2.5 归档面）、`src/main/verification.ts`（同 conversationState）、`src/main/main.ts`（去 `import { setTimelineUserData } from './timelineLogger.js'` ＋ 其调用 `setTimelineUserData(app.getPath('userData'))`＝旧 JSONL timeline 接线，属 A2.5 归档面）。
+**Interfaces:** Produces 这些复用文件的旧域依赖迁到**新树**——`isLocalhostCommand`/`classifyReadonly`（只读/本地命令判定）落 `src/domain/authorization/` 高影响清单侧或新 `src/main/toolClassify.ts`（自包含，不 import 旧域）；`PROTOCOL_TOOL_DEFS` 迁新工具面或本地常量表；`main.ts` 的 `setTimelineUserData` 与 `tools.ts` 的 `logTimeline` 旧 JSONL 接线**直接删、不迁移**（新树 timeline 走 TimelineRepo 内存态，无 JSONL userData 接线）。**不改** gateway 重试/分类/修复逻辑本体，只断旧域 import。
 
-- [ ] **Step 1：定位符号消费点** — `grep -rn "classifyReadonly\|isLocalhostCommand\|PROTOCOL_TOOL_DEFS" src/main`；`grep -rn "setTimelineUserData\|timelineLogger" src/main/main.ts`；记录每处调用。
+- [ ] **Step 1：定位符号消费点** — `grep -rn "classifyReadonly\|isLocalhostCommand\|PROTOCOL_TOOL_DEFS" src/main`；`grep -rn "setTimelineUserData\|logTimeline\|timelineLogger" src/main`（本任务只处理 `main.ts`/`tools.ts` 两命中，`ipc.ts` 归 Task 3）；记录每处调用。
 - [ ] **Step 2：写失败测** — `tests/unit/toolClassify.test.ts`：新落点函数按旧语义判 localhost/只读（等价回归，取自 tag 版旧实现）。
-- [ ] **Step 3：迁实现** — 把纯判定函数复制到新树自包含模块（不 import 旧域），`gateway.ts`/`tools.ts`/`verification.ts` 改 import 到新落点；`main.ts` 删 `setTimelineUserData` 的 import＋调用（不迁移）。
-- [ ] **Step 4：跑 PASS** — `npx vitest run tests/unit/toolClassify.test.ts`；`grep "domain/conversationState\|domain/protocolTools" src/main/{gateway,tools,verification}.ts` 与 `grep "timelineLogger\|setTimelineUserData" src/main/main.ts` 命中皆＝0。
-- [ ] **Step 5：commit** — `refactor(S1b): 复用文件 gateway/tools/verification/main 去旧域依赖（迁纯判定到新树＋删 main 旧 JSONL 接线，为归档铺路）`。
+- [ ] **Step 3：迁实现** — 把纯判定函数复制到新树自包含模块（不 import 旧域），`gateway.ts`/`tools.ts`/`verification.ts` 改 import 到新落点；`main.ts` 删 `setTimelineUserData` 的 import＋调用、`tools.ts` 删 `logTimeline` 的 import＋3 处调用（均不迁移）。
+- [ ] **Step 4：跑 PASS** — `npx vitest run tests/unit/toolClassify.test.ts`；`grep "domain/conversationState\|domain/protocolTools" src/main/{gateway,tools,verification}.ts` 命中皆＝0，且 `grep "timelineLogger\|setTimelineUserData\|logTimeline" src/main/{main,tools}.ts` 命中＝0（`ipc.ts` 的 timeline handler 由 Task 3 清，不在本步）。
+- [ ] **Step 5：commit** — `refactor(S1b): 复用文件 gateway/tools/verification/main 去旧域依赖（迁纯判定到新树＋删 main/tools 旧 JSONL 接线，为归档铺路）`。
 
 ## Task 1：领域运行时装配（main 持 S1a 单例）
 
