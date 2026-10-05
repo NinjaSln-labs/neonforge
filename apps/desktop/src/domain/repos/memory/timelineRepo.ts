@@ -8,13 +8,14 @@ export class InMemoryTimelineRepo implements TimelineRepo {
 
   append(event: AppendInput, tx?: () => void): void {
     const snap = this.log.lastSeq()
-    this.log.record(event)
+    const entry = this.log.record(event)
     try {
       tx?.()
     } catch (err) {
       this.log.rollbackTo(snap)
       throw err
     }
+    this.log.publish(entry.event) // 先落账后分发；回滚路径不发（B4）
   }
 
   since(seq: number): TimelineEvent[] {
@@ -23,5 +24,9 @@ export class InMemoryTimelineRepo implements TimelineRepo {
 
   findByDelegation(delegationId: string): TimelineEvent[] {
     return this.log.findByDelegation(delegationId)
+  }
+
+  subscribe(listener: (event: TimelineEvent) => void): () => void {
+    return this.log.subscribe(listener)
   }
 }

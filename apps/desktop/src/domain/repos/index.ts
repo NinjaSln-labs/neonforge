@@ -6,4 +6,6 @@ export interface TimelineRepo {
   append(event: AppendInput, tx?: () => void): void
   since(seq: number): TimelineEvent[]
   findByDelegation(delegationId: string): TimelineEvent[]
+  // 进程内只读订阅（§6：呈现/度量为只读消费者；无对外发布通道）。
+  subscribe(listener: (event: TimelineEvent) => void): () => void
 }

@@ -261,6 +261,20 @@ export interface AppendInput {
 export class TimelineLog {
   private entries: EventEntry[] = []
   private nextSeq = 1
+  private listeners = new Set<(event: TimelineEvent) => void>()
+
+  // 进程内只读订阅（呈现/度量为只读消费者）；返回 unsubscribe。
+  subscribe(listener: (event: TimelineEvent) => void): () => void {
+    this.listeners.add(listener)
+    return () => {
+      this.listeners.delete(listener)
+    }
+  }
+
+  // 只读分发（无对外发布通道，L0 原则6）。由 append 机制口在落账成功【后】调用（先落账后分发）。
+  publish(event: TimelineEvent): void {
+    for (const listener of this.listeners) listener(event)
+  }
 
   // 唯一写者口：落全局单调 seq 入序列，返回 EventEntry（seq＋event）。
   record(input: AppendInput): EventEntry {
