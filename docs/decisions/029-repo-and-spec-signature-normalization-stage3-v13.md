@@ -13,7 +13,7 @@
 3. `RequiresApprovalSpec`：段3 §8 写 `(operation, scopeVersion, 高影响清单)`，而同节头注写「纯谓词，可独立测试」。判「作用域外」需要 entries 的 kind/pattern 匹配，**版本号零信息**；要么反查仓储（不再纯）、要么再传 Scope（双源）。字面照做与自家头注硬冲突。
 4. `deriveWaitingItems`：段3 §8 把四类等待项的来源写成「DecisionPoint 未决集／Delegation 待核验态／**Turn 拒绝·中断·卡滞待指令态**／Queue pending」，而 §4 I-15 明写拒绝待决的判定输入＝「以 Delegation 只读查询取被拒标记」。两处对「拒绝待决」的归属不一致；实现侧据 §4（权威）把该标记落在 Delegation 机制态，于是 S1 无 Turn 侧消费点、`turns` 形参成空转。
 
-实现面（`src/domain/repos/index.ts`、`spec/requiresApproval.ts`、`service/admissionCheck.ts`、`projection/waitingItems.ts`）已按上述读法落地并有测覆盖。用户裁 B＝回退段3/段5 改工件重过闸，代码零改动。
+实现面（`src/domain/repos/index.ts`、`spec/requiresApproval.ts`、`service/admissionCheck.ts`、`projection/waitingItems.ts`）已按上述读法落地并有测覆盖。用户裁 B＝回退段3/段5 改工件重过闸，**实现侧零语义改动**（仅注释由「偏离登记」改「正名引用」＋一轮审计扫出的零调用者死形删除，见 Decision 5/6）。
 
 ## Decision
 
