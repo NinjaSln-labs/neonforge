@@ -201,8 +201,7 @@ export interface NeonForgeBridge {
     export: () => Promise<{ ok: boolean; path?: string; error?: string }>
   }
   // S1b Task 4（详设 §7／B4）：委托单中心时间线读面——queryByDelegation＋跨进程只读订阅。
-  // 旧 JSONL `log` 面已退役（A2.5），仅留**可选**声明给两处归档调用点（ConversationPanel:582／
-  // MainWorkspace:164，皆 `timeline?.log?.()`），随 A2.2 归档批整体 `git rm`，本声明同批删。
+  // 旧 JSONL `log` 面已退役（A2.5），可选 `log?` 声明随 A2.2 归档批同批删除（两处归档调用点已 git rm）。
   timeline: {
     queryByDelegation: (
       delegationId: string,
@@ -219,12 +218,6 @@ export interface NeonForgeBridge {
         detail: unknown
       }) => void,
     ) => () => void
-    log?: (evt: {
-      session?: string
-      type: string
-      role?: 'user' | 'assistant' | 'system' | 'tool'
-      detail?: Record<string, unknown>
-    }) => Promise<void>
   }
   tools: NeonForgeTools
   plannedFiles: PlannedFilesApi // D3（ADR-005）：PlannedFiles 契约——权威在 main

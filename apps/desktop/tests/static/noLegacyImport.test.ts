@@ -3,15 +3,11 @@ import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
-// G-1 归档防回流闸（stage-spec A5.1／A3 判据载体／详设 §8）：新领域树**与复用面**不得 import 归档面。
+// G-1 归档防回流闸（stage-spec A5.1／A3 判据载体／详设 §8）：全树 src/** 不得 import 归档面。
 // 归档面名单＝唯一源 stage-spec DoD A2.1（旧领域）＋A2.2（旧呈现 24）＋A2.5（旧 main 时间线），
 // 本测从 stage-spec 现场解析、不复制字面（防第二源漂移）。
-// 射程＝①S1a 新领域树子目录＋src/domain/timeline.ts ②stage-spec A3 复用清单面：src/main/** ＋ src/preload/**
-// ＋ 复用 renderer 三件（diffRender/icons/ConfigPage）。②是 t000096 的兑付——A3 写「复用面未反向依赖归档文件＝
-// G-1 判绿」，但 S1a 期扫描面只有新域树＝A3 无判据载体；扩面当场捕获的唯一红＝`src/main/ipc.ts → timelineLogger`
-// （A2.5 旧 JSONL handler，Task 3 清除），其余复用面 40 文件 0 命中。
-// renderer 剩余面暂不入射程：A2.2 的 24 件旧呈现本就 import 归档域（11 处），由归档批整体 `git rm`；
-// S1b Task 5/6 建委托单中心新六件时，把 src/renderer 扩成全目录扫描。
+// 射程沿革：S1a＝新领域树；t000096 扩 A3 复用面（main/preload/renderer 三件）；S1b Task 9
+// 归档批物理 `git rm` 后扩到 **src/** 全树**（承载 stage-spec A5.1 全树判据，堵覆盖空档）。
 
 const HERE = path.dirname(fileURLToPath(import.meta.url)) // apps/desktop/tests/static
 const DESKTOP = path.resolve(HERE, '../..') // apps/desktop
@@ -52,30 +48,12 @@ function collect(root: string): string[] {
   return readdirSync(root, { withFileTypes: true }).flatMap((e) => collect(path.join(root, e.name)))
 }
 
-// S1a 新领域树扫描根（详设 §1 切分）；不存在的目录跳过。
-const NEW_DOMAIN_ROOTS = [
-  path.join(DESKTOP, 'src/domain/timeline.ts'),
-  ...[
-    'delegation',
-    'authorization',
-    'turn',
-    'queue',
-    'evidence',
-    'projection',
-    'spec',
-    'service',
-    'repos',
-  ].map((d) => path.join(DESKTOP, 'src/domain', d)),
-]
-
-// A3 复用清单面（stage-spec A3 行＝复用面未反向依赖归档文件，判据载体即本闸）。
-// ConfigPage.tsx 与 icons.tsx 属复用件；旧呈现 24 件（A2.2）不入射程——它们随归档批整体移出。
-const REUSE_ROOTS = [
+// src/** 全树扫描根（归档批后旧面已不在树，全树命中＝0 即 A5.1 全树判据）。
+const SCAN_ROOTS = [
+  path.join(DESKTOP, 'src/domain'),
   path.join(DESKTOP, 'src/main'),
   path.join(DESKTOP, 'src/preload'),
-  path.join(DESKTOP, 'src/renderer/diffRender.ts'),
-  path.join(DESKTOP, 'src/renderer/icons.tsx'),
-  path.join(DESKTOP, 'src/renderer/ConfigPage.tsx'),
+  path.join(DESKTOP, 'src/renderer'),
 ]
 
 describe('G-1 归档防回流（A5.1）', () => {
@@ -89,14 +67,12 @@ describe('G-1 归档防回流（A5.1）', () => {
     expect(legacy.size).toBeGreaterThanOrEqual(30) // 5 领域＋24 呈现＋1 时间线
   })
 
-  it('新领域树与复用面零 import 归档面（主断言，A5.1／A3）', () => {
-    const newDomain = NEW_DOMAIN_ROOTS.flatMap(collect)
-    const reuse = REUSE_ROOTS.flatMap(collect)
-    // 两面各自非空守卫：任一面的目录移位＝扫不到文件，不得静默放行
-    expect(newDomain.length).toBeGreaterThan(20)
-    expect(reuse.length).toBeGreaterThan(30)
+  it('src/** 全树零 import 归档面（主断言，A5.1／A3）', () => {
+    const files = SCAN_ROOTS.flatMap(collect)
+    // 非空守卫：目录移位＝扫不到文件，不得静默放行
+    expect(files.length).toBeGreaterThan(60)
     const hits: string[] = []
-    for (const f of [...newDomain, ...reuse])
+    for (const f of files)
       hits.push(
         ...legacyImportsIn(readFileSync(f, 'utf-8'), legacy).map(
           (s) => `${path.relative(DESKTOP, f)} → ${s}`,
