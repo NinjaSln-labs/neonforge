@@ -3,9 +3,6 @@ import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
-// append 单一写者闸（详设 §8 I-2/S-1 承载）：TimelineLog.record / new TimelineLog 只允许出现在
-// 聚合定义（timeline.ts）与机制口（repos/memory/timelineRepo.ts）；其余任何文件直连＝回流违例。
-
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const SRC = path.resolve(HERE, '../../src')
 
@@ -20,19 +17,38 @@ function collect(root: string): string[] {
   return readdirSync(root, { withFileTypes: true }).flatMap((e) => collect(path.join(root, e.name)))
 }
 
+// append 单一写者闸（详设 §8 I-2/S-1 承载）：TimelineLog.record / new TimelineLog 只允许出现在
+// 聚合定义（timeline.ts）与机制口（repos/memory/timelineRepo.ts）；其余任何文件直连＝回流违例。
+// 判据面：直连＝「文中具名 TimelineLog（导入绑定或类型标注）∧ 出现 .record(」，或 new TimelineLog。
+// 单看 `.record(` 会把别的聚合同名命令（EvidenceItem.record，Task 14 实证）误判为违例，故加具名条件。
+// ponytail: 天花板＝鸭子类型（不具名 TimelineLog 而持其实例再 record）绕过文本面；
+// 升级路径＝私有构造器已挡 new（构造在聚合内），全量依赖图面随 S-1 全量（S6）。
+function singleWriterHit(src: string): boolean {
+  if (/new\s+TimelineLog\b/.test(src)) return true
+  return /\bTimelineLog\b/.test(src) && /\.record\(/.test(src)
+}
+
 describe('append 单一写者（I-2/S-1）', () => {
   it('record/构造 仅经聚合与机制口，非 append 路径命中＝0', () => {
     const hits: string[] = []
     for (const f of collect(SRC)) {
       if (ALLOWED.includes(f)) continue
-      const src = readFileSync(f, 'utf-8')
-      if (/\.record\(/.test(src) || /new TimelineLog\b/.test(src)) hits.push(path.relative(SRC, f))
+      if (singleWriterHit(readFileSync(f, 'utf-8'))) hits.push(path.relative(SRC, f))
     }
     expect(hits).toEqual([])
   })
 
-  it('机制口确在允许清单内且引用了 record（防闸因文件移位而空跑）', () => {
+  it('判据可红自证（A5.2 同族）：直连判红、异聚合同名命令不判红', () => {
+    expect(singleWriterHit(`import { TimelineLog } from '../timeline.js'\nlog.record(e)`)).toBe(
+      true,
+    )
+    expect(singleWriterHit(`const log = new TimelineLog()`)).toBe(true)
+    expect(singleWriterHit(`EvidenceItem.record({ evidenceId })`)).toBe(false)
+    expect(singleWriterHit(`timeline.append({ ts, type })`)).toBe(false)
+  })
+
+  it('机制口确在允许清单内且被判据认出（防闸因文件移位或判据漂移而空跑）', () => {
     const repo = readFileSync(path.join(SRC, 'domain/repos/memory/timelineRepo.ts'), 'utf-8')
-    expect(/\.record\(/.test(repo)).toBe(true)
+    expect(singleWriterHit(repo)).toBe(true)
   })
 })
