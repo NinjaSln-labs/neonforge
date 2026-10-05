@@ -8,6 +8,8 @@ import {
   cleanupSnapshots,
 } from './applyDiff.js'
 import { gateway, classifyGatewayError } from './gateway.js'
+import { registerDomainChannels } from './ipcDomain.js'
+import { getRuntime } from './domainRuntime.js'
 import { configStore } from './configStore.js'
 import { isProviderId, listProviders } from './providers/index.js'
 import { workspace } from './workspace.js'
@@ -33,6 +35,12 @@ export function registerIpc(): void {
   initTools()
   initPlugins() // 08：注册 5 内置插件（生命周期钩子）
   registerLspTools(toolRegistry)
+  // S1b Task 3（详设 §7）：委托单中心通道——wiring 面单独成模块（ipcDomain），本处只递真 ipcMain 与运行时。
+  // streamId→AbortController 的表归 gateway 持有（Task 2），取消通道在此转投。
+  registerDomainChannels(ipcMain, {
+    runtime: getRuntime(),
+    abortStream: (streamId) => gateway.abort(streamId),
+  })
   // D3（ADR-005）：启动恢复——write 门控布尔镜像从 store 同步（批准事实跨重启；renderer 挂载时另经 planned-files:load 恢复清单）
   syncPlanApprovedFromStore()
   ipcMain.handle('config:has-key', () => configStore.hasValidKey())
