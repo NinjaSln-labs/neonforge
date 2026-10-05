@@ -115,7 +115,7 @@ apps/desktop/eslint.config.js    # 追加 renderer 禁 import 聚合写面（fla
 ## Task 8：InstructionQueue（C3）
 
 **Files:** `queue/InstructionQueue.ts`＋`repos/...instructionQueue`；Test `tests/unit/instructionQueue.test.ts`。
-**Interfaces:** Produces `enqueue/pending(排已准入已撤回, FIFO)/admit(幂等 I-4)/markWithdrawn(机制口, S1 不接 DelegationAbandoned)`。
+**Interfaces:** Produces 聚合命令 `submitInput/pending(排已准入已撤回, FIFO)/admit(幂等 I-4)/markWithdrawn(机制口, S1 不接 DelegationAbandoned)`＋仓储面 `InstructionQueueRepo{save, find}`（ADR-029 D2 正名＝命令归聚合，本行原写 `enqueue/…` 为旧仓储形，已按详设 §3 v0.4 回补）。
 
 - [ ] **Step 1：写失败测** — 同 itemId 二次 admit=no-op；已撤回再 admit=拒；FIFO 保序；pending 不含已准入/已撤回。
 - [ ] **Step 2–4：** 实现＋跑 `npx vitest run tests/unit/instructionQueue.test.ts` 绿。
@@ -144,7 +144,7 @@ apps/desktop/eslint.config.js    # 追加 renderer 禁 import 聚合写面（fla
 ## Task 11：requiresApproval Spec + AdmissionCheck（C6/D1）
 
 **Files:** `spec/requiresApproval.ts`、`service/admissionCheck.ts`；Test `tests/unit/requiresApproval.test.ts`。
-**Interfaces:** Produces `requiresApproval(op,scopeVersion,list):boolean`（S1 两类：资源访问/命令执行；作用域修正分支返 `false` 并注释「全外延→S2」，不 throw、不留 TODO）；`admissionCheck(op,…):boolean`＝requiresApproval 的入口前置闸。
+**Interfaces:** Produces `requiresApproval(op,scope,list):boolean`（形参取 Scope 本体——ADR-029 D3 正名，本行原写 `scopeVersion` 为旧形；S1 两类：资源访问/命令执行；作用域修正分支返 `false` 并注释「全外延→S2」，不 throw、不留 TODO）；`admissionCheck(op,scope,list):boolean`＝requiresApproval 的入口前置闸。
 
 - [ ] **Step 1：写失败测** — 清单命中/作用域外⇒true；未过闸⇒操作副作用计数=0（校验先于产出）。
 - [ ] **Step 2–4：** 实现纯谓词＋`admissionCheck`；`npx vitest run tests/unit/requiresApproval.test.ts` 绿。
@@ -179,7 +179,7 @@ apps/desktop/eslint.config.js    # 追加 renderer 禁 import 聚合写面（fla
 ## Task 15：deriveWaitingItems（C7）
 
 **Files:** `projection/waitingItems.ts`；Test `tests/unit/waitingItems.test.ts`（≥6，四类各一＋双归属反例＋空集）。
-**Interfaces:** `deriveWaitingItems(delegations,decisionPoints,turns,queue):WaitingItem[]` 四类闭集（待拍板>待核验>待用户指令>排队）；每实例属且仅属一类；无归宿计数=0。**收束态过滤不实现（→S5）**。
+**Interfaces:** `deriveWaitingItems(delegations,decisionPoints,queue):WaitingItem[]`（S1 无 `turns` 形参——ADR-029 D4 正名：拒绝待决权威源＝Delegation，Turn 侧只供卡滞待指令态，`turns` 随 S5 同刀回补；本行原写四入参为旧形）四类闭集（待拍板>待核验>待用户指令>排队）；每实例属且仅属一类；无归宿计数=0。**收束态过滤不实现（→S5）**。
 
 - [ ] **Step 1–4：** 写失败测→实现纯函数（无状态，不属子域）→`npx vitest run tests/unit/waitingItems.test.ts` 绿。
 - [ ] **Step 5：commit** — `feat(S1a): deriveWaitingItems 四类闭集共用纯函数（I-9 检测，C7；收束态过滤延 S5）`。

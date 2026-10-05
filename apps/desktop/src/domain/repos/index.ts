@@ -21,7 +21,6 @@ export interface EvidenceRepo {
   save(item: EvidenceItem): void
   findByIds(ids: string[]): EvidenceItem[]
   findByDelegation(delegationId: string): EvidenceItem[]
-  markFirstInspection(id: string): void
 }
 
 // 委托仓储（详设 §3／段3 §7）：findActive＝非归档非放弃（含已收尾，I-9 读侧）；listArchived 供归档面。

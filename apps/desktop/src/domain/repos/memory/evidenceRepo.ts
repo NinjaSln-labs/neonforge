@@ -21,8 +21,4 @@ export class InMemoryEvidenceRepo implements EvidenceRepo {
   findByDelegation(delegationId: string): EvidenceItem[] {
     return [...this.items.values()].filter((e) => e.delegationId === delegationId)
   }
-
-  markFirstInspection(id: string): void {
-    this.items.get(id)?.inspect()
-  }
 }
