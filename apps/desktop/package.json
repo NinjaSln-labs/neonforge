@@ -12,6 +12,7 @@
     "build": "npm run build:main && vite build",
     "start": "env -u ELECTRON_RUN_AS_NODE electron .",
     "test": "vitest run",
+    "e2e": "vitest run tests/e2e",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"*.mjs\" \"*.config.*\" \"../../.prettierrc.json\" \"../../lefthook.yml\" \"../../.github/workflows/qa.yml\"",

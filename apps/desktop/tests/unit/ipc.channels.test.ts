@@ -57,6 +57,7 @@ describe('委托单中心 IPC 通道（Task 3）', () => {
     const { handlers } = harness()
     expect(Object.keys(handlers).sort()).toEqual(
       [
+        'change:produce',
         'decision:raise',
         'decision:resolve',
         'delegation:accept',
@@ -91,6 +92,47 @@ describe('委托单中心 IPC 通道（Task 3）', () => {
     const list = call<Array<Record<string, unknown>>>(handlers['delegation:list'], evt, {})
     expect(list).toEqual([{ delegationId: 'd1', intent: 'x', state: 'created', reopenCount: 0 }])
     expect(Object.getPrototypeOf(list[0]) === Object.prototype).toBe(true)
+  })
+
+  it('change:produce 过闸 ⇒ ChangeProduced＋EvidenceRecorded；未过闸（作用域外）⇒ produced:false 零副作用', () => {
+    const { handlers, evt } = harness()
+    call(handlers['delegation:create'], evt, {
+      delegationId: 'd1',
+      intent: 'x',
+      scopeEntries: [{ kind: '目录', pattern: 'src/**' }],
+    })
+    const inScope = {
+      category: '资源访问',
+      entryKind: '目录',
+      resource: 'src/a.ts',
+      hits: null,
+    }
+    const ok = call<{ produced: boolean }>(handlers['change:produce'], evt, {
+      delegationId: 'd1',
+      turnId: 't1',
+      changeSet: '-old\n+new',
+      op: inScope,
+    })
+    expect(ok.produced).toBe(true)
+    expect(rt.timeline.since(1).map((e) => e.type)).toEqual([
+      'DelegationCreated',
+      'ChangeProduced',
+      'EvidenceRecorded',
+    ])
+    const outScope = { ...inScope, resource: '/etc/hosts' }
+    const blocked = call<{ produced: boolean }>(handlers['change:produce'], evt, {
+      delegationId: 'd1',
+      turnId: 't2',
+      changeSet: 'x',
+      op: outScope,
+    })
+    expect(blocked.produced).toBe(false)
+    // 作用域外⇒零副作用（无新事件）
+    expect(rt.timeline.since(1).map((e) => e.type)).toEqual([
+      'DelegationCreated',
+      'ChangeProduced',
+      'EvidenceRecorded',
+    ])
   })
 
   it('turn:start 空档 ⇒ TurnStarted＋InputAcknowledged（归宿＝开轮）', () => {

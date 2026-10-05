@@ -12,6 +12,7 @@ import {
 import { Scope } from '../domain/authorization/Scope.js'
 import { InstructionQueue } from '../domain/queue/InstructionQueue.js'
 import { Turn, type TriggerSource } from '../domain/turn/Turn.js'
+import type { Operation } from '../domain/spec/requiresApproval.js'
 import type { DomainRuntime } from './domainRuntime.js'
 
 export type DomainChannel =
@@ -20,6 +21,7 @@ export type DomainChannel =
   | 'delegation:accept'
   | 'delegation:reject'
   | 'turn:start'
+  | 'change:produce'
   | 'decision:raise'
   | 'decision:resolve'
   | 'evidence:list-by-delegation'
@@ -141,6 +143,15 @@ export function registerDomainChannels(ipc: IpcMainLike, deps: DomainChannelDeps
       }
       throw e
     }
+  })
+
+  // §9 步2 产物推进：未过 AdmissionCheck ⇒ 返 {produced:false}（调用方转 decision:raise），零副作用。
+  ipc.handle('change:produce', (_evt, args) => {
+    const a = args as { delegationId: string; turnId: string; changeSet: string; op: Operation }
+    const draft = rt.produce(a)
+    return draft
+      ? { produced: true, changeSetRef: (draft.detail as { changeSetRef: string }).changeSetRef }
+      : { produced: false }
   })
 
   ipc.handle('decision:raise', (_evt, args) => {

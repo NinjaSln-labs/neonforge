@@ -2,7 +2,6 @@
 // 内存态＝重启即失（F2 未持久化须显式呈现的前提）；持久化落 S3，届时换仓储适配、本装配面不变。
 // 事件写入只经 TimelineRepo.append 唯一机制口（S-1/I-2），本文件是 wiring 侧、不直连 record。
 import { HIGH_IMPACT_LIST } from '../domain/authorization/highImpactList.js'
-import type { Scope } from '../domain/authorization/Scope.js'
 import { InMemoryDecisionPointRepo } from '../domain/repos/memory/decisionPointRepo.js'
 import { InMemoryDelegationRepo } from '../domain/repos/memory/delegationRepo.js'
 import { InMemoryEvidenceRepo } from '../domain/repos/memory/evidenceRepo.js'
@@ -11,7 +10,10 @@ import { InMemoryScopeRepo } from '../domain/repos/memory/scopeRepo.js'
 import { InMemoryTimelineRepo } from '../domain/repos/memory/timelineRepo.js'
 import { InMemoryTurnRepo } from '../domain/repos/memory/turnRepo.js'
 import type { ApplyChangeDeps } from '../domain/service/applyChange.js'
+import { applyChange, attachEvidenceCollector } from '../domain/service/applyChange.js'
+import type { Operation } from '../domain/spec/requiresApproval.js'
 import type { EventDraft } from '../domain/timeline.js'
+import { Scope } from '../domain/authorization/Scope.js'
 
 // 网关 port＝真假两轨的共同实现面（假轨承 S1a Task 18：同输入同产出、无网络无随机）。
 export interface GatewayLike {
@@ -35,6 +37,13 @@ export interface DomainRuntime {
   gateway: GatewayLike
   setGateway(gateway: GatewayLike): void
   newDeps(scope: Scope): ApplyChangeDeps
+  /** §9 步2 产物推进：经 admissionCheck→ChangeProduced→（订阅）EvidenceRecorded。返回草稿或 null（未过闸/幂等）。 */
+  produce(input: {
+    delegationId: string
+    turnId: string
+    changeSet: string
+    op: Operation
+  }): EventDraft | null
   log(draft: EventDraft, tx?: () => void): void
 }
 
@@ -63,11 +72,28 @@ function build(gateway: GatewayLike): DomainRuntime {
         changeSets: rt.changeSets,
       }
     },
+    produce(input) {
+      const scope =
+        rt.scopes.findByDelegation(input.delegationId) ?? Scope.initial(input.delegationId, [])
+      return applyChange(
+        {
+          delegationId: input.delegationId,
+          turnId: input.turnId,
+          ts: new Date().toISOString(),
+          changeSet: input.changeSet,
+          op: input.op,
+        },
+        rt.newDeps(scope),
+      )
+    },
     log(draft, tx) {
       // draft 的 type↔detail 配对已由聚合构造处钉住，展开只补 ts。
       rt.timeline.append({ ts: new Date().toISOString(), ...draft }, tx)
     },
   }
+  // 证据域订阅面挂一次（单例级）：ChangeProduced ⇒ EvidenceRecorded。collector 只读 timeline/evidence/changeSets，
+  // 不读 scope，故占位 Scope 仅满足形参（内容不影响采集）。
+  attachEvidenceCollector(rt.newDeps(Scope.initial('__collector__', [])))
   return rt
 }
 
