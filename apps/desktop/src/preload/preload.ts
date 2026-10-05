@@ -127,33 +127,8 @@ contextBridge.exposeInMainWorld('neonforge', {
     export: () =>
       ipcRenderer.invoke('chat:export') as Promise<{ ok: boolean; path?: string; error?: string }>,
   },
-  // 2026-08-07 会话时间线（单会话所有步骤统一日志——用户/搭档/工具/授权/状态——分析一步到位）
-  timeline: {
-    log: (evt: {
-      session?: string
-      type: string
-      role?: 'user' | 'assistant' | 'system' | 'tool'
-      detail?: Record<string, unknown>
-    }) => ipcRenderer.invoke('timeline:log', evt) as Promise<void>,
-    // 2026-08-15 DDD 重建：时间线查询（通用接入——调试/分析）
-    query: (filter: {
-      session?: string
-      type?: string | string[]
-      from?: string
-      to?: string
-      limit?: number
-    }) =>
-      ipcRenderer.invoke('timeline:query', filter) as Promise<
-        Array<{
-          ts: string
-          seq: number
-          session: string
-          type: string
-          role?: string
-          detail: Record<string, unknown>
-        }>
-      >,
-  },
+  // A2.5（S1b）：旧 JSONL 会话时间线面退役——`timeline.log/query` 桥随 main 侧 handler 同批移除；
+  // renderer 两处调用点皆 `timeline?.log?.()` 可选链，桥缺席＝静默 no-op，不产生未处理拒绝。
   tools: {
     list: () =>
       ipcRenderer.invoke('tools:list') as Promise<

@@ -27,7 +27,6 @@ import { buildStandardPrefix, planPreheat, prefixCache, preheating } from './pre
 import { initPlugins, pluginRegistry } from './pluginSystem.js'
 import { compaction } from './compact.js'
 import { appendChatLog, exportChatLog } from './chatLog.js'
-import { logTimeline, timelineLogger } from './timelineLogger.js'
 import { runVerificationCommands } from './verification.js'
 
 export function registerIpc(): void {
@@ -296,22 +295,6 @@ export function registerIpc(): void {
     appendChatLog(app.getPath('userData'), entry),
   )
   ipcMain.handle('chat:export', () => exportChatLog(app.getPath('userData')))
-  // 2026-08-07 会话时间线（单会话所有步骤统一日志——用户/搭档/工具/授权/状态）
-  ipcMain.handle('timeline:log', (_e, evt: Parameters<typeof logTimeline>[0]) => logTimeline(evt))
-  // 2026-08-15 DDD 重建：时间线查询（通用接入 A3——append 之外补 read）
-  ipcMain.handle(
-    'timeline:query',
-    (
-      _e,
-      filter: {
-        session?: string
-        type?: string | string[]
-        from?: string
-        to?: string
-        limit?: number
-      },
-    ) => timelineLogger.query({ ...filter, type: filter.type as never }),
-  )
 }
 // ticket 10：ToolRegistry（工具清单 + 执行分发——write/edit/bash 需 approved）
 ipcMain.handle('tools:list', () => toolRegistry.list())

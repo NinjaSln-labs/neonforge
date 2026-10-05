@@ -138,8 +138,10 @@ export interface NeonForgeBridge {
     }) => Promise<void>
     export: () => Promise<{ ok: boolean; path?: string; error?: string }>
   }
-  // 2026-08-07 会话时间线（单会话所有步骤统一日志——用户/搭档/工具/授权/状态）
-  timeline: {
+  // A2.5（S1b）：main 侧 handler 与 preload 桥已同批移除，运行期此面恒缺席——留**可选**声明而非整删，
+  // 免得给两处调用点（ConversationPanel:582／MainWorkspace:164，皆 `timeline?.log?.()`）新增类型红；
+  // 两处调用点随 A2.2 归档批整体 `git rm`，本声明同批删。
+  timeline?: {
     log: (evt: {
       session?: string
       type: string
