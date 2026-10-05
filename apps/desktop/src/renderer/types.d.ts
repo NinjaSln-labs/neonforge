@@ -97,6 +97,68 @@ export interface NeonForgeBridge {
         toolCall?: { name: string; args: Record<string, unknown> }
       }) => void,
     ) => () => void
+    // S1b Task 4（E1）：流级取消——Stop 经此转投 main gateway:cancel-stream。
+    stop: (streamId: string) => Promise<{ ok: boolean }>
+  }
+  // S1b Task 4（详设 §7）：委托单中心领域桥——逐键对齐 ipcDomain 通道注册表。
+  delegation: {
+    create: (args: {
+      delegationId?: string
+      intent: string
+      scopeEntries?: Array<{ kind: '仓库' | '目录' | '命令' | '网络'; pattern: string }>
+    }) => Promise<{ delegationId: string; state: string }>
+    list: () => Promise<
+      Array<{ delegationId: string; intent: string; state: string; reopenCount: number }>
+    >
+    accept: (
+      delegationId: string,
+    ) => Promise<{ delegationId: string; intent: string; state: string; reopenCount: number }>
+    reject: (
+      delegationId: string,
+      reason?: string,
+    ) => Promise<{ delegationId: string; intent: string; state: string; reopenCount: number }>
+  }
+  turn: {
+    start: (args: {
+      delegationId: string
+      turnId?: string
+      inputId?: string
+      triggerSource: '用户输入' | '系统恢复' | '队列准入'
+    }) => Promise<{ into: 'turn'; turnId: string } | { into: 'queue'; itemId: string }>
+  }
+  decision: {
+    raise: (args: {
+      decisionPointId: string
+      delegationId: string
+      turnId: string
+      requestReason: {
+        reason: '作用域外' | '高影响清单命中' | '作用域修正'
+        operation: string
+        requestedBy: 'AI 提请' | '用户提请'
+      }
+    }) => Promise<{ decisionPointId: string; open: boolean }>
+    resolve: (args: {
+      decisionPointId: string
+      value: string
+      reason?: string
+    }) => Promise<{ resolved: string | null }>
+  }
+  evidence: {
+    listByDelegation: (delegationId: string) => Promise<
+      Array<{
+        evidenceId: string
+        type: string
+        delegationId: string
+        payloadRef: string
+        provenance: string
+      }>
+    >
+    inspect: (evidenceId: string) => Promise<{ firstInspection: boolean }>
+  }
+  queue: {
+    pending: () => Promise<
+      Array<{ itemId: string; delegationId: string; inputId: string; origin: string }>
+    >
   }
   delivery: {
     applyDiff: (
@@ -138,11 +200,26 @@ export interface NeonForgeBridge {
     }) => Promise<void>
     export: () => Promise<{ ok: boolean; path?: string; error?: string }>
   }
-  // A2.5（S1b）：main 侧 handler 与 preload 桥已同批移除，运行期此面恒缺席——留**可选**声明而非整删，
-  // 免得给两处调用点（ConversationPanel:582／MainWorkspace:164，皆 `timeline?.log?.()`）新增类型红；
-  // 两处调用点随 A2.2 归档批整体 `git rm`，本声明同批删。
-  timeline?: {
-    log: (evt: {
+  // S1b Task 4（详设 §7／B4）：委托单中心时间线读面——queryByDelegation＋跨进程只读订阅。
+  // 旧 JSONL `log` 面已退役（A2.5），仅留**可选**声明给两处归档调用点（ConversationPanel:582／
+  // MainWorkspace:164，皆 `timeline?.log?.()`），随 A2.2 归档批整体 `git rm`，本声明同批删。
+  timeline: {
+    queryByDelegation: (
+      delegationId: string,
+    ) => Promise<
+      Array<{ seq: number; ts: string; type: string; delegationId: string; detail: unknown }>
+    >
+    subscribe: () => Promise<{ subscribed: boolean }>
+    onEvent: (
+      cb: (e: {
+        seq: number
+        ts: string
+        type: string
+        delegationId: string
+        detail: unknown
+      }) => void,
+    ) => () => void
+    log?: (evt: {
       session?: string
       type: string
       role?: 'user' | 'assistant' | 'system' | 'tool'

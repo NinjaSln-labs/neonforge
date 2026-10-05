@@ -69,6 +69,114 @@ contextBridge.exposeInMainWorld('neonforge', {
       ipcRenderer.on('gateway:stream-chunk', listener)
       return () => ipcRenderer.removeListener('gateway:stream-chunk', listener)
     },
+    // S1b Task 4（E1）：流级取消——Stop 按钮经此转投 main，落到 Task 2 的 gateway.abort（streamId 面）。
+    stop: (streamId: string) =>
+      ipcRenderer.invoke('gateway:cancel-stream', { streamId }) as Promise<{ ok: boolean }>,
+  },
+  // S1b Task 4（详设 §7）：委托单中心领域通道——逐键对齐 ipcDomain 注册表（通道名即契约）。
+  delegation: {
+    create: (args: {
+      delegationId?: string
+      intent: string
+      scopeEntries?: Array<{ kind: '仓库' | '目录' | '命令' | '网络'; pattern: string }>
+    }) =>
+      ipcRenderer.invoke('delegation:create', args) as Promise<{
+        delegationId: string
+        state: string
+      }>,
+    list: () =>
+      ipcRenderer.invoke('delegation:list') as Promise<
+        Array<{ delegationId: string; intent: string; state: string; reopenCount: number }>
+      >,
+    accept: (delegationId: string) =>
+      ipcRenderer.invoke('delegation:accept', { delegationId }) as Promise<{
+        delegationId: string
+        intent: string
+        state: string
+        reopenCount: number
+      }>,
+    reject: (delegationId: string, reason?: string) =>
+      ipcRenderer.invoke('delegation:reject', { delegationId, reason }) as Promise<{
+        delegationId: string
+        intent: string
+        state: string
+        reopenCount: number
+      }>,
+  },
+  turn: {
+    start: (args: {
+      delegationId: string
+      turnId?: string
+      inputId?: string
+      triggerSource: '用户输入' | '系统恢复' | '队列准入'
+    }) =>
+      ipcRenderer.invoke('turn:start', args) as Promise<
+        { into: 'turn'; turnId: string } | { into: 'queue'; itemId: string }
+      >,
+  },
+  decision: {
+    raise: (args: {
+      decisionPointId: string
+      delegationId: string
+      turnId: string
+      requestReason: {
+        reason: '作用域外' | '高影响清单命中' | '作用域修正'
+        operation: string
+        requestedBy: 'AI 提请' | '用户提请'
+      }
+    }) =>
+      ipcRenderer.invoke('decision:raise', args) as Promise<{
+        decisionPointId: string
+        open: boolean
+      }>,
+    resolve: (args: { decisionPointId: string; value: string; reason?: string }) =>
+      ipcRenderer.invoke('decision:resolve', args) as Promise<{ resolved: string | null }>,
+  },
+  evidence: {
+    listByDelegation: (delegationId: string) =>
+      ipcRenderer.invoke('evidence:list-by-delegation', { delegationId }) as Promise<
+        Array<{
+          evidenceId: string
+          type: string
+          delegationId: string
+          payloadRef: string
+          provenance: string
+        }>
+      >,
+    inspect: (evidenceId: string) =>
+      ipcRenderer.invoke('evidence:inspect', { evidenceId }) as Promise<{
+        firstInspection: boolean
+      }>,
+  },
+  queue: {
+    pending: () =>
+      ipcRenderer.invoke('queue:pending') as Promise<
+        Array<{ itemId: string; delegationId: string; inputId: string; origin: string }>
+      >,
+  },
+  timeline: {
+    queryByDelegation: (delegationId: string) =>
+      ipcRenderer.invoke('timeline:query-by-delegation', { delegationId }) as Promise<
+        Array<{ seq: number; ts: string; type: string; delegationId: string; detail: unknown }>
+      >,
+    subscribe: () => ipcRenderer.invoke('timeline:subscribe') as Promise<{ subscribed: boolean }>,
+    // B4 只读分发跨进程面：main 侧起转发后，本窗口经此收 'timeline:event'。
+    onEvent: (
+      cb: (e: {
+        seq: number
+        ts: string
+        type: string
+        delegationId: string
+        detail: unknown
+      }) => void,
+    ) => {
+      const listener = (
+        _e: unknown,
+        evt: { seq: number; ts: string; type: string; delegationId: string; detail: unknown },
+      ) => cb(evt)
+      ipcRenderer.on('timeline:event', listener)
+      return () => ipcRenderer.removeListener('timeline:event', listener)
+    },
   },
   delivery: {
     applyDiff: (path: string, diff: string, approved?: boolean) =>
