@@ -4,6 +4,7 @@ import type { Delegation } from '../delegation/Delegation.js'
 import type { DecisionPoint } from '../authorization/DecisionPoint.js'
 import type { Scope } from '../authorization/Scope.js'
 import type { InstructionQueue } from '../queue/InstructionQueue.js'
+import type { Turn } from '../turn/Turn.js'
 
 // 仓储面（详设 §3／段3 §7，S1 内存实现）。seq 单调与单写者由 TimelineLog 聚合维护，非仓储（M-02）。
 // append＝唯一机制口（S-1）：追加与聚合状态写入同事务，失败⇒整事务回滚（§6 例外条款）。
@@ -49,4 +50,11 @@ export interface ScopeRepo {
 export interface InstructionQueueRepo {
   save(q: InstructionQueue): void
   find(): InstructionQueue | undefined
+}
+
+// 轮次仓储（详设 §3／段3 §7）：findInFlight＝I-1 读侧（全局 ≤1，终态轮退出在飞仍可溯）。
+export interface TurnRepo {
+  save(turn: Turn): void
+  findInFlight(): Turn | null
+  findByDelegation(delegationId: string): Turn[]
 }

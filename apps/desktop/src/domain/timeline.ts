@@ -97,10 +97,10 @@ export interface TurnStartedPayload {
   triggerSource: string
 }
 
-// terminal 三值＝段3 §5「收口/中止/中断」
+// terminal 三值逐字＝段3 §5「收口/中止/中断」（与 Turn 聚合 VO 同词表，不另造英文二源）
 export interface TurnEndedPayload {
   turnId: string
-  terminal: 'closed' | 'aborted' | 'interrupted'
+  terminal: '收口' | '中止' | '中断'
 }
 
 // requestReason＝段3 §5「缘由+requestedBy」（单键承载二面）

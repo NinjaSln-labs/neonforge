@@ -127,4 +127,21 @@ export class Delegation {
       detail: { delegationId: this.delegationId, archivedState: 'archived' } as AnyPayload,
     }
   }
+
+  // 机制侧内部转移（非段3 §2 关键命令，M-03 口径）：拒绝待决＝DecisionDenied 的事件驱动消费置位（详设 §2 awaitingUser）。
+  // I-15 的校验位置在 Turn 聚合，其读侧＝本标记（段3 §4）；重复置位＝no-op（再次拒绝不重复计数）。
+  markAwaitingUser(): void {
+    if (isClosed(this._state)) throw new DomainError('I-10', '终态委托不再进入拒绝待决')
+    this._state = 'awaitingUser'
+  }
+
+  // 解除＝TriggerSource=用户输入 的开轮成功（C12）；解除后回推进中态（新轮即推进），队列按序恢复消费。
+  resumeFromAwaitingUser(): void {
+    if (this._state !== 'awaitingUser') throw new DomainError('I-15', '非拒绝待决态无需解除')
+    this._state = 'inProgress'
+  }
+
+  get awaitingUser(): boolean {
+    return this._state === 'awaitingUser'
+  }
 }
