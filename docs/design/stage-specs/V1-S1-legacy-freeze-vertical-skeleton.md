@@ -13,10 +13,11 @@
 - [ ] A1 基线 tag 存在且可调阅旧实现：`git rev-parse legacy-freeze-v0.1.0` 返回 sha，且 `git show legacy-freeze-v0.1.0:apps/desktop/src/domain/conversationState.ts | wc -l` > 0（轻量 tag，无署名面）
 - [ ] A2 归档清单已移出工作树（cwd `apps/desktop`，全部 `test ! -e` 通过；清单＝ADR-028 Decision 3）：
   - [ ] A2.1 旧领域：`src/domain/conversationState.ts`、`src/domain/agentLoop.ts`、`src/domain/protocolTools.ts`、`src/domain/planProposalParser.ts`、`src/domain/completionClaimParser.ts`
-  - [ ] A2.2 旧呈现：`src/renderer/ConversationPanel.tsx` 及其对话中心子组件（renderer 目录为扁平结构，无 `components/` 层；具体删除清单以归档批 commit message 逐条列出为准）
+  - [ ] A2.2 旧呈现（对话中心面，**24 文件逐个 `test ! -e`**；renderer 为扁平结构无 `components/` 层；清单经现场 `ls`＋import 图核实固化于本件，归档批 commit message 只作**增量补记**不再定义外延）：`src/renderer/` 下 `ConversationPanel.tsx`、`CandidateButtons.tsx`、`DeliveryPanel.tsx`、`DigitalDeliveryPanel.tsx`、`DoDAlignPanel.tsx`、`OutputPanel.tsx`、`SessionPanel.tsx`、`StartPage.tsx`、`TrustLadderPanel.tsx`、`SettingsPanel.tsx`、`MainWorkspace.tsx`、`FileTree.tsx`、`scenes.tsx`、`authModel.ts`、`candidates.ts`、`demoBridge.ts`、`errorClassify.ts`、`problemStore.ts`、`sessionStore.ts`、`sysPrompt.ts`、`systemNudge.ts`、`textClean.ts`、`useConversationState.ts`、`useToolApproval.ts`
+    - **不删（保留面，`test -e` 反向断言）**：复用原语 `icons.tsx`／`styles.css`／`diffRender.ts`（ADR-028 Decision 4）；凭据配置 UI `ConfigPage.tsx`（非对话中心，S1 真网关移植需要它，ADR-028 Decision 4 同批登记）；壳与入口 `main.tsx`／`index.html`／`App.tsx`／`types.d.ts`／`assets/`（S1 ⑥ **就地重写**为委托单中心，不属归档面）
   - [ ] A2.3 旧测试：`tests/unit/**`（旧 45 文件全数）、`tests/interaction/**`、`tests/visual/**`、视觉基线目录 `snapshots/**`（`playwright.config.ts` 的 `snapshotDir: './snapshots'`，即 `apps/desktop/snapshots/`，**不在 tests/ 下**）
   - [ ] A2.4 旧 UAT/e2e 面：`scripts-cdp/`、`e2e-*.mjs`（6 个，均在 `apps/desktop/` 下，非仓库根）、`e2e-sim/`
-- [ ] A3 复用面已移植且**未反向依赖归档文件**：G-1 静态闸对当前树判绿（见 A5），复用清单＝ADR-028 Decision 4（`main.ts`／`preload.ts`／`gateway.ts`＋`providers/**`／`configStore.ts`＋`envManager.ts`／`applyDiff.ts`＋`workspace.ts`＋`sandboxPath.ts`＋`diffRender.ts`／`styles.css`＋`icons.tsx`）
+- [ ] A3 复用面已移植且**未反向依赖归档文件**：G-1 静态闸对当前树判绿（见 A5），复用清单＝ADR-028 Decision 4（`main.ts`／`preload.ts`／`gateway.ts`＋`providers/**`／`configStore.ts`＋`envManager.ts`／`applyDiff.ts`＋`workspace.ts`＋`sandboxPath.ts`＋`diffRender.ts`／`styles.css`＋`icons.tsx`＋`ConfigPage.tsx`（凭据配置 UI））
 - [ ] A4 **L1 基线诚实重建**：`npx vitest run`（cwd `apps/desktop`）全绿，用例总数 **≥ 60 条**且**全部来自本 spec TDD 网格登记的新树测试文件**（旧基线 769 条随归档清零，不以旧数充新数——ADR-028 Decision 8）
 - [ ] A5 G-1 归档防回流依赖闸**已建立且自证可红可绿**：
   - [ ] A5.1 `npx vitest run tests/static/noLegacyImport.test.ts` 绿（当前树命中数＝0）
@@ -33,7 +34,7 @@
 - [ ] B3 I-2 单一写者＋seq 单调：`npx vitest run tests/unit/timeline.append.test.ts` 绿——①并发追加下 seq 无重号无跳号；②追加失败⇒整事务回滚（聚合状态写入一并不生效，段3 §6 例外条款）；③非机制口调用 append 的路径命中数＝0（与 G-1 同族的静态断言，落 `tests/static/appendSingleWriter.test.ts`）
 - [ ] B4 发布纪律：全部事件先入 TimelineLog 再进程内分发；对外发布通道命中数＝0（L0 原则6）——`npx vitest run tests/unit/timeline.publishDiscipline.test.ts` 绿
 
-### C S1 首立不变量判据（14 条；渐进登记纪律——本阶段负 DoD 主责，后续阶段只写回归＋扩面）
+### C S1 首立不变量判据（C1–C14＝14 条不变量；C15＝领域服务契约）＋渐进登记纪律（本阶段负 DoD 主责，后续阶段只写回归＋扩面）
 
 - [ ] C1 I-1 在飞 ≤1：并发两次 StartTurn → 至多一次成功；失败方的用户输入**转入队列**（InputAcknowledged 归宿＝入队，非丢弃）——`tests/unit/turn.admission.test.ts`（≥4 条用例）
 - [ ] C2 I-3 决策点归属唯一：RaiseDecision 缺 (delegationId, turnId) 归属→命令拒绝；同 decisionPointId 重复决议＝首次生效——`tests/unit/decisionPoint.test.ts`（≥3 条）
@@ -49,6 +50,7 @@
 - [ ] C12 I-15 拒绝待决期守卫：自 DecisionDenied 起至下一次 TriggerSource＝用户输入的 StartTurn 成功止，该委托以"系统恢复"／"队列准入"开轮的**计数＝0**；解除后队列按序恢复消费——`tests/unit/turn.deniedGuard.test.ts`（≥4 条）
 - [ ] C13 I-16 验收前置（**基线判据**）：待核验态∧AcceptanceSpec 过（存在可打开核验且 Provenance＝系统采集的证据引用）才可验收，否则拒绝且 DelegationRejected 路径可用——`tests/unit/acceptance.test.ts`（≥3 条）。**显式缺口登记（不预绿）**：段3 v1.1 的产物谓词条款（≥1 条 EvidenceType＝变更集）在 S1 **不实现**，其 DoD 主责＝S4（ADR-027 Decision 5）；本阶段该文件须含一条 `it.todo`/跳过标记用例指名 S4，使缺口在测试面可见而非沉默
 - [ ] C14 I-2 见 B3（同一判据的静态与运行时两面，不重复计数）
+- [ ] C15 **ApplyChange 领域服务契约**（段3 §6「变更→证据」行／§8 领域服务）：经 AdmissionCheck 通过后的变更操作 ⇒ ①发 `ChangeProduced`（载荷键含变更集ref＝PayloadRef＋作用域校验结果）；②证据域订阅采集 ⇒ `EvidenceRecorded` 且 Provenance＝系统采集、EvidenceType＝变更集；③未过 AdmissionCheck 的调用副作用计数＝0（与 C6 同源的写侧确认）；④evidenceId 去重（同变更重复投递＝幂等）——`tests/unit/applyChange.test.ts`（≥4 条）
 
 ### D 结构检查项（段3 S-1／S-2／S-4）与段4 新建闸
 
@@ -106,7 +108,7 @@
 ## 产出物
 
 - [ ] 归档批 commit（删除清单逐条列于 commit message）＋轻量 tag `legacy-freeze-v0.1.0`
-- [ ] `apps/desktop/src/domain/**`：新树领域层（7 聚合／5 Spec 中 S1 承担 4 个／共用纯函数模块／内存仓储 7 面）——**模块签名与文件切分归段5**，本件只锁落点目录
+- [ ] `apps/desktop/src/domain/**`：新树领域层（**6 业务聚合＋TimelineLog 机制聚合＝段3 7 聚合**／5 Spec 中 S1 承担 **3 个**：RequiresApproval／ValidClaim／Acceptance，StallSpec 归 S5、RecoverableSpec 归 S3／共用纯函数模块／内存仓储 7 面）——**模块签名与文件切分归段5**，本件只锁落点目录
 - [ ] `apps/desktop/src/domain/timeline.ts`：22 事件闭集注册表（就地重写）
 - [ ] `apps/desktop/src/main/**`：接线位（真网关移植＋取消令牌＋IPC 通道集，通道命名归段5）
 - [ ] `apps/desktop/src/renderer/**`：委托单中心最简呈现
