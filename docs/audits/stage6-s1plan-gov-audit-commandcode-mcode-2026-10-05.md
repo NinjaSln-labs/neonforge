@@ -5,7 +5,7 @@
 - A 批治理对齐（`b4594f8`：AGENTS 规则 6/7/15＋ADR-026 D3/D4＋decision-log，与升级后的中央 agent-dispatch 技能结合）。
 
 **审计者**：command-code@deepseek-v4.1-flash（主审计）→ 主会话采纳修入（`998b527`）→ mcode@MiniMax-M3.1-Flash-Preview（增量复审 fix diff）。
-**独立性**：currentTool＝qodercn@Qwen3.8-Flash（当前主）。两审计者均与当前主不同源、不同执行者，符合硬约束①不自审＋硬约束④同源不审亲笔；模型为用户当场认的强模型，符合硬约束③。
+**独立性**：currentTool＝qodercn（当前主）；currentModel 未现场复核，不作依据（依 agent-dispatch「模型只认现场打印／用户口述、不抄上一轮或仓内记录」）。**独立性系于渠道而非具体模型**＝command-code、mcode 均系与 qodercn 不同的 CLI／渠道，无论当前主跑哪个模型都恒不同源，符合硬约束①不自审＋④同源不审亲笔。两审计者所用模型（command-code＝deepseek-v4.1-flash、mcode＝MiniMax-M3.1-Flash-Preview）为用户当场认的强模型，符合硬约束③。
 **任务书边界**：只读已入库工件（plan×2＋stage-spec＋ADR-026＋AGENTS＋书写规范＋agent-dispatch 技能），不引用未列出文件作依据；不改码、不 commit。command-code 本轮 shell 受限，改用 reflog＋源码 import 图重建改动面；其关键发现由主会话真 grep 复核后再采纳。
 
 ---
