@@ -1062,3 +1062,14 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   background: rgba(124, 92, 255, 0.25);
   font-weight: 600;
 }
+
+/* S1b Task 6（F2）：未持久化态横幅——诚实面，常驻顶部不遮挡主面 */
+.nf-unpersisted {
+  padding: 6px 14px;
+  background: rgba(255, 176, 32, 0.14);
+  border-bottom: 1px solid rgba(255, 176, 32, 0.35);
+  color: var(--nf-amber, #ffb020);
+  font-size: var(--nf-font-sm, 12px);
+  text-align: center;
+  letter-spacing: 0.02em;
+}
