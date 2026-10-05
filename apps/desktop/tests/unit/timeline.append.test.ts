@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { InMemoryTimelineRepo } from '../../src/domain/repos/memory/timelineRepo'
-import type { AppendInput, AnyPayload } from '../../src/domain/timeline'
+import type { AppendInput } from '../../src/domain/timeline'
 
-const ev = (delegationId: string, detail: object = {}): AppendInput => ({
+const ev = (delegationId: string): AppendInput => ({
   ts: '2026-01-01T00:00:00.000Z',
   delegationId,
   type: 'TurnStarted',
-  detail: detail as unknown as AnyPayload,
+  detail: { turnId: 't1', delegationId, triggerSource: '用户输入' },
 })
 
 describe('TimelineRepo.append（B3/C14 单一写者同事务）', () => {

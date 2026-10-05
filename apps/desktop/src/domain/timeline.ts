@@ -94,7 +94,7 @@ export interface InputAcknowledgedPayload {
 export interface TurnStartedPayload {
   turnId: string
   delegationId: string
-  triggerSource: string
+  triggerSource: TriggerSource
 }
 
 // terminal 三值逐字＝段3 §5「收口/中止/中断」（与 Turn 聚合 VO 同词表，不另造英文二源）
@@ -113,7 +113,7 @@ export interface DecisionRaisedPayload {
 
 export interface DecisionResolvedPayload {
   decisionPointId: string
-  resolution: string
+  resolution: ResolutionValue
 }
 
 // 理由(可选) → reason?: string（§5 明标「可选」，键可缺省）
@@ -134,7 +134,7 @@ export interface ChangeProducedPayload {
 
 export interface EvidenceRecordedPayload {
   evidenceId: string
-  type: string // EvidenceType 四值（段3 §3）
+  type: EvidenceType // 段3 §3 四值闭集（词表入注册表，聚合侧取别名）
   delegationId: string
   payloadRef: string
 }
@@ -229,15 +229,18 @@ export type PayloadOf<T extends EventType> = PayloadMap[T]
 // ─────────────────────────────────────────────────────────────
 // 事件与 VO
 // ─────────────────────────────────────────────────────────────
-export type AnyPayload = PayloadMap[EventType]
+// 值域入注册表（段3 §3 VO 表）：注册表＝词表唯一源，聚合侧 `PayloadOf<…>[…]` 取别名（承 TurnTerminal 先例）。
+export type TriggerSource = '用户输入' | '系统恢复' | '队列准入' // 闭集三种
+export type ResolutionValue = '批准' | '拒绝' | '选项' // 段2 X1a 用户三值，作废不占决议值
+export type EvidenceType = '变更集' | '命令输出' | '测试结果' | '验收判据运行结果'
 
-export interface TimelineEvent {
-  ts: string // ISO
-  seq: number // 全局单调
-  delegationId: string
-  type: EventType
-  detail: AnyPayload
-}
+// 判别式收口（详设 §6「detail 由 PayloadOf<type> 判别联合收口＝契约面」）：
+// type 与 detail 的配对由映射类型钉死——发射处多键/缺键/错键/错值域＝编译期红（B2 的可拦面）。
+type Pair<T extends EventType> = { type: T; detail: PayloadOf<T> }
+
+export type TimelineEvent = {
+  [T in EventType]: { ts: string; seq: number; delegationId: string } & Pair<T>
+}[EventType]
 
 // EventEntry VO＝seq＋事件，追加不可变（段3 §3）。
 export interface EventEntry {
@@ -246,19 +249,14 @@ export interface EventEntry {
 }
 
 // append 机制口的输入＝事件主体（无 seq，seq 由聚合落）。
-export interface AppendInput {
-  ts: string
-  delegationId: string
-  type: EventType
-  detail: AnyPayload
-}
+export type AppendInput = {
+  [T in EventType]: { ts: string; delegationId: string } & Pair<T>
+}[EventType]
 
 // 聚合命令派生的事件草稿（未落 seq/ts，供 Task 18 经 TimelineRepo.append 落账）。跨聚合共享 VO。
-export interface EventDraft {
-  type: EventType
-  delegationId: string
-  detail: AnyPayload
-}
+export type EventDraft = {
+  [T in EventType]: { delegationId: string } & Pair<T>
+}[EventType]
 
 // ─────────────────────────────────────────────────────────────
 // TimelineLog 聚合根：唯一写者口 record（seq 单调、无重号无跳号）。
@@ -285,7 +283,8 @@ export class TimelineLog {
 
   // 唯一写者口：落全局单调 seq 入序列，返回 EventEntry（seq＋event）。
   record(input: AppendInput): EventEntry {
-    const event: TimelineEvent = { ...input, seq: this.nextSeq }
+    // type↔detail 配对在 append 调用点已被判别联合钉住，此处只补 seq（联合相关性 TS 不自证）。
+    const event = { ...input, seq: this.nextSeq } as TimelineEvent
     const entry: EventEntry = { seq: this.nextSeq, event }
     this.entries.push(entry)
     this.nextSeq += 1

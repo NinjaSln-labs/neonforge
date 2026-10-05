@@ -12,14 +12,18 @@ const DESKTOP = path.resolve(HERE, '../..')
 const TYPES = path.join(DESKTOP, 'src/main/providers/types.ts')
 const DOMAIN = path.join(DESKTOP, 'src/domain')
 
-// 逐行锚定取联合成员（跨行贪婪匹配会把 ModelTier/ThinkingLevel 的字面吞进来＝假清单，实测踩过）。
-function providerIds(): string[] {
-  const line =
-    readFileSync(TYPES, 'utf-8')
-      .split('\n')
-      .find((l) => /^export type ProviderId\s*=/.test(l)) ?? ''
-  return [...line.matchAll(/'([^']+)'/g)].map((m) => m[1])
+// 声明段锚定取联合成员：起始行锚 `^export type <name> =`，吃到续行成员，止于下一顶层声明或空行。
+// 两头的坑都踩过：跨行贪婪会把 ModelTier/ThinkingLevel 的字面吞进来＝假清单（p000170）；
+// 只取一行则续行成员逃闸＝假清单（异构审计 N5，2026-10-05）。
+function unionMembers(src: string, name: string): string[] {
+  const lines = src.split('\n')
+  const i = lines.findIndex((l) => new RegExp(`^export type ${name}\\s*=`).test(l))
+  if (i < 0) return []
+  const seg = [lines[i]]
+  for (let j = i + 1; j < lines.length && /^\s*\|/.test(lines[j]); j++) seg.push(lines[j])
+  return [...seg.join('\n').matchAll(/'([^']+)'/g)].map((x) => x[1])
 }
+const providerIds = (): string[] => unionMembers(readFileSync(TYPES, 'utf-8'), 'ProviderId')
 
 function collect(root: string): string[] {
   if (!existsSync(root)) return []
@@ -44,6 +48,13 @@ describe('S-2 核心域零 provider 专名（D2）', () => {
     expect(names).toContain('deepseek')
     expect(names).not.toContain('pro') // 逐行锚定生效（防吞相邻类型的字面）
     expect(hitsIn(`// sample provider=opencode-zen`, names)).not.toEqual([])
+  })
+
+  it('解析器可证伪：单行与续行两形都取全、相邻类型字面不吞（N5）', () => {
+    const one = `export type ProviderId = 'a' | 'b'\n\nexport type ModelTier = 'pro' | 'max'`
+    const wrapped = `export type ProviderId = 'a' | 'b'\n  | 'gemini'\n\nexport type ModelTier = 'pro'`
+    expect(unionMembers(one, 'ProviderId')).toEqual(['a', 'b'])
+    expect(unionMembers(wrapped, 'ProviderId')).toEqual(['a', 'b', 'gemini'])
   })
 
   it('核心域目录专名命中数＝0（主断言，大小写不敏感）', () => {

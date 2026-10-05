@@ -75,9 +75,10 @@ describe('G-1 归档防回流（A5.1）', () => {
   })
 
   it('新领域树零 import 归档面（主断言）', () => {
+    const scanned = SCAN_ROOTS.flatMap(collect)
+    expect(scanned.length).toBeGreaterThan(10) // 空跑守卫（N7：目录整体缺位不得静默放行）
     const hits: string[] = []
-    for (const root of SCAN_ROOTS)
-      for (const f of collect(root)) hits.push(...legacyImportsIn(readFileSync(f, 'utf-8'), legacy))
+    for (const f of scanned) hits.push(...legacyImportsIn(readFileSync(f, 'utf-8'), legacy))
     expect(hits).toEqual([])
   })
 

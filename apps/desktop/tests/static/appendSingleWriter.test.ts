@@ -21,8 +21,9 @@ function collect(root: string): string[] {
 // 聚合定义（timeline.ts）与机制口（repos/memory/timelineRepo.ts）；其余任何文件直连＝回流违例。
 // 判据面：直连＝「文中具名 TimelineLog（导入绑定或类型标注）∧ 出现 .record(」，或 new TimelineLog。
 // 单看 `.record(` 会把别的聚合同名命令（EvidenceItem.record，Task 14 实证）误判为违例，故加具名条件。
-// ponytail: 天花板＝鸭子类型（不具名 TimelineLog 而持其实例再 record）绕过文本面；
-// 升级路径＝私有构造器已挡 new（构造在聚合内），全量依赖图面随 S-1 全量（S6）。
+// ponytail: 天花板＝具名文本面——别名导入（import { TimelineLog as TL }）再 new、或不具名持实例再
+// record 均不命中（异构审计 N2 实测：TimelineLog 构造器是默认的公开构造器，注释原写「私有构造器已挡
+// new」与代码不符，已改）。当场收口需给构造器加机制口专用 token；全量依赖图面随 S-1 全量（S6）。
 function singleWriterHit(src: string): boolean {
   if (/new\s+TimelineLog\b/.test(src)) return true
   return /\bTimelineLog\b/.test(src) && /\.record\(/.test(src)

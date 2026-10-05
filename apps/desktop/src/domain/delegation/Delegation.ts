@@ -2,7 +2,7 @@ import { DomainError } from '../domainError.js'
 import { validClaim } from '../spec/validClaim.js'
 import { acceptance } from '../spec/acceptance.js'
 import type { EvidenceRepo } from '../repos/index.js'
-import type { AnyPayload, EventDraft } from '../timeline.js'
+import type { EventDraft } from '../timeline.js'
 
 // Delegation 聚合状态机（详设 §2／段3 §2、§4 I-6/I-10/I-14/I-16）。
 // 命令＝公开方法；违例 throw DomainError 且不改状态；返回事件草稿供 append（Task 18 接线）。
@@ -48,7 +48,7 @@ export class Delegation {
       event: {
         type: 'DelegationCreated',
         delegationId,
-        detail: { delegationId, intent, scopeVersion: 1 } as AnyPayload,
+        detail: { delegationId, intent, scopeVersion: 1 },
       },
     }
   }
@@ -80,7 +80,7 @@ export class Delegation {
         turnId: claim.turnId,
         claim: claim.claim,
         evidenceRefs: claim.evidenceRefs,
-      } as AnyPayload,
+      },
     }
   }
 
@@ -93,11 +93,12 @@ export class Delegation {
     return {
       type: 'DelegationAccepted',
       delegationId: this.delegationId,
-      detail: { delegationId: this.delegationId, closeState: 'accepted' } as AnyPayload,
+      detail: { delegationId: this.delegationId, closeState: 'accepted' },
     }
   }
 
   // I-14/C11：验收拒绝⇒挂原 delegationId 重开（不新建委托），reopenCount 单调 +1，回推进中。
+  // reason 入命令回执与呈现文案，不入 timeline：§5 DelegationRejected 键集仅 delegationId＋去向（禁增键）。
   reject(_reason?: string): { rejected: EventDraft; reopened: EventDraft } {
     if (this._state !== 'pendingVerify') throw new DomainError('I-16', '验收拒绝路径限待核验态')
     this._reopenCount += 1
@@ -106,12 +107,12 @@ export class Delegation {
       rejected: {
         type: 'DelegationRejected',
         delegationId: this.delegationId,
-        detail: { delegationId: this.delegationId, outcome: 'reopened' } as AnyPayload,
+        detail: { delegationId: this.delegationId, outcome: 'reopened' },
       },
       reopened: {
         type: 'DelegationReopened',
         delegationId: this.delegationId,
-        detail: { delegationId: this.delegationId, reopenCount: this._reopenCount } as AnyPayload,
+        detail: { delegationId: this.delegationId, reopenCount: this._reopenCount },
       },
     }
   }
@@ -124,7 +125,7 @@ export class Delegation {
     return {
       type: 'DelegationClosed',
       delegationId: this.delegationId,
-      detail: { delegationId: this.delegationId, archivedState: 'archived' } as AnyPayload,
+      detail: { delegationId: this.delegationId, archivedState: 'archived' },
     }
   }
 

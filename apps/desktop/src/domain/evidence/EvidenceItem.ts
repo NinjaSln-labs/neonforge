@@ -1,10 +1,11 @@
 // EvidenceItem 聚合 + Provenance 恒等值 + PayloadRef 落账前脱敏（详设 §2/§8 S-4／段3 §3 I-5）
 // Provenance 单字面量类型 ⇒ 编译期不可表达「AI 自述」，非系统采集写不进（I-5）。
 // 本文件零归档面 import。
+import type { PayloadOf } from '../timeline.js'
 
 export type Provenance = '系统采集'
 
-export type EvidenceType = '变更集' | '命令输出' | '测试结果' | '验收判据运行结果'
+export type EvidenceType = PayloadOf<'EvidenceRecorded'>['type'] // 四值单源＝注册表（段3 §3）
 
 export interface PayloadRef {
   ptr: string

@@ -17,8 +17,9 @@ const FORBIDDEN = [
   /domain\/repos\/memory\//,
 ]
 
+// 静态 from、副作用 import 'x'、动态 import('x')、require('x') 四类说明符同源提取。
 function importSpecifiers(source: string): string[] {
-  return [...source.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1])
+  return [...source.matchAll(/(?:from|import|require)\s*\(?\s*['"]([^'"]+)['"]/g)].map((m) => m[1])
 }
 function s1HitsIn(source: string): string[] {
   return importSpecifiers(source).filter((spec) => FORBIDDEN.some((re) => re.test(spec)))
@@ -59,6 +60,12 @@ describe('S-1 呈现/度量写路径闸（D1）', () => {
     expect(
       s1HitsIn(`import { InMemoryTimelineRepo } from '../domain/repos/memory/timelineRepo.js'`),
     ).toEqual(['../domain/repos/memory/timelineRepo.js'])
+    // N4（异构审计 2026-10-05）：动态 import 与 require 同面——只匹配静态 from 则此形逃闸
+    expect(
+      s1HitsIn(
+        `const m = await import('../domain/delegation/Delegation.js'); require('../domain/service/applyChange.js')`,
+      ),
+    ).toEqual(['../domain/delegation/Delegation.js', '../domain/service/applyChange.js'])
     // 反例：呈现侧允许的只读面
     expect(s1HitsIn(`import { deriveFocus } from '../domain/projection/focus.js'`)).toEqual([])
     expect(s1HitsIn(`import type { TimelineEvent } from '../domain/timeline.js'`)).toEqual([])

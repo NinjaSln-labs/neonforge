@@ -5,8 +5,8 @@ import type { EventDraft, PayloadOf } from '../timeline.js'
 // Turn 聚合根（详设 §2／段3 §2、§4 I-1/I-10/I-12/I-13/I-15）。
 // 公开命令＝start（StartTurn）与 terminal（EndTurn；中止/中断为其内部终态分支，非独立命令）；
 // MarkStalled（卡滞待指令）→S5。守卫的读侧入参由仓储/委托提供（校验位置仍在聚合，段3 §4）。
-export type TriggerSource = '用户输入' | '系统恢复' | '队列准入' // 闭集三种（段3 §3）
-// TurnTerminal VO 三值单源＝事件注册表（段3 §5 与 §3 同集合，不另造二源）。
+// TriggerSource 与 TurnTerminal 两 VO 单源＝事件注册表（段3 §3 闭集三种／§5 终态词表，不另造二源）。
+export type TriggerSource = PayloadOf<'TurnStarted'>['triggerSource']
 export type TurnTerminal = PayloadOf<'TurnEnded'>['terminal']
 
 export interface StartInput {

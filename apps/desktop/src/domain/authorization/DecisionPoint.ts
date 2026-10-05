@@ -1,5 +1,5 @@
 import { DomainError } from '../domainError.js'
-import type { AnyPayload, EventDraft } from '../timeline.js'
+import type { EventDraft, PayloadOf } from '../timeline.js'
 
 // DecisionPoint 聚合根（详设 §2／段3 §2、§4 I-3/I-7；段2 X1a/X2）。
 // 公开命令＝raise/resolve；拒绝＝Resolution 三值之一（非独立 deny 命令，M-03）。
@@ -16,7 +16,7 @@ export interface RequestReason {
   requestedBy: RequestedBy
 }
 
-export type ResolutionValue = '批准' | '拒绝' | '选项'
+export type ResolutionValue = PayloadOf<'DecisionResolved'>['resolution'] // 三值单源＝注册表（段2 X1a）
 
 // Resolution VO＝决议值（承段2 X1a 三值）＋选项值（仅 选项 时有）＋时刻；首次生效、不可变。
 export interface Resolution {
@@ -67,7 +67,7 @@ export class DecisionPoint {
           delegationId: input.delegationId,
           turnId: input.turnId,
           requestReason: { reason, requestedBy },
-        } as AnyPayload,
+        },
       },
     }
   }
@@ -88,7 +88,7 @@ export class DecisionPoint {
       {
         type: 'DecisionResolved',
         delegationId: this.delegationId,
-        detail: { decisionPointId: this.decisionPointId, resolution: value } as AnyPayload,
+        detail: { decisionPointId: this.decisionPointId, resolution: value },
       },
     ]
     if (value === '拒绝') {
@@ -100,7 +100,7 @@ export class DecisionPoint {
           delegationId: this.delegationId,
           turnId: this.turnId,
           ...(opts.reason === undefined ? {} : { reason: opts.reason }),
-        } as AnyPayload,
+        },
       })
     }
     return drafts

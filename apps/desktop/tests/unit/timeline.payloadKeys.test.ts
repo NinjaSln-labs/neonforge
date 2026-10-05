@@ -38,7 +38,7 @@ describe('timeline 载荷键（B2，段3 §5 快照）', () => {
     TurnStarted: {
       turnId: 't1',
       delegationId: 'd1',
-      triggerSource: 'userInput',
+      triggerSource: '用户输入',
     } satisfies TurnStartedPayload,
     TurnEnded: { turnId: 't1', terminal: '收口' } satisfies TurnEndedPayload,
     DecisionRaised: {
@@ -49,7 +49,7 @@ describe('timeline 载荷键（B2，段3 §5 快照）', () => {
     } satisfies DecisionRaisedPayload,
     DecisionResolved: {
       decisionPointId: 'dp1',
-      resolution: 'approved',
+      resolution: '批准',
     } satisfies DecisionResolvedPayload,
     DecisionDenied: {
       decisionPointId: 'dp1',

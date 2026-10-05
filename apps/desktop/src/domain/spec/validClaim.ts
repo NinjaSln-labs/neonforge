@@ -4,12 +4,13 @@ import type { EvidenceRepo } from '../repos/index.js'
 //   evidenceRefs 非空 ∧ 全部命中（无悬空）∧ 全 Provenance=系统采集 ∧ 同 delegationId。
 // Provenance 恒系统采集由证据类型面保证（I-5），此处仍显式判据以钉死契约。
 
-export interface ClaimInput {
+// 入参形＝声称的证据指向（异于 Delegation.ClaimInput 的完整声称，二者不同形不同名——异构审计 N8）。
+export interface ClaimRef {
   delegationId: string
   evidenceRefs: string[]
 }
 
-export function validClaim(claim: ClaimInput, evidenceRepo: EvidenceRepo): boolean {
+export function validClaim(claim: ClaimRef, evidenceRepo: EvidenceRepo): boolean {
   const refs = claim.evidenceRefs
   if (refs.length === 0) return false
   const found = evidenceRepo.findByIds(refs)
