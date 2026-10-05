@@ -1,6 +1,6 @@
 # Stage V1-S1 Spec（冻结归档＋垂直骨架）
 
-> 来源：`docs/design/v1.0.0-stage-plan.md` §3 S1 行（阶段计划）＋`docs/neonforgeV1.0.0/03-domain-tactics.md`（段3 frozen v1.1）＋ADR-027／ADR-028；开工日期：**未开工**（spec 先行，段4 定稿 2026-10-05；S1 实际开工日于段6 启动时回填本行）
+> 来源：`docs/design/v1.0.0-stage-plan.md` §3 S1 行（阶段计划）＋`docs/neonforgeV1.0.0/03-domain-tactics.md`（段3 frozen v1.2）＋ADR-027／ADR-028；开工日期：**未开工**（spec 先行，段4 定稿 2026-10-05；S1 实际开工日于段6 启动时回填本行）
 >
 > 尺寸核：TDD 网格 **20 行**＝计划 §3 拆分警语阈值（>20 行才拆 S1a/S1b）的下限，未触发拆分。若段5 详设后网格需增行，按警语拆 S1a（领域内核＋归档）／S1b（真网关＋最简呈现），拆分登记于本头部并记 handoff（属计划细化，非设计变更）。
 >
@@ -48,7 +48,7 @@
 - [ ] C10 I-13 过期令牌写入计数＝0（S1 面＝令牌建立＋写前复核）：TurnToken 复合值 (delegationId, turnId) ≠ 当前在飞轮⇒过期；过期写入被丢弃且**过期令牌写入计数器 +1**；正常路径计数器读数＝**0**——`tests/unit/turnToken.test.ts`（≥4 条；全恢复点横切覆盖属 S5 扩面）
 - [ ] C11 I-14 重开挂原单：RejectAcceptance 后 delegationId 不变、reopenCount 单调 +1；新建委托＝拒绝——`tests/unit/delegation.reopen.test.ts`（≥3 条）
 - [ ] C12 I-15 拒绝待决期守卫：自 DecisionDenied 起至下一次 TriggerSource＝用户输入的 StartTurn 成功止，该委托以"系统恢复"／"队列准入"开轮的**计数＝0**；解除后队列按序恢复消费——`tests/unit/turn.deniedGuard.test.ts`（≥4 条）
-- [ ] C13 I-16 验收前置（**基线判据**）：待核验态∧AcceptanceSpec 过（存在可打开核验且 Provenance＝系统采集的证据引用）才可验收，否则拒绝且 DelegationRejected 路径可用——`tests/unit/acceptance.test.ts`（≥3 条）。**显式缺口登记（不预绿）**：段3 v1.1 的产物谓词条款（≥1 条 EvidenceType＝变更集）在 S1 **不实现**，其 DoD 主责＝S4（ADR-027 Decision 5）；本阶段该文件须含一条 `it.todo`/跳过标记用例指名 S4，使缺口在测试面可见而非沉默
+- [ ] C13 I-16 验收前置（**基线判据**）：待核验态∧AcceptanceSpec 过（存在可打开核验且 Provenance＝系统采集的证据引用）才可验收，否则拒绝且 DelegationRejected 路径可用——`tests/unit/acceptance.test.ts`（≥3 条）。**显式缺口登记（不预绿）**：段3 v1.2 的产物谓词两条合取条款（≥1 条 EvidenceType＝变更集【D1】∧ ≥1 条 EvidenceType＝验收判据运行结果【D6】）在 S1 **不实现**，其 DoD 主责＝S4（ADR-027 Decision 5＋Decision 6）；本阶段该文件须含一条 `it.todo`/跳过标记用例指名 S4，使缺口在测试面可见而非沉默
 - [ ] C14 I-2 见 B3（同一判据的静态与运行时两面，不重复计数）
 - [ ] C15 **ApplyChange 领域服务契约**（段3 §6「变更→证据」行／§8 领域服务）：经 AdmissionCheck 通过后的变更操作 ⇒ ①发 `ChangeProduced`（载荷键含变更集ref＝PayloadRef＋作用域校验结果）；②证据域订阅采集 ⇒ `EvidenceRecorded` 且 Provenance＝系统采集、EvidenceType＝变更集；③未过 AdmissionCheck 的调用副作用计数＝0（与 C6 同源的写侧确认）；④evidenceId 去重（同变更重复投递＝幂等）——`tests/unit/applyChange.test.ts`（≥4 条）
 
@@ -98,7 +98,7 @@
 | 12 | 决策点归属与幂等决议 | 段3 I-3 | `tests/unit/decisionPoint.test.ts` | DecisionPoint 聚合＋内存 Repo | — |
 | 13 | RequiresApprovalSpec＋AdmissionCheck | 段3 I-7／§8；段2 §4「须拍板操作」谓词 | `tests/unit/requiresApproval.test.ts` | Spec 纯谓词＋授权域前置闸 | 校验先于产出：闸在 ApplyChange 之前，不在之后补救 |
 | 14 | 证据 Provenance 恒系统采集＋ValidClaimSpec | 段3 I-5／§8；段2 §4「证据」「声称」 | `tests/unit/evidence.provenance.test.ts`＋`tests/unit/evidence.claim.test.ts` | EvidenceItem＋Claim 有效性判定 | 非法 Provenance 由类型面不可表达（双 tsc 承载） |
-| 15 | AcceptanceSpec 基线（产物谓词条款留 S4） | 段3 v1.1 I-16／§8；ADR-027 Decision 5 | `tests/unit/acceptance.test.ts`（含指名 S4 的跳过用例） | AcceptanceSpec 只读查询（环收敛点） | S4 加严时只扩 Spec，不改 Delegation 状态机 |
+| 15 | AcceptanceSpec 基线（产物谓词条款留 S4） | 段3 v1.2 I-16／§8；ADR-027 Decision 5＋Decision 6 | `tests/unit/acceptance.test.ts`（含指名 S4 的跳过用例） | AcceptanceSpec 只读查询（环收敛点） | S4 加严时只扩 Spec，不改 Delegation 状态机 |
 | 16 | ApplyChange→ChangeProduced→证据订阅采集 | 段3 §6「变更→证据」行 | `tests/unit/applyChange.test.ts` | 领域服务 ApplyChange＋证据域订阅采集 | 变更集不建聚合（段3 §2 取舍），只以 PayloadRef 入证据 |
 | 17 | deriveWaitingItems 四类闭集 | 段3 I-9／§8 共用纯函数模块 | `tests/unit/waitingItems.test.ts` | 共用纯函数模块（不属任一子域） | 呈现与度量各自调用同一模块，杜绝两套投影 |
 | 18 | deriveFocus 唯一投影入口 | 段3 §8 deriveFocus 口径边界 | `tests/unit/focus.test.ts` | 纯函数（候选三类×创建序→唯一焦点或空） | 焦点不携带动作类型、不落存储 |
@@ -121,8 +121,8 @@
 
 - 作用域**修正**与版本链（AmendScope／I-8／I-17／S-3）属 **S2**；S1 的 Scope 只有 v1 声明、无修正路径。
 - 持久化与崩溃恢复属 **S3**：S1 为**内存态**，重启即失；RecoverableSpec／SessionInterrupted／DelegationRestored／I-12 一律不做（但"未持久化"须在 UI 显式呈现，见 F2）。
-- 证据三类型中**命令输出／测试结果**载荷与 S-4 全覆盖回归属 **S4**；S1 只做变更集类与落账前脱敏判据。
-- **产物谓词条款**（段3 v1.1／ADR-027：收尾必有 EvidenceType＝变更集 的证据）属 **S4**——S1 的 AcceptanceSpec 只实现基线判据，缺口以跳过用例显式登记（C13），**不得预绿**。
+- 证据四类型（段3 v1.2）中**命令输出／测试结果／验收判据运行结果**载荷与 S-4 全覆盖回归属 **S4**；S1 只做变更集类与落账前脱敏判据。
+- **产物谓词两条合取条款**（段3 v1.2／ADR-027 D1＋D6：收尾必有 EvidenceType＝变更集 ∧ 验收判据运行结果 两类证据）属 **S4**——S1 的 AcceptanceSpec 只实现基线判据，缺口以跳过用例显式登记（C13），**不得预绿**。
 - StallDetector／StallSpec／卡滞与催弃路径／DelegationAbandoned 三处事件驱动消费／deriveWaitingItems 收束态过滤属 **S5**；S1 的队列只做**可见**（排队项有可见位置），不做撤回与卡滞期准入窗。
 - 等待项与焦点的**完整呈现义务**、S-1 全量呈现面覆盖属 **S6**；S1 只覆盖最小闭环所需呈现。
 - 指标计算与三层比率口径属 **S7**；S1 只保证事件按段3 §5 载荷键正确发射（采点面已就绪，计算不做）。
