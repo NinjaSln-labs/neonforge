@@ -424,6 +424,31 @@ export const TOOL_DEFS = [
   })),
 ]
 
+// ── E1 流级取消令牌（本仓此前零取消管道，详设 §8／stage-spec E1）──────────────
+// streamId → AbortController。控制器由 streamChat 在发起时登记、收尾时出表；
+// abort 由调用方（Stop 按钮经 IPC，Task 3 接线）触发。取消不是瞬态错误：见 streamChat 的让位闸。
+const streamRegistry = new Map<string, AbortController>()
+
+/** 登记一路流并回其 signal（假网关轨亦用同面，故独立成函数） */
+export function beginStream(streamId: string): AbortSignal {
+  const controller = new AbortController()
+  streamRegistry.set(streamId, controller)
+  return controller.signal
+}
+
+function endStream(streamId: string): void {
+  streamRegistry.delete(streamId)
+}
+
+/** 取消一路流：命中即 abort 并出表，回 true；未知或已收尾回 false（不抛——Stop 连点要幂等） */
+export function abortStream(streamId: string): boolean {
+  const controller = streamRegistry.get(streamId)
+  if (!controller) return false
+  controller.abort()
+  streamRegistry.delete(streamId)
+  return true
+}
+
 export class DeepSeekGateway {
   private router = new ModelRouter()
   /** provider → 已解析上游档位（validate/首次请求时灌入） */
@@ -560,36 +585,50 @@ export class DeepSeekGateway {
     apiKey: string,
     opts: Parameters<DeepSeekGateway['streamChatOnce']>[1],
   ): Promise<void> {
+    // E1：带 streamId 的流登记控制器（同一 streamId 的多次重试共用一路取消位）。
+    const signal = opts.streamId ? beginStream(opts.streamId) : undefined
     const maxAttempts = 3
     let attempt = 0
-    while (attempt < maxAttempts) {
-      attempt++
-      let emitted = false
-      try {
-        return await this.streamChatOnce(apiKey, {
-          ...opts,
-          onDelta: (chunk) => {
-            emitted = true
-            opts.onDelta(chunk)
-          },
-        })
-      } catch (e) {
-        const is400 = e instanceof GatewayHttpError && e.status === 400
-        const transient = isTransientStreamError(e)
-        const canRetry = is400 ? attempt === 1 : transient && attempt < maxAttempts
-        if (!canRetry) throw e
-        const kind = is400
-          ? 'http-400'
-          : e instanceof DOMException && e.name === 'TimeoutError'
-            ? 'timeout'
-            : e instanceof GatewayHttpError
-              ? `http-${e.status}`
-              : 'network'
-        console.log(`[gateway] ${kind} transient — retrying (${attempt}/${maxAttempts - 1})`)
-        if (emitted) opts.onDelta({ type: 'stream-reset' })
-        await new Promise((r) => setTimeout(r, 400 * attempt))
+    try {
+      while (attempt < maxAttempts) {
+        attempt++
+        let emitted = false
+        try {
+          return await this.streamChatOnce(apiKey, {
+            ...opts,
+            signal,
+            onDelta: (chunk) => {
+              emitted = true
+              opts.onDelta(chunk)
+            },
+          })
+        } catch (e) {
+          // 用户取消＝让位，不进重试阶梯（否则 Stop 后还会重拉至多 2 击，与「中止」语义相反）。
+          if (signal?.aborted) throw e
+          const is400 = e instanceof GatewayHttpError && e.status === 400
+          const transient = isTransientStreamError(e)
+          const canRetry = is400 ? attempt === 1 : transient && attempt < maxAttempts
+          if (!canRetry) throw e
+          const kind = is400
+            ? 'http-400'
+            : e instanceof DOMException && e.name === 'TimeoutError'
+              ? 'timeout'
+              : e instanceof GatewayHttpError
+                ? `http-${e.status}`
+                : 'network'
+          console.log(`[gateway] ${kind} transient — retrying (${attempt}/${maxAttempts - 1})`)
+          if (emitted) opts.onDelta({ type: 'stream-reset' })
+          await new Promise((r) => setTimeout(r, 400 * attempt))
+        }
       }
+    } finally {
+      if (opts.streamId) endStream(opts.streamId)
     }
+  }
+
+  /** E1 取消入口（IPC 侧 Stop 通道调用；未知/已收尾 streamId 回 false） */
+  abort(streamId: string): boolean {
+    return abortStream(streamId)
   }
 
   private async streamChatOnce(
@@ -615,6 +654,10 @@ export class DeepSeekGateway {
         text?: string
         toolCall?: { name: string; args: Record<string, unknown> }
       }) => void
+      /** E1：流标识（登记/取消用），由 streamChat 登记控制器 */
+      streamId?: string
+      /** E1：由 streamChat 注入的取消 signal（与整段超时 signal 合并） */
+      signal?: AbortSignal
     },
   ): Promise<void> {
     const tier = opts.model ?? this.router.route({ thinking: opts.level ?? 'basic' })
@@ -647,6 +690,7 @@ export class DeepSeekGateway {
       },
       // 流式整段共用 AbortSignal——含读 body；批准后写产物常 >45s，过短会误报「服务暂时不可用」
       180000,
+      opts.signal,
     )
     console.log('[gateway] http', res.status)
     if (!res.ok) {

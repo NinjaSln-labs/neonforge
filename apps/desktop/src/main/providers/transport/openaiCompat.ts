@@ -8,7 +8,10 @@ export async function postChatCompletions(
   apiKey: string,
   body: Record<string, unknown>,
   timeoutMs: number,
+  /** E1 流级取消：外部 signal 与整段超时 signal 合并，任一触发即断流 */
+  signal?: AbortSignal,
 ): Promise<Response> {
+  const timeout = AbortSignal.timeout(timeoutMs)
   return fetch(`${baseURL}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -16,7 +19,7 @@ export async function postChatCompletions(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(timeoutMs),
+    signal: signal ? AbortSignal.any([timeout, signal]) : timeout,
   })
 }
 
