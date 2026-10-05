@@ -253,6 +253,13 @@ export interface AppendInput {
   detail: AnyPayload
 }
 
+// 聚合命令派生的事件草稿（未落 seq/ts，供 Task 18 经 TimelineRepo.append 落账）。跨聚合共享 VO。
+export interface EventDraft {
+  type: EventType
+  delegationId: string
+  detail: AnyPayload
+}
+
 // ─────────────────────────────────────────────────────────────
 // TimelineLog 聚合根：唯一写者口 record（seq 单调、无重号无跳号）。
 // TimelineRepo.append 为其机制口（M-02：seq/单写者由聚合维护，非仓储）；

@@ -2,7 +2,7 @@ import { DomainError } from '../domainError.js'
 import { validClaim } from '../spec/validClaim.js'
 import { acceptance } from '../spec/acceptance.js'
 import type { EvidenceRepo } from '../repos/index.js'
-import type { EventType, AnyPayload } from '../timeline.js'
+import type { AnyPayload, EventDraft } from '../timeline.js'
 
 // Delegation 聚合状态机（详设 §2／段3 §2、§4 I-6/I-10/I-14/I-16）。
 // 命令＝公开方法；违例 throw DomainError 且不改状态；返回事件草稿供 append（Task 18 接线）。
@@ -18,12 +18,6 @@ export type DelegationState =
   | 'reopened'
   | 'archived'
   | 'abandoned'
-
-export interface EventDraft {
-  type: EventType
-  delegationId: string
-  detail: AnyPayload
-}
 
 export interface ClaimInput {
   claim: string
