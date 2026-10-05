@@ -1,6 +1,6 @@
 # S1a 实现计划：领域内核＋假网关（段6 · 只增不删）
 
-> 由 writing-plans 出，2026-10-05。契约源（不得超其边界）＝`docs/design/stage-specs/V1-S1-legacy-freeze-vertical-skeleton.md`（DoD A–G，本 plan 只承 **S1a 面**＝A1 tag＋B/C/D＋E 假轨＋F3 域面；**物理归档 A2–A6＋入口 rewire＋复用文件去旧域依赖＋E2/F 真网关面全归 S1b，S1 出口闸在 S1b 完成时跑**）＋接口 `docs/design/v1.0.0-s1-detailed-design.md` v0.3（签名以此为准）＋段3 `03-domain-tactics.md` frozen v1.2。执行走 executing-plans，逐任务 TDD。
+> 由 writing-plans 出，2026-10-05。契约源（不得超其边界）＝`docs/design/stage-specs/V1-S1-legacy-freeze-vertical-skeleton.md`（DoD A–G，本 plan 只承 **S1a 面**＝A1 tag＋B/C/D＋E 假轨＋F3 域面；**物理归档 A2–A6＋入口 rewire＋复用文件去旧域依赖＋E2/F 真网关面全归 S1b，S1 出口闸在 S1b 完成时跑**）＋接口 `docs/design/v1.0.0-s1-detailed-design.md` v0.4（签名以此为准，v0.4／段3 v1.3＝ADR-029 正名）＋段3 `03-domain-tactics.md` frozen v1.3。执行走 executing-plans，逐任务 TDD。
 
 **Goal:** S1a 只**增/重写新领域树**（7 聚合＋7 仓储＋3 Spec＋领域服务＋`timeline.ts` 22 事件闭集），L1 端到端用**假网关**跑通「发起→推进→拍板→核验→收尾」最小闭环；**不删旧文件**（归档与 rewire 在 S1b）。S1a 内 DoD B/C/D＋E 假轨＋F3 域面逐条绿。
 

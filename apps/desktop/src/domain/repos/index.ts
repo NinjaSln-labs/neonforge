@@ -39,14 +39,15 @@ export interface DecisionPointRepo {
   findOpenBy(delegationId: string, turnId: string): DecisionPoint[]
 }
 
-// 作用域仓储（详设 §3）：S1 写入面＝initial() 的 v1 链落存；appendVersion＝AmendScope 追加面→S2。
+// 作用域仓储（详设 §3／段3 §7 v1.3，ADR-029 D1）：S1 写入面＝initial() 的 v1 链落存；
+// 「版本只追加」是 Scope 聚合内部不变量，追加面随 S2 AmendScope 仍由聚合承载、仓储面不变。
 export interface ScopeRepo {
   save(scope: Scope): void
   findByDelegation(delegationId: string): Scope | undefined
 }
 
-// 指令队列仓储（详设 §3）：V1 单队列＝全局一个，仓储只持队列本体。
-// 详设 §3 的 enqueue/pending/admit/markWithdrawn 面归 InstructionQueue 聚合（I-4 校验位置＝聚合，段3 §4）。
+// 指令队列仓储（详设 §3 v0.4／段3 §7 v1.3，ADR-029 D2）：V1 单队列＝全局一个，仓储只持队列本体。
+// 详设 §3 原列的 enqueue/pending/admit/markWithdrawn 面归 InstructionQueue 聚合命令（I-4 校验位置＝聚合，段3 §4）。
 export interface InstructionQueueRepo {
   save(q: InstructionQueue): void
   find(): InstructionQueue | undefined

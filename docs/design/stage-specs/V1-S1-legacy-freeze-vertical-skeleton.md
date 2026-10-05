@@ -1,6 +1,6 @@
 # Stage V1-S1 Spec（冻结归档＋垂直骨架）
 
-> 来源：`docs/design/v1.0.0-stage-plan.md` §3 S1 行（阶段计划）＋`docs/neonforgeV1.0.0/03-domain-tactics.md`（段3 frozen v1.2）＋ADR-027／ADR-028；开工日期：**未开工**（spec 先行，段4 定稿 2026-10-05；S1 实际开工日于段6 启动时回填本行）
+> 来源：`docs/design/v1.0.0-stage-plan.md` §3 S1 行（阶段计划）＋`docs/neonforgeV1.0.0/03-domain-tactics.md`（段3 frozen v1.3）＋ADR-027／ADR-028／ADR-029；开工日期：**未开工**（spec 先行，段4 定稿 2026-10-05；S1 实际开工日于段6 启动时回填本行）
 >
 > 尺寸核：TDD 网格 **20 行**＝计划 §3 拆分警语阈值（>20 行才拆 S1a/S1b）的下限，未触发拆分。若段5 详设后网格需增行，按警语拆 S1a（领域内核＋假网关，只增不删）／S1b（真网关＋最简呈现＋物理归档＋rewire），拆分登记于本头部并记 handoff（属计划细化，非设计变更；实际外延以下行【段6 拆分登记】为准）。
 >

@@ -6,8 +6,9 @@ import type { InstructionQueue } from '../queue/InstructionQueue.js'
 // 纯函数、无状态、不属任一子域（呈现投影与度量采点各自调用，两域互不依赖）。
 // 四类闭集来源：待拍板←DecisionPoint 未决／待核验←Delegation 有效声称后待核验态／
 // 待用户指令←拒绝待决标记（I-15 读侧落 Delegation，段3 §4）／排队中←InstructionQueue 未准入项。
-// 偏离登记：详设 §5 四入参里的 turns 分量在 S1 无来源——中断态→S3、卡滞待指令态→S5，
-// 届时补该入参；S1 拒绝待决以 Delegation 标记为准，故本面不收 turns（不留空转参数）。
+// 形参面（详设 §5 v0.4／段3 §8 v1.3，ADR-029 D4）：本面无 turns 入参——拒绝待决的权威源＝Delegation
+// （段3 §4 I-15「以 Delegation 只读查询取被拒标记」），Turn 侧只供卡滞待指令态（中断→S3、卡滞→S5）；
+// S5 StallDetected 落地时同刀回补 turns（§5＋实现＋测三处一起改，不留空转参数）。
 // 收束态过滤谓词→S5（M-10：不实现、不预绿，见 waitingItems.test.ts 的跳过用例）。
 
 export type WaitingKind = '待拍板' | '待核验' | '待用户指令' | '排队中'

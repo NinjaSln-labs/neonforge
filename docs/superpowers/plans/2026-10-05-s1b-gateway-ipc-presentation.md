@@ -1,6 +1,6 @@
 # S1b 实现计划：真网关 port + 流级取消令牌 + IPC 桥 + 委托单中心呈现 + 归档批 + rewire（段6 · S1 出口闸在此）
 
-> 由 writing-plans 出，2026-10-05。契约源＝stage-spec V1-S1（DoD **A2–A6/E2/F**＋A2.5 归档＋E1 真轨）＋接口 `docs/design/v1.0.0-s1-detailed-design.md` v0.3（§7 IPC/renderer、§8 机制落点、§9 时序）＋段3 v1.2＋ADR-028。**前置**：S1a 已落（新领域树＋假网关新测绿，旧 app 未删）。**S1b 额外承接 S1a 未做的物理层**：归档批 `git rm`（A2/A2.3/A2.4/A2.5）、复用文件去旧域依赖（gateway/tools/verification 现 import `conversationState`/`protocolTools`，tools/main 现 import `timelineLogger`）、入口 rewire（App/ipc/main/preload）。**S1 全出口闸（双 tsc／全量 L1／eslint／desens／DoD A–G）在 S1b 末尾跑**（ADR-028「同批过闸」真意）。
+> 由 writing-plans 出，2026-10-05。契约源＝stage-spec V1-S1（DoD **A2–A6/E2/F**＋A2.5 归档＋E1 真轨）＋接口 `docs/design/v1.0.0-s1-detailed-design.md` v0.4（§7 IPC/renderer、§8 机制落点、§9 时序）＋段3 v1.3＋ADR-028／ADR-029。**前置**：S1a 已落（新领域树＋假网关新测绿，旧 app 未删）。**S1b 额外承接 S1a 未做的物理层**：归档批 `git rm`（A2/A2.3/A2.4/A2.5）、复用文件去旧域依赖（gateway/tools/verification 现 import `conversationState`/`protocolTools`，tools/main 现 import `timelineLogger`）、入口 rewire（App/ipc/main/preload）。**S1 全出口闸（双 tsc／全量 L1／eslint／desens／DoD A–G）在 S1b 末尾跑**（ADR-028「同批过闸」真意）。
 
 **Goal:** 把 S1a 假网关换**真网关**（复用现 `gateway.ts`/`providers/**`，先**去旧域依赖**）＋新建**流级取消令牌**（E1）＋接线**委托单中心呈现**（IPC 桥＋renderer 六件＋App rewire）＋**物理归档旧实现 `git rm`**（A2–A4/A2.5）；L3 interaction＋`npm run e2e` 双轨跑通 §9 happy path＋Stop 路径；S1 出口闸全绿。
 
