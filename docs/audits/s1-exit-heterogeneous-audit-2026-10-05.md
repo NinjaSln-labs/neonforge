@@ -245,3 +245,6 @@
     属其会话限制，如实登记。CI 闭环（G5）仍以用户授权 push 为前提。
 - G1 coverage-matrix 表 N S1 行回填、G2 spec 勾选与 blocked 登记、G3 handoff 落账、G4「无新语义
   裁定」登记：随本采纳同批落地（commit 见 git log）。
+- **F-1 裁定落地追记（2026-10-05）**：用户批准「回段5 出 v0.4.x 补登记」——详设已出 **v0.4.1**
+  （§7 renderer 切分补登记 DelegationCenter.tsx／useDomainView.ts／StreamBar.tsx 三件，登记级修订、
+  零语义改动、不立新 ADR；版本头与 §7 双处落笔）。lock-in 漂移已闭合。
