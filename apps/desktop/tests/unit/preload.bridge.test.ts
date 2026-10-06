@@ -90,4 +90,22 @@ describe('preload 桥（Task 4）', () => {
     await ns('gateway').stop('s9')
     expect(h.calls).toEqual([{ channel: 'gateway:cancel-stream', args: [{ streamId: 's9' }] }])
   })
+
+  // S2b Task 3：scope:chain／scope:amend 两通道过桥
+  it('scope 段键集＝契约面（恰 amend/chain 两键）', () => {
+    expect(Object.keys(ns('scope')).sort()).toEqual(['amend', 'chain'])
+  })
+
+  it('scope.chain/amend 把渠道名与载荷原样投到 ipcRenderer.invoke', async () => {
+    await ns('scope').chain('d1')
+    expect(h.calls).toEqual([{ channel: 'scope:chain', args: [{ delegationId: 'd1' }] }])
+    h.calls.length = 0
+    const amendArgs = {
+      delegationId: 'd1',
+      decisionPointId: 'dp1',
+      entries: [{ kind: '仓库', pattern: 'docs/**' }],
+    }
+    await ns('scope').amend(amendArgs)
+    expect(h.calls).toEqual([{ channel: 'scope:amend', args: [amendArgs] }])
+  })
 })

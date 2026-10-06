@@ -5,6 +5,14 @@ export interface DirEntry {
   kind: 'file' | 'dir'
 }
 
+// S2b Task 3：作用域条目唯一源——delegation:create 与 scope:amend 同引此形（词表字面不许改）
+export type ScopeEntryDTO = { kind: '仓库' | '目录' | '命令' | '网络'; pattern: string }
+export type ScopeVersionDTO = {
+  seq: number
+  entries: ScopeEntryDTO[]
+  amendmentRef: string | null
+}
+
 export interface NeonForgeBridge {
   version: string
   config: {
@@ -105,7 +113,7 @@ export interface NeonForgeBridge {
     create: (args: {
       delegationId?: string
       intent: string
-      scopeEntries?: Array<{ kind: '仓库' | '目录' | '命令' | '网络'; pattern: string }>
+      scopeEntries?: ScopeEntryDTO[]
     }) => Promise<{ delegationId: string; state: string }>
     list: () => Promise<
       Array<{ delegationId: string; intent: string; state: string; reopenCount: number }>
@@ -142,6 +150,15 @@ export interface NeonForgeBridge {
       value: string
       reason?: string
     }) => Promise<{ resolved: string | null }>
+  }
+  // S2b Task 3：作用域两通道——版本链读取＋已批决议的逐条收窄
+  scope: {
+    chain: (delegationId: string) => Promise<ScopeVersionDTO[]>
+    amend: (args: {
+      delegationId: string
+      decisionPointId: string
+      entries: ScopeEntryDTO[]
+    }) => Promise<{ version: number } | { rejected: true; why: string }>
   }
   evidence: {
     listByDelegation: (delegationId: string) => Promise<

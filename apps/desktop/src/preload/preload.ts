@@ -1,5 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+// 作用域条目形状（本文件内唯一源＝本别名；跨面唯一源在 `renderer/types.d.ts` 的 `ScopeEntryDTO`，
+// preload 不 import 那个声明文件，故此处另立一处、两处词表须保持一致）。
+type ScopeEntryArg = { kind: '仓库' | '目录' | '命令' | '网络'; pattern: string }
+
 // D3（ADR-005）：PlannedFiles 契约载荷（main plannedFilesStore 最小契约）
 interface PlannedFilesPayload {
   files: string[]
@@ -75,11 +79,7 @@ contextBridge.exposeInMainWorld('neonforge', {
   },
   // S1b Task 4（详设 §7）：委托单中心领域通道——逐键对齐 ipcDomain 注册表（通道名即契约）。
   delegation: {
-    create: (args: {
-      delegationId?: string
-      intent: string
-      scopeEntries?: Array<{ kind: '仓库' | '目录' | '命令' | '网络'; pattern: string }>
-    }) =>
+    create: (args: { delegationId?: string; intent: string; scopeEntries?: ScopeEntryArg[] }) =>
       ipcRenderer.invoke('delegation:create', args) as Promise<{
         delegationId: string
         state: string
@@ -131,6 +131,12 @@ contextBridge.exposeInMainWorld('neonforge', {
       }>,
     resolve: (args: { decisionPointId: string; value: string; reason?: string }) =>
       ipcRenderer.invoke('decision:resolve', args) as Promise<{ resolved: string | null }>,
+  },
+  // S2b Task 3：作用域两通道过桥（条目形状沿用本文件内联字面做法——preload 不 import renderer 声明文件）
+  scope: {
+    chain: (delegationId: string) => ipcRenderer.invoke('scope:chain', { delegationId }),
+    amend: (args: { delegationId: string; decisionPointId: string; entries: ScopeEntryArg[] }) =>
+      ipcRenderer.invoke('scope:amend', args),
   },
   evidence: {
     listByDelegation: (delegationId: string) =>
