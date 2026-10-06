@@ -2,7 +2,7 @@
 
 - Status: accepted（用户 2026-10-06 裁「案 A：命令式消费」）
 - Date: 2026-10-06
-- 相关：`docs/design/v1.0.0-s2-detailed-design.md` §5 冲突登记／§11 钩子（**本件承载其裁定，随动 v0.2**）；`docs/neonforgeV1.0.0/03-domain-tactics.md` §6 跨聚合一致性表「作用域修正」行＋§5 事件目录（**零改动**）；`docs/design/stage-specs/V1-S2-authorization-scope.md`（A4/A5/B2 判据面，**零改动**）；`docs/audits/stage5-s2-design-audit-2026-10-06.md`（异构审计 4.3 专项判＋发现 F-3/F-9）；ADR-026（铁律②／禁跨段）；ADR-029（上游签名正名先例＝「回上游改工件」的对照面）
+- 相关：`docs/design/v1.0.0-s2-detailed-design.md` §5 冲突登记／§11 钩子（**本件承载其裁定，随动 v0.2**）；`docs/neonforgeV1.0.0/03-domain-tactics.md` §6 跨聚合一致性表「作用域修正」行＋§5 事件目录（**零改动**）；`docs/design/stage-specs/V1-S2-authorization-scope.md`（A4/A5/B2 判据面，**条目零增删**；A5／E2 两处措辞随详设 v0.3 对齐本裁，见 Decision 4③）；`docs/audits/stage5-s2-design-audit-2026-10-06.md`（异构审计 4.3 专项判＋发现 F-3/F-9）；ADR-026（铁律②／禁跨段）；ADR-029（上游签名正名先例＝「回上游改工件」的对照面）
 
 ## Context
 
