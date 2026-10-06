@@ -6,6 +6,8 @@
 >
 > 上游登记针（本 spec 必须消化，不得再延后）：S1 出口异构审计 **F-2** 的处置＝「登记 coverage-matrix 表 N 轴 1/6 注记『C1 E2E 跨层延后 S2』」（`docs/audits/s1-exit-heterogeneous-audit-2026-10-05.md`）⇒ 落本件 **E5**；S1 期 `Scope.ts` 的 `ponytail:` 天花板「正式 glob 语义随 S2 作用域修正批落地」⇒ 落本件 **A7**。
 >
+> **【段6 拆分登记 2026-10-06】**：段6 writing-plans 任务级拆解 **17 个任务 > 15**（S2a 九项＝版本链／amend 前置／正式 glob／③类翻转／ScopeAmended 接线／仓储面断言／词表断言／S-3 闸／applyChange 删占位；S2b 八项＋出口闸＝`rt.amendScope` 同事务／两通道＋raise 的 main 侧 id 归位／桥／派生／`ScopePanel`／`DecisionCard` 留痕／L3 八针＋夹具／F1–F11）→ 按上条警语拆 **S2a／S2b**，两份 plan 落 `docs/superpowers/plans/2026-10-06-s2a-authorization-kernel.md`／`2026-10-06-s2b-wiring-presentation-gate.md`。边界＝**S2a**：`src/domain/**`＋`tests/static/**`＋域内 L1（新增 32 条，出口自证跑相关文件与双 tsc）；**S2b**：`src/main/**`＋`preload`/`types.d.ts`＋`src/renderer/**`＋L3（新增 9 条，含 B2 同事务两条）＋**S2 全出口闸在此单次过**（F1–F11）。DoD 条目 A–F 实体不变、不重分配，仅执行子批划分（属计划细化，非设计变更，不触发铁律②回退）。
+>
 > 术语纪律：本件名词以段2 §4 语言表为谓词源；判据形态引段3 §4「违反时行为」列不复制条文；实现文件**签名／通道命名／闸承载体形态**归段5 详设，本件只给落点目录与测试文件名。
 
 ## DoD（机器可验证断言——stage-gate 逐条执行）
