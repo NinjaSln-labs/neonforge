@@ -52,6 +52,14 @@ A1–A7 ✅／B1–B4 ✅／C1–C4 ✅／D1–D3 ✅／E1–E4 ✅／**E5 block
 
 **可选补法（等用户定）**：①F11 按**有条件通过**结算（四项闸＋两支关键变异已有异体值，vitest 总数与 X3 由主会话自证并在此声明为"证据非结论"）；②换体复跑一次（`pi@omniroute` 不同渠道，但用户尚未认它够强＝按硬约束 3 未知即不合格）；③下批改形状：一闸一单、`--max-steps 20`。
 
+**补跑结果（2026-10-07，用户裁选②换体复跑）**：派遣体＝`qodercn@Qwen3.8-Max`（异渠道、异模型、**非本轮原体 mcode**，守硬约束 1／3／4）。前置自报 `HEAD=cb0dd3d`（与派单书一致，守 p000192 纪律）。两项缺失值已补齐：
+
+- **vitest 总数**＝`Test Files 38 passed`／`Tests 237 passed | 4 skipped`（failed=0；237+0+4=241 自洽）。**与主会话声称 237 一致** ⟹ 前轮"235 vs 237"的差异确系**派单方工作树滞后**（原报告 F-D1 归因成立），非实现问题。
+- **X3 变异**＝E3-2 承载于 `tests/interaction/delegationLifecycle.interaction.ts:204`（**`.interaction.ts`＝playwright，非 vitest**；任务书模板命令误写 `npx vitest run`，审计者按"以 grep 实测为准"改用 AGENTS.md L3 口径，未盲从）。变异点＝`ScopePanel.tsx:150` 的 `|| !approved`：摘除后 **1 failed｜0 passed**（杀死断言＝E3-2 第三步 raise 后仍须 disabled），`git checkout` 还原后 **1 passed**（回绿），`git status` 空。**X3 复现成立**。
+- desens 复核 rc=0。
+
+**F11 终态＝正式通过**（原"有条件"之两项缺失值已由异体补齐，结论面无变化＝无阻断项）。补跑产出＝`/tmp/ninjasin-f11-rerun-qodercn-2026-10-07.md`（外部审计者产出落临时位，承 ADR-032；本报告为采纳后的仓内落点）。派单缺陷（runner 与承载文件名未同源核）立坑 **p000196**。
+
 ## 5. 方法学追补（已回写 ADR-031 v1.5）
 
 复跑型单的载荷不按"判据条数"计，按**命令数**计：一闸≈1–2 step，故「复跑单命令 ≤5 且 `--max-steps ≥ 命令数×2＋4`，超出拆单而非加步数硬扛」。本轮又补一条：**变异／闸脚本的目标文件必须与判据同源核对**——我写的 `mutate.py` X3 把目标指错文件，直接产出一条假"无覆盖"finding（审计者如实报了，是我核对后否掉的）。

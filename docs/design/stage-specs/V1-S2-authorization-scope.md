@@ -58,11 +58,11 @@
 - [x] F4 `python3 tools/desens-scan.py`（仓库根）→ rc=0
 - [x] F5 **G-1 归档防回流**：`tests/static/noLegacyImport.test.ts` 回归绿；自 S1 出口起该闸转「归档路径不得重现」的同源断言（计划 §4 G-1 扩面列），**本阶段不另立新闸**
 - [x] F6 `docs/tests/coverage-matrix.md` 表 N：S2 承担行回填（轴 4 贯通面、轴 7 的 S2 列＝I-8／I-17／S-3、轴 6 的「C1 E2E 跨层延后 S2」注记**改「延后 S4」**（不是转 ✅——本阶段未偿清，不得预绿；ADR-033））；**S3–S7 承担的行保持 ⏳，不得预绿**
-- [x] F7 本 spec 的 `- [ ]` 全数勾绿或显式标 blocked＋理由（无沉默未跑项）；`stage-gate` 逐条留**本会话新鲜命令输出**｜结算见 `docs/audits/s2-exit-heterogeneous-audit-2026-10-06.md` §3：A–E 全 ✅、E5 blocked（ADR-033）、F10 blocked（待 push 授权）、F11 有条件（同报告 §4 逐条归因）
+- [x] F7 本 spec 的 `- [ ]` 全数勾绿或显式标 blocked＋理由（无沉默未跑项）；`stage-gate` 逐条留**本会话新鲜命令输出**｜结算见 `docs/audits/s2-exit-heterogeneous-audit-2026-10-06.md` §3：A–E 全 ✅、E5 blocked（ADR-033，非沉默项）、F10 已满足（2026-10-07 push 授权）、F11 正式通过（2026-10-07 补跑，同报告 §4）
 - [x] F8 决策日志同步：S2 内语义裁定→`docs/decisions/` 出 ADR＋索引行；无裁定则本项记「无」，不留空
 - [x] F9 handoff CLI 落账：S2 闸结果、新增 pitfall、`next` 指向下一活；`exit`／`summary` 先 `--dry-run` 再整槽覆写｜已落：pitfall p000190–p000194（含本轮三次自伤：工作树滞后派单、变异脚本目标错、把本契约件截成 0 字节后经 git 复原）、决策件 d000117（ADR-033 引用行）、闸结果与 next 经 CLI 写入
-- [ ] F10 代码与工件已 commit 到工作分支（Conventional Commits，经 lefthook→lint-staged）；**push 与 CI 绿以用户显式授权为前提**——未授权时本项登记 blocked（不判红、不预绿）
-- [x] F11 出口异构审计：按 agent-dispatch 派**非当前主同源**的强模型执行者出报告 → `docs/audits/`，主会话署名采纳逐条复核，**结论由用户亲裁**（AGENTS.md 流程3）；审计者不复现得出的项由主会话补实测（沿 S1 F-6 纪律）｜**有条件通过**：四张只读审计单交付（11 finding＝采纳 7／驳回 3／口径 1）；闸五项中四项与关键变异 X1/X2 由异体亲跑复现；vitest 总数与 X3 因主会话的工作树滞后与脚本目标错未获异体值，已收回主会话自做并在报告 §4 声明为"证据非结论"
+- [x] F10 代码与工件已 commit 到工作分支（Conventional Commits，经 lefthook→lint-staged）；**push 与 CI 绿以用户显式授权为前提**——未授权时本项登记 blocked（不判红、不预绿）｜**已满足**（2026-10-07 用户授权 push）：14 刀推至 origin/docs/neonforge-v1.0.0，`aa3d1d5..cb0dd3d`，远端＝本地齐平（0/0）
+- [x] F11 出口异构审计：按 agent-dispatch 派**非当前主同源**的强模型执行者出报告 → `docs/audits/`，主会话署名采纳逐条复核，**结论由用户亲裁**（AGENTS.md 流程3）；审计者不复现得出的项由主会话补实测（沿 S1 F-6 纪律）｜**正式通过**（2026-10-07 补跑后）：四张只读审计单交付（11 finding＝采纳 7／驳回 3／口径 1）；闸五项中四项与关键变异 X1/X2 由异体亲跑复现；vitest 总数（237 passed｜4 skipped）与 X3（变异红/还原绿）经**换体补跑**（qodercn@Qwen3.8-Max，非原体）补齐，F11 由「有条件」升为正式通过
 
 ## TDD 网格（本阶段新增功能——spec-first + test-first；每行在 DoD 有对应断言）
 
