@@ -37,6 +37,8 @@ tests/static/s3HighImpactList.test.ts                 # 新（D1 1＋D2 2）
 
 **计数账（S2a）**：vitest 新增 **39 条**＝A 组 22（T1 9＋T2 6＋T3 6＋T6 1）＋B1 1＋C 组 12（T4 C1 3＋C2 6＋C3 3）＋D 组 3＋词表 1。**S2b 另加 2 条**（B2 同事务）⇒ 合计 **41**＝契约件 F2 下限 40 满足且可逐名点出。L3 8 条走 playwright（E4 下限），**不重复计入 F2**；`tests/unit/ipc.channels.test.ts` 与 mockBridge 夹具改动按 §9 纪律**不计下限**。
 
+**执行序（编译前置，逐字核过 `timeline.ts`）＝ 5 → 1 → 2 → 3 → 4 → 6 → 7 → 8 → 9**。Task 1/2 的 `amend` 要返回 `draft: { type: 'ScopeAmended', detail: {...} }`，而 `PayloadMap['ScopeAmended']` 现状＝`ScopeAmendedPayload = never`——对 `never` 赋对象字面量过不了 tsc（实测于本会话读码，非推测）。Task 5 的载荷具名化因此是 1/2 的**硬前置**，不随文件里的物理序号。
+
 ---
 
 ## Task 1：Scope 版本链与三层深冻结（A1／A2／A3）
@@ -44,7 +46,7 @@ tests/static/s3HighImpactList.test.ts                 # 新（D1 1＋D2 2）
 **Files:** Modify `src/domain/authorization/Scope.ts`；Test `tests/unit/scope.versionChain.test.ts`（新建 9 条）。
 **Interfaces:** Consumes `DecisionPoint`（`import type { DecisionPoint } from './DecisionPoint.js'`）；Produces `amend(dp, entries, ts): { scope: Scope; draft: EventDraft }`、`get chain(): readonly ScopeVersion[]`。
 
-- [ ] **Step 1：写失败测（A1 单调 4 条）** — 断言序列：`Scope.initial('d1',[{kind:'仓库',pattern:'src/**'}])` → 造已批准修正决议（`DecisionPoint.raise({decisionPointId:'dp1',delegationId:'d1',turnId:'t1',requestReason:{reason:'作用域修正',operation:'扩到 docs',requestedBy:'用户提请'}}).decisionPoint.resolve('批准')`）→ `scope.amend(dp,[{kind:'仓库',pattern:'docs/**'}],'2026-10-06T00:00:00Z')`；断言 `next.scope.version === 2`、`[...next.scope.chain].map(v=>v.seq)` 逐次严格递增、`chain.length===2`；再断言**乱序拒**：对返回实例二次 amend 后 `chain.at(-1).seq` 仍＝上一位＋1（调用方无法注入 seq——`amend` 形参里没有 seq 位）。
+- [ ] **Step 1：写失败测（A1 单调 4 条）** — 断言序列：`Scope.initial('d1',[{kind:'仓库',pattern:'src/**'}])` → 造已批准修正决议（`const { decisionPoint: dp } = DecisionPoint.raise({decisionPointId:'dp1',delegationId:'d1',turnId:'t1',requestReason:{reason:'作用域修正',operation:'扩到 docs',requestedBy:'用户提请'}})`，随后 `dp.resolve('批准')`——**`resolve` 返回 `EventDraft[]` 不是聚合本体**，夹具须取 `raise` 返回值里的 `decisionPoint` 再就地决议）→ `scope.amend(dp,[{kind:'仓库',pattern:'docs/**'}],'2026-10-06T00:00:00Z')`；断言 `next.scope.version === 2`、`[...next.scope.chain].map(v=>v.seq)` 逐次严格递增、`chain.length===2`；再断言**乱序拒**：对返回实例二次 amend 后 `chain.at(-1).seq` 仍＝上一位＋1（调用方无法注入 seq——`amend` 形参里没有 seq 位）。
 - [ ] **Step 2：跑 FAIL** — `npx vitest run tests/unit/scope.versionChain.test.ts`；预期：红（`amend` 不存在）。
 - [ ] **Step 3：实现链追加＋深冻结** — `Scope.ts` 内：
   ```ts
