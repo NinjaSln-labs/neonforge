@@ -5,8 +5,8 @@
 
 // ─────────────────────────────────────────────────────────────
 // EventType 闭集（22 名，顺序＝段3 §5 表；禁增禁减）
-// S1 发射 17，另 5（ScopeAmended/StallDetected/SessionInterrupted/DelegationRestored/DelegationAbandoned）
-//   类型先入联合占位、发射逻辑分阶段接线（S2/S3/S5）。
+// 发射 18，另 4（StallDetected/SessionInterrupted/DelegationRestored/DelegationAbandoned）
+//   类型先入联合占位、发射逻辑分阶段接线（S3/S5）。
 // ─────────────────────────────────────────────────────────────
 export type EventType =
   | 'DelegationCreated'
@@ -58,23 +58,22 @@ export const EVENT_NAMES: readonly EventType[] = [
   'DelegationAbandoned',
 ] as const
 
-/** S1 不发射的 5 事件（详设 §6 M-01/M-11/M-13：类型先入联合、发射逻辑分阶段接线）。 */
+/** S1 不发射的 4 事件（详设 §6 M-01/M-11/M-13：类型先入联合、发射逻辑分阶段接线）。 */
 const NON_EMIT: readonly EventType[] = [
-  'ScopeAmended',
   'StallDetected',
   'SessionInterrupted',
   'DelegationRestored',
   'DelegationAbandoned',
 ] as const
 
-/** S1 发射子集（17）＝22 闭集去掉上述 5 个。 */
-export const S1_EMIT_EVENT_NAMES: readonly EventType[] = EVENT_NAMES.filter(
+/** 发射子集（18）＝22 闭集去掉上述 4 个未接线（接线阶段＝S3／S5）。 */
+export const EMIT_EVENT_NAMES: readonly EventType[] = EVENT_NAMES.filter(
   (n) => !NON_EMIT.includes(n),
 ) as readonly EventType[]
 
 // ─────────────────────────────────────────────────────────────
 // 载荷接口（键名 camelCase 系段6 接线权，语义逐一对齐段3 §5 描述符；禁增禁减）
-// 未发射 5 事件的载荷类型先收口 never（详设 §6 CC-04，接线阶段替换）。
+// 未发射 4 事件的载荷类型先收口 never（详设 §6 CC-04，接线阶段替换）。
 // ─────────────────────────────────────────────────────────────
 export interface DelegationCreatedPayload {
   delegationId: string
@@ -189,8 +188,13 @@ export interface InstructionAdmittedPayload {
   admittedTurnId: string
 }
 
-// 未发射 5 事件：类型入联合、载荷 never（S2/S3/S5 接线时替换）
-export type ScopeAmendedPayload = never
+export interface ScopeAmendedPayload {
+  delegationId: string
+  versionPair: { from: number; to: number } // 版本对（旧→新）
+  decisionPointId: string
+}
+
+// 未发射 4 事件：类型入联合、载荷 never（S3/S5 接线时替换）
 export type StallDetectedPayload = never
 export type SessionInterruptedPayload = never
 export type DelegationRestoredPayload = never

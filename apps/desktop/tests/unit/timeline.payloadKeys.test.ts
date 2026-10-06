@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { S1_EMIT_EVENT_NAMES } from '../../src/domain/timeline'
+import { EMIT_EVENT_NAMES } from '../../src/domain/timeline'
 import type {
   DelegationCreatedPayload,
   InputAcknowledgedPayload,
@@ -8,6 +8,7 @@ import type {
   DecisionRaisedPayload,
   DecisionResolvedPayload,
   DecisionDeniedPayload,
+  ScopeAmendedPayload,
   ChangeProducedPayload,
   EvidenceRecordedPayload,
   EvidenceInspectedPayload,
@@ -18,9 +19,10 @@ import type {
   DelegationClosedPayload,
   InstructionQueuedPayload,
   InstructionAdmittedPayload,
+  EventDraft,
 } from '../../src/domain/timeline'
 
-// B2：S1 发射 17 事件逐个断言 detail 键集＝段3 §5 快照（禁增禁减，M-09）。
+// B2：已接线 18 事件逐个断言 detail 键集＝段3 §5 快照（禁增禁减，M-09）。
 // 样本经 `satisfies` 编译期锁键；运行期 Object.keys 对快照再核一遍（防接线漂移）。
 describe('timeline 载荷键（B2，段3 §5 快照）', () => {
   const samples = {
@@ -57,6 +59,11 @@ describe('timeline 载荷键（B2，段3 §5 快照）', () => {
       turnId: 't1',
       reason: 'no',
     } satisfies DecisionDeniedPayload,
+    ScopeAmended: {
+      delegationId: 'd1',
+      versionPair: { from: 1, to: 2 },
+      decisionPointId: 'dp1',
+    } satisfies ScopeAmendedPayload,
     ChangeProduced: {
       delegationId: 'd1',
       turnId: 't1',
@@ -125,8 +132,25 @@ describe('timeline 载荷键（B2，段3 §5 快照）', () => {
     InstructionAdmitted: ['itemId', 'admittedTurnId'],
   }
 
-  it('样本覆盖恰为 S1 发射的 17 事件', () => {
-    expect(Object.keys(samples).sort()).toEqual([...S1_EMIT_EVENT_NAMES].sort())
+  it('样本覆盖恰为已接线的 18 事件', () => {
+    expect(Object.keys(samples).sort()).toEqual([...EMIT_EVENT_NAMES].sort())
+  })
+
+  it('ScopeAmended：手工构造 EventDraft，detail 键集＝§5 快照（禁增禁减）', () => {
+    const draft = {
+      delegationId: 'd1',
+      type: 'ScopeAmended',
+      detail: {
+        delegationId: 'd1',
+        versionPair: { from: 1, to: 2 },
+        decisionPointId: 'dp1',
+      },
+    } satisfies EventDraft
+    expect(Object.keys(draft.detail).sort()).toEqual([
+      'decisionPointId',
+      'delegationId',
+      'versionPair',
+    ])
   })
 
   for (const name of Object.keys(snapshot)) {

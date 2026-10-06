@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import * as timeline from '../../src/domain/timeline'
-import { EVENT_NAMES, S1_EMIT_EVENT_NAMES } from '../../src/domain/timeline'
+import { EMIT_EVENT_NAMES, EVENT_NAMES } from '../../src/domain/timeline'
 
 // B1：22 事件闭集名单快照＝段3 §5（改动回段3，不改本测）
 describe('timeline 事件闭集（B1，段3 §5 快照）', () => {
@@ -34,16 +34,16 @@ describe('timeline 事件闭集（B1，段3 §5 快照）', () => {
     expect(new Set(EVENT_NAMES).size).toBe(22)
   })
 
-  it('S1 发射子集＝22 去掉 5 个未接线事件（17）', () => {
-    expect(S1_EMIT_EVENT_NAMES.length).toBe(17)
+  it('发射子集＝22 去掉 4 个未接线事件（18）', () => {
+    expect(EVENT_NAMES.length).toBe(22)
+    expect(EMIT_EVENT_NAMES.length).toBe(18)
     const notEmit = [
-      'ScopeAmended',
       'StallDetected',
       'SessionInterrupted',
       'DelegationRestored',
       'DelegationAbandoned',
     ]
-    for (const n of notEmit) expect(S1_EMIT_EVENT_NAMES).not.toContain(n)
+    for (const n of notEmit) expect(EMIT_EVENT_NAMES).not.toContain(n)
   })
 
   it('旧 ~56 事件实现残留＝0（旧 TIMELINE_EVENT_SPECS 导出已撤）', () => {
