@@ -23,6 +23,7 @@
 7. 外部 agent 调遣走 agent-dispatch 技能（软链外挂；机制全文见技能，权威源 ADR-026 D3）。产出过段6闸（见「## 命令」）才合入，合并权在主会话。任务书只给已入库工件路径；凭据与 `.handoff/`、`.scratch/` 不给。当前主不审本会话亲笔（当前主可轮换）。
 8. 方向问题给建议并等用户裁定后执行；手段问题与既定目标无冲突直接做，不逐项请示。**流程已明确给出指导的（阶段闸口、DoD 判据、出口审计、纪律条款所要求的动作）直接按流程推进，不停下来征求**——停下来问＝把该做的事变成一次往返；只有流程设计本身有缺口或矛盾才报用户裁定（此时走铁律②回退，不自创豁免）。
 9. 段6 内循环有**码审**（ADR-032，用户 2026-10-06 裁）：每个实现切片合入后、段6 出口闸前，派异构 agent 跑 Standards＋Spec 两轴审查，**对象含主会话亲笔**；finding 由主会话逐条署名采纳／驳回并留理由，成立项修入后**复跑该切片闸**，报告落 `docs/reviews/`，**结论用户亲裁**。用户不逐行复核 diff；审查者资格照流程 7（同源不审亲笔）与 ADR-031 拆单上限。它不替代 `stage-gate` 与出口审计——三者判据不重叠。
+10. **审计闭环＝单源记录**（ADR-035）：每项审计（段出口异构审计／切片码审／复验）**落一条记录**——`python3 tools/audit-record.py --subject <受审工件> --auditor <agent@model> --verdict … --findings …`，写进 `refs/audit/log`（唯一写入口；手改即被抓）。**判据机械化**：`python3 tools/audit-check.py` —— `subject_blob` 与工件当前内容不符 ⇒ STALE、有 STALE 未补复验 ⇒ 红、记录/附件哈希对不上 ⇒ 未登记写入。**任何改动受审工件后不补记录，`audit-check` 即红**——不靠人记得（这是 ADR-032「修入后复跑」从纪律升为机制）。tamper-evident 非 tamper-proof（写权限者可改写历史，须外部锚点；见 ADR-035）。
 
 ## 命令
 
@@ -38,6 +39,7 @@ npm run e2e   # 依赖 /tmp/nf-e2e-test（入口会建）；改 main/preload 后
 python3 "$HOME/.agents/skills/project-handoff/scripts/handoff.py" check  # 交接门禁
 python3 "$HOME/.agents/skills/project-handoff/scripts/handoff.py" agents-block --check .  # 交接块漂移校验
 python3 tools/desens-scan.py --selftest                                  # 脱敏闸自检
+python3 tools/audit-check.py                                             # 审计闭环判据（ADR-035：STALE／复验链／凭证）
 ```
 
 ## 内容落位
