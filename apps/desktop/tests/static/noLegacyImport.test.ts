@@ -25,8 +25,11 @@ function basenames(src: string): string[] {
 
 function legacyNameSet(): Set<string> {
   const lines = readFileSync(STAGE_SPEC, 'utf-8').split('\n')
-  // 锚到 DoD 勾选项本体（`- [ ] A2.x`），避免被正文里出现的 "A2.5" 之类枚举串误命中。
-  const pick = (tag: string) => lines.find((l) => new RegExp(`- \\[ \\] ${tag}\\b`).test(l)) ?? ''
+  // 锚到 DoD 勾选项本体（`A2.x`），避免被正文里出现的 "A2.5" 之类枚举串误命中。
+  // 勾选态两支都收：出口闸把 `- [ ]` 逐条勾成 `- [x]` 是**正常演进**，名单只活在文本里——
+  // 只认未勾态会让闸在出口当场失明（S1 出口实测：解析出空集，靠本测自带的可红自证针把它喊出来的）。
+  const pick = (tag: string) =>
+    lines.find((l) => new RegExp(`- \\[[ xX]?\\] ${tag}\\b`).test(l)) ?? ''
   const names = [...basenames(pick('A2.1')), ...basenames(pick('A2.2')), ...basenames(pick('A2.5'))]
   return new Set(names)
 }
