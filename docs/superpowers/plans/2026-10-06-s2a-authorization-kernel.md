@@ -62,6 +62,7 @@ tests/static/s3HighImpactList.test.ts                 # 新（D1 1＋D2 2）
   get entries(): ScopeEntry[] { return this.chain[this.chain.length - 1].entries }  // 已是冻结副本的元素
   ```
   `private readonly chain_` 持内部数组；**`covers()`／`entries`／`version` 三处一律读 `this.chain_` 末位，不走 `chain` getter**（getter 每次调用都 `Object.freeze([...])` 拷一份，热路径上白拷；对外只读面才走 `chain`）。`amend` 新建实例＝A3「就地改写旧版本的路径命中数＝0」的静态面（旧版本对象永不被原地改）。
+  **拆界（执行期订正）**：A2 第 3 条断言「同 `decisionPointId` 二次修正不产第二版本」，它的实现＝`amend` 里的 I-8 查重那一支——**本任务连同该支一起落**，否则该测跑不到绿；I-17 那两支（缘由／已批准）留 Task 2，提前落会让 Task 2 的失败测跑不红（违反 TDD 先红纪律）。
 - [ ] **Step 4：跑 A2／A3 三条＋两条通过** — A2：`chain[1].amendmentRef === 'dp1'` ∧ `chain[0].amendmentRef === null`；A3：`expect(Object.isFrozen(chain[0])).toBe(true)`、`expect(Object.isFrozen(chain[0].entries)).toBe(true)`、`expect(Object.isFrozen(chain[0].entries[0])).toBe(true)`；逃逸断言：`chain[0].entries[0].pattern = 'x'` 在严格模式下抛／或赋值后重读仍 `'src/**'`（**逐层都测**——浅冻结只挡前两层，F-7 的靶心）。
 - [ ] **Step 5：跑 PASS** — 同命令；预期：9 绿。
 - [ ] **Step 6：commit** — `feat(S2a): Scope 版本链只追加＋VO 三层深冻结（A1/A2/A3，偿 F-7 逃逸面）`。
