@@ -179,3 +179,50 @@ test('E3-1：修正后当前版本可读、旧版本只读可溯，且未持久�
 
   await expectText(page.locator('.nf-unpersisted'), '未持久化', 8000)
 })
+
+// ── 码审 CR6 采纳针：两步流的呈现闸门此前无任何测试 ──
+// 变异实测（审查者与我各自复现同果）＝摘掉 ScopePanel 的 `!approved` 判据后，17 条单测＋18 条 L3 全绿。
+// 承的是契约件 A5（批准本身不自额推进版本）与 E2 后半句（版本随「批准 ∧ 用户提交修正」推进）。
+// 时间线必须带 turnId：否则面板走「无在飞轮」blocked 支，闸门根本到不了＝测的就不是这件事。
+const TL_NO_APPROVAL = `d.timeline.d1 = [
+  { seq: 1, ts: 'x', type: 'DelegationCreated', delegationId: 'd1', detail: {} },
+  { seq: 2, ts: 'x', type: 'TurnStarted', delegationId: 'd1', detail: { turnId: 't1' } },
+]`
+const TL_APPROVED = `d.timeline.d1 = [
+  { seq: 1, ts: 'x', type: 'DelegationCreated', delegationId: 'd1', detail: {} },
+  { seq: 2, ts: 'x', type: 'TurnStarted', delegationId: 'd1', detail: { turnId: 't1' } },
+  { seq: 3, ts: 'x', type: 'DecisionRaised', delegationId: 'd1', detail: {
+    decisionPointId: 'dp9', delegationId: 'd1', turnId: 't1',
+    requestReason: { reason: '作用域修正', operation: '扩到 docs', requestedBy: '用户提请' },
+  } },
+  { seq: 4, ts: 'x', type: 'DecisionResolved', delegationId: 'd1', detail: {
+    decisionPointId: 'dp9', resolution: '批准',
+  } },
+]
+d.amendResult = { version: 2 }`
+
+test('E3-2：提请后未获批准 ⇒「提交修正」始终 disabled（案 A 第二步不许跳过）', async ({ page }) => {
+  await boot(page, TL_NO_APPROVAL)
+  const amend = page.locator('[data-testid="nf-scope-amend"]')
+  await expectText(page.locator('[data-testid="nf-scope-raise"]'), '提出修正', 8000)
+  await expect(amend).toBeDisabled()
+  await page.locator('[data-testid="nf-scope-entries"]').fill('仓库\tdocs/**')
+  await expect(amend).toBeDisabled()
+  await page.locator('[data-testid="nf-scope-raise"]').click()
+  await expect(amend).toBeDisabled()
+  const calls = await page.evaluate(
+    () => (window as unknown as { __domainCalls: string[] }).__domainCalls,
+  )
+  expect(calls).not.toContain('scope:amend')
+})
+
+test('E3-3：批准决议在场时提交 ⇒ 走 scope:amend 并呈现版本推进（两步流走通）', async ({ page }) => {
+  await boot(page, TL_APPROVED)
+  await page.locator('[data-testid="nf-scope-entries"]').fill('仓库\tdocs/**')
+  await page.locator('[data-testid="nf-scope-raise"]').click()
+  const amend = page.locator('[data-testid="nf-scope-amend"]')
+  await expect(amend).toBeEnabled()
+  await amend.click()
+  await expectText(page.locator('.nf-scopepanel__advanced'), '版本已推进至', 8000)
+  await expectCount(page.locator('[data-testid="nf-scope-rejected"]'), 0)
+})
