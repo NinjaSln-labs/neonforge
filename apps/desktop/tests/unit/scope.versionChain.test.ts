@@ -75,7 +75,8 @@ describe('Scope 版本链 A3：旧版本只读可溯（三层深冻结）', () =
   it('8. 修正后整条链可读，旧版本 entries 逐字不变', () => {
     const next = base().amend(approvedDp('dp1'), docs, TS)
     expect(next.scope.chain.length).toBe(2)
-    expect(next.scope.chain[0].entries[0].pattern).toBe('src/**')
+    // 码审 CR3 采纳针：A3 的「逐字不变」判整条 entries，不是单字段——多 entry／改 kind 的漂移也要红。
+    expect(next.scope.chain[0].entries).toEqual([{ kind: '仓库', pattern: 'src/**' }])
   })
 
   it('9. 三层深冻结：version／entries／entry 各冻结，改写尝试不生效', () => {

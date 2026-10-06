@@ -40,6 +40,14 @@ describe('Scope.covers 按资源类型分流的 glob（详设 §8）', () => {
         'evilgithub.com',
       ),
     ).toBe(false)
+    // 码审 CR2b 采纳针：零前缀逃逸——`.github.com`  endsWith('.github.com') 成立，靠 length 判据拒。
+    // 删掉 `resource.length > dot.length` 后本条是唯一杀得动它的断言（变异实测已证其余六条全绿）。
+    expect(
+      Scope.initial('d1', [{ kind: '网络', pattern: '*.github.com' }]).covers(
+        '网络',
+        '.github.com',
+      ),
+    ).toBe(false)
   })
 
   it('6. 网络字面支＋** 全放行：example.com:443 只命中自身；** 命中任意资源', () => {

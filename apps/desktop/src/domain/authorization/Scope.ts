@@ -1,5 +1,5 @@
-// Scope 聚合根（详设 §2／段3 §2）：版本链只追加，amend()＝唯一追加口（I-8 同决议查重已落；
-// I-17 缘由/批准两支前置→S2a Task 2）。ScopeVersion 三层深冻结（VO 不可变）。本文件零归档面 import。
+// Scope 聚合根（详设 §2／段3 §2）：版本链只追加，amend()＝唯一追加口（I-8 同决议查重与
+// I-17 缘由/批准两支前置均已落，A1–A5）。ScopeVersion 三层深冻结（VO 不可变）。本文件零归档面 import。
 
 import type { DecisionPoint } from './DecisionPoint.js'
 import { DomainError } from '../domainError.js'

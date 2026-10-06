@@ -101,13 +101,10 @@ describe('Scope 与高影响清单（CC-05／段2 §4 唯一源）', () => {
     expect(scope.entries).toEqual([{ kind: '目录', pattern: 'src/**' }])
   })
 
-  it('高影响清单＝段2 附录 A 初版五行（逐字）', () => {
-    expect(HIGH_IMPACT_LIST).toEqual([
-      '删除文件',
-      '改写 git 历史（force push/reset --hard 类）',
-      '安装/卸载依赖',
-      '修改凭据配置',
-      '外发仓库内容出本机',
-    ])
+  // 码审 CR3 采纳：本条原样抄了五行文案＝清单的第二源（漂移要改两处）。
+  // 逐字比对归唯一源闸 `tests/static/s3HighImpactList.test.ts`（从段2 §4 现场解析），本条退化为形状断言。
+  it('高影响清单＝五项非空字符串（文案唯一源比对不在本测内复制）', () => {
+    expect(HIGH_IMPACT_LIST).toHaveLength(5)
+    expect(HIGH_IMPACT_LIST.every((s) => typeof s === 'string' && s.length > 0)).toBe(true)
   })
 })
