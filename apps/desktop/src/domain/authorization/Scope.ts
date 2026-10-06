@@ -69,6 +69,10 @@ export class Scope {
     entries: ScopeEntry[],
     _ts: string,
   ): { scope: Scope; draft: EventDraft } {
+    if (dp?.requestReason?.reason !== '作用域修正')
+      throw new DomainError('I-17', '修正须绑定缘由＝作用域修正的决策点')
+    if (dp.resolution?.value !== '批准')
+      throw new DomainError('I-17', '批准权仅用户：决议未批准（未决/拒绝/选项一律拒）')
     if (this.chain_.some((v) => v.amendmentRef === dp.decisionPointId))
       throw new DomainError('I-8', '同 decisionPointId 只产一个版本')
     const seq = this.chain_[this.chain_.length - 1].seq + 1
