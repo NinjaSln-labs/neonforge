@@ -2,9 +2,9 @@
 
 > 来源：`docs/design/v1.0.0-stage-plan.md` §3 S3 行（阶段计划）＋§4 不变量映射（**I-12 首立＝S3**；I-11 首立 S1、**S3 补 SessionInterrupted 边**）＋§5 事件映射（SessionInterrupted／DelegationRestored 首射＝S3，两事件）＋`docs/neonforgeV1.0.0/03-domain-tactics.md`（段3 frozen v1.3）§6（事务边界）／§7（仓储面）／§8（RecoverableSpec）＋`docs/design/v1.0.0-s1-detailed-design.md` §11（S3 钩子：RecoverableSpec／持久化，Repo 内存→持久适配、接口不变）＋`docs/design/v1.0.0-s2-detailed-design.md` §11（S3 钩子：修正提案的持久与重放——内存态下 `chain` 重启即失）；开工日期：**2026-10-07**（用户放行 S3，段5 spec 先行）
 >
-> 尺寸核：TDD 网格 **11 行** < 计划 §3 拆分警语阈值（>20 行才拆），未触发拆分。若段5 详设后网格需增行，按警语拆 S3a／S3b 并在本头部登记＋记 handoff（属计划细化，非设计变更，不触发铁律②回退）。
+> 尺寸核：TDD 网格 **12 行** < 计划 §3 拆分警语阈值（>20 行才拆），未触发拆分。若段5 详设后网格需增行，按警语拆 S3a／S3b 并在本头部登记＋记 handoff（属计划细化，非设计变更，不触发铁律②回退）。
 >
-> 上游登记针（本 spec 必须消化，不得再延后）：①S1 详设 §11「S3 RecoverableSpec／持久化（Repo 内存→持久适配，**接口不变**）」⇒ 落本件 **A 组**；②S2 详设 §11「修正提案的持久与重放→S3：内存态下 `chain` 重启即失，`ScopePanel` 的未持久化提示沿用 F2 面」⇒ 落本件 **C 组**；③S1 F2 未持久化横幅（`t000100`）在 S3 落地后语义转变（从「内存态＝重启即失」到「已持久化，横幅撤除或改义」）⇒ 落本件 **E3**；④计划 §4 I-11 行「四事件闭集全判据在 S5 收口，S3 补 SessionInterrupted」⇒ 落本件 **B 组**。
+> 上游登记针（本 spec 必须消化，不得再延后）：①S1 详设 §11「S3 RecoverableSpec／持久化（Repo 内存→持久适配，**接口不变**）」⇒ 落本件 **A 组**；②S2 详设 §11「修正提案的持久与重放→S3：内存态下 `chain` 重启即失，`ScopePanel` 的未持久化提示沿用 F2 面」⇒ 落本件 **C 组（C4）**；③S1 F2 未持久化横幅（`t000100`）在 S3 落地后语义转变（从「内存态＝重启即失」到「已持久化，横幅撤除或改义」）⇒ 落本件 **D4**；④计划 §4 I-11 行「四事件闭集全判据在 S5 收口，S3 补 SessionInterrupted」⇒ 落本件 **B 组**。
 >
 > 术语纪律：本件名词以段2 §4 语言表为谓词源；判据形态引段3 §4「违反时行为」列不复制条文；实现文件**签名／通道命名／存储格式／闸承载体形态**归段5 详设，本件只给落点目录与测试文件名。
 
@@ -12,11 +12,11 @@
 
 ### A 7 仓储面持久化适配（段3 §7；详设 §3；S1 内存态换持久、**接口不变**）
 
-- [ ] A1 **接口冻结回归**：7 仓储面（DelegationRepo／ScopeRepo／DecisionPointRepo／TurnRepo／InstructionQueueRepo／EvidenceRepo／TimelineRepo）的**方法名集合逐名不变**（与段3 §7 及 S3 开工前 HEAD 的 `src/domain/repos/**` 导出面**逐名比对**，多一个／少一个／改名即红）——`tests/unit/repos.surface.test.ts`（≥1 条，静态面：解析导出名集合与契约常量比对，防实现期就地扩接口）
+- [ ] A1 **接口冻结回归**：7 仓储面（DelegationRepo／ScopeRepo／DecisionPointRepo／TurnRepo／InstructionQueueRepo／EvidenceRepo／TimelineRepo）的**方法名集合逐名不变**——契约常量**钉单源＝「S3 开工前 HEAD 的 `src/domain/repos/index.ts` 导出面」**（段3 §7 作**语义源**，因两者不同构：HEAD 的 TimelineRepo 另有 `subscribe`，系 S1 详设 §3 批准的进程内只读订阅、段3 §7 未列）；多一个／少一个／改名即红，**`subscribe` 为已批准增项、登入契约常量不算违例**——`tests/unit/repos.surface.test.ts`（≥1 条，静态面：解析导出名集合与契约常量比对，防实现期**再**就地扩接口）
 - [ ] A2 **持久化落盘往返**：7 聚合各自 save→（进程外重建实例）→find，读回值与写前**逐字段相等**（含 Scope 的版本链、Delegation 的状态机字段、QueueItem 的 FIFO 序、TimelineLog 的 seq 序）——`tests/unit/repos.persistence.test.ts`（≥7 条，每聚合一条往返）
 - [ ] A3 **同库同事务**（段3 §6：聚合与 TimelineLog 同库）：聚合状态写入与 `TimelineRepo.append` 落在**同一持久化事务**——append 抛错 ⇒ 聚合写入**整事务回滚**（重开实例后聚合与 timeline 均无该次写入痕）；`TimelineRepo.append` 仍是**单一写者口**（写事件只经它，S-1 依赖检查回归绿）——`tests/unit/repos.transaction.test.ts`（≥2 条：提交路径／回滚路径）
-- [ ] A4 **损坏容错**：持久化文件缺失／截断／非法 JSON ⇒ 读侧**不崩溃**，按「空态重建」或「拒绝加载并报错」二择一（形态归段5 详设），且**不得静默吞掉已有数据**（有数据却读成空＝红）——`tests/unit/repos.corruption.test.ts`（≥2 条：缺文件／截断）
-- [ ] A5 **原子写**：持久化写入为原子替换（写临时文件→rename，或等价机制），半写文件不可被读侧观察到——`tests/unit/repos.atomicWrite.test.ts`（≥1 条：模拟写中断后旧值仍在）
+- [ ] A4 **损坏容错**（派生加固：I-12＋段3 §8 RecoverableSpec「账本完整可重放」——崩溃瞬间半写文件正是账本完整性的首要威胁；非逐字上游条文，形态归段5、不预设存储选型）：持久化文件缺失／截断／非法 JSON ⇒ 读侧**不崩溃**，按「空态重建」或「拒绝加载并报错」二择一（形态归段5 详设），且**不得静默吞掉已有数据**（有数据却读成空＝红）——`tests/unit/repos.corruption.test.ts`（≥2 条：缺文件／截断）
+- [ ] A5 **原子写**（同上派生加固）：持久化写入为原子替换（写临时文件→rename，或等价机制），半写文件不可被读侧观察到——`tests/unit/repos.atomicWrite.test.ts`（≥1 条：模拟写中断后旧值仍在）
 - [ ] A6 **路径注入可测**（沿 S1 `configStore`／`plannedFilesStore` 模式）：存储根目录可注入（不硬编码 userData），测试内以临时目录替换——`tests/unit/repos.persistence.test.ts` 复用（测试全部用注入路径，无一条依赖真实 userData）
 
 ### B 崩溃恢复：SessionInterrupted／DelegationRestored 首射（段3 §5 两事件；计划 §5 S3 行＝2 事件）
@@ -26,7 +26,7 @@
 - [ ] B3 **恢复＝账本重放**（段3 §6 崩溃恢复行）：恢复后**聚合状态与 timeline** 均由持久化账本重放得出；重复恢复＝**no-op**（第二次恢复不产生新事件、状态不变）——`tests/unit/recovery.replay.test.ts`（≥2 条：首次重放／重复 no-op）
 - [ ] B4 **恢复失败留痕不假装修复**（I-12 违反时行为＝恢复拒绝并留痕）：账本不完整／不可重放（RecoverableSpec 不过）⇒ `DelegationRestored` 携**恢复结果＝失败＋原因**，且**拒绝恢复**（不进入已恢复态）——`tests/unit/recovery.failure.test.ts`（≥2 条：成功键／失败键含原因）
 - [ ] B5 **I-11 补 SessionInterrupted 边**：`SessionInterrupted` 发生时 timeline 条目计数 ≥1（否定事实必有痕，与 S1 的 DecisionDenied／DelegationRejected 同族承载体）——`tests/unit/recovery.interrupt.test.ts`（≥1 条，断言事件落 timeline）
-- [ ] B6 **事件闭集仍 22、余 2 事件不预绿**：`DelegationAbandoned`（S5）载荷保持 `never`；事件名集合仍与段3 §5 逐名相等——`tests/unit/timeline.eventCatalog.test.ts` 回归绿
+- [ ] B6 **事件闭集仍 22、余 2 事件不预绿**：`DelegationAbandoned`（S5）载荷保持 `never`；**发射子集断言随 S3 更新为已接线 20／未接线 2**（`timeline.eventCatalog.test.ts` 现断言 `EMIT_EVENT_NAMES.length===18`，本阶段接 2 事件后**须改 20/2 才可能绿**，非「原样回归绿」），**闭集 22 断言不动**，eventCatalog 全绿——`tests/unit/timeline.eventCatalog.test.ts`（回归＋发射子集计数更新）
 
 ### C I-12 丢失范围派生与在飞流不重放（计划 §4 I-12 行；段3 §4 I-12）
 
@@ -40,18 +40,18 @@
 - [ ] D1 **委托单可见性**：重启后委托单列表（`DelegationRepo.findActive`／`listArchived`）与重启前**逐条相等**——`tests/unit/restart.visibility.test.ts`（≥1 条）
 - [ ] D2 **队列可见性 + FIFO 保序**：重启后待处理队列（`InstructionQueueRepo.find` 的 pending，排除已准入与已撤回）逐条相等且**序不变**——同文件（≥1 条）
 - [ ] D3 **证据可见性**：重启后证据集（`EvidenceRepo.findByDelegation`）逐条相等——同文件（≥1 条）
-- [ ] D4 **未持久化横幅语义转变**（S1 F2 回归面）：S3 落地后「内存态＝重启即失」不再成立 ⇒ S1 F2 横幅**撤除或改义**（形态归段5 详设）；L3 断言随之更新——`tests/interaction/delegationLifecycle.interaction.ts`（F2 相关针更新，≥1 条）
+- [ ] D4 **未持久化横幅语义转变**（S1 F2 回归面）：S3 落地后「内存态＝重启即失」不再成立 ⇒ S1 F2 横幅**撤除或改义**（形态归段5 详设）；**主针位＝`tests/interaction/unpersistedState.interaction.ts`（F2-1 于 :20，断言 `.nf-unpersisted`「未持久化」文案，:24）**，`delegationLifecycle.interaction.ts` 的 E3-1 同针（:164/:180）随之同步；两处 L3 断言随之更新——`tests/interaction/unpersistedState.interaction.ts`（主，F2-1 更新）＋`tests/interaction/delegationLifecycle.interaction.ts`（E3-1 同步，≥1 条）
 
 ### E 呈现侧恢复可见性（L3；计划 §4 I-12 行「L1＋L3」）
 
 - [ ] E1 **恢复后状态可见**：重启后委托单／时间线／证据在 UI 可见（I-12 呈现侧最小面）——`tests/interaction/restartVisibility.interaction.ts`（≥2 条）
 - [ ] E2 **中断留痕可见**：`SessionInterrupted` 的丢失范围（或"不可判定"）在时间线视图可见（原则1「输入不静默消失」的恢复侧兑现）——同文件（≥1 条）
-- [ ] E3 `npx playwright test --project=interaction` **全绿**，本阶段新增用例 **≥3 条**（实落数由 stage-gate 现场数）
+- [ ] E3 `npx playwright test --project=interaction` **全绿**，本阶段新增 interaction 用例 **≥3 条**（E1·2＋E2·1；**D4 的两处 F2 横幅针属既有用例更新、不计新增**；实落数由 stage-gate 现场数）
 
 ### F 段6 闸与状态类断言（逐条列，不合并）
 
 - [ ] F1 `npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit`（cwd `apps/desktop`）→ **0 error**
-- [ ] F2 `npx vitest run`（cwd `apps/desktop`）全绿，本阶段新增用例 **≥ 35 条**（下限＝A 组 15＋B 组 9＋C 组 6＋D 组 4；E 组 3 条走 playwright 不重复计数；逐行映射见 TDD 网格），且全部来自本 spec 网格登记的新树测试文件
+- [ ] F2 `npx vitest run`（cwd `apps/desktop`）全绿，本阶段新增 vitest 用例 **≥ 31 条**——**算式＝逐条下限之和 A 13＋B 9＋C 6＋D 3＝31**（A＝A1·1＋A2·7＋A3·2＋A4·2＋A5·1＋A6·复用 0＝13；B＝B1·2（payloadKeys 扩两事件快照）＋B2·2＋B3·2＋B4·2＋B5·1＝9；C＝C1·3＋C2·1＋C3·1＋C4·1＝6；D＝D1·1＋D2·1＋D3·1＝3；**D4 是 playwright interaction、不走 vitest，且 E 组 3 条亦走 playwright**，均不入本下限），且全部来自本 spec 网格登记的新树测试文件
 - [ ] F3 `npx eslint .` → 0 error
 - [ ] F4 `python3 tools/desens-scan.py`（仓库根）→ rc=0
 - [ ] F5 **G-1 归档防回流回归**：`tests/static/noLegacyImport.test.ts` 绿；S-1 呈现/度量零写命令回归绿（`tests/static/s1WritePath.test.ts`）
@@ -77,6 +77,7 @@
 | 9 | 丢失范围三值派生 | 段3 §4 I-12（下界/上界/不可判定） | `tests/unit/recovery.lostRange.test.ts` | 派生纯函数（签名归段5） | 不可判定＝枚举值，不留空 |
 | 10 | 在飞流不重放＋中断态 | 段3 §4 I-12；§2 Turn MarkInterrupted | `tests/unit/recovery.noStreamReplay.test.ts` | 恢复不回放流；在飞轮标中断态 | 中断态＝Terminal 态之一 |
 | 11 | 重启可见性＋呈现 | 计划 §3 S3 行产出物；I-12 呈现侧 | `tests/unit/restart.visibility.test.ts`＋`tests/interaction/restartVisibility.interaction.ts` | 读侧重建＋UI 可见 | F2 横幅撤除/改义 |
+| 12 | 修正提案持久与重放 | S2 详设 §11 钩子；I-8 只读可溯持久面 | `tests/unit/recovery.scopeReplay.test.ts` | Scope 版本链随聚合持久化，重放读回完整链 | 与行 7 重放口共用 |
 
 ## 产出物
 
@@ -101,4 +102,4 @@
 - 等待项四类完整呈现、焦点呈现、对话通道按 delegationId 过滤、S-1 全量＝**S6**；S3 只补恢复侧最小可溯呈现（E1–E2）。
 - 指标计算与比率口径＝**S7**；S3 只保证 SessionInterrupted／DelegationRestored 按段3 §5 键集正确发射（护栏③采点源）。
 - **存储格式选型**（单文件 JSON／SQLite／逐聚合文件）＝段5 详设定，本件不预设；**若选型需语义裁定则出 S3 ADR**（F8），不在段6 就地改契约。
-- 恢复的**重放时序**（I-12 上下界计算点）＝段5 详设定（计划 §4 遗留①）。
+- 恢复的**重放时序**（I-12 上下界计算点）＝段5 详设定（计划 **§8 移交必答项第 3 条**）。
