@@ -41,6 +41,14 @@ tests/static/s3HighImpactList.test.ts                 # 新（D1 1＋D2 2）
 
 ---
 
+## 执行台账（外派 B 模式，2026-10-06）
+
+- **已合入**：T5 `ba9bf17`（载荷 3 键＋发射 18）／T1 `ffa822a`（版本链＋三层冻结）／T2 `968224c`（I-17 两支＋主会话补 4b）／T3＋T6 `见 git log`（正式 glob／仓储面两面断言）／T7（词表同源断言）。
+- **执行序**＝5→1→2→3→6→7→4→8→9（编译前置与文件冲突决定，见上「执行序」段）。
+- **执行者**＝`qodercn@Qwen3.8-Max --reasoning-effort low`（ADR-031 D4c；一次性 worktree `.scratch/wt-t*/`，主会话复核 diff＋亲跑闸后合入，外部 agent 零 commit）。
+- **闸实况**（主会话亲跑，cwd `apps/desktop`）：合入 T7 后 `vitest 212 passed｜4 skipped`、双 tsc 0 error、eslint 0 error。
+- **plan 缺陷由执行期回补三处**：夹具 `resolve()` 返回值形／`freezeVersion` 的 `readonly[]` 编译冲突／T2 缺①支正面用例（变异实测已证）。
+
 ## Task 1：Scope 版本链与三层深冻结（A1／A2／A3）
 
 **Files:** Modify `src/domain/authorization/Scope.ts`；Test `tests/unit/scope.versionChain.test.ts`（新建 9 条）。
