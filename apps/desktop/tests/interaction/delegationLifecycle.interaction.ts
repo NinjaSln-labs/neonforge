@@ -6,7 +6,8 @@ import { installMockBridge } from './mockBridge'
 import { expectVisible, expectText, expectCount } from '../helpers/assertions'
 
 // 领域桥假数据（内存态）——注入 window.neonforge 六命名空间，App 启动即取数
-const DOMAIN_SEED = `
+// seedExtra：单针覆盖默认表用（在 d 定义之后、domainInit 之前求值；函数不能走 extra——JSON 会吃掉）
+const DOMAIN_SEED = (seedExtra = '') => `
 window.__domainCalls = []
 const d = {
   delegations: [
@@ -27,6 +28,7 @@ const d = {
   queue: [
     { itemId: 'q1', delegationId: 'd1', inputId: 'in2', origin: 'StartTurn 忙转投' },
   ],
+  scopeVersions: [{ seq: 1, entries: [{ kind: '仓库', pattern: 'src/**' }], amendmentRef: null }],
   timeline: {
     d1: [
       { seq: 1, ts: '2026-10-05T00:00:00Z', type: 'DelegationCreated', delegationId: 'd1', detail: {} },
@@ -46,6 +48,7 @@ const d = {
     ],
   },
 }
+${seedExtra}
 // 认领 patch：mockBridge 的 extraInit 排在 neonforge 赋值之前——须等就绪再补。
 // 用 defineProperty 拦截 neonforge 赋值，一旦建立立即把六命名空间挂上（早于 React 首帧取数）。
 const domainInit = (nf) => {
@@ -69,6 +72,10 @@ nf.evidence = {
   inspect: async (id) => { window.__domainCalls.push('evidence:inspect:' + id); return { firstInspection: true } },
 }
 nf.queue = { pending: async () => { window.__domainCalls.push('queue:pending'); return d.queue.slice() } }
+nf.scope = {
+  chain: async () => { window.__domainCalls.push('scope:chain'); return d.scopeVersions || [] },
+  amend: async (a) => { window.__domainCalls.push('scope:amend'); return d.amendResult || { rejected: true, why: '夹具默认拒' } },
+}
 nf.timeline = {
   queryByDelegation: async (id) => { window.__domainCalls.push('timeline:query:' + id); return (d.timeline[id] || []).slice() },
   subscribe: async () => ({ subscribed: true }),
@@ -87,8 +94,8 @@ else {
 }
 `
 
-async function boot(page: Page) {
-  await installMockBridge(page, { project: 'open', extraInit: DOMAIN_SEED })
+async function boot(page: Page, seedExtra = '') {
+  await installMockBridge(page, { project: 'open', extraInit: DOMAIN_SEED(seedExtra) })
   await page.goto('http://localhost:5175/')
   await page.waitForSelector('.nf-app', { timeout: 8000 })
 }
@@ -152,4 +159,23 @@ test('F1-8：验收按钮——触发 delegation:accept', async ({ page }) => {
     () => (window as unknown as { __domainCalls: string[] }).__domainCalls,
   )
   expect(calls.some((c) => c.startsWith('delegation:accept'))).toBe(true)
+})
+
+test('E3-1：修正后当前版本可读、旧版本只读可溯，且未持久化提示仍在', async ({ page }) => {
+  await boot(
+    page,
+    `d.scopeVersions = [
+  { seq: 1, entries: [{ kind: '仓库', pattern: 'src/**' }], amendmentRef: null },
+  { seq: 2, entries: [{ kind: '目录', pattern: 'docs/**' }], amendmentRef: 'dp9' },
+]`,
+  )
+  const current = page.locator('[data-testid="nf-scope-current"]')
+  await expectText(current, 'docs/**', 8000)
+
+  const history = page.locator('[data-testid="nf-scope-history"]')
+  await expectText(history.locator('.nf-scope-history__item').first(), '1', 8000)
+  await expectText(history.locator('.nf-scope-history__item').first(), '首版本', 8000)
+  await expectCount(history.locator('button'), 0)
+
+  await expectText(page.locator('.nf-unpersisted'), '未持久化', 8000)
 })
