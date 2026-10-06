@@ -6,6 +6,11 @@ import type { HighImpactOperation } from '../authorization/highImpactList.js'
 // S1 只判两类＝资源访问／命令执行；作用域修正分支的全外延（I-8/I-17 绑定决议）→ S2。
 
 export type OperationCategory = '资源访问' | '命令执行' | '作用域修正'
+export const OPERATION_CATEGORIES: readonly OperationCategory[] = [
+  '资源访问',
+  '命令执行',
+  '作用域修正',
+]
 
 export interface Operation {
   category: OperationCategory

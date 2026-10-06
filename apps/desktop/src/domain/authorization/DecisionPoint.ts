@@ -7,6 +7,7 @@ import type { EventDraft, PayloadOf } from '../timeline.js'
 // I-3：每个决策点恰属一个 (delegationId, turnId) 归属对，缺归属⇒命令拒绝且不生成。
 
 export type RequestCause = '作用域外' | '高影响清单命中' | '作用域修正'
+export const REQUEST_CAUSES: readonly RequestCause[] = ['作用域外', '高影响清单命中', '作用域修正']
 export type RequestedBy = 'AI 提请' | '用户提请'
 
 // RequestReason VO＝缘由＋操作描述＋requestedBy（不可变事实）。
