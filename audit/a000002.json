@@ -1,0 +1,12 @@
+{
+  "id": "a000002",
+  "subject": "docs/design/v1.0.0-s3-detailed-design.md",
+  "subject_blob": "ff37f5b54f49074e0459934efa3cdcf6cc5d7de3",
+  "subject_commit": "f975155",
+  "auditor": "qodercn@Qwen3.8-Max",
+  "verdict": "accepted",
+  "findings": "第2轮段5出口审计:3阻断(B-01/C-03/D-01)+14非阻断; 全采纳修入v0.2; 复验17/17 PASS",
+  "reverify_of": null,
+  "ts": "2026-10-07T03:53:18+08:00",
+  "attachment_sha256": "1b0383c3670abae6b16f65826ecc18f8ccfe925c814e95276171ab359044c557"
+}
