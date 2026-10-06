@@ -1,5 +1,5 @@
 // S1b Task 5：委托单中心六件的共享取数层（只读投影——只经 window.neonforge 领域桥，零核心聚合 import，S-1 绿）。
-// 只读既有通道：delegation:list、evidence:list-by-delegation、queue:pending、timeline:query-by-delegation。
+// 只读既有通道：delegation:list、evidence:list-by-delegation、queue:pending、timeline:query-by-delegation、scope:chain。
 // 待决决策点从时间线派生（DecisionRaised 后未被 DecisionResolved/Denied 收口的最后一个），不新增通道。
 import { useEffect, useState } from 'react'
 import type { ScopeVersionDTO } from './types'

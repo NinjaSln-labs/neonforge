@@ -4,6 +4,9 @@ import { contextBridge, ipcRenderer } from 'electron'
 // preload 不 import 那个声明文件，故此处另立一处、两处词表须保持一致）。
 type ScopeEntryArg = { kind: '仓库' | '目录' | '命令' | '网络'; pattern: string }
 
+// 版本链元素（与 `renderer/types.d.ts` 的 `ScopeVersionDTO` 同形；preload 不 import 那个声明文件）
+type ScopeVersionArg = { seq: number; entries: ScopeEntryArg[]; amendmentRef: string | null }
+
 // D3（ADR-005）：PlannedFiles 契约载荷（main plannedFilesStore 最小契约）
 interface PlannedFilesPayload {
   files: string[]
@@ -134,8 +137,13 @@ contextBridge.exposeInMainWorld('neonforge', {
   },
   // S2b Task 3：作用域两通道过桥（条目形状沿用本文件内联字面做法——preload 不 import renderer 声明文件）
   scope: {
-    chain: (delegationId: string) => ipcRenderer.invoke('scope:chain', { delegationId }),
-    amend: (args: { delegationId: string; decisionPointId: string; entries: ScopeEntryArg[] }) =>
+    chain: (delegationId: string): Promise<ScopeVersionArg[]> =>
+      ipcRenderer.invoke('scope:chain', { delegationId }),
+    amend: (args: {
+      delegationId: string
+      decisionPointId: string
+      entries: ScopeEntryArg[]
+    }): Promise<{ version: number } | { rejected: true; why: string }> =>
       ipcRenderer.invoke('scope:amend', args),
   },
   evidence: {

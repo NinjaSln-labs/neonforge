@@ -248,7 +248,7 @@ export function registerDomainChannels(ipc: IpcMainLike, deps: DomainChannelDeps
     ok: deps.abortStream((args as { streamId: string }).streamId),
   }))
 
-  // DTO 用 { ...e } 摊平＝不把冻结引用递给 renderer（桥侧本就 JSON 序列化，摊平是显式意图）。
+  // DTO 逐条浅拷＝不把领域实例引用递给 renderer（摊平后的新对象不再带冻结态；桥侧本就 JSON 序列化，此为显式意图）。
   ipc.handle('scope:chain', (_evt, args) => {
     const { delegationId } = args as { delegationId: string }
     const scope = rt.scopes.findByDelegation(delegationId)
