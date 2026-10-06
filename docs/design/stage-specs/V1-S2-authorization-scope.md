@@ -4,7 +4,7 @@
 >
 > 尺寸核：TDD 网格 **13 行** < 计划 §3 拆分警语阈值（>20 行才拆），未触发拆分。若段5 详设后网格需增行，按警语拆 S2a／S2b 并在本头部登记＋记 handoff（属计划细化，非设计变更，不触发铁律②回退）。
 >
-> 上游登记针（本 spec 必须消化，不得再延后）：S1 出口异构审计 **F-2** 的处置＝「登记 coverage-matrix 表 N 轴 1/6 注记『C1 E2E 跨层延后 S2』」（`docs/audits/s1-exit-heterogeneous-audit-2026-10-05.md`）⇒ 落本件 **E5**；S1 期 `Scope.ts` 的 `ponytail:` 天花板「正式 glob 语义随 S2 作用域修正批落地」⇒ 落本件 **A7**。
+> 上游登记针（原口径「本 spec 必须消化，不得再延后」；**E5 那条经用户 2026-10-06 裁改为延后 S4＝ADR-033**，其余照消化）：S1 出口异构审计 **F-2** 的处置＝「登记 coverage-matrix 表 N 轴 1/6 注记『C1 E2E 跨层延后 S2』」（`docs/audits/s1-exit-heterogeneous-audit-2026-10-05.md`）⇒ 落本件 **E5**；S1 期 `Scope.ts` 的 `ponytail:` 天花板「正式 glob 语义随 S2 作用域修正批落地」⇒ 落本件 **A7**。
 >
 > **【段6 拆分登记 2026-10-06】**：段6 writing-plans 任务级拆解 **17 个任务 > 15**（S2a 九项＝版本链／amend 前置／正式 glob／③类翻转／ScopeAmended 接线／仓储面断言／词表断言／S-3 闸／applyChange 删占位；S2b 八项＋出口闸＝`rt.amendScope` 同事务／两通道＋raise 的 main 侧 id 归位／桥／派生／`ScopePanel`／`DecisionCard` 留痕／L3 八针＋夹具／F1–F11）→ 按上条警语拆 **S2a／S2b**，两份 plan 落 `docs/superpowers/plans/2026-10-06-s2a-authorization-kernel.md`／`2026-10-06-s2b-wiring-presentation-gate.md`。边界＝**S2a**：`src/domain/**`＋`tests/static/**`＋域内 L1（新增 32 条，出口自证跑相关文件与双 tsc）；**S2b**：`src/main/**`＋`preload`/`types.d.ts`＋`src/renderer/**`＋L3（新增 9 条，含 B2 同事务两条）＋**S2 全出口闸在此单次过**（F1–F11）。DoD 条目 A–F 实体不变、不重分配，仅执行子批划分（属计划细化，非设计变更，不触发铁律②回退）。
 >
@@ -47,8 +47,8 @@
 - [ ] E1 **缘由三值可见**：作用域外／高影响清单命中／作用域修正 三类拍板卡在 UI 各有可见位置，呈现层不得吞项——`tests/interaction/decisionCard.interaction.ts`（≥3 条）
 - [ ] E2 **决议留痕可见**：批准／拒绝／选项 三值决议后卡片呈决议态；拒绝携理由时理由可见（理由可选，无值不得渲染空占位）；A5 的用户批准路径在本针可见（版本随「批准 ∧ 用户提交修正」推进＝案 A 两步流，ADR-030）——同文件（≥2 条）
 - [ ] E3 **作用域版本可溯呈现**：修正后当前版本可读、旧版本只读可查（I-8 只读可溯的呈现侧最小面）；未持久化态显式呈现不红（S1 F2 回归）——`tests/interaction/delegationLifecycle.interaction.ts`（≥1 条）
-- [ ] E4 `npx playwright test --project=interaction` **全绿**，本阶段新增用例 **≥8 条**
-- [ ] E5 **F-2 登记针偿清**（S1 出口审计→表 N 轴 6「C1 E2E 跨层延后 S2」）：忙时发起（在飞位占用）⇒ 拒方输入 ⇒ QueueList 出现可见位置的**端到端**断言入 `tests/interaction/delegationLifecycle.interaction.ts`（≥1 条）；补上后本阶段真轨 E2 仍按 blocked 处理（三缺口未认领，见边界）
+- [ ] E4 `npx playwright test --project=interaction` **全绿**，本阶段新增用例 **≥7 条**（原下限 8 含 E5；E5 延后 S4 ⇒ 下限随动 7＝E1 3＋E2 3＋E3 1，实落数由 stage-gate 现场数）
+- [ ] E5 **【blocked·延后 S4，用户 2026-10-06 裁＝ADR-033】** F-2 登记针（忙时发起⇒拒方输入⇒QueueList 可见的端到端断言）本阶段**不偿清**。理由＝端到端的前提不存在：`src/renderer/` 内无任何一处调用 `nf.turn.start`（`StreamBar.tsx:7` 的「发起流」只置本地 state），而输入／对话入口按本件边界节与详设 §11 排在 S4/S6——E5 原条文把偿清期限压在 S2，与同一文件的边界条款互相矛盾（缺陷在本契约件，不在实现）。表 N 轴 6 注记随之改「延后 S4」。
 
 ### F 段6 闸与状态类断言（逐条列，不合并）
 
@@ -57,7 +57,7 @@
 - [ ] F3 `npx eslint .` → 0 error
 - [ ] F4 `python3 tools/desens-scan.py`（仓库根）→ rc=0
 - [ ] F5 **G-1 归档防回流**：`tests/static/noLegacyImport.test.ts` 回归绿；自 S1 出口起该闸转「归档路径不得重现」的同源断言（计划 §4 G-1 扩面列），**本阶段不另立新闸**
-- [ ] F6 `docs/tests/coverage-matrix.md` 表 N：S2 承担行回填（轴 4 贯通面、轴 7 的 S2 列＝I-8／I-17／S-3、轴 6 的「C1 E2E 跨层延后 S2」注记转 ✅）；**S3–S7 承担的行保持 ⏳，不得预绿**
+- [ ] F6 `docs/tests/coverage-matrix.md` 表 N：S2 承担行回填（轴 4 贯通面、轴 7 的 S2 列＝I-8／I-17／S-3、轴 6 的「C1 E2E 跨层延后 S2」注记**改「延后 S4」**（不是转 ✅——本阶段未偿清，不得预绿；ADR-033））；**S3–S7 承担的行保持 ⏳，不得预绿**
 - [ ] F7 本 spec 的 `- [ ]` 全数勾绿或显式标 blocked＋理由（无沉默未跑项）；`stage-gate` 逐条留**本会话新鲜命令输出**
 - [ ] F8 决策日志同步：S2 内语义裁定→`docs/decisions/` 出 ADR＋索引行；无裁定则本项记「无」，不留空
 - [ ] F9 handoff CLI 落账：S2 闸结果、新增 pitfall、`next` 指向下一活；`exit`／`summary` 先 `--dry-run` 再整槽覆写
@@ -90,7 +90,7 @@
 - [ ] `apps/desktop/src/main/**`、`src/renderer/**`：授权域接线与决策点族呈现完整化（通道命名归段5）
 - [ ] `apps/desktop/tests/unit/**`：`scope.versionChain`／`scope.amend`／`scope.repoSurface`／`scope.covers`／`requiresApproval`（扩）／`decisionPoint`（扩）／`timeline.payloadKeys`（扩至 18）＋回归面
 - [ ] `apps/desktop/tests/static/s3HighImpactList.test.ts`：S-3 承载体（含可红 fixture）
-- [ ] `apps/desktop/tests/interaction/**`：`decisionCard.interaction.ts`（扩）＋`delegationLifecycle.interaction.ts`（E3／E5 两针）
+- [ ] `apps/desktop/tests/interaction/**`：`decisionCard.interaction.ts`（扩）＋`delegationLifecycle.interaction.ts`（E3 一针；E5 已随 ADR-033 延后 S4）
 - [ ] `docs/design/v1.0.0-s2-detailed-design.md`：段5 详设（本 spec 的下游，签名／通道／闸形态在此定）
 - [ ] `docs/superpowers/plans/`：S2 任务级拆解（writing-plans，开工前出，任务不得超出本 DoD 边界）
 - [ ] `docs/tests/coverage-matrix.md` 表 N 的 S2 行回填

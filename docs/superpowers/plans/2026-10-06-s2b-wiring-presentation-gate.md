@@ -177,7 +177,7 @@ docs/tests/coverage-matrix.md              # 表 N S2 行回填（F6）
 - [ ] **Step 3：跑绿** — `npx playwright test --project=interaction tests/interaction/decisionCard.interaction.ts`；预期 6 条全绿（含 S1 原有用例不红）。
 - [ ] **Step 4：commit** — `test(S2b): 决策卡 L3 缘由三值＋决议留痕六针（E1/E2）`。
 
-## Task 8：L3 版本可溯与 E5 端到端针（E3 1＋E5 1）＋夹具扩
+## Task 8：L3 版本可溯针（E3 1）＋夹具扩【E5 已随 ADR-033 延后 S4，用户 2026-10-06 裁】
 
 **Files:** Modify `tests/interaction/mockBridge.ts`（夹具，**不计用例**）、`tests/interaction/delegationLifecycle.interaction.ts`。
 **Interfaces:** Produces 域桥 `scope` 两方法假件＋`turn.start` 的 `into:'queue'` 分支。
@@ -190,11 +190,11 @@ docs/tests/coverage-matrix.md              # 表 N S2 行回填（F6）
   }
   ```
   并把 `d.scopeVersions` 加进夹具假数据的默认值表（`seq:1` 一条起步）。函数字段一律走 `extraInit`，**不经 `extra` 的 JSON 序列化**（坑 `p000105`：JSON 会静默吃掉函数）。
-- [ ] **Step 2：扩 `turn.start` 分支** — 现假件恒返 `{into:'turn'}`；改成按 `d.busy` 决定：`return d.busy ? { into: 'queue', itemId: 'i1' } : { into: 'turn', turnId: 't2' }`。
+- **N/A（ADR-033 延后 S4，本单不做）**＝`turn.start` 的 `busy` 分支：原为 E5 端到端针准备；E5 既延后 S4，本步不再有消费者。留此记录而不是删掉，防后来者以为漏做。
 - [ ] **Step 3：写 E3 针** — 注入两条版本（`seq1` 原始＋`seq2` 修正，`amendmentRef:'dp9'`），断言 `[data-testid="nf-scope-current"]` 显 `docs/**` ∧ `[data-testid="nf-scope-history"]` 内 `seq=1` 项只读可见 ∧ 未持久化提示件仍在（S1 F2 回归同针）。
-- [ ] **Step 4：写 E5 针（偿 S1 审计 F-2 登记针）** — `d.busy = true` 下用户发起输入 ⇒ 断言 `QueueList` 出现该项的**可见位置**（端到端：桥调用 `turn:start` 被记 ∧ DOM 有该行），并断言不是静默丢弃（列表长度 +1）。
-- [ ] **Step 5：跑绿** — `npx playwright test --project=interaction`；预期**全绿、E4 下限 ≥8 条新增达成**（本文件 2＋决策卡 6）。
-- [ ] **Step 6：commit** — `test(S2b): 版本可溯呈现＋忙时入队端到端针（E3/E5），mockBridge 域桥与 queue 分支扩面`。
+- **N/A（ADR-033 延后 S4，本单不做）**＝E5 端到端针：前提不存在＝`src/renderer/` 内无任何 `nf.turn.start` 调用点，「用户发起输入」这件事在当前 UI 里没有入口（`StreamBar.tsx:7` 只置本地 state）；强行写＝假端到端。
+- [ ] **Step 5：跑绿** — `npx playwright test --project=interaction`；预期**全绿**；E4 下限随 ADR-033 改为 **≥7 条**（决策卡 6＋本文件 1）。实况＝决策卡 9 passed（含 S1 三条 C6）／全项目 21 passed。。
+- [ ] **Step 6：commit** — `test(S2b): E3 版本可溯呈现针（scope 假件落 DOMAIN_SEED）`。
 
 ## Task 9：段6 出口闸与状态类断言（F1–F11）
 
@@ -212,7 +212,7 @@ docs/tests/coverage-matrix.md              # 表 N S2 行回填（F6）
 - [ ] **Step 3：F6 表 N 回填** — `docs/tests/coverage-matrix.md`：轴 4 贯通面、轴 7 的 S2 列（I-8／I-17／S-3）、轴 6 的「C1 E2E 跨层延后 S2」注记转 ✅；**S3–S7 行保持 ⏳**（不得预绿）。
 - [ ] **Step 4：F7 逐条勾** — 跑 `stage-gate` 对 `docs/design/stage-specs/V1-S2-authorization-scope.md` 的 `- [ ]` 全数执行：绿则勾，跑不了显式标 blocked＋理由（真轨 E2＝blocked，理由＝三缺口未认领＋无 NF_* Key）。
 - [ ] **Step 5：F8/F9/F10 落账** — S2 内语义裁定已存在＝ADR-030（＋流程纪律 ADR-031，不占本闸计数）；`.handoff` 走 CLI（`close`／`set exit --dry-run` 先预览）；commit 到工作分支，**push 与 CI 绿以用户逐批授权为前提**，未授权则 F10 记 blocked 不判红。
-- [ ] **Step 6：F11 出口异构审计** — 按 **ADR-031** 派单（一单一型、判据 ≤3、`--max-turns` ≤15、目标 10 分钟、跑脚本必带执行权限＋一次性 worktree）；代码面 S2 出口建议拆：INC-A＝A 组域判据对详设、INC-B＝B/C 组（事件与谓词）、INC-C＝D/E 组（闸与呈现）、INC-D＝**主会话声称的实测复跑**（L3 型，必异体）。报告落 `docs/audits/s2-exit-heterogeneous-audit-2026-10-*.md`，主会话署名采纳，**结论由用户亲裁**。
+- [ ] **Step 6：F11 出口异构审计** — 按 **ADR-031** 派单（一单一型、判据 ≤3、`--max-turns` ≤15、目标 10 分钟、跑脚本必带执行权限＋一次性 worktree）；代码面 S2 出口建议拆：INC-A＝A 组域判据对详设、INC-B＝B/C 组（事件与谓词）、INC-C＝D/E 组（闸与呈现）、INC-D＝**主会话声称的实测复跑**（L3 型，必异体）；INC-E＝**契约件内部自相检查**（新增，源＝ADR-033 的教训：DoD 条目与边界节／详设 §11 认领面是否互相打架——E5 那次就是边界节排除、DoD 必偿，10 单出口异构审没抓到这一类）。报告落 `docs/audits/s2-exit-heterogeneous-audit-2026-10-*.md`，主会话署名采纳，**结论由用户亲裁**。
 
 ## Self-Review（本 plan 对契约的覆盖核账）
 
