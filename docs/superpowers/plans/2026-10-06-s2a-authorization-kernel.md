@@ -2,7 +2,7 @@
 
 > 由 writing-plans 出，2026-10-06。契约源（不得超其边界）＝`docs/design/stage-specs/V1-S2-authorization-scope.md`（DoD A–F 十一组，本 plan 只承 **S2a 面**＝A1–A7 域面＋B1/B3＋C1/C2/C3 谓词面＋D1–D3；**B2 同事务两条＋E 组呈现＋F 组段6 出口闸全归 S2b**）＋接口 `docs/design/v1.0.0-s2-detailed-design.md` **v0.4**（签名以此为准，用户 2026-10-06 亲裁放行）＋段3 `03-domain-tactics.md` frozen v1.3＋ADR-030（案 A）。执行走 executing-plans，逐任务 TDD。
 
-**Goal:** S2a 只在**领域层与静态闸**落地作用域版本链与 `AmendScope`：`Scope.amend()`＋三层深冻结＋正式 glob＋`requiresApproval` ③类翻转＋`ScopeAmendedPayload` 接线＋S-3 唯一源闸＋仓储面/词表两条防漂移断言；vitest 用例 **39 条**＝A 组 22＋B1 1＋C 组 12＋D 组 3＋词表 1（契约件 F2 下限 40 的余下 2 条＝B2 同事务，归 S2b），**不碰 main/renderer/preload**（那三面归 S2b）。
+**Goal:** S2a 只在**领域层与静态闸**落地作用域版本链与 `AmendScope`：`Scope.amend()`＋三层深冻结＋正式 glob＋`requiresApproval` ③类翻转＋`ScopeAmendedPayload` 接线＋S-3 唯一源闸＋仓储面/词表两条防漂移断言；vitest 用例 **40 条**＝A 组 23＋B1 1＋C 组 12＋D 组 3＋词表 1（契约件 F2 下限 40 的余下 2 条＝B2 同事务，归 S2b），**不碰 main/renderer/preload**（那三面归 S2b）。
 
 **Architecture:** 纯领域（`src/domain/authorization/**`＋`src/domain/spec/**`＋`src/domain/timeline.ts`），零 React、零 electron import；内存态（真持久化＝S3）；版本追加只走聚合口（仓储不理解版本链，段3 §7）；事件经 `TimelineRepo.append` 唯一机制口（I-2）；Spec＝纯谓词不收决议不收仓储（段3 §8 头注）。
 
@@ -25,7 +25,7 @@ apps/desktop/src/domain/timeline.ts                   # 改：ScopeAmendedPayloa
 apps/desktop/src/domain/spec/requiresApproval.ts      # 改：③类 return true（全外延三支序）
 apps/desktop/src/domain/service/applyChange.ts        # 删：scopeCheckResult「未判（修正分支→S2）」占位三元
 tests/unit/scope.versionChain.test.ts                 # 新（A1 4＋A2 3＋A3 2＝9）
-tests/unit/scope.amend.test.ts                        # 新（A4 4＋A5 2＝6；B2 2 条归 S2b 追加同文件）
+tests/unit/scope.amend.test.ts                        # 新（A4 4＋4b＋A5 2＝7；B2 2 条归 S2b 追加同文件）
 tests/unit/scope.repoSurface.test.ts                  # 新（A6 1）
 tests/unit/scope.covers.test.ts                       # 新（A7 6）
 tests/unit/scope.vocabulary.test.ts                   # 新（F-14 双源词表 1）
@@ -35,7 +35,7 @@ tests/unit/timeline.payloadKeys.test.ts               # 扩（B1 新增独立 it
 tests/static/s3HighImpactList.test.ts                 # 新（D1 1＋D2 2）
 ```
 
-**计数账（S2a）**：vitest 新增 **39 条**＝A 组 22（T1 9＋T2 6＋T3 6＋T6 1）＋B1 1＋C 组 12（T4 C1 3＋C2 6＋C3 3）＋D 组 3＋词表 1。**S2b 另加 2 条**（B2 同事务）⇒ 合计 **41**＝契约件 F2 下限 40 满足且可逐名点出。L3 8 条走 playwright（E4 下限），**不重复计入 F2**；`tests/unit/ipc.channels.test.ts` 与 mockBridge 夹具改动按 §9 纪律**不计下限**。
+**计数账（S2a）**：vitest 新增 **40 条**＝A 组 23（T1 9＋T2 7＋T3 6＋T6 1）＋B1 1＋C 组 12（T4 C1 3＋C2 6＋C3 3）＋D 组 3＋词表 1。**S2b 另加 2 条**（B2 同事务）⇒ 合计 **41**＝契约件 F2 下限 40 满足且可逐名点出。L3 8 条走 playwright（E4 下限），**不重复计入 F2**；`tests/unit/ipc.channels.test.ts` 与 mockBridge 夹具改动按 §9 纪律**不计下限**。
 
 **执行序（编译前置，逐字核过 `timeline.ts`）＝ 5 → 1 → 2 → 3 → 4 → 6 → 7 → 8 → 9**。Task 1/2 的 `amend` 要返回 `draft: { type: 'ScopeAmended', detail: {...} }`，而 `PayloadMap['ScopeAmended']` 现状＝`ScopeAmendedPayload = never`——对 `never` 赋对象字面量过不了 tsc（实测于本会话读码，非推测）。Task 5 的载荷具名化因此是 1/2 的**硬前置**，不随文件里的物理序号。
 
@@ -69,10 +69,11 @@ tests/static/s3HighImpactList.test.ts                 # 新（D1 1＋D2 2）
 
 ## Task 2：AmendScope 命令前置（A4／A5 域面）
 
-**Files:** Modify `src/domain/authorization/Scope.ts`；Test `tests/unit/scope.amend.test.ts`（新建 6 条；**B2 两条留 S2b 追加进本文件**）。
+**Files:** Modify `src/domain/authorization/Scope.ts`；Test `tests/unit/scope.amend.test.ts`（新建 7 条＝A4 四条＋**4b 缘由不符正面用例**＋A5 两条；**B2 两条留 S2b 追加进本文件**）。
 **Interfaces:** Consumes `DomainError`（`import { DomainError } from '../domainError.js'`）、`EventDraft`；Produces `amend` 的三支前置与 `'I-17'`/`'I-8'` 错误码。
 
-- [ ] **Step 1：写失败测（A4 四条）** — ①无决议：`expect(() => scope.amend(undefined as unknown as DecisionPoint, entries, ts)).toThrow(DomainError)`；②未决决议（只 raise 不 resolve）⇒ 抛；③决议值＝`'拒绝'` ⇒ 抛；④`'批准'` ⇒ 不抛且返回 `{scope,draft}` 且 `draft.type === 'ScopeAmended'`。每条附加断言＝**抛出的那一支 `scope.chain.length` 不变**（违反映零写入）。
+- [x] **Step 1：写失败测（A4 四条）** — ①无决议：`expect(() => scope.amend(undefined as unknown as DecisionPoint, entries, ts)).toThrow(DomainError)`；②未决决议（只 raise 不 resolve）⇒ 抛；③决议值＝`'拒绝'` ⇒ 抛；④`'批准'` ⇒ 不抛且返回 `{scope,draft}` 且 `draft.type === 'ScopeAmended'`。每条附加断言＝**抛出的那一支 `scope.chain.length` 不变**（违反映零写入）。
+  **＋4b（执行期由主会话复核补）**＝`缘由＝作用域外 ∧ 决议已批准` ⇒ 抛 `I-17` 且链不长。补因：①支的真实语义「缘由不符⇒拒」当时无正面用例（第 1 条只是以 `dp.resolution` 读 `undefined` 撞 TypeError 顺带杀到①支）；**变异实测**＝删①支后第 1 条与 4b 同时红，两条都是活用例。
 - [ ] **Step 2：跑 FAIL** — 预期红。
 - [ ] **Step 3：实现 amend** —
   ```ts
@@ -95,7 +96,7 @@ tests/static/s3HighImpactList.test.ts                 # 新（D1 1＋D2 2）
   ```
   注：`ts` 形参在域内不进 payload（段3 §5 三键禁增禁减，`ts` 由 `log` 侧补）——保留形参是为 §2 签名逐字一致；不用它就在参数名前加 `_` 以免 eslint 报未用。
 - [ ] **Step 4：跑 A5 两条** — `requestedBy:'AI 提请'` 的已批准决议 ⇒ amend **仍成功**（批准权仅用户判的是**决议值**，提请者不影响）；另一条＝`'选项'` 决议值 ⇒ 抛 I-17 且链不长。
-- [ ] **Step 5：跑 PASS** — `npx vitest run tests/unit/scope.amend.test.ts`；预期 6 绿。
+- [ ] **Step 5：跑 PASS** — `npx vitest run tests/unit/scope.amend.test.ts`；预期 7 绿。
 - [ ] **Step 6：commit** — `feat(S2a): AmendScope 三支前置（I-17 缘由/批准 ∧ I-8 决议查重），违例零写入（A4/A5）`。
 
 ## Task 3：正式 glob 分流（A7，偿清 `ponytail:` 天花板）
@@ -212,8 +213,8 @@ npx vitest run tests/unit/scope.versionChain.test.ts tests/unit/scope.amend.test
   tests/unit/requiresApproval.test.ts tests/unit/decisionPoint.test.ts tests/unit/applyChange.test.ts \
   tests/unit/timeline.payloadKeys.test.ts tests/unit/timeline.eventCatalog.test.ts \
   tests/unit/timeline.publishDiscipline.test.ts tests/static/s3HighImpactList.test.ts
-npx vitest run            # 全量：S1 既有 187 绿不红（加本次 39 ⇒ 226）
+npx vitest run            # 全量：S1 既有 188 绿不红（加本次 40 ⇒ 228）
 npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit   # 0 error
 npx eslint . && python3 tools/desens-scan.py                                   # 0 / rc=0
 ```
-预期：S2a 新增 **39 条**全绿；`ScopeAmended` 的 `never` 仅余 4 事件（B3 不预绿）；**B2 两条与 E 组 8 条 L3、F 组表 N 回填与出口异构审计在 S2b**。
+预期：S2a 新增 **40 条**全绿；`ScopeAmended` 的 `never` 仅余 4 事件（B3 不预绿）；**B2 两条与 E 组 8 条 L3、F 组表 N 回填与出口异构审计在 S2b**。
