@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, it, expect } from 'vitest'
 import { DecisionPoint } from '../../src/domain/authorization/DecisionPoint'
 import { Scope, type ScopeEntry } from '../../src/domain/authorization/Scope'
@@ -79,6 +80,21 @@ describe('Scope 版本链 A3：旧版本只读可溯（三层深冻结）', () =
     expect(next.scope.chain[0].entries).toEqual([{ kind: '仓库', pattern: 'src/**' }])
   })
 
+  // 契约件 A3 的字面要求是「就地改写旧版本的代码路径命中数＝0（**静态断言**，与 S-1 同族承载体）」。
+  // 此前只有运行时 isFrozen 两支＝A3 半做（审计 F-2）：新增一条源码形态扫描补上静态面。
+  it('10. 静态面：聚合源码内不存在就地改写版本链或旧版本条目的赋值形态', () => {
+    const src = readFileSync(
+      new URL('../../src/domain/authorization/Scope.ts', import.meta.url),
+      'utf-8',
+    )
+    const inPlace = [
+      /\bchain_\s*\[[^\]]*\]\s*=[^=>]/, // chain_[i] = ...
+      /\.entries\s*\[[^\]]*\]\s*=[^=>]/, // x.entries[i] = ...
+      /\bentries\.push\(/, // 就地追加
+    ]
+    for (const re of inPlace) expect(src).not.toMatch(re)
+    expect(src).toContain('const next = new Scope(') // 追加只能走新建实例
+  })
   it('9. 三层深冻结：version／entries／entry 各冻结，改写尝试不生效', () => {
     const next = base().amend(approvedDp('dp1'), docs, TS)
     const v0 = next.scope.chain[0]

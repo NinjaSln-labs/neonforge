@@ -104,6 +104,21 @@ describe('Scope.amend A5：批准权仅用户判的是决议值', () => {
     expect(next.draft.type).toBe('ScopeAmended')
   })
 
+  // 契约件 A5 前半的字面＝「requestedBy＝AI 提请 只产生 DecisionRaised，版本链长度不变」。
+  // 此前只测了后半支（提请者不影响决议效力），前半支无承载（审计 F-3）——补上，两支分开各一条。
+  it('6b. AI 提请只产生 DecisionRaised 草稿，作用域版本链不动（提请≠推进）', () => {
+    const scope = base()
+    const { raised } = DecisionPoint.raise({
+      decisionPointId: 'dpAI',
+      delegationId: 'd1',
+      turnId: 't1',
+      requestReason: { reason: '作用域修正', operation: '扩到 docs', requestedBy: 'AI 提请' },
+    })
+    expect(raised.type).toBe('DecisionRaised')
+    expect(scope.chain.length).toBe(1)
+    expect(scope.version).toBe(1)
+  })
+
   it('6. 决议值＝选项 ⇒ DomainError I-17，链长仍 1', () => {
     const scope = base()
     const dp = raiseDp('dp1')
