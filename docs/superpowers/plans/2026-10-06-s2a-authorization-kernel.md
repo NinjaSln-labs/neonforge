@@ -2,7 +2,7 @@
 
 > 由 writing-plans 出，2026-10-06。契约源（不得超其边界）＝`docs/design/stage-specs/V1-S2-authorization-scope.md`（DoD A–F 十一组，本 plan 只承 **S2a 面**＝A1–A7 域面＋B1/B3＋C1/C2/C3 谓词面＋D1–D3；**B2 同事务两条＋E 组呈现＋F 组段6 出口闸全归 S2b**）＋接口 `docs/design/v1.0.0-s2-detailed-design.md` **v0.4**（签名以此为准，用户 2026-10-06 亲裁放行）＋段3 `03-domain-tactics.md` frozen v1.3＋ADR-030（案 A）。执行走 executing-plans，逐任务 TDD。
 
-**Goal:** S2a 只在**领域层与静态闸**落地作用域版本链与 `AmendScope`：`Scope.amend()`＋三层深冻结＋正式 glob＋`requiresApproval` ③类翻转＋`ScopeAmendedPayload` 接线＋S-3 唯一源闸＋仓储面/词表两条防漂移断言；vitest 用例 **40 条**＝A 组 23＋B1 1＋C 组 12＋D 组 3＋词表 1（契约件 F2 下限 40 的余下 2 条＝B2 同事务，归 S2b），**不碰 main/renderer/preload**（那三面归 S2b）。
+**Goal:** S2a 只在**领域层与静态闸**落地作用域版本链与 `AmendScope`：`Scope.amend()`＋三层深冻结＋正式 glob＋`requiresApproval` ③类翻转＋`ScopeAmendedPayload` 接线＋S-3 唯一源闸＋仓储面/词表两条防漂移断言；vitest 用例 **39 条新增**（A 组 23＋B1 1＋C 组 11＋D 组 3＋词表 1）＋1 条翻转用例；计数口径见「计数账」（契约件 F2 下限 40 的余下 2 条＝B2 同事务，归 S2b），**不碰 main/renderer/preload**（那三面归 S2b）。
 
 **Architecture:** 纯领域（`src/domain/authorization/**`＋`src/domain/spec/**`＋`src/domain/timeline.ts`），零 React、零 electron import；内存态（真持久化＝S3）；版本追加只走聚合口（仓储不理解版本链，段3 §7）；事件经 `TimelineRepo.append` 唯一机制口（I-2）；Spec＝纯谓词不收决议不收仓储（段3 §8 头注）。
 
@@ -35,7 +35,7 @@ tests/unit/timeline.payloadKeys.test.ts               # 扩（B1 新增独立 it
 tests/static/s3HighImpactList.test.ts                 # 新（D1 1＋D2 2）
 ```
 
-**计数账（S2a）**：vitest 新增 **40 条**＝A 组 23（T1 9＋T2 7＋T3 6＋T6 1）＋B1 1＋C 组 12（T4 C1 3＋C2 6＋C3 3）＋D 组 3＋词表 1。**S2b 另加 2 条**（B2 同事务）⇒ 合计 **41**＝契约件 F2 下限 40 满足且可逐名点出。L3 8 条走 playwright（E4 下限），**不重复计入 F2**；`tests/unit/ipc.channels.test.ts` 与 mockBridge 夹具改动按 §9 纪律**不计下限**。
+**计数账（S2a）**：vitest 新增 **39 条**＝A 组 23（T1 9＋T2 7＋T3 6＋T6 1）＋B1 1＋C 组 11＋D 组 3＋词表 1。**口径订正（执行期实况）**：C1 的第①条落在既有那条「作用域修正分支 ⇒ false」的**断言翻转**上（用例数不增），故 C 组新增＝11 而非 12；S2a 39＋S2b 2＝**41**，契约件 F2 下限 40 仍满足且逐名可点。**S2b 另加 2 条**（B2 同事务）⇒ 合计 **41**＝契约件 F2 下限 40 满足且可逐名点出。L3 8 条走 playwright（E4 下限），**不重复计入 F2**；`tests/unit/ipc.channels.test.ts` 与 mockBridge 夹具改动按 §9 纪律**不计下限**。
 
 **执行序（编译前置，逐字核过 `timeline.ts`）＝ 5 → 1 → 2 → 3 → 4 → 6 → 7 → 8 → 9**。Task 1/2 的 `amend` 要返回 `draft: { type: 'ScopeAmended', detail: {...} }`，而 `PayloadMap['ScopeAmended']` 现状＝`ScopeAmendedPayload = never`——对 `never` 赋对象字面量过不了 tsc（实测于本会话读码，非推测）。Task 5 的载荷具名化因此是 1/2 的**硬前置**，不随文件里的物理序号。
 
@@ -46,7 +46,8 @@ tests/static/s3HighImpactList.test.ts                 # 新（D1 1＋D2 2）
 - **已合入**：T5 `ba9bf17`（载荷 3 键＋发射 18）／T1 `ffa822a`（版本链＋三层冻结）／T2 `968224c`（I-17 两支＋主会话补 4b）／T3＋T6 `见 git log`（正式 glob／仓储面两面断言）／T7（词表同源断言）。
 - **执行序**＝5→1→2→3→6→7→4→8→9（编译前置与文件冲突决定，见上「执行序」段）。
 - **执行者**＝`qodercn@Qwen3.8-Max --reasoning-effort low`（ADR-031 D4c；一次性 worktree `.scratch/wt-t*/`，主会话复核 diff＋亲跑闸后合入，外部 agent 零 commit）。
-- **闸实况**（主会话亲跑，cwd `apps/desktop`）：合入 T7 后 `vitest 212 passed｜4 skipped`、双 tsc 0 error、eslint 0 error。
+- **闸实况**（主会话亲跑，cwd `apps/desktop`）：S2a 出口全量 **226 passed｜4 skipped**、双 tsc 0 error、eslint 0 error、`grep -rn 未判 src tests` 零命中；12 个 S2a 相关测试文件单独再跑＝**87 passed**。
+- **S2a 完结**：T1–T9 全部合入（`ba9bf17`→`f794c5e`），外部 agent 零 commit、零越界改动；三处 plan 缺陷执行期回补。
 - **plan 缺陷由执行期回补三处**：夹具 `resolve()` 返回值形／`freezeVersion` 的 `readonly[]` 编译冲突／T2 缺①支正面用例（变异实测已证）。
 
 ## Task 1：Scope 版本链与三层深冻结（A1／A2／A3）
@@ -221,8 +222,8 @@ npx vitest run tests/unit/scope.versionChain.test.ts tests/unit/scope.amend.test
   tests/unit/requiresApproval.test.ts tests/unit/decisionPoint.test.ts tests/unit/applyChange.test.ts \
   tests/unit/timeline.payloadKeys.test.ts tests/unit/timeline.eventCatalog.test.ts \
   tests/unit/timeline.publishDiscipline.test.ts tests/static/s3HighImpactList.test.ts
-npx vitest run            # 全量：S1 既有 188 绿不红（加本次 40 ⇒ 228）
+npx vitest run            # 全量实况＝226 passed｜4 skipped（S1 既有 188＋S2a 新增 39 − 1 条既有用例被翻正复用）
 npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit   # 0 error
 npx eslint . && python3 tools/desens-scan.py                                   # 0 / rc=0
 ```
-预期：S2a 新增 **40 条**全绿；`ScopeAmended` 的 `never` 仅余 4 事件（B3 不预绿）；**B2 两条与 E 组 8 条 L3、F 组表 N 回填与出口异构审计在 S2b**。
+预期：S2a 新增 **39 条**全绿；`ScopeAmended` 的 `never` 仅余 4 事件（B3 不预绿）；**B2 两条与 E 组 8 条 L3、F 组表 N 回填与出口异构审计在 S2b**。
