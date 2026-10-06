@@ -7,6 +7,7 @@ import DecisionCard from './DecisionCard'
 import EvidenceList from './EvidenceList'
 import AcceptRejectBar from './AcceptRejectBar'
 import QueueList from './QueueList'
+import ScopePanel from './ScopePanel'
 import StreamBar from './StreamBar'
 import { useDomainView } from './useDomainView'
 
@@ -48,6 +49,7 @@ export default function DelegationCenter() {
         <DecisionCard decision={view.decision} onResolve={resolveDecision} />
         <EvidenceList evidence={view.evidence} onInspect={inspectEvidence} />
         <QueueList items={view.queue} />
+        <ScopePanel delegationId={selectedId} view={view} />
         <AcceptRejectBar delegationId={selectedId} onAccept={accept} onReject={reject} />
       </div>
     </div>
