@@ -1,4 +1,4 @@
-> 本件＝**外派起草原始件**（非审计报告，非裁定）：ADR-031 的未编辑草案全文，作者＝`qodercn@Qwen3.8-Max`（任务书＝`/tmp/nf-audit-split-brief.md`，未入库），产出走 stdout、仓内零改动（agent-dispatch 硬约束 2）。**权威面＝`docs/decisions/031-agent-audit-task-splitting.md`（主会话署名采纳件）**；本件只留「采纳时改了什么」的可核底稿，差异＝草案编号占位 `0XX`→031、章节题改 Nygard 英名、外部 context rot 数据降级标注为二手转述并补来源链接、追加 L3 窄单实例与本件互引两处。
+> 本件＝**外派起草原始件**（非审计报告，非裁定）：ADR-031 的未编辑草案全文，作者＝`qodercn@Qwen3.8-Max`（任务书＝`/tmp/nf-audit-split-brief.md`，未入库），产出走 stdout、仓内零改动（agent-dispatch 硬约束 2）。**权威面＝`docs/decisions/031-agent-audit-task-splitting.md`（主会话署名采纳件）**；本件只留「采纳时改了什么」的可核底稿，差异＝草案编号占位 `0XX`→031、章节题改 Nygard 英名、外部 context rot 数据降级标注为二手转述并补来源链接、追加 L3 窄单实例与本件互引；**采纳失职一处**＝我漏抄了草案末「一页派单前 checklist」整节（v1.1 已补回，见 ADR-031 同名节）；**v1.1 增量**＝用户同日二次细化「尽量 10 分钟以内但有些单块会长」⇒ ADR 新增 D2b 三档墙钟与 D3 两级止损，草案本身不改（底稿保原样）。
 
 技能文件在软链外无法直接读取，但任务书已给出其四条硬约束与首派流程要点，足以对齐措辞。以下为 ADR 草案全文（未写任何文件）：
 
