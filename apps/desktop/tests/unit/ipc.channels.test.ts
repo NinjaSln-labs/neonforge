@@ -8,6 +8,7 @@ import {
   type IpcMainLike,
 } from '../../src/main/ipcDomain'
 import { getRuntime, resetRuntime, type DomainRuntime } from '../../src/main/domainRuntime'
+import { Scope } from '../../src/domain/authorization/Scope'
 import { EvidenceItem } from '../../src/domain/evidence/EvidenceItem'
 import { DomainError } from '../../src/domain/domainError'
 
@@ -375,5 +376,34 @@ describe('scope 通道（S2b Task 2）', () => {
       ),
     ).toBe('other')
     expect(rt.scopes.findByDelegation('d1')?.version).toBe(1)
+  })
+  // 案 A（ADR-030）两步流的 wiring 级证据：批准本身不自额推进版本链，必须再有「用户提交 scope:amend」。
+  // 这条是契约件 A5/E2 的真正承载点——风险面在 decision:resolve 处理器里被顺手接上 amend，只有走通道才测得到。
+  it('A5：resolve(批准) 后版本仍 1 且无 ScopeAmended；其后 scope:amend 才推进到 2（两步流）', () => {
+    const { handlers, evt } = harness()
+    rt.scopes.save(Scope.initial('d1', [{ kind: '仓库', pattern: 'src/**' }]))
+    const raised = call<{ decisionPointId: string }>(handlers['decision:raise'], evt, {
+      delegationId: 'd1',
+      turnId: 't1',
+      requestReason: {
+        reason: '作用域修正',
+        operation: '扩到 docs',
+        requestedBy: '用户提请',
+      },
+    })
+    call(handlers['decision:resolve'], evt, {
+      decisionPointId: raised.decisionPointId,
+      value: '批准',
+    })
+    expect(rt.scopes.findByDelegation('d1')?.version).toBe(1)
+    expect(rt.timeline.since(1).filter((e) => e.type === 'ScopeAmended')).toHaveLength(0)
+
+    const out = call<{ version: number }>(handlers['scope:amend'], evt, {
+      delegationId: 'd1',
+      decisionPointId: raised.decisionPointId,
+      entries: [{ kind: '仓库', pattern: 'docs/**' }],
+    })
+    expect(out.version).toBe(2)
+    expect(rt.timeline.since(1).filter((e) => e.type === 'ScopeAmended')).toHaveLength(1)
   })
 })
