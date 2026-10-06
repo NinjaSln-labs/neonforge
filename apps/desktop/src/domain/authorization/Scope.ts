@@ -59,7 +59,7 @@ export class Scope {
   // 作用域内读数（RequiresApprovalSpec 的①类判据输入）：条目资源类型相等 ∧ 模式命中。
   covers(kind: ResourceKind, resource: string): boolean {
     return this.chain_[this.chain_.length - 1].entries.some(
-      (e) => e.kind === kind && matches(e.pattern, resource),
+      (e) => e.kind === kind && matches(e.kind, e.pattern, resource),
     )
   }
 
@@ -95,9 +95,24 @@ export class Scope {
   }
 }
 
-// ponytail: S1 命中判据＝'**' 全放行 ∨ 尾随 '/**' 前缀 ∨ 字面相等；正式 glob 语义随 S2 作用域修正批落地。
-function matches(pattern: string, resource: string): boolean {
+const segEq = (p: string, r: string) =>
+  p === r ||
+  (p.includes('*') &&
+    new RegExp('^' + p.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*') + '$').test(r))
+
+// 按资源类型分流；命令支不收 argv（首 token 由调用方传入，领域层不做 shell 解析）。
+function matches(kind: ResourceKind, pattern: string, resource: string): boolean {
   if (pattern === '**') return true
-  if (pattern.endsWith('/**')) return resource.startsWith(pattern.slice(0, -2))
-  return resource === pattern
+  if (kind === '命令')
+    return pattern.endsWith('*') ? resource.startsWith(pattern.slice(0, -1)) : resource === pattern
+  if (kind === '网络') {
+    if (!pattern.startsWith('*.')) return resource === pattern
+    const dot = pattern.slice(1) // '*.github.com' → '.github.com'（点即边界）
+    return resource.endsWith(dot) && resource.length > dot.length
+  }
+  const ps = pattern.split('/')
+  const rs = resource.split('/')
+  return pattern.endsWith('/**')
+    ? rs.length >= ps.length - 1 && ps.slice(0, -1).every((p, i) => segEq(p, rs[i]))
+    : ps.length === rs.length && ps.every((p, i) => segEq(p, rs[i]))
 }
