@@ -22,6 +22,7 @@
 6. 无豁免通道：一切变更走流水线；小修补（typo/脱敏/格式）从段 6 进入，段 6 闸与记录照走。
 7. 外部 agent 调遣走 agent-dispatch 技能（软链外挂；机制全文见技能，权威源 ADR-026 D3）。产出过段6闸（见「## 命令」）才合入，合并权在主会话。任务书只给已入库工件路径；凭据与 `.handoff/`、`.scratch/` 不给。当前主不审本会话亲笔（当前主可轮换）。
 8. 方向问题给建议并等用户裁定后执行；手段问题与既定目标无冲突直接做，不逐项请示。**流程已明确给出指导的（阶段闸口、DoD 判据、出口审计、纪律条款所要求的动作）直接按流程推进，不停下来征求**——停下来问＝把该做的事变成一次往返；只有流程设计本身有缺口或矛盾才报用户裁定（此时走铁律②回退，不自创豁免）。
+9. 段6 内循环有**码审**（ADR-032，用户 2026-10-06 裁）：每个实现切片合入后、段6 出口闸前，派异构 agent 跑 Standards＋Spec 两轴审查，**对象含主会话亲笔**；finding 由主会话逐条署名采纳／驳回并留理由，成立项修入后**复跑该切片闸**，报告落 `docs/reviews/`，**结论用户亲裁**。用户不逐行复核 diff；审查者资格照流程 7（同源不审亲笔）与 ADR-031 拆单上限。它不替代 `stage-gate` 与出口审计——三者判据不重叠。
 
 ## 命令
 
@@ -46,12 +47,13 @@ python3 tools/desens-scan.py --selftest                                  # 脱�
 3. 实现计划（writing-plans 产物）→ `docs/superpowers/plans/`。
 4. 语义裁定与流程硬闸全文 → `docs/decisions/`（索引 `000-decision-log.md`）。
 5. 审计报告（横切独立审计产物）→ `docs/audits/`。
-6. 覆盖矩阵与追溯登记 → `docs/tests/coverage-matrix.md`。
-7. Timeline 事件注册表 → `apps/desktop/src/domain/timeline.ts`。
-8. 交接台账经验汇总（可迁移部分，属经验不属依据）→ `docs/experience/`。
-9. 本机草稿与中间产物 → `.scratch/`（不入库）。
-10. 只读经验层（不得编辑、不作依据，新版从零设计＝ADR-026）：旧设计文在 `docs/domain/`、`docs/product/` 原路径，冻结基线 be6e299 版在 `docs/frozen-be6e299/`（调阅等价 `git show be6e299:<路径>`），历史产品文档审计在 `docs/PRODUCT-DOC-AUDIT*`；索引与冻结评级见 `docs/neonforgeV1.0.0/ARCHIVE-INDEX.md`。
-11. 本地私有 → `.git/info/exclude` 列明；`.handoff/` 在内（禁止入库，调阅走 CLI：view/log/next/check）。
+6. 切片级码审报告（段6 内循环，ADR-032）→ `docs/reviews/`。
+7. 覆盖矩阵与追溯登记 → `docs/tests/coverage-matrix.md`。
+8. Timeline 事件注册表 → `apps/desktop/src/domain/timeline.ts`。
+9. 交接台账经验汇总（可迁移部分，属经验不属依据）→ `docs/experience/`。
+10. 本机草稿与中间产物 → `.scratch/`（不入库）。
+11. 只读经验层（不得编辑、不作依据，新版从零设计＝ADR-026）：旧设计文在 `docs/domain/`、`docs/product/` 原路径，冻结基线 be6e299 版在 `docs/frozen-be6e299/`（调阅等价 `git show be6e299:<路径>`），历史产品文档审计在 `docs/PRODUCT-DOC-AUDIT*`；索引与冻结评级见 `docs/neonforgeV1.0.0/ARCHIVE-INDEX.md`。
+12. 本地私有 → `.git/info/exclude` 列明；`.handoff/` 在内（禁止入库，调阅走 CLI：view/log/next/check）。
 
 ## 交接
 
