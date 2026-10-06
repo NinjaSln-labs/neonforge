@@ -44,7 +44,7 @@ docs/tests/coverage-matrix.md              # 表 N S2 行回填（F6）
 **Files:** Modify `src/main/domainRuntime.ts`；Test `tests/unit/scope.amend.test.ts`（**追加** B2 两条）。
 **Interfaces:** Consumes `rt.decisionPoints.findById`／`rt.scopes.{findByDelegation,save}`／`rt.log`／`rt.timeline.append`；Produces `amendScope(input): { version: number } | null`（`null`＝决议不在场/未批准/已用过）。
 
-- [ ] **Step 1：写失败测（B2 两条）** — ①happy：造委托＋已批准修正决议，`rt.amendScope({delegationId:'d1',decisionPointId:'dp1',entries:[{kind:'仓库',pattern:'docs/**'}]})` ⇒ 返回 `{version:2}`，且 `rt.timeline` 里 `ScopeAmended` 恰 1 条、`rt.scopes.findByDelegation('d1').version === 2`；②**tx 失败⇒链不长**：现 `InMemoryTimelineRepo.append` 的形参已核＝`append(event, tx?)`，体内 `record(event)` → `try { tx?.() } catch { this.log.rollbackTo(snap); throw }` → 成功才 `publish`（先落账后分发，B4）。故注入点＝**让 `rt.scopes.save` 抛**（`vi.spyOn(rt.scopes,'save').mockImplementation(()=>{throw new Error('boom')})`）⇒ 调 `amendScope` 抛，断言 `scopes.findByDelegation('d1').version` **仍＝1** ∧ `timeline` 里 `ScopeAmended` 计数＝**0**（回滚路径不发）。这与 S1 B3 用同一条事务包装（详设 §6）。
+- [ ] **Step 1：写失败测（B2 两条＋A5 一支）** — ①happy：造委托＋已批准修正决议，`rt.amendScope({delegationId:'d1',decisionPointId:'dp1',entries:[{kind:'仓库',pattern:'docs/**'}]})` ⇒ 返回 `{version:2}`，且 `rt.timeline` 里 `ScopeAmended` 恰 1 条、`rt.scopes.findByDelegation('d1').version === 2`；②**tx 失败⇒链不长**：现 `InMemoryTimelineRepo.append` 的形参已核＝`append(event, tx?)`，体内 `record(event)` → `try { tx?.() } catch { this.log.rollbackTo(snap); throw }` → 成功才 `publish`（先落账后分发，B4）。故注入点＝**让 `rt.scopes.save` 抛**（`vi.spyOn(rt.scopes,'save').mockImplementation(()=>{throw new Error('boom')})`）⇒ 调 `amendScope` 抛，断言 `scopes.findByDelegation('d1').version` **仍＝1** ∧ `timeline` 里 `ScopeAmended` 计数＝**0**（回滚路径不发）。这与 S1 B3 用同一条事务包装（详设 §6）。（详设 §6）。 **③A5 承载补针（码审 CR3 采纳，2026-10-06）**＝只 `resolve('批准')` 而**不调** `amendScope` ⇒ `scopes.findByDelegation(...).version` 仍＝1 ∧ timeline 里 `ScopeAmended` 计数＝0——案 A「批准本身不自额推进版本」在编排面的证据；契约件 A5 的「≥2 条」由本针与既有「提请者不影响」补齐
 - [ ] **Step 2：跑 FAIL** — `npx vitest run tests/unit/scope.amend.test.ts`；预期：红（`amendScope` 未定义）。
 - [ ] **Step 3：实现编排** — 在 `build()` 的 `rt` 字面量里加：
   ```ts
@@ -63,7 +63,7 @@ docs/tests/coverage-matrix.md              # 表 N S2 行回填（F6）
   },
   ```
   并在 `DomainRuntime` 接口补同名签名一行（`amendScope(input): { version: number } | null`）。`DomainError` 需在 `domainRuntime.ts` 顶部 import（`import { DomainError } from '../domain/domainError.js'`，路径按该文件现有 `../domain/...` 风格对齐）。
-- [ ] **Step 4：跑 PASS** — 同命令；预期 S2a 6 条＋B2 2 条全绿。
+- [ ] **Step 4：跑 PASS** — 同命令；预期该文件既有 9 条（S2a 7＋B2 2）＋本步新增 A5 一支＝**12 条全绿**。
 - [ ] **Step 5：commit** — `feat(S2b): rt.amendScope 编排＝决议事实消费＋聚合写与 append 同事务（B2，案 A）`。
 
 ## Task 2：`scope:chain`／`scope:amend` 两通道（A4/A5 回执面）
