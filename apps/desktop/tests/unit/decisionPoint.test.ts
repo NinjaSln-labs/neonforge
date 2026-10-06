@@ -53,6 +53,32 @@ describe('DecisionPoint（C2／I-3 归属唯一 + 决议幂等）', () => {
     expect(decisionPoint.resolution).toMatchObject({ value: '选项', option: '只删缓存' })
   })
 
+  // 缘由三值同走 I-3 归属守卫：三条各自 raise 的缘由不同，证③类（作用域修正）不另立一套。
+  it.each([
+    ['作用域外', { operation: 'etc/hosts 读取' }],
+    ['高影响清单命中', { operation: '删除文件' }],
+    ['作用域修正', { operation: '作用域扩到 src/**' }],
+  ] as const)('缘由=%s 缺归属对 ⇒ DomainError(I-3) 且不生成', (cause, over) => {
+    const base = {
+      ...full,
+      requestReason: { reason: cause, requestedBy: 'AI 提请' as const, ...over },
+    }
+    for (const broken of [
+      { ...base, delegationId: '' },
+      { ...base, turnId: '' },
+    ]) {
+      let raised = false
+      try {
+        DecisionPoint.raise(broken)
+      } catch (e) {
+        raised = true
+        expect(e).toBeInstanceOf(DomainError)
+        expect((e as DomainError).code).toBe('I-3')
+      }
+      expect(raised).toBe(true)
+    }
+  })
+
   it('findOpenBy 只返该归属对的未决项（仓储面）', () => {
     const repo = new InMemoryDecisionPointRepo()
     const a = DecisionPoint.raise(full).decisionPoint

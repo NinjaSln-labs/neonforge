@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { requiresApproval, type Operation } from '../../src/domain/spec/requiresApproval'
+import {
+  OPERATION_CATEGORIES,
+  requiresApproval,
+  type Operation,
+} from '../../src/domain/spec/requiresApproval'
 import { admissionCheck } from '../../src/domain/service/admissionCheck'
 import { Scope } from '../../src/domain/authorization/Scope'
 import { HIGH_IMPACT_LIST } from '../../src/domain/authorization/highImpactList'
@@ -48,14 +52,65 @@ describe('RequiresApprovalSpec（C6／I-7：作用域外 ∪ 清单命中）', (
     expect(requiresApproval(run({ hits: '安装/卸载依赖' }), scope, [])).toBe(false)
   })
 
-  it('作用域修正分支 ⇒ false（全外延→S2，不 throw）', () => {
+  it('③类翻转：作用域修正⇒恒真（修正必经拍板）', () => {
     expect(
       requiresApproval(
         access({ category: '作用域修正', resource: 'any' }),
         scope,
         HIGH_IMPACT_LIST,
       ),
-    ).toBe(false)
+    ).toBe(true)
+  })
+
+  it('类别闭集＝三支（不多不少）', () => {
+    expect(OPERATION_CATEGORIES).toEqual(['资源访问', '命令执行', '作用域修正'])
+  })
+
+  // ③类不查决议：形参面里没有决议／DecisionPoint（三形参 op, scope, list）。
+  // 判「拍板够不够」在 Scope.amend 前置，两处不同源＝防双源。
+  it('③类不查决议：谓词三形参，决议不在其面', () => {
+    expect(requiresApproval.length).toBe(3)
+  })
+})
+
+describe('三类并集真值表（①作用域外 ∪ ②清单命中 ∪ ③作用域修正）', () => {
+  it('1 作用域外 ∧ 未命中 ∧ 非修正 ⇒ true', () => {
+    expect(requiresApproval(access({ resource: 'etc/hosts' }), scope, HIGH_IMPACT_LIST)).toBe(true)
+  })
+
+  it('2 作用域外 ∧ 命中清单 ∧ 非修正 ⇒ true', () => {
+    expect(
+      requiresApproval(
+        access({ resource: 'etc/hosts', hits: '删除文件' }),
+        scope,
+        HIGH_IMPACT_LIST,
+      ),
+    ).toBe(true)
+  })
+
+  it('3 作用域内 ∧ 未命中 ∧ 非修正 ⇒ false', () => {
+    expect(requiresApproval(access(), scope, HIGH_IMPACT_LIST)).toBe(false)
+    expect(requiresApproval(run(), scope, HIGH_IMPACT_LIST)).toBe(false)
+  })
+
+  it('4 作用域内 ∧ 命中清单 ∧ 非修正 ⇒ true', () => {
+    expect(requiresApproval(run({ hits: '安装/卸载依赖' }), scope, HIGH_IMPACT_LIST)).toBe(true)
+  })
+
+  it('5 作用域内 ∧ hits 非 null 但不在传入清单 ∧ 非修正 ⇒ false（清单是闭集）', () => {
+    expect(requiresApproval(run({ hits: '随手编的一条' as never }), scope, HIGH_IMPACT_LIST)).toBe(
+      false,
+    )
+  })
+
+  it('6 作用域内 ∧ 未命中 ∧ 修正 ⇒ true', () => {
+    expect(
+      requiresApproval(
+        access({ category: '作用域修正', resource: 'src/a.ts' }),
+        scope,
+        HIGH_IMPACT_LIST,
+      ),
+    ).toBe(true)
   })
 })
 
