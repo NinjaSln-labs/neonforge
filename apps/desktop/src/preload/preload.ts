@@ -116,7 +116,7 @@ contextBridge.exposeInMainWorld('neonforge', {
   },
   decision: {
     raise: (args: {
-      decisionPointId: string
+      decisionPointId?: string
       delegationId: string
       turnId: string
       requestReason: {

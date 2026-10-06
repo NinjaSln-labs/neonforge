@@ -136,7 +136,7 @@ export interface NeonForgeBridge {
   }
   decision: {
     raise: (args: {
-      decisionPointId: string
+      decisionPointId?: string
       delegationId: string
       turnId: string
       requestReason: {
