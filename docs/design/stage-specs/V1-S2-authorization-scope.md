@@ -16,7 +16,7 @@
 - [ ] A2 **I-8 决议绑定**：每个新版本**恰绑**一个已决 DecisionPoint（`ScopeVersion.amendmentRef` 非空，且指向缘由＝作用域修正的已批准决议）；同 `decisionPointId` 二次修正＝拒绝或幂等，**不产第二个版本**——同文件（≥3 条）
 - [ ] A3 **I-8 旧版本只读可溯**：修正后整条版本链可读，旧版本 `entries` 内容逐字不变（VO 不可变）；就地改写旧版本的代码路径命中数＝0（静态断言，与 S-1 同族承载体）——同文件（≥2 条）
 - [ ] A4 **I-17 无决议不产版本**：AmendScope 前不存在「缘由＝作用域修正 ∧ 已批准」的 DecisionPoint ⇒ 命令拒绝（类型化 DomainError，理由进命令回执、**不进 timeline**，段3 §5 留痕口径），且**不发射 ScopeAmended、仓储 save 不发生**——`tests/unit/scope.amend.test.ts`（≥4 条：无决议／决议未决／决议为拒绝／批准后放行）
-- [ ] A5 **批准权仅用户**（段2 X8：AI 可提请，批准权仅用户）：`requestedBy＝AI 提请` 只产生 DecisionRaised，版本链长度不变；版本推进的唯一触发面是用户决议——`tests/unit/scope.amend.test.ts`（≥2 条）＋ E2 呈现侧一针
+- [ ] A5 **批准权仅用户**（段2 X8：AI 可提请，批准权仅用户）：`requestedBy＝AI 提请` 只产生 DecisionRaised，版本链长度不变；版本推进的唯一触发面是**用户侧动作**＝批准该决议 ∧ 其后提交 `scope:amend`（案 A 两步流，ADR-030；批准本身不自额推进版本）——`tests/unit/scope.amend.test.ts`（≥2 条）＋ E2 呈现侧一针
 - [ ] A6 **仓储面不变**（段3 §7 ScopeRepo 行 v1.3／详设 §3：版本只追加＝聚合内部不变量，追加面随 S2 仍由聚合承载、仓储面不变）：ScopeRepo 方法名集合仍＝`save`／`findByDelegation`，未被就地扩——`tests/unit/scope.repoSurface.test.ts`（≥1 条，防就地扩上游冻结件）
 - [ ] A7 **正式 glob 语义落地**（`src/domain/authorization/Scope.ts` 的 `ponytail:` 天花板在本阶段偿清）：`covers()` 除 `**`／尾随 `/**`／字面相等外的正式 glob 命中判据成立（正反例各覆盖，形态归段5）——`tests/unit/scope.covers.test.ts`（≥6 条）＋ S1 现有 `tests/unit/requiresApproval.test.ts` 全数回归不红
 
@@ -43,7 +43,7 @@
 ### E 决策点族呈现完整化（L3；计划 §3 S2 行产出物「授权域模块＋呈现」）
 
 - [ ] E1 **缘由三值可见**：作用域外／高影响清单命中／作用域修正 三类拍板卡在 UI 各有可见位置，呈现层不得吞项——`tests/interaction/decisionCard.interaction.ts`（≥3 条）
-- [ ] E2 **决议留痕可见**：批准／拒绝／选项 三值决议后卡片呈决议态；拒绝携理由时理由可见（理由可选，无值不得渲染空占位）；A5 的用户批准路径在本针可见（版本随批准而推进）——同文件（≥2 条）
+- [ ] E2 **决议留痕可见**：批准／拒绝／选项 三值决议后卡片呈决议态；拒绝携理由时理由可见（理由可选，无值不得渲染空占位）；A5 的用户批准路径在本针可见（版本随「批准 ∧ 用户提交修正」推进＝案 A 两步流，ADR-030）——同文件（≥2 条）
 - [ ] E3 **作用域版本可溯呈现**：修正后当前版本可读、旧版本只读可查（I-8 只读可溯的呈现侧最小面）；未持久化态显式呈现不红（S1 F2 回归）——`tests/interaction/delegationLifecycle.interaction.ts`（≥1 条）
 - [ ] E4 `npx playwright test --project=interaction` **全绿**，本阶段新增用例 **≥8 条**
 - [ ] E5 **F-2 登记针偿清**（S1 出口审计→表 N 轴 6「C1 E2E 跨层延后 S2」）：忙时发起（在飞位占用）⇒ 拒方输入 ⇒ QueueList 出现可见位置的**端到端**断言入 `tests/interaction/delegationLifecycle.interaction.ts`（≥1 条）；补上后本阶段真轨 E2 仍按 blocked 处理（三缺口未认领，见边界）
