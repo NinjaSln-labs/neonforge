@@ -46,7 +46,11 @@ export default function DelegationCenter() {
       <div className="nf-delegationcenter__main">
         <StreamBar />
         <TimelineView rows={view.timeline} />
-        <DecisionCard decision={view.decision} onResolve={resolveDecision} />
+        <DecisionCard
+          decision={view.decision}
+          onResolve={resolveDecision}
+          lastResolution={view.lastResolution}
+        />
         <EvidenceList evidence={view.evidence} onInspect={inspectEvidence} />
         <QueueList items={view.queue} />
         <ScopePanel delegationId={selectedId} view={view} />
