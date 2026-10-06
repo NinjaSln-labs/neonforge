@@ -68,6 +68,8 @@ describe('委托单中心 IPC 通道（Task 3）', () => {
         'evidence:list-by-delegation',
         'gateway:cancel-stream',
         'queue:pending',
+        'scope:amend',
+        'scope:chain',
         'timeline:query-by-delegation',
         'timeline:subscribe',
         'turn:start',
@@ -274,5 +276,104 @@ describe('委托单中心 IPC 通道（Task 3）', () => {
     })
     const res = call<{ ok: boolean }>(handlers['gateway:cancel-stream'], evt, { streamId: 's1' })
     expect([res, seen]).toEqual([{ ok: true }, ['s1']])
+  })
+})
+
+describe('scope 通道（S2b Task 2）', () => {
+  let rt: DomainRuntime
+  beforeEach(() => {
+    resetRuntime()
+    rt = getRuntime()
+  })
+
+  const raiseAmendPoint = (handlers: Channels, evt: unknown, decisionPointId: string) =>
+    call(handlers['decision:raise'], evt, {
+      decisionPointId,
+      delegationId: 'd1',
+      turnId: 't1',
+      requestReason: { reason: '作用域修正', operation: '读 docs/**', requestedBy: 'AI 提请' },
+    })
+
+  it('scope:chain ⇒ 整条版本链 DTO；未知委托 ⇒ 接线级 Error（非 DomainError）', () => {
+    const { handlers, evt } = harness()
+    call(handlers['delegation:create'], evt, {
+      delegationId: 'd1',
+      intent: 'x',
+      scopeEntries: [{ kind: '目录', pattern: 'src/**' }],
+    })
+    expect(call(handlers['scope:chain'], evt, { delegationId: 'd1' })).toEqual([
+      { seq: 1, entries: [{ kind: '目录', pattern: 'src/**' }], amendmentRef: null },
+    ])
+    expect(codeOf(() => call(handlers['scope:chain'], evt, { delegationId: 'nope' }))).toBe('other')
+  })
+
+  it('scope:amend happy（raise＋批准）⇒ { version: 2 }，链上多一位挂 amendmentRef', () => {
+    const { handlers, evt } = harness()
+    call(handlers['delegation:create'], evt, {
+      delegationId: 'd1',
+      intent: 'x',
+      scopeEntries: [{ kind: '目录', pattern: 'src/**' }],
+    })
+    raiseAmendPoint(handlers, evt, 'dp1')
+    call(handlers['decision:resolve'], evt, { decisionPointId: 'dp1', value: '批准' })
+    expect(
+      call(handlers['scope:amend'], evt, {
+        delegationId: 'd1',
+        decisionPointId: 'dp1',
+        entries: [{ kind: '目录', pattern: 'docs/**' }],
+      }),
+    ).toEqual({ version: 2 })
+    expect(call(handlers['scope:chain'], evt, { delegationId: 'd1' })).toEqual([
+      { seq: 1, entries: [{ kind: '目录', pattern: 'src/**' }], amendmentRef: null },
+      { seq: 2, entries: [{ kind: '目录', pattern: 'docs/**' }], amendmentRef: 'dp1' },
+    ])
+  })
+
+  it('scope:amend 决议未批准 ⇒ { rejected:true, why:非空 }，且拒绝理由不进 timeline（事件总数不减）', () => {
+    const { handlers, evt } = harness()
+    call(handlers['delegation:create'], evt, {
+      delegationId: 'd1',
+      intent: 'x',
+      scopeEntries: [{ kind: '目录', pattern: 'src/**' }],
+    })
+    raiseAmendPoint(handlers, evt, 'dp1')
+    const before = rt.timeline.since(1).map((e) => e.type)
+    const res = call<{ rejected: boolean; why: string }>(handlers['scope:amend'], evt, {
+      delegationId: 'd1',
+      decisionPointId: 'dp1',
+      entries: [{ kind: '目录', pattern: 'docs/**' }],
+    })
+    expect(res.rejected).toBe(true)
+    expect(typeof res.why).toBe('string')
+    expect(res.why.length).toBeGreaterThan(0)
+    expect(rt.timeline.since(1).map((e) => e.type)).toEqual(before)
+  })
+
+  it('scope:amend 外来 entries 含非法 kind ⇒ 接线级 Error，不新增不变量码', () => {
+    const { handlers, evt } = harness()
+    call(handlers['delegation:create'], evt, {
+      delegationId: 'd1',
+      intent: 'x',
+      scopeEntries: [{ kind: '目录', pattern: 'src/**' }],
+    })
+    raiseAmendPoint(handlers, evt, 'dp1')
+    call(handlers['decision:resolve'], evt, { decisionPointId: 'dp1', value: '批准' })
+    expect(() =>
+      call(handlers['scope:amend'], evt, {
+        delegationId: 'd1',
+        decisionPointId: 'dp1',
+        entries: [{ kind: '天上', pattern: 'x' }],
+      }),
+    ).toThrowError(/entries 形状非法/)
+    expect(
+      codeOf(() =>
+        call(handlers['scope:amend'], evt, {
+          delegationId: 'd1',
+          decisionPointId: 'dp1',
+          entries: [{ kind: '天上', pattern: 'x' }],
+        }),
+      ),
+    ).toBe('other')
+    expect(rt.scopes.findByDelegation('d1')?.version).toBe(1)
   })
 })

@@ -9,7 +9,7 @@ import {
   type RaiseInput,
   type ResolutionValue,
 } from '../domain/authorization/DecisionPoint.js'
-import { Scope } from '../domain/authorization/Scope.js'
+import { Scope, type ScopeEntry } from '../domain/authorization/Scope.js'
 import { InstructionQueue } from '../domain/queue/InstructionQueue.js'
 import { Turn, type TriggerSource } from '../domain/turn/Turn.js'
 import type { Operation } from '../domain/spec/requiresApproval.js'
@@ -30,6 +30,8 @@ export type DomainChannel =
   | 'timeline:query-by-delegation'
   | 'timeline:subscribe'
   | 'gateway:cancel-stream'
+  | 'scope:chain'
+  | 'scope:amend'
 
 export interface IpcEventLike {
   sender: {
@@ -156,7 +158,11 @@ export function registerDomainChannels(ipc: IpcMainLike, deps: DomainChannelDeps
 
   ipc.handle('decision:raise', (_evt, args) => {
     const a = args as RaiseInput
-    const { decisionPoint, raised } = DecisionPoint.raise(a) // I-3 缺归属⇒抛且不生成（C2 面）
+    // I-3 缺归属⇒抛且不生成（C2 面）；id 由 main 侧生成（详设 §7）——漏给呈现侧＝ScopePanel 自己在渲染层造 id。
+    const { decisionPoint, raised } = DecisionPoint.raise({
+      ...a,
+      decisionPointId: a.decisionPointId ?? randomUUID(),
+    })
     rt.log(raised, () => rt.decisionPoints.save(decisionPoint))
     return { decisionPointId: decisionPoint.decisionPointId, open: decisionPoint.open }
   })
@@ -241,4 +247,34 @@ export function registerDomainChannels(ipc: IpcMainLike, deps: DomainChannelDeps
   ipc.handle('gateway:cancel-stream', (_evt, args) => ({
     ok: deps.abortStream((args as { streamId: string }).streamId),
   }))
+
+  // DTO 用 { ...e } 摊平＝不把冻结引用递给 renderer（桥侧本就 JSON 序列化，摊平是显式意图）。
+  ipc.handle('scope:chain', (_evt, args) => {
+    const { delegationId } = args as { delegationId: string }
+    const scope = rt.scopes.findByDelegation(delegationId)
+    if (!scope) throw new Error(`未知委托：${delegationId}`)
+    return scope.chain.map((v) => ({
+      seq: v.seq,
+      entries: v.entries.map((e) => ({ ...e })),
+      amendmentRef: v.amendmentRef,
+    }))
+  })
+
+  // 唯一机制口＝rt.amendScope（聚合写入与 append 同事务）；拒绝理由不进 timeline，只回呈现侧。
+  ipc.handle('scope:amend', (_evt, args) => {
+    const a = args as {
+      delegationId: string
+      decisionPointId: string
+      entries: Array<{ kind: string; pattern: string }>
+    }
+    const KINDS = ['仓库', '目录', '命令', '网络'] as const
+    for (const e of a.entries ?? []) {
+      if (!KINDS.includes(e.kind as (typeof KINDS)[number]) || typeof e.pattern !== 'string')
+        throw new Error(`entries 形状非法：${JSON.stringify(e)}`)
+    }
+    const out = rt.amendScope({ ...a, entries: a.entries as ScopeEntry[] })
+    return out
+      ? { version: out.version }
+      : { rejected: true as const, why: '无已批准的作用域修正决议，或该决议已产过版本' }
+  })
 }
