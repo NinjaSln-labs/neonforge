@@ -2,7 +2,7 @@
 
 > 由 writing-plans 出，2026-10-06。前置＝**S2a 已完成**（`docs/superpowers/plans/2026-10-06-s2a-authorization-kernel.md`：`Scope.amend`/`chain`/正式 glob/③类翻转/`ScopeAmendedPayload`/S-3 闸全绿）。契约源（不得超其边界）＝`docs/design/stage-specs/V1-S2-authorization-scope.md`（本 plan 承 **S2b 面**＝A4/A5 的接线与呈现侧＋**B2 同事务两条**＋C4 静态闸回归＋E1–E5＋F1–F11）＋接口 `docs/design/v1.0.0-s2-detailed-design.md` **v0.4** §5/§7＋ADR-030（案 A＝命令式消费）。执行走 executing-plans，逐任务 TDD。
 
-**Goal:** vitest 新增 **2 条**（B2 同事务两条）＋ playwright L3 新增 **8 条**（E1 3＋E2 3＋E3 1＋E5 1，走 E4 下限不重复计 F2）。把 S2a 的领域能力经**唯一写者口**接到用户手上：`rt.amendScope` 编排（决议在场性读得到、追加与写同事务）→ `scope:chain`/`scope:amend` 两通道 → 类型化桥 → `ScopePanel` 提案与历史只读 → `DecisionCard` 缘由与决议留痕 → L3 八条针（含 S1 遗留的 E5 端到端针）→ 段6 出口闸全跑。
+**Goal:** vitest 新增 **3 条**（B2 同事务两条＋A5 wiring 一条）＋ playwright L3 新增 **9 条**（实落＝E1 3＋E2 3＋E3 3；E5 已随 ADR-033 延后 S4）（E1 3＋E2 3＋E3 1＋E5 1，走 E4 下限不重复计 F2）。把 S2a 的领域能力经**唯一写者口**接到用户手上：`rt.amendScope` 编排（决议在场性读得到、追加与写同事务）→ `scope:chain`/`scope:amend` 两通道 → 类型化桥 → `ScopePanel` 提案与历史只读 → `DecisionCard` 缘由与决议留痕 → L3 八条针（含 S1 遗留的 E5 端到端针）→ 段6 出口闸全跑。
 
 **Architecture:** main 侧装配（`domainRuntime.ts` 是唯一调 `Scope.amend` 的地方）＋`ipcDomain.ts` 通道注册表（args 取 `unknown`、逐 handler 收窄＝信任边界）＋preload 桥＋renderer 扁平件（**零核心聚合 import**，S-1 静态闸守）；呈现层派生只读，不新增第二条取数通道。
 
@@ -217,5 +217,5 @@ docs/tests/coverage-matrix.md              # 表 N S2 行回填（F6）
 ## Self-Review（本 plan 对契约的覆盖核账）
 
 - **DoD 覆盖**：A1–A3→S2a T1；A4/A5→S2a T2（域前置）＋S2b T1/T2（回执与呈现）；A6→S2a T6；A7→S2a T3；B1/B3→S2a T5；B2→S2b T1；B4→S2a T5 Step 5 回归；C1/C2→S2a T4；C3→S2a T4 Step 6（缘由三值 3 条）；C4→S2b T2 Step 5／T5 Step 2；D1–D3→S2a T8；E1/E2→S2b T6/T7；E3→S2b T5/T8；E4→S2b T8 Step 5；E5→S2b T8 Step 4；F1–F11→S2b T9。
-- **计数账**：S2a 39（A22＋B1 1＋C12＋D3＋词表 1）＋S2b 2（B2 同事务）＝**41 ≥ 40**，逐名可点出＝详设 §9 同源；L3 8 条另计（E4 下限），`ipc.channels` 回执面与 mockBridge 夹具改动**不计入下限**。
+- **计数账（v0.5 实落）**：S2a 41（A22＋A3 静态面补 1＋A5 前半补 1＋T2 补 4b＋B1 1＋C11＋D3＋词表 1）＋S2b 3（B2 2＋A5 wiring 1）＝**44** ≥ 40；按 `git diff 2c1dc75..HEAD` 复点＝unit＋static 新增定义行 **41 行／展开 43 例**（差＝既有用例的翻正与它.each 展开）。L3 新增 **9** 条走 playwright，不占 F2。逐名可点出＝详设 §9 同源；L3 8 条另计（E4 下限），`ipc.channels` 回执面与 mockBridge 夹具改动**不计入下限**。
 - **两处已当场核掉的疑点**（不留 TBD）：①`rt.log(draft, tx)` 语义＝`record`→`tx()`→失败 `rollbackTo(snap)` 且不发（读 `repos/memory/timelineRepo.ts:9-19` 得证）⇒ B2 的注入点是 `scopes.save` 抛，不是 `append` 抛；②`decision:raise` 现要求调用方传 id，与详设 §7「main 侧 `randomUUID()`」不符 ⇒ T2 Step 1 补一行 `?? randomUUID()`（同 `delegation:create`/`turn:start` 既有路数，属接线层归位，不动契约面）。
