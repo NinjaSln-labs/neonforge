@@ -52,8 +52,10 @@ export class Scope {
     return this.chain_[this.chain_.length - 1].seq
   }
 
+  // 吐冻结副本（详设 §2）：内部数组虽已冻结，但把聚合内部对象引用直接交给调用方＝口径不符。
+  // 低频口——热路径 covers() 直读 chain_，不经此处。（本行曾被变异还原抹掉，二次落入并记录于码审报告）
   get entries(): ScopeEntry[] {
-    return this.chain_[this.chain_.length - 1].entries
+    return Object.freeze([...this.chain_[this.chain_.length - 1].entries]) as ScopeEntry[]
   }
 
   // 作用域内读数（RequiresApprovalSpec 的①类判据输入）：条目资源类型相等 ∧ 模式命中。
