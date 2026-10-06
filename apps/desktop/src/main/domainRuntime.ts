@@ -13,7 +13,8 @@ import type { ApplyChangeDeps } from '../domain/service/applyChange.js'
 import { applyChange, attachEvidenceCollector } from '../domain/service/applyChange.js'
 import type { Operation } from '../domain/spec/requiresApproval.js'
 import type { EventDraft } from '../domain/timeline.js'
-import { Scope } from '../domain/authorization/Scope.js'
+import { Scope, type ScopeEntry } from '../domain/authorization/Scope.js'
+import { DomainError } from '../domain/domainError.js'
 
 // 网关 port＝真假两轨的共同实现面（假轨承 S1a Task 18：同输入同产出、无网络无随机）。
 export interface GatewayLike {
@@ -45,6 +46,12 @@ export interface DomainRuntime {
     op: Operation
   }): EventDraft | null
   log(draft: EventDraft, tx?: () => void): void
+  /** S2b Task 1（案 A／ADR-030）：消费已批准决议，聚合写入与事件 append 同事务。null＝决议不在场/未批准/已产过版本（拒绝理由不进 timeline）。 */
+  amendScope(input: {
+    delegationId: string
+    decisionPointId: string
+    entries: ScopeEntry[]
+  }): { version: number } | null
 }
 
 let runtime: DomainRuntime | undefined
@@ -89,6 +96,19 @@ function build(gateway: GatewayLike): DomainRuntime {
     log(draft, tx) {
       // draft 的 type↔detail 配对已由聚合构造处钉住，展开只补 ts。
       rt.timeline.append({ ts: new Date().toISOString(), ...draft }, tx)
+    },
+    amendScope(input) {
+      const dp = rt.decisionPoints.findById(input.decisionPointId)
+      const scope = rt.scopes.findByDelegation(input.delegationId)
+      if (!dp || !scope) return null
+      try {
+        const { scope: next, draft } = scope.amend(dp, input.entries, new Date().toISOString())
+        rt.log(draft, () => rt.scopes.save(next))
+        return { version: next.version }
+      } catch (e) {
+        if (e instanceof DomainError) return null
+        throw e
+      }
     },
   }
   // 证据域订阅面挂一次（单例级）：ChangeProduced ⇒ EvidenceRecorded。collector 只读 timeline/evidence/changeSets，

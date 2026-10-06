@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { DecisionPoint } from '../../src/domain/authorization/DecisionPoint'
 import { Scope, type ScopeEntry } from '../../src/domain/authorization/Scope'
 import { DomainError } from '../../src/domain/domainError'
+import { getRuntime, resetRuntime } from '../../src/main/domainRuntime'
 
 // S2a Task 2 A4/A5：amend() 的 I-17 两支前置——缘由＝作用域修正 ∧ 决议已批准。
 function raiseDp(
@@ -116,5 +117,43 @@ describe('Scope.amend A5：批准权仅用户判的是决议值', () => {
     expect(err).toBeInstanceOf(DomainError)
     expect((err as DomainError).code).toBe('I-17')
     expect(scope.chain.length).toBe(1)
+  })
+})
+
+// S2b Task 1（案 A／ADR-030）：rt.amendScope 消费「已批准决议」这一事实，聚合写入与事件 append 同事务。
+describe('rt.amendScope 编排口：批准决议的消纳面（S2b Task 1）', () => {
+  beforeEach(() => {
+    resetRuntime()
+  })
+
+  const seed = () => {
+    const rt = getRuntime()
+    rt.scopes.save(base())
+    const dp = raiseDp('dp1')
+    dp.resolve('批准')
+    rt.decisionPoints.save(dp)
+    return rt
+  }
+
+  it('7. 已批准决议在场 ⇒ 返 version 2，作用域链推进且 ScopeAmended 恰 1 条', () => {
+    const rt = seed()
+    expect(rt.amendScope({ delegationId: 'd1', decisionPointId: 'dp1', entries: docs })).toEqual({
+      version: 2,
+    })
+    expect(rt.scopes.findByDelegation('d1')!.version).toBe(2)
+    expect(rt.timeline.since(1).filter((e) => e.type === 'ScopeAmended')).toHaveLength(1)
+  })
+
+  it('8. 事务失败 ⇒ 抛错且链不长、事件不落（回滚路径不 publish）', () => {
+    const rt = seed()
+    vi.spyOn(rt.scopes, 'save').mockImplementation(() => {
+      throw new Error('boom')
+    })
+    expect(() =>
+      rt.amendScope({ delegationId: 'd1', decisionPointId: 'dp1', entries: docs }),
+    ).toThrow('boom')
+    expect(rt.scopes.findByDelegation('d1')!.version).toBe(1)
+    expect(rt.timeline.since(1).filter((e) => e.type === 'ScopeAmended')).toHaveLength(0)
+    vi.restoreAllMocks()
   })
 })
