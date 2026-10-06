@@ -1,0 +1,12 @@
+{
+  "id": "a000001",
+  "subject": "docs/design/stage-specs/V1-S3-persistence-recovery.md",
+  "subject_blob": "de928c5d60edb6a3ef306d5e1f68954224bb359f",
+  "subject_commit": "c6e024e",
+  "auditor": "qodercn@Qwen3.8-Max",
+  "verdict": "accepted",
+  "findings": "第1轮段5出口审计:1阻断(C-01 F2算术)+6非阻断; 全采纳修入; 复验7/7 PASS",
+  "reverify_of": null,
+  "ts": "2026-10-07T03:53:12+08:00",
+  "attachment_sha256": "889331a113fbab952231b546f0698d5035e683ae901c20c9216c0113b3d8d316"
+}
