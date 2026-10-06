@@ -37,8 +37,8 @@ export function applyChange(input: ChangeInput, deps: ApplyChangeDeps): EventDra
     delegationId: input.delegationId,
     turnId: input.turnId,
     changeSetRef: evidencePtr(evidenceId),
-    // 过闸即作用域内（修正分支除外——其 requiresApproval 恒 false）。
-    scopeCheckResult: input.op.category === '作用域修正' ? '未判（修正分支→S2）' : '作用域内',
+    // 过闸即作用域内（③类作用域修正由 requiresApproval 恒真拦在闸前，走不到产出）。
+    scopeCheckResult: '作用域内',
   }
   const draft: EventDraft = { type: 'ChangeProduced', delegationId: input.delegationId, detail }
   deps.changeSets.set(evidenceId, input.changeSet)
