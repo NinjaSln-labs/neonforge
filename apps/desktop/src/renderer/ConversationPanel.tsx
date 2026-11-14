@@ -11,11 +11,11 @@ import { buildAuthHint, canMergeApprove, toolRisk } from './authModel'
 import { cleanContent, stripMarkdown } from './textClean'
 // P1-05 阶段 1：纯格式化/展示辅助（工具卡文案、假设列表、协议信号、行动承诺判定）
 import {
-  AssumptionList,
   fmtToolArgs,
   fmtToolResult,
   hasProtoCall,
 } from './conversationFormat'
+import { GoalConfirmCard, PlanConfirmCard, ResolutionConfirmCard } from './DecisionCards'
 // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层纯逻辑，双源调研驱动）
 import {
   evaluateTurnProgress,
@@ -2636,6 +2636,11 @@ export default function ConversationPanel({
                 // 文本探测仅保留为**信号消息定位**（卡挂哪条消息——lastSignalIdx 防连发漂移），不参与触发判定
                 const dc = stateRef.current.decisionContent
                 const dcKind = dc?.kind ?? null
+                // P1-05 阶段 2：确认卡只接收快照（不再在卡组件内读 stateRef）
+                const goalDc = dc?.kind === 'goal' ? (dc.proposal as GoalProposal) : null
+                const planDc = dc?.kind === 'plan' ? (dc.proposal as PlanProposal) : null
+                const resolutionClaim =
+                  dc?.kind === 'resolution' ? (dc.proposal as CompletionClaim) : null
                 // V1.5 S2：信号判定识别协议工具调用（协议工具消息 content 为空——决策经 decisionContent
                 // 承载；文本探测只认标记——协议路径消息无标记 → 卡信号缺失）。hasPlan/achievedMatch/
                 // execSignal 三处统一「文本标记 或 协议工具调用」
@@ -2698,61 +2703,30 @@ export default function ConversationPanel({
                     {((dcKind === 'goal' && i === lastSignalIdx.goal) ||
                       (lastSignalIdx.goal === -1 && goalFallback && !dcKind)) &&
                     i !== rejectedCardIdx.goal ? (
-                      <div className="nf-confirmcard" role="group" aria-label="确认目标">
-                        <div className="nf-confirmcard__head">目标确认——需要你确认</div>
-                        <div className="nf-confirmcard__goal">
-                          {/* A-004：内容从决策点快照取（无快照时兜底 initialPrompt——goalFallback 路径） */}
-                          {stateRef.current.decisionContent?.kind === 'goal'
-                            ? (stateRef.current.decisionContent.proposal as GoalProposal).statement
-                            : initialPrompt || '你描述的目标'}
-                        </div>
-                        {/* S3：目标提议关键假设（⑬ 契约——A-008 共享 AssumptionList 渲染） */}
-                        {(() => {
-                          const dc = stateRef.current.decisionContent
-                          if (!dc || dc.kind !== 'goal') return null
-                          const goal = dc.proposal as GoalProposal
-                          if (!goal.assumptions || goal.assumptions.length === 0) return null
-                          return <AssumptionList items={goal.assumptions} />
-                        })()}
-                        <div className="nf-confirmcard__actions">
-                          <button
-                            type="button"
-                            className="nf-confirmcard__btn nf-confirmcard__btn--ok"
-                            onClick={() => {
-                              // 先取快照 statement 再 confirm（confirm 清 decisionContent——时序）
-                              const confirmedGoal =
-                                stateRef.current.decisionContent?.kind === 'goal'
-                                  ? (stateRef.current.decisionContent.proposal as GoalProposal)
-                                      .statement
-                                  : initialPrompt || '目标已确认'
-                              confirm('goal')
-                              tlog('card.resolved', { card: 'goal', action: 'confirm' }, 'system')
-                              onGoalConfirmed?.(confirmedGoal)
-                              void sendRef.current({ text: '确认，目标清楚了' })
-                            }}
-                          >
-                            确认目标
-                          </button>
-                          <button
-                            type="button"
-                            className="nf-confirmcard__btn nf-confirmcard__btn--no"
-                            onClick={() => {
-                              // A-006：拒绝带具体原因（不变量 8——「重新描述」= direction 调整）
-                              reject('goal', { kind: 'direction' })
-                              setRejectedCardIdx((p) => ({ ...p, goal: i }))
-                              tlog(
-                                'card.rejected',
-                                { card: 'goal', action: 'reject', reason: 'direction' },
-                                'system',
-                              )
-                              onGoalRejected?.()
-                              void sendRef.current({ text: '目标需要重新描述一下' })
-                            }}
-                          >
-                            重新描述
-                          </button>
-                        </div>
-                      </div>
+                      <GoalConfirmCard
+                        statement={goalDc?.statement ?? initialPrompt ?? '你描述的目标'}
+                        assumptions={goalDc?.assumptions ?? []}
+                        onConfirm={() => {
+                          // 先取快照 statement 再 confirm（confirm 清 decisionContent——时序）
+                          const confirmedGoal = goalDc?.statement ?? initialPrompt ?? '目标已确认'
+                          confirm('goal')
+                          tlog('card.resolved', { card: 'goal', action: 'confirm' }, 'system')
+                          onGoalConfirmed?.(confirmedGoal)
+                          void sendRef.current({ text: '确认，目标清楚了' })
+                        }}
+                        onReject={() => {
+                          // A-006：拒绝带具体原因（不变量 8——「重新描述」= direction 调整）
+                          reject('goal', { kind: 'direction' })
+                          setRejectedCardIdx((p) => ({ ...p, goal: i }))
+                          tlog(
+                            'card.rejected',
+                            { card: 'goal', action: 'reject', reason: 'direction' },
+                            'system',
+                          )
+                          onGoalRejected?.()
+                          void sendRef.current({ text: '目标需要重新描述一下' })
+                        }}
+                      />
                     ) : null}
                     {/* 触发：领域状态（dcKind==='plan'）或信号兜底（execFallback/execSignal——旧场景：方案征询文本/write 拦截；
                         拒绝后由 rejectedCardIdx 抑制（无快照卡）——结构化卡（dcKind）拒绝后经领域状态自然消失 */}
@@ -2763,84 +2737,34 @@ export default function ConversationPanel({
                     ((execSignal && i === lastSignalIdx.exec) ||
                       (lastSignalIdx.exec === -1 && isLastAssistant && !hasCandidates)) &&
                     (dcKind === 'plan' || i !== rejectedCardIdx.execution) ? (
-                      <div className="nf-confirmcard" role="group" aria-label="确认执行方案">
-                        <div className="nf-confirmcard__head">执行方案——需要你确认后动手</div>
-                        {/* S3：方案卡三要素（文件清单含原因/关键假设/验证计划——decisionContent.proposal 渲染）——
-                        S7 修复（P1-1 接线暴露）：占位卡（无 proposal——write 拦截/征询「等你确认」路径）不渲染三要素——
-                        A-004「卡占位——内容区不渲染三要素」的渲染层防御（dc.proposal undefined 曾致 React 崩溃） */}
-                        {(() => {
-                          const dc = stateRef.current.decisionContent
-                          if (!dc || dc.kind !== 'plan') return null
-                          const proposal = dc.proposal as PlanProposal
-                          if (!proposal) return null // 占位卡——无结构化内容
-                          return (
-                            <div className="nf-confirmcard__plan">
-                              {proposal.files.length > 0 && (
-                                <ul className="nf-confirmcard__plan-files">
-                                  {proposal.files.map((f) => (
-                                    <li key={f.path}>
-                                      {f.path}
-                                      {f.reason ? `（${f.reason}）` : ''}
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                              {proposal.assumptions.length > 0 && (
-                                <AssumptionList items={proposal.assumptions} />
-                              )}
-                              {proposal.verificationPlan.length > 0 && (
-                                <div className="nf-confirmcard__plan-section">
-                                  <div className="nf-confirmcard__plan-label">验证计划</div>
-                                  <ul>
-                                    {proposal.verificationPlan.map((v, idx) => (
-                                      <li key={idx}>{v}</li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
-                            </div>
+                      <PlanConfirmCard
+                        proposal={planDc}
+                        onConfirm={() => {
+                          confirm('plan')
+                          planWasRejectedRef.current = false
+                          planRejectNudgedRef.current = false
+                          tlog(
+                            'card.resolved',
+                            { card: 'execution', action: 'confirm' },
+                            'system',
                           )
-                        })()}
-                        <div className="nf-confirmcard__actions">
-                          <button
-                            type="button"
-                            className="nf-confirmcard__btn nf-confirmcard__btn--ok"
-                            onClick={() => {
-                              confirm('plan')
-                              planWasRejectedRef.current = false
-                              planRejectNudgedRef.current = false
-                              tlog(
-                                'card.resolved',
-                                { card: 'execution', action: 'confirm' },
-                                'system',
-                              )
-                              onPlanConfirmed?.()
-                              void sendRef.current({ text: '确认，按方案执行' })
-                            }}
-                          >
-                            确认执行
-                          </button>
-                          <button
-                            type="button"
-                            className="nf-confirmcard__btn nf-confirmcard__btn--no"
-                            onClick={() => {
-                              // S3：拒绝带原因（不变量 8——RejectKind；「修改方案」= scope 调整方向）
-                              reject('plan', { kind: 'scope', target: 'plan' })
-                              planWasRejectedRef.current = true
-                              setRejectedCardIdx((p) => ({ ...p, execution: i }))
-                              tlog(
-                                'card.rejected',
-                                { card: 'execution', action: 'reject', reason: 'scope' },
-                                'system',
-                              )
-                              onPlanRejected?.()
-                              void sendRef.current({ text: '方案需要调整一下' })
-                            }}
-                          >
-                            修改方案
-                          </button>
-                        </div>
-                      </div>
+                          onPlanConfirmed?.()
+                          void sendRef.current({ text: '确认，按方案执行' })
+                        }}
+                        onReject={() => {
+                          // S3：拒绝带原因（不变量 8——RejectKind；「修改方案」= scope 调整方向）
+                          reject('plan', { kind: 'scope', target: 'plan' })
+                          planWasRejectedRef.current = true
+                          setRejectedCardIdx((p) => ({ ...p, execution: i }))
+                          tlog(
+                            'card.rejected',
+                            { card: 'execution', action: 'reject', reason: 'scope' },
+                            'system',
+                          )
+                          onPlanRejected?.()
+                          void sendRef.current({ text: '方案需要调整一下' })
+                        }}
+                      />
                     ) : null}
                     {dcKind === 'resolution' &&
                     achievedMatch &&
@@ -2848,62 +2772,29 @@ export default function ConversationPanel({
                     !stateRef.current.resolutionConfirmed &&
                     i === lastSignalIdx.achieve &&
                     i !== rejectedCardIdx.achievement ? (
-                      <div className="nf-confirmcard" role="group" aria-label="确认达成">
-                        <div className="nf-confirmcard__head">搭档已完成——你确认解决了没有</div>
-                        {/* ADR-008：遗留问题不阻塞对账——呈现在解决卡上供用户知情决策（真实机取证：
-                            阻塞语义使诚实列遗留的模型永不可达已解决） */}
-                        {(() => {
-                          const dc = stateRef.current.decisionContent
-                          const claim = dc?.proposal as CompletionClaim | undefined
-                          const qs = claim?.evidence?.pendingQuestions ?? []
-                          return qs.length > 0 ? (
-                            <div className="nf-confirmcard__questions" style={{ margin: '6px 0' }}>
-                              {qs.map((q, qi) => (
-                                <div
-                                  key={qi}
-                                  style={{ fontSize: 12, color: 'var(--dim, #8b9bb0)' }}
-                                >
-                                  遗留：{q}
-                                </div>
-                              ))}
-                            </div>
-                          ) : null
-                        })()}
-                        <div className="nf-confirmcard__actions">
-                          <button
-                            type="button"
-                            className="nf-confirmcard__btn nf-confirmcard__btn--ok"
-                            onClick={() => {
-                              confirm('resolution')
-                              tlog(
-                                'card.resolved',
-                                { card: 'achievement', action: 'confirm' },
-                                'system',
-                              )
-                              void sendRef.current({ text: '已解决，谢谢' })
-                            }}
-                          >
-                            已解决
-                          </button>
-                          <button
-                            type="button"
-                            className="nf-confirmcard__btn nf-confirmcard__btn--no"
-                            onClick={() => {
-                              // A-006：拒绝带具体原因（不变量 8——「还要改」= scope 调整）
-                              reject('resolution', { kind: 'scope' })
-                              setRejectedCardIdx((p) => ({ ...p, achievement: i }))
-                              tlog(
-                                'card.rejected',
-                                { card: 'achievement', action: 'reject', reason: 'scope' },
-                                'system',
-                              )
-                              inputRef.current = '还要改一些地方：'
-                            }}
-                          >
-                            还要改
-                          </button>
-                        </div>
-                      </div>
+                      <ResolutionConfirmCard
+                        pendingQuestions={resolutionClaim?.evidence?.pendingQuestions ?? []}
+                        onConfirm={() => {
+                          confirm('resolution')
+                          tlog(
+                            'card.resolved',
+                            { card: 'achievement', action: 'confirm' },
+                            'system',
+                          )
+                          void sendRef.current({ text: '已解决，谢谢' })
+                        }}
+                        onReject={() => {
+                          // A-006：拒绝带具体原因（不变量 8——「还要改」= scope 调整）
+                          reject('resolution', { kind: 'scope' })
+                          setRejectedCardIdx((p) => ({ ...p, achievement: i }))
+                          tlog(
+                            'card.rejected',
+                            { card: 'achievement', action: 'reject', reason: 'scope' },
+                            'system',
+                          )
+                          inputRef.current = '还要改一些地方：'
+                        }}
+                      />
                     ) : null}
                   </>
                 )

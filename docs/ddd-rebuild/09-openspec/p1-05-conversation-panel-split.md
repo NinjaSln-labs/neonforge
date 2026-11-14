@@ -11,7 +11,7 @@
 ## 阶段
 
 1. [x] **纯格式化/展示辅助**（2026-11-14）：`fmtToolResult`、`fmtToolArgs`、`AssumptionList`、`hasProtoCall`、`isActionPromise` → `conversationFormat.tsx`（102 行；无行为变更）。
-2. [ ] **决策卡组件**：目标/计划/达成确认卡 → `DecisionCards.tsx`；只接收快照与回调，不在组件内读写 `stateRef`。
+2. [x] **决策卡组件**（2026-11-14）：目标/计划/达成确认卡 → `DecisionCards.tsx`；只接收快照与回调，组件内不读写 `stateRef`。卡片相关 interaction 40 项：39 通过 / 1 既有 `.nf-start` flaky。
 3. [ ] **输入区**：输入框、@引用浮层、发送/停止/合并授权按钮 → `ConversationComposer.tsx`。
 4. [ ] **流式/工具链编排**：`applyChunk` / `runChat` / `maybeContinue` / `send` / `finishError` / `retryFailedTurn` → `useChatEngine.ts`；以显式依赖对象接入（参照 `useToolApproval`），状态所有权仍归面板。
 5. [ ] **面板收敛**：`ConversationPanel` 仅组合布局、订阅 hook 返回值与渲染子组件。
