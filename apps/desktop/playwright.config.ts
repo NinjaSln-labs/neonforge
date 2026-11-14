@@ -14,10 +14,11 @@ export default defineConfig({
   fullyParallel: true,
   workers: 1, // 截图确定性
   retries: 0, // 视觉回归不重试（重试会覆盖 diff 产物）
+  timeout: 90_000, // WSL 下 Vite 首次模块图编译常 >30s（默认单测超时会先于断言超时触发）
   // 断言超时必须放顶层（use.expect 不是 Playwright 有效选项——放 use 里会被静默忽略 → 直接 expect 仍用 5s 默认，
   // Vite 冷模块编译下 .nf-start 等直接断言偶发超时）。
   expect: {
-    timeout: 15_000,
+    timeout: 30_000,
     toHaveScreenshot: {
       maxDiffPixels: 100,
       maxDiffPixelRatio: 0.01,
