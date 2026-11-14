@@ -19,13 +19,13 @@
 | BC-07 | **配置与凭据**（Configuration & Secrets） | API Key、Provider/Model 选择、Web 访问开关/端点/Key、本机安全存储 | 不发起模型请求、不执行工具、不决定任务 | 接入方、模型 id、API Key、Web 访问、探测、本机存储 | `config:*` IPC | `userData/config/neonforge-config.json`（safeStorage 加密 + 明文 fallback 0600） | `src/main/configStore.ts`、`renderer/ConfigPage.tsx`、`SettingsPanel.tsx` | 平台/安全 |
 | BC-08 | **上下文与检索**（Context & Retrieval） | @mention 文件片段、CodeRAG、LSP 查询、压缩、标准前缀/预热 | 不决定目标/方案、不执行副作用、不拥有会话状态 | 上下文片段、注入、检索、命中、符号、诊断、压缩、前缀、预热 | `context:resolve`、`rag:search`、`compaction:compact`、`preheat:status` | 片段（瞬时）、RAG 命中（瞬时）、前缀缓存（main 内存）、LSP 进程 | `src/main/context.ts`、`codeRag.ts`、`lsp.ts`、`compact.ts`、`preheat.ts` | 执行层 |
 | BC-09 | **平台运行**（Platform Runtime） | Electron 生命周期、单实例、窗口、进程清理、内置插件注册表 | 不参与业务决策、不执行模型调用、不拥有业务数据 | 应用、窗口、单实例、生命周期、进程、插件 | — | 进程 PID 文件（userData）、插件注册表（main 内存） | `src/main/main.ts`、`pluginSystem.ts`、`preload.ts`（桥） | 平台 |
-| BC-10 | **变更与版本**（Change & Version）<br>`目标态` | 变更集、基线快照、差异、审核、应用、回滚、Git 只读桥 | 不决定任务完成、不执行工具、不管理队列 | 变更集、变更项、基线、差异、应用、回滚、冲突、Git 状态 | `changeset.*`（目标态） | 变更集记录、基线快照（`.nf-bak`/内容哈希）、Git 只读结果 | `src/main/applyDiff.ts`、`ipc.ts` `delivery:apply/revert-diff`、`DeliveryPanel.tsx`、`pluginSystem.ts`（git 占位） | 执行层 + 应用层 |
-| BC-11 | **任务编排**（Task Orchestration）<br>`目标态` | 多任务入队、调度、阻塞/恢复、取消、队列视图 | 不决定目标/方案、不执行工具、不持有效证据 | 任务条目、队列、排队、运行、阻塞、暂停、取消、优先级 | `queue.*`（目标态） | 队列状态（目标态持久化；当前无） | `MainWorkspace.tsx:15-40`（占位） | 应用层 |
-| BC-12 | **用量与成本**（Usage & Cost）<br>`目标态` | 记录 Provider 真实 usage、缓存命中、成本计算、预算提醒、导出 | 不发起模型请求、不决定模型路由、不修改 Provider 响应 | 用量条目、token、缓存、价格表、成本、预算 | `usage.*`（目标态） | 用量台账（目标态 JSONL/本地存储） | `gateway.ts`（需解析 usage）、`MainWorkspace.tsx:33-36`、`pluginSystem.ts`（stats 占位） | 平台/财务口径 |
-| BC-13 | **扩展与集成**（Extensions & Integrations）<br>`目标态` | 扩展注册/生命周期、MCP 连接、外部工具描述、Git 集成、信任边界 | 不直接执行文件/进程操作（经 BC-02）、不决定任务状态 | 扩展、版本、类型、能力、信任、MCP 服务器、工具描述 | `extension.*`（目标态） | 扩展注册表、连接状态、配置（目标态） | `src/main/pluginSystem.ts`、`ipc.ts` `plugins:*` | 平台/安全 |
-| BC-14 | **验收与质量门禁**（Acceptance & Quality Gate）<br>`目标态` | 验收标准来源、验收项、证据绑定、豁免、门禁判定、交付联动 | 不执行工具、不决定任务状态、不替代完成证据门 | 验收标准、验收项、来源、证据、豁免、门禁、结论 | `acceptance.*`、`quality_gate.evaluated`（目标态） | 验收记录（目标态随会话/交付） | `DeliveryPanel.tsx:332-350`、`MainWorkspace.tsx:282-299`、`DoDAlignPanel.tsx`（演示）、`PlanProposal.verificationPlan` | 领域/产品 |
+| BC-10 | **变更与版本**（Change & Version）<br>`已落地 2026-11-14` | 变更集、基线快照、差异、审核、应用、回滚、Git 只读桥 | 不决定任务完成、不执行工具、不管理队列 | 变更集、变更项、基线、差异、应用、回滚、冲突、Git 状态 | `changeset.*` | 变更集记录、基线快照（`.nf-bak`/内容哈希）、Git 只读结果 | `src/domain/changeSet.ts`、`src/main/changeSetService.ts`、`src/main/gitBridge.ts`、`ipc.ts` `changeset:*`/`git:read` | 执行层 + 应用层 |
+| BC-11 | **任务编排**（Task Orchestration）<br>`已落地 2026-11-14` | 多任务入队、调度、阻塞/恢复、取消、队列视图 | 不决定目标/方案、不执行工具、不持有效证据 | 任务条目、队列、排队、运行、阻塞、暂停、取消、优先级 | `queue.*` | 队列状态（userData 本地 JSON） | `src/domain/taskQueue.ts`、`src/main/taskQueueStore.ts`、`ipc.ts` `queue:*`、`MainWorkspace.tsx` TaskPanel | 应用层 |
+| BC-12 | **用量与成本**（Usage & Cost）<br>`已落地 2026-11-14` | 记录 Provider 真实 usage、缓存命中、成本计算、预算提醒、导出 | 不发起模型请求、不决定模型路由、不修改 Provider 响应 | 用量条目、token、缓存、价格表、成本、预算 | `usage.*` | 用量台账（userData 本地 JSON） | `src/domain/usageLedger.ts`、`src/main/usageStore.ts`、`gateway.ts` usage 解析、`ipc.ts` `usage:*` | 平台/财务口径 |
+| BC-13 | **扩展与集成**（Extensions & Integrations）<br>`已落地 2026-11-14` | 扩展注册/生命周期、MCP 连接、外部工具描述、Git 集成、信任边界 | 不直接执行文件/进程操作（经 BC-02）、不决定任务状态 | 扩展、版本、类型、能力、信任、MCP 服务器、工具描述 | `extension.*` | 扩展注册表、连接状态、配置（userData） | `src/domain/extension.ts`、`src/main/pluginSystem.ts`、`src/main/mcpClient.ts`、`src/main/gitBridge.ts`、`ipc.ts` `extensions:*`/`mcp:*` | 平台/安全 |
+| BC-14 | **验收与质量门禁**（Acceptance & Quality Gate）<br>`已落地 2026-11-14` | 验收标准来源、验收项、证据绑定、豁免、门禁判定、交付联动 | 不执行工具、不决定任务状态、不替代完成证据门 | 验收标准、验收项、来源、证据、豁免、门禁、结论 | `acceptance.*`、`quality_gate.evaluated` | 验收记录（随会话/交付持久化） | `src/domain/acceptance.ts`、`src/main/acceptanceStore.ts`、`ipc.ts` `acceptance:*`、`DeliveryPanel.tsx` 门禁 | 领域/产品 |
 
-> BC-10～BC-14 是 `00-domain-blueprint.md` 推导出的**目标态上下文**：代码中已有字段/占位/文案证据，但完整领域尚未实现。编号追加而不是插入，保持既有文档与代码引用的稳定性。
+> BC-10～BC-14 是 `00-domain-blueprint.md` 推导出的**目标态上下文**：字段/占位/文案证据先于实现存在，编号追加而不是插入，保持既有文档与代码引用的稳定性。五个上下文已于 2026-11-14 全部落地；表中 `已落地 2026-11-14` 标记取代原 `目标态` 标记。
 
 ### 1.1 上下文关系图
 
@@ -133,7 +133,7 @@ flowchart LR
 | `plan_approval` | 旧工具名，已改为 `approve-files`；且它表达的是批量授权，不是方案确认 | `approve-files` / 文件清单批准 |
 | `classifyAction` | 已移除的兼容壳；当前是 `classifyReadonly` + `isSideEffectAction` | `classifyReadonly` / 动作属性 |
 | Manager / Processor / Handler / Agent（作为用户可见词） | 泛化技术词，污染通用语言；用户不需要理解 | 搭档、任务、方案、决策点 |
-| 任务队列（Task Queue） | 当前只是占位文案，未实现能力 | 问题台账、任务（不承诺队列） |
+| 任务队列（作为用户可见承诺） | 用户可见文案曾把占位描述成能力；领域内 `TaskQueueEntry` 已是真实聚合（BC-11，2026-11-14） | 用户侧称“任务/问题台账”；领域内可用“任务队列” |
 | Demo / 演示数据（作为产品语义） | 演示面板不是生产能力；混入领域文档会误导 | 原型/演示（显式标记） |
 | 坑 N / ticket N / S1…S7 | 内部开发编号，不是领域语言 | 用业务规则或 ADR 描述 |
 | V1 / V2 / V3（作为领域状态） | 版本号不是业务状态 | 能力状态、兼容状态 |
@@ -202,8 +202,8 @@ flowchart LR
 
 - **决策**：领域事件由 `deriveStateEvents(prev, next)` 在唯一转换点自动派生；事件目录必须在 `TIMELINE_EVENT_SPECS` 注册；时间线 append 到 JSONL，支持 query。
 - **理由**：避免散落打点；状态转换与事件一致；可回放诊断。
-- **权衡**：事件是派生事实，不是持久化事件源；日志写失败被静默吞掉，不能保证强一致审计。
-- **风险**：未注册事件只 warn；跨进程事件顺序依赖调用时序；没有事件版本字段。
+- **权衡**：事件是派生事实，不是持久化事件源；日志写失败有计数与 DLQ（P1-02），但不能保证强一致审计。
+- **风险**：未注册事件只 warn；跨进程事件顺序依赖调用时序；事件已有 `eventId`/`version`（P2-07）与去重（P2-06），但跨上下文事务投递仍无保证（Outbox 设计预留）。
 - **备选方案**：每个组件手写打点（已拒绝）；完整 Event Sourcing + 事件存储（当前过重）。
 - **代码**：`timeline.ts:94-250`、`260-335`；`timelineLogger.ts:55-112`；`useConversationState.ts:40-50`。
 

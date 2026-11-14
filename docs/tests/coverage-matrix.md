@@ -1,7 +1,8 @@
 # 覆盖矩阵（Coverage Matrix）
 
-> 生成：2026-08-16（S2 首版）→ **更新：D3 完成（2026-08-16）**
-> 数据源版本：L1 测试 35 文件 / 435 用例 · 事件注册表 48 事件 · 不变量 Inv 1-8 · S2/S3 DoD · L3 49 场景（interaction）
+> 首版：2026-08-16（S2）→ 增补：2026-09-29（Keenable 合规）
+> 当前快照（2026-11-15）：L1 **67 文件 / 773 用例** · 事件注册表 55+ 事件 · 不变量 Inv 1-8 + I17-I21 · L3 interaction **74 场景**
+> 表 1-表 10 保留各阶段时点的基线记录；当前总数以本快照与 `09-openspec/tasks.md §4` 为准。
 > 维护：阶段末更新（coverage-matrix skill）；缺口入 audit-items
 
 ## 表 1：不变量 ↔ L1 测试
@@ -52,6 +53,8 @@
 | **proposal.plan / proposal.completion** | **提议解析事件（S2 登记 + S3 接线）** | **timelineEvents.test.ts::proposal.*（schema/成功/失败/缺必选 4 断言）** | ✅（A-003 关闭 + A-007 两形态 schema） |
 | **completion.evidence_missing** | **完成声明被拒诊断（S4 登记 + 接线打点）** | **timelineEvents.test.ts::completion.evidence_missing（schema/载荷/缺必选 3 断言）+ L3 S4-1a/S4-3 打点断言** | ✅（S4——A-010 关闭） |
 | conversation.status_change / error | 状态/错误 | timelineEvents.test.ts | ✅ |
+
+> 表 3-表 8 中的用例/场景数是各阶段 DoD 的时点记录，不是当前总数；当前总数见页首快照。
 
 ## 表 3：DoD ↔ 门禁（S2 spec）
 
@@ -155,6 +158,22 @@
 | Key → `/v1/search` + `X-API-Key`；试用 → `/public` + Title | webTools.test.ts | ✅ |
 | probe：DDG→keyed search / health；从不打 public | webTools.test.ts | ✅ |
 | UAT 显式试用或 `NF_UAT_KEENABLE_KEY`（T3/G-web） | uat-lib `ensureWebAccessEnabled` + `docs/tests/uat-tier-baseline.md` | ✅ harness |
+
+## 表 11：BC-10～BC-14 目标态领域 ↔ 测试（2026-11-14 落地，2026-11-15 复核）
+
+| 领域 / 硬化项 | 覆盖测试 | 判定 |
+|---------------|----------|------|
+| BC-10 变更与版本 | `changeSet.test.ts`（状态机/不变量 I17）、`changeSetService.test.ts`（快照/应用/回滚）、`applyDiff.test.ts`（diff 审核） | ✅ |
+| BC-11 任务编排 | `taskQueue.test.ts`、`taskQueueStore.test.ts`、`queue.interaction.ts`（连续排队 FIFO、停止回填输入框） | ✅ |
+| BC-12 用量与成本 | `usageLedger.test.ts`、`usageStore.test.ts`、`budgetStore.test.ts`、`priceStore.test.ts`、`gatewayUsage.test.ts` | ✅ |
+| BC-13 扩展与集成 | `extension.test.ts`、`extensionRegistry.test.ts`、`mcpClient.test.ts`、`mcpConfig.test.ts`、`mcpManager.test.ts`、`gitBridge.test.ts`、`pluginSystem.test.ts` | ✅ |
+| BC-14 验收与质量门禁 | `acceptance.test.ts`、`acceptanceStore.test.ts`、`applyDiff.test.ts`（交付 diff 与门禁联动） | ✅ |
+| P1-04 IPC 契约校验 | `ipcSchema.test.ts`（结构/必填/nullable）、`ipcContractParity.test.ts`（main ↔ preload 静态对齐） | ✅ |
+| 审查回归（2026-11-15） | `agentLoop.test.ts::isApprovalIntent`（否定不批准）、`retry.interaction.ts`（第二轮失败重试上下文）、`queue.interaction.ts`（FIFO/停止回填） | ✅ |
+| P1-05 会话/轮次编排拆分 | `conversationHistory.test.ts`、`useConversationState.test.ts` + interaction 全量 74 场景 | ✅ |
+| Web Key 来源与明文副本 | `configStore.test.ts`（env/file/config 来源、opt-in 明文、删除清理） | ✅ |
+
+> 表 11 为 2026-11-15 增补；逐文件用例数不在此重复，避免与页首快照漂移。
 
 ## L5 视觉基线纪律（K8）
 

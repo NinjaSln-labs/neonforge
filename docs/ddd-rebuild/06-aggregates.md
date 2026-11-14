@@ -277,7 +277,7 @@ classDiagram
   ToolInvocation ..> SessionTimeline : 工具事件
 ```
 
-> 目标态聚合关系（A13-A17）不画入上图，避免把“未实现”混进现状图：`ChangeSet` 由工具变更产生并被 `DeliveryPackage` 引用；`TaskQueueEntry` 消费 `Task` 状态事件；`UsageLedger` 消费 `ChatStream` usage；`AcceptanceRecord` 消费 `PlanProposal.verificationPlan` 与完成证据，并向 `DeliveryPackage` 发布门禁结论；`Extension` 向 `ToolInvocation` 提供受控能力描述（经 BC-02 授权）。
+> 目标态聚合关系（A13-A17）在原 as-is 图中未画入，避免与历史现状混淆；A13–A17 已于 2026-11-14 全部落地（见 §A13–A17）：`ChangeSet` 由工具变更产生并被 `DeliveryPackage` 引用；`TaskQueueEntry` 消费 `Task` 状态事件；`UsageLedger` 消费 `ChatStream` usage；`AcceptanceRecord` 消费 `PlanProposal.verificationPlan` 与完成证据，并向 `DeliveryPackage` 发布门禁结论；`Extension` 向 `ToolInvocation` 提供受控能力描述（经 BC-02 授权）。
 
 ---
 

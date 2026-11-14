@@ -14,7 +14,7 @@
 | 证据类型 | 含义 | 例子 |
 | :--- | :--- | :--- |
 | **运行时实现** | 代码真实执行、有测试或明确入口 | Task 状态机、工具授权、SSE 流、问题台账 |
-| **占位 / 演示** | 代码明确标注“即将支持 / V1 占位 / demo”，入口存在但无真实能力 | 任务队列占位、`mcp-bridge`/`git`/`stats` 插件占位、DoD/数字交付演示面板 |
+| **占位 / 演示** | 代码明确标注“即将支持 / V1 占位 / demo”，入口存在但无真实能力 | DoD/数字交付/信任阶梯演示面板（仅 demo bridge 可达）；第三方插件加载尚未实现（仅内置注册） |
 | **产品语义暗示** | 类型、字段、注释、UI 文案、契约共同指向一个应有领域，但实现缺失或不完整 | `DeliveryPackage.acceptance` 字段、`verificationPlan`、`plan.files`、`preview`/`diff` 审核 UI |
 
 领域判定四问：
@@ -38,9 +38,9 @@
 | BC-01 | 会话与任务 | Core | 已落地 | `conversationState.ts`、`agentLoop.ts`、`protocolTools.ts` | 04/06/07 + `conversation-task` spec |
 | BC-02 | 执行与信任 | Core | 已落地（本轮修 P0） | `tools.ts`、`useToolApproval.ts`、`sandboxPath.ts` | 04/06/07 + `execution-trust` spec |
 | BC-03 | 工作区与环境 | Supporting | 已落地 | `workspace.ts`、`plannedFilesStore.ts`、`envManager.ts`、`serviceManager.ts` | 04/06/07 + `workspace-environment` spec |
-| BC-04 | 交付与问题台账 | Supporting | 部分落地 | `DeliveryPanel.tsx`、`problemStore.ts`、`applyDiff.ts` | 04/06/07 + `delivery-ledger` spec |
-| BC-05 | 模型接入 | Supporting | 已落地（用量缺失） | `gateway.ts`、`providers/*`、`preheat.ts` | 04/06/07 + `provider-gateway` spec |
-| BC-06 | 会话时间线 | Generic | 已落地（版本/投递缺失） | `timeline.ts`、`timelineLogger.ts` | 04/06/07 + `session-timeline` spec |
+| BC-04 | 交付与问题台账 | Supporting | 已落地（BC-10/14 补齐交付与验收） | `DeliveryPanel.tsx`、`problemStore.ts`、`applyDiff.ts` | 04/06/07 + `delivery-ledger` spec |
+| BC-05 | 模型接入 | Supporting | 已落地（BC-12 补齐用量） | `gateway.ts`、`providers/*`、`preheat.ts` | 04/06/07 + `provider-gateway` spec |
+| BC-06 | 会话时间线 | Generic | 已落地（跨上下文 Outbox 预留） | `timeline.ts`、`timelineLogger.ts` | 04/06/07 + `session-timeline` spec |
 | BC-07 | 配置与凭据 | Generic | 已落地 | `configStore.ts` | 04/06/07 + `configuration-secrets` spec |
 | BC-08 | 上下文与检索 | Supporting | 已落地 | `context.ts`、`codeRag.ts`、`lsp.ts`、`compact.ts` | 04/06/07 + `context-retrieval` spec |
 | BC-09 | 平台运行 | Generic | 已落地（插件仅注册） | `main.ts`、`pluginSystem.ts`、`preload.ts` | 04/06/07 + `platform-runtime` spec |
@@ -159,7 +159,7 @@
 | BC-03 | 项目初始化只创建最小骨架，没有模板/场景工程初始化 | `projectInit.ts`、`scenes.tsx` | 模板化列为候选，不建新上下文 |
 | BC-04 | 交付包验收项为空；diff 审核与变更集未统一 | `MainWorkspace.tsx:282-293`、`DeliveryPanel.tsx` | 由 BC-10/BC-14 补齐 |
 | BC-05 | 无 usage 解析、无价格表、无模型健康/降级策略 | `gateway.ts` | 由 BC-12 补齐；健康策略列入后续 |
-| BC-06 | 无事件版本/eventId/Outbox/DLQ；写失败静默 | `timeline.ts`、`timelineLogger.ts` | 保留为后续硬化项 |
+| BC-06 | 事件版本/DLQ/重放/去重已落地（P1-02、P2-06、P2-07）；跨上下文事务性 Outbox 仍预留 | `timeline.ts`、`timelineLogger.ts` | 仅 Outbox 保留为后续硬化项（设计见 `09-openspec/design.md §6`） |
 | BC-07 | 明文 fallback 的风险决策未产品化 | `configStore.ts` | 保留为安全决策项 |
 | BC-08 | 无长期记忆/项目知识库；RAG 是关键词级 | `codeRag.ts`、`context.ts` | 明确为非目标（无代码证据），避免虚构 |
 | BC-09 | 无自动更新/签名/崩溃上报；插件仅注册 | `main.ts`、`pluginSystem.ts` | 平台通用能力，列入非目标 |
@@ -186,7 +186,8 @@
 | :--- | :--- | :--- |
 | 已完成 | P0 安全/不变量修正（P0-01～P0-05、P1-01） | 先保证现有核心可信 |
 | 已完成（2026-11-14） | BC-10 变更集、BC-14 验收门禁、BC-12 用量台账、BC-11 任务队列、BC-13 MCP/Git 集成 | 目标态五领域已落地 |
-| 后续 | Outbox/DLQ/事件版本、IPC 契约校验、ConversationPanel 拆分、演示隔离机制化 | 见 `08-model-review.md` 与 `09-openspec/tasks.md §6` |
+| 已完成（2026-11-15） | IPC 契约校验（P1-04）、ConversationPanel 拆分（P1-05）、演示隔离机制化 | 工程边界与安全边界硬化 |
+| 后续 | 跨上下文事务性 Outbox（设计预留） | 仅剩跨库事务投递保证，见 `08-model-review.md` 与 `09-openspec/tasks.md §6` |
 
 ---
 

@@ -180,7 +180,7 @@ state transition (useConversationState.transition)
 
 ### 4.1 IPC 契约
 
-见 [07 §2](07-domain-interactions.md#2-集成事件契约ipc)。本次修正只新增/调整语义，不新增通道：
+见 [07 §2](../07-domain-interactions.md#2-集成事件契约ipc)。本次修正只新增/调整语义，不新增通道：
 
 - `tools:execute`：read 的授权策略变化；`ToolResult` 字段不变。
 - `completion:verify`：只代跑范围收紧；返回结构不变。

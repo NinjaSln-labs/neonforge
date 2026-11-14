@@ -38,10 +38,10 @@
 | G4 | 副作用操作可授权、可回滚、有边界 | write/edit/bash 需授权；写前快照；计划清单内才自动放行 | `tools.ts`、`useToolApproval.ts`、`tools.test.ts` |
 | G5 | 会话可中断、可恢复、可审计 | 支持停止、重试、断点续做、问题台账、时间线 | `sessionStore.ts`、`problemStore.ts`、`timelineLogger.ts` |
 | G6 | 接入方可替换 | DeepSeek / Command Code / OpenCode Zen/Go 通过统一描述符接入 | `providers/descriptors/*`、`providers/transport/openaiCompat.ts` |
-| G7 | 交付可验收（目标态） | 验收标准有来源（方案验证计划/用户 DoD），证据可绑定，门禁通过才允许关闭 | 目标态 `acceptance-quality` spec；当前 `DeliveryPackage.acceptance` 为空，见 08 §2A |
-| G8 | 任务可编排、成本可见（目标态） | 多任务可排队/暂停/恢复；token/成本有台账与预算提醒 | 目标态 `task-orchestration` / `usage-cost` spec；当前为占位，见 00 §3 |
+| G7 | 交付可验收 | 验收标准有来源（方案验证计划/用户 DoD），证据可绑定，门禁通过才允许关闭 | 已落地（BC-14，2026-11-14）：`domain/acceptance.ts`、`main/acceptanceStore.ts`、`ipc.ts` `acceptance:*` |
+| G8 | 任务可编排、成本可见 | 多任务可排队/暂停/恢复；token/成本有台账与预算提醒 | 已落地（BC-11/BC-12，2026-11-14）：`taskQueue.ts`/`taskQueueStore.ts`、`usageLedger.ts`/`usageStore.ts` |
 
-> G7/G8 是**目标态目标**：产品语义上应有，但当前代码只有字段/占位/演示。文档明确区分，避免把目标写成现状。
+> G7/G8 在初始分析时只有字段/占位/演示证据，已作为目标态目标记录；2026-11-14 已全部落地，现状以 `00-domain-blueprint.md §2` 与 `10-code-evidence.md` 为准。
 
 ### 2.2 非目标
 

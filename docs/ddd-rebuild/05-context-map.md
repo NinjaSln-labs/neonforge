@@ -3,6 +3,8 @@
 > 阶段：战略 / Context Map
 > 输入：[04 限界上下文](04-bounded-contexts.md) 的上下文目录、[02 领域发现](02-discovery.md) 的跨边界热点
 > 输出：关系矩阵、集成模式、契约所有权、翻译/ACL 决策、失败模式、版本策略
+>
+> 状态（2026-11-15）：矩阵中的 `目标态` 标记记录设计来源；M12-M18 对应上下文与接口已于 2026-11-14 全部落地（`changeset:*`/`queue:*`/`usage:*`/`extensions:*`/`acceptance:*` 已在 `ipc.ts` 注册）。
 
 ---
 
@@ -78,11 +80,11 @@ flowchart LR
 | `PROTOCOL_TOOL_DEFS` | TypeScript 常量 / JSON Schema | BC-01 | BC-05、BC-01 | schema 与提示词同步；新增字段需参数校验同步 | 同上 |
 | `TIMELINE_EVENT_SPECS` | TypeScript 常量 | BC-06 | 全部 | 新增事件三步：注册 → emit → 测试 | 同上 |
 | `NeonForgeBridge` | `preload.ts` + `types.d.ts` | BC-09/BC-02 | renderer | 类型与实现同步；无生成式 schema（见 08） | 同上 |
-| `changeset:*`（目标态） | IPC invoke | BC-10 | BC-04、UI | 变更集状态机；应用必须带 approved；回滚必须带 changeId | 随应用发布 |
-| `queue:*`（目标态） | IPC invoke + 事件 | BC-11 | BC-01、UI | 队列条目状态只由调度器变更；Task 状态事件为唯一事实源 | 随应用发布 |
-| `usage:*`（目标态） | IPC query/export | BC-12 | UI、审计 | 只读台账；导出脱敏；价格表版本字段只增 | 随应用发布 |
-| `extensions:*`（目标态） | IPC invoke | BC-13 | BC-02、UI | 能力描述符需版本；第三方扩展首次调用需授权 | 随应用发布 |
-| `acceptance:*`（目标态） | IPC invoke | BC-14 | BC-04、UI | 验收项来源必填；passed 必须带 evidenceRef；waive 必须带 reason | 随应用发布 |
+| `changeset:*` | IPC invoke | BC-10 | BC-04、UI | 变更集状态机；应用必须带 approved；回滚必须带 changeId | 随应用发布 |
+| `queue:*` | IPC invoke + 事件 | BC-11 | BC-01、UI | 队列条目状态只由调度器变更；Task 状态事件为唯一事实源 | 随应用发布 |
+| `usage:*` | IPC query/export | BC-12 | UI、审计 | 只读台账；导出脱敏；价格表版本字段只增 | 随应用发布 |
+| `extensions:*` | IPC invoke | BC-13 | BC-02、UI | 能力描述符需版本；第三方扩展首次调用需授权 | 随应用发布 |
+| `acceptance:*` | IPC invoke | BC-14 | BC-04、UI | 验收项来源必填；passed 必须带 evidenceRef；waive 必须带 reason | 随应用发布 |
 
 ---
 
@@ -129,7 +131,7 @@ flowchart LR
 | F20 | M17 用量（目标态） | Provider 不返回 usage | 成本不可见/被误算 0 | 响应解析 | 记 `unknown`，不得按 0 | 用上一版价格表估算并标注估算 |
 | F21 | M18 扩展（目标态） | MCP 服务器不可达/能力描述不符 | 工具调用失败或越权 | 连接探测/能力校验 | 失败隔离；调用前能力校验；首次授权 | 停用扩展；回退内置工具 |
 
-**已识别失败模式 21 个，超过 5 个的要求（其中 F17-F21 为目标态）。**
+**已识别失败模式 21 个，超过 5 个的要求（其中 F17-F21 随目标态上下文于 2026-11-14 落地）。**
 
 ---
 
@@ -152,7 +154,7 @@ flowchart LR
 - `BC-07` 是通用供应方，不反向依赖业务上下文。
 - `BC-06` 是事件消费者，不反向依赖业务上下文。
 - `BC-09` 是平台宿主，向所有上下文提供生命周期，不消费业务事件。
-- 目标态：`BC-11 → BC-01`（调度命令）与 `BC-01 → BC-11`（任务状态事件）是双向事件协作，但 **命令/事件分离**，不构成状态依赖环；`BC-14 → BC-04` 是单向发布；`BC-10 → BC-04` 是单向供应；`BC-12` 是事件消费者；`BC-13 → BC-02` 经 ACL 单向提供能力描述，BC-02 不反向依赖扩展内部状态。
+- 目标态关系（已落地 2026-11-14）：`BC-11 → BC-01`（调度命令）与 `BC-01 → BC-11`（任务状态事件）是双向事件协作，但 **命令/事件分离**，不构成状态依赖环；`BC-14 → BC-04` 是单向发布；`BC-10 → BC-04` 是单向供应；`BC-12` 是事件消费者；`BC-13 → BC-02` 经 ACL 单向提供能力描述，BC-02 不反向依赖扩展内部状态。
 - **未发现循环依赖**。但 `BC-01 ↔ BC-02` 的 Shared Kernel（`src/domain` 被两端同时导入）是逻辑上的双向耦合；见 08。
 
 ---
