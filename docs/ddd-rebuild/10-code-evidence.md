@@ -76,16 +76,16 @@
 
 | 文档断言 | 证据 |
 | :--- | :--- |
-| 完成核验 → 解决确认 | `R/ConversationPanel.tsx:733-792`（`verifyThenResolve`） |
+| 完成核验 → 解决确认 | `R/useEvidenceVerification.ts:34-...`（`verifyThenResolve`） |
 | 流式增量处理（`propose_plan`/done 分支均不再写 plannedFiles——P0-03） | `R/useChatStream.ts:80-...`（`createApplyChunk`） |
 | done 分支文本方案降级（降级引导，不落清单） | `R/useChatStream.ts`（`createApplyChunk` done 分支） |
-| 续聊与最大轮次 | `R/useChatEngine.ts:147-...`（`maybeContinue`） |
-| 主回合（历史组装、压缩、互斥） | `R/useChatEngine.ts:291-...`（`runChat`） |
+| 续聊与最大轮次 | `R/useChatEngine.ts:148-...`（`maybeContinue`） |
+| 主回合（历史组装、压缩、互斥） | `R/useChatEngine.ts:292-...`（`runChat`） |
 | 历史构建（结构化 tool_calls/tool 消息） | `R/conversationHistory.ts:13-...`（`buildHistory`） |
-| 发送入口与 pending 文本意图 | `R/useChatEngine.ts:557-...`（`send`） |
-| 错误收口（含 auto-retry 与 sid 归属） | `R/useChatEngine.ts:774-...`（`finishError`） |
-| 演示数据门控 | `R/ConversationPanel.tsx:647-663`（`getDemoBridge`/`demoDigital`） |
-| 信任集合追加 | `R/ConversationPanel.tsx:571-...`（`addTrust`） |
+| 发送入口与 pending 文本意图 | `R/useChatEngine.ts:578-...`（`send`） |
+| 错误收口（含 auto-retry 与 sid 归属） | `R/useChatEngine.ts:795-...`（`finishError`） |
+| 演示数据门控 | `R/ConversationPanel.tsx:648-...`（`getDemoBridge`/`demoDigital`） |
+| 信任集合追加 | `R/ConversationPanel.tsx:572-...`（`addTrust`） |
 | 会话状态 hook | `R/useConversationState.ts`（`transition`/`stateRef`） |
 | 工具授权卡状态机 | `R/useToolApproval.ts` |
 | 问题台账 7 态与迁移 | `R/problemStore.ts` |
@@ -141,6 +141,28 @@
 | BC-14 验收与质量门禁 | 历史证据：`R/DeliveryPanel.tsx`（验收勾选）、`R/DoDAlignPanel.tsx:9-13`（演示）、`D/conversationState.ts` 的 `PlanProposal.verificationPlan`；实现：`domain/acceptance.ts`、`main/acceptanceStore.ts`、`ipc.ts` `acceptance:*`、`DeliveryPanel.tsx` 门禁 | 已落地（2026-11-14）：来源派生 + 证据/豁免 + 门禁判定 |
 | 演示面板（非目标域） | `R/DigitalDeliveryPanel.tsx:14-67`、`R/DoDAlignPanel.tsx`、`R/TrustLadderPanel.tsx` | 仅 demo bridge 可达；生产路径不得注入 |
 | 场景卡（产品内容） | `R/scenes.tsx:1`、`R/StartPage.tsx:4`、`R/ConversationPanel.tsx:82` | 不构成业务领域 |
+
+---
+
+## 9. 代码审查修复证据（2026-11-15）
+
+> 审查范围 `a524c4c..HEAD`；行为变更与不变量见 `09-openspec/tasks.md §7`。
+
+| 断言 | 证据 |
+| :--- | :--- |
+| 批准文本只认精确批准词（否定句不触发） | `D/agentLoop.ts:84-...`（`isApprovalIntent`） |
+| 停止后旧流 chunk 仍被丢弃（sid 归属） | `R/useChatEngine.ts:534-...`（`stopGeneration`） |
+| 失败回合重试重放本回合上下文 | `R/useChatEngine.ts:292-...`（`runChat` 请求前记录 `chatRef`）、`851-...`（`retryFailedTurn`） |
+| 排队衔接多槽 FIFO + 停止回填输入框 | `R/useChatEngine.ts:534-...`/`568-...`/`578-...` |
+| 工具结果/拦截按稳定 id 绑定（迟到的结果不丢） | `R/useChatStream.ts:716-...`（`isThisCall`）、`:943-956`（全消息定位） |
+| ask_user「已回复」按消息位置判定（内层 toolCalls 索引不遮蔽） | `R/ConversationPanel.tsx:1034-...`（`messages.indexOf(m)`） |
+| 目标卡空值回退（不再写空标题） | `R/ConversationPanel.tsx:872-876`（`statement || initialPrompt || …`） |
+| 异步对账按发起 sid 归属 | `R/useEvidenceVerification.ts:59-...`（`sid` 捕获/校验） |
+| 一次性自动续跑不被排队消息空耗 | `R/useChatEngine.ts:795-...`（`finishError`） |
+| Web Key 来源标注 / IPC 脱敏 / opt-in 明文副本 | `M/configStore.ts:31-...`（source helper）、`:292-...`（`getWebAccess`）、`:329-...`（`setWebAccess`）、`M/ipc.ts:64-...`（`webAccessView`） |
+| 设置页仅提交用户编辑过的 Web Key | `R/SettingsPanel.tsx:204-...`（dirty 标记与 patch 组装） |
+| Key 失效时 env/文件优先级提示 | `R/useChatEngine.ts:795-...`、`R/ConfigPage.tsx`（来源提示 + 保存后校验） |
+| 启动导航本身也重试 | `tests/interaction/scenarios.ts:211-...`（`gotoStart`） |
 
 ---
 
