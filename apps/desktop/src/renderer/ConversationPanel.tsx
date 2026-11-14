@@ -481,6 +481,18 @@ export default function ConversationPanel({
     restorePlanned,
   } = useConversationState({
     emit: (type, detail) => tlog(type, detail, 'system'),
+    // BC-14：方案确认 → 验收标准从 verificationPlan 派生（权威记录在 main；无来源记录为空）
+    onPlanConfirmed: (plan) => {
+      void window.neonforge.acceptance?.derive(
+        sessionId,
+        plan.verificationPlan ?? [],
+        'plan-verification',
+      )
+    },
+    onTaskBoundary: () => {
+      void window.neonforge.acceptance?.clear(sessionId)
+      void window.neonforge.changeset?.clear(sessionId)
+    },
   })
   // D3（ADR-005）：启动恢复——main plannedFilesStore 权威（批准事实跨重启）→ 本地镜像
   // 恢复后模型继续写清单内文件不需重新批量授权（与问题台账 authorized 恢复同构）
@@ -752,6 +764,14 @@ export default function ConversationPanel({
     const v = verifyCompletion(claim, systemState)
     if (v.ok) {
       evidenceGuideCountRef.current = 0 // 证据通过 → 计数重置
+      // BC-14：把系统复核通过的命令证据绑定到验收项（未覆盖项保留 pending，由用户手工确认）
+      const verifiedCommands = claim.evidence.verification
+        .filter((item) => item.passed !== false)
+        .map((item) => item.command)
+        .filter(
+          (cmd) => !systemState || systemState.verificationResults[cmd]?.ok !== false,
+        )
+      void window.neonforge.acceptance?.applyEvidence(sessionId, verifiedCommands)
       // 核验期间可能已有其它决策点置位（竞态防护——pending 非 none 不覆盖）。
       // A-022（S5 真机 2026-09-06）：直接丢弃 = resolution 不可达死锁（真机实证：核验通过瞬间
       // 残留授权卡 pending 占用 → return → 之后再无重试，forceTool 循环不止）。修正：等 pending
@@ -2031,6 +2051,7 @@ export default function ConversationPanel({
         level: 'basic',
         tools: true,
         forceTool,
+        sessionId,
         messages: [
           ...(loopGuardSuffix
             ? [{ ...sysHint, content: sysHint.content + loopGuardSuffix }]

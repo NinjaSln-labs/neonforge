@@ -21,6 +21,7 @@ import {
   type PendingKind,
   type RejectReason,
   type ApprovalRequest,
+  type PlanProposal,
 } from '../domain/conversationState'
 import { deriveStateEvents } from '../domain/timeline'
 
@@ -29,6 +30,10 @@ export type ConfirmPoint = 'goal' | 'plan' | 'resolution' | 'system_clarify'
 export interface UseConversationStateOpts {
   // 领域事件发出（应用层接 IPC——落盘时间线）
   emit?: (type: string, detail: Record<string, unknown>) => void
+  // BC-14：方案确认后把 verificationPlan 交给验收上下文（记录在 main；renderer 不持有权威）
+  onPlanConfirmed?: (plan: PlanProposal) => void
+  // 任务边界（goal 确认）：清理上一任务的验收记录等跨任务数据
+  onTaskBoundary?: () => void
 }
 
 export function useConversationState(opts?: UseConversationStateOpts) {
@@ -56,9 +61,19 @@ export function useConversationState(opts?: UseConversationStateOpts) {
     // S3：拒绝带原因（不变量 8——userDecided 签名强制；A-006：reason 必传——缺省会静默掩盖调用方漏传）
     // #6 真机 2026-08-31（复验轮）：plan 确认镜像到 main（approve-files 硬序门）；goal 确认=任务边界 → 复位
     confirm: (point: ConfirmPoint) => {
+      const before = stateRef.current
       const r = transition((s) => userConfirmed(s, point))
-      if (point === 'plan') void window.neonforge?.session?.setPlanConfirmed?.(true)
-      else if (point === 'goal') void window.neonforge?.session?.setPlanConfirmed?.(false)
+      if (point === 'plan') {
+        void window.neonforge?.session?.setPlanConfirmed?.(true)
+        // BC-14：确认前的 decisionContent 是方案快照；确认时派生验收记录（无来源则记录为空）
+        const dc = before.decisionContent
+        if (dc?.kind === 'plan' && dc.proposal) {
+          opts?.onPlanConfirmed?.(dc.proposal as PlanProposal)
+        }
+      } else if (point === 'goal') {
+        void window.neonforge?.session?.setPlanConfirmed?.(false)
+        opts?.onTaskBoundary?.()
+      }
       return r
     },
     reject: (point: ConfirmPoint, reason: RejectReason) => {

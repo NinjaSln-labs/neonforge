@@ -29,6 +29,12 @@ import { compaction } from './compact.js'
 import { appendChatLog, exportChatLog } from './chatLog.js'
 import { logTimeline, timelineLogger } from './timelineLogger.js'
 import { runVerificationCommands } from './verification.js'
+import { createUsageEntry } from '../domain/usageLedger.js'
+import { getUsageStore } from './usageStore.instance.js'
+import { getAcceptanceStore } from './acceptanceStore.instance.js'
+import type { AcceptanceSource } from '../domain/acceptance.js'
+import { getChangeSetService } from './changeSetService.instance.js'
+import { getTaskQueueStore } from './taskQueueStore.instance.js'
 
 export function registerIpc(): void {
   initTools()
@@ -171,6 +177,7 @@ export function registerIpc(): void {
           tool_call_id?: string
           reasoning_content?: string
         }>
+        sessionId?: string
       },
     ) => {
       const send = (
@@ -202,6 +209,24 @@ export function registerIpc(): void {
           messages: opts.messages,
           onDelta: (chunk) =>
             send(chunk.type, chunk.text, 'toolCall' in chunk ? chunk.toolCall : undefined),
+          // BC-12：Provider 真实 usage → 本机用量台账（不含内容；sessionId 由 renderer 传入）
+          onUsage: (u) => {
+            const at = new Date().toISOString()
+            getUsageStore().record(
+              createUsageEntry({
+                id: `usage-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                at,
+                provider: u.providerId,
+                model: u.model,
+                promptTokens: u.promptTokens,
+                completionTokens: u.completionTokens,
+                reasoningTokens: u.reasoningTokens,
+                cacheHitTokens: u.cacheHitTokens,
+                cacheMissTokens: u.cacheMissTokens,
+                sessionId: opts.sessionId,
+              }),
+            )
+          },
         })
         return { ok: true }
       } catch (e) {
@@ -216,19 +241,199 @@ export function registerIpc(): void {
     },
   )
 
+  // BC-12 用量与成本：查询汇总 / 脱敏导出
+  ipcMain.handle('usage:summary', (_e, sessionId?: string) => getUsageStore().summary(sessionId))
+  ipcMain.handle('usage:export', () => getUsageStore().exportCsv())
+
+  // BC-14 验收与质量门禁
+  ipcMain.handle(
+    'acceptance:derive',
+    (_e, opts: { sessionId: string; verificationPlan?: string[]; source?: AcceptanceSource }) => {
+      if (!opts?.sessionId) return null
+      return getAcceptanceStore().derive(
+        opts.sessionId,
+        opts.verificationPlan ?? [],
+        opts.source ?? 'plan-verification',
+      )
+    },
+  )
+  ipcMain.handle('acceptance:list', (_e, sessionId: string) =>
+    sessionId ? getAcceptanceStore().get(sessionId) : null,
+  )
+  ipcMain.handle(
+    'acceptance:mark',
+    (
+      _e,
+      opts: {
+        sessionId: string
+        itemId: string
+        status: 'passed' | 'failed' | 'waived'
+        evidenceRef?: string
+        manualReason?: string
+        reason?: string
+      },
+    ) => {
+      if (!opts?.sessionId || !opts.itemId) return null
+      return getAcceptanceStore().mark(opts.sessionId, opts.itemId, opts.status, {
+        evidenceRef: opts.evidenceRef,
+        manualReason: opts.manualReason,
+        reason: opts.reason,
+      })
+    },
+  )
+  ipcMain.handle(
+    'acceptance:waive',
+    (_e, opts: { sessionId: string; itemId: string; reason: string }) => {
+      if (!opts?.sessionId || !opts.itemId) return null
+      return getAcceptanceStore().mark(opts.sessionId, opts.itemId, 'waived', {
+        reason: opts.reason,
+      })
+    },
+  )
+  ipcMain.handle(
+    'acceptance:apply-evidence',
+    (_e, opts: { sessionId: string; evidenceRefs: string[] }) => {
+      if (!opts?.sessionId) return null
+      return getAcceptanceStore().applyEvidence(opts.sessionId, opts.evidenceRefs ?? [])
+    },
+  )
+  ipcMain.handle('acceptance:evaluate', (_e, sessionId: string) =>
+    sessionId ? getAcceptanceStore().evaluate(sessionId) : null,
+  )
+  ipcMain.handle('acceptance:accept-empty', (_e, sessionId: string) =>
+    sessionId ? getAcceptanceStore().acceptEmpty(sessionId) : null,
+  )
+  ipcMain.handle('acceptance:clear', (_e, sessionId: string) => {
+    if (sessionId) getAcceptanceStore().clear(sessionId)
+  })
+
+  // BC-11 任务编排：队列命令（每命令返回 {ok, queue|error}）
+  const queueSafe = (fn: () => unknown) => {
+    try {
+      return { ok: true, queue: fn() }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+  ipcMain.handle('queue:list', (_e, sessionId: string) =>
+    sessionId ? getTaskQueueStore().list(sessionId) : { entries: [] },
+  )
+  ipcMain.handle('queue:enqueue', (_e, opts: { sessionId: string; title: string }) =>
+    opts?.sessionId
+      ? queueSafe(() => getTaskQueueStore().enqueue(opts.sessionId, opts.title))
+      : { ok: false, error: '缺少 sessionId' },
+  )
+  ipcMain.handle(
+    'queue:start',
+    (_e, opts: { sessionId: string; entryId: string }) =>
+      opts?.sessionId
+        ? queueSafe(() => getTaskQueueStore().start(opts.sessionId, opts.entryId))
+        : { ok: false, error: '缺少 sessionId' },
+  )
+  ipcMain.handle(
+    'queue:block',
+    (_e, opts: { sessionId: string; entryId: string; reason: string }) =>
+      opts?.sessionId
+        ? queueSafe(() =>
+            getTaskQueueStore().block(opts.sessionId, opts.entryId, opts.reason),
+          )
+        : { ok: false, error: '缺少 sessionId' },
+  )
+  ipcMain.handle(
+    'queue:resume',
+    (_e, opts: { sessionId: string; entryId: string }) =>
+      opts?.sessionId
+        ? queueSafe(() => getTaskQueueStore().resume(opts.sessionId, opts.entryId))
+        : { ok: false, error: '缺少 sessionId' },
+  )
+  ipcMain.handle(
+    'queue:pause',
+    (_e, opts: { sessionId: string; entryId: string }) =>
+      opts?.sessionId
+        ? queueSafe(() => getTaskQueueStore().pause(opts.sessionId, opts.entryId))
+        : { ok: false, error: '缺少 sessionId' },
+  )
+  ipcMain.handle(
+    'queue:complete',
+    (_e, opts: { sessionId: string; entryId: string }) =>
+      opts?.sessionId
+        ? queueSafe(() => getTaskQueueStore().complete(opts.sessionId, opts.entryId))
+        : { ok: false, error: '缺少 sessionId' },
+  )
+  ipcMain.handle(
+    'queue:fail',
+    (_e, opts: { sessionId: string; entryId: string; reason: string }) =>
+      opts?.sessionId
+        ? queueSafe(() => getTaskQueueStore().fail(opts.sessionId, opts.entryId, opts.reason))
+        : { ok: false, error: '缺少 sessionId' },
+  )
+  ipcMain.handle(
+    'queue:cancel',
+    (_e, opts: { sessionId: string; entryId: string }) =>
+      opts?.sessionId
+        ? queueSafe(() => getTaskQueueStore().cancel(opts.sessionId, opts.entryId))
+        : { ok: false, error: '缺少 sessionId' },
+  )
+  ipcMain.handle(
+    'queue:reorder',
+    (_e, opts: { sessionId: string; entryId: string; position: number }) =>
+      opts?.sessionId
+        ? queueSafe(() =>
+            getTaskQueueStore().reorder(opts.sessionId, opts.entryId, opts.position),
+          )
+        : { ok: false, error: '缺少 sessionId' },
+  )
+  ipcMain.handle('queue:clear', (_e, sessionId: string) => {
+    if (sessionId) getTaskQueueStore().clear(sessionId)
+  })
+
   // 05 交付包执行层：diff 应用（L3 授权）/ 快照回滚
   ipcMain.handle(
     'delivery:apply-diff',
-    (_e, opts: { path: string; diff: string; approved?: boolean }) => {
+    (_e, opts: { path: string; diff: string; approved?: boolean; sessionId?: string }) => {
       if (!opts.approved)
         return { ok: false, error: '「applyDiff」需要授权（L3）——approved=true 后执行' }
       const changes = parseUnifiedDiff(opts.diff ?? '')
       if (changes.length === 0) return { ok: false, error: 'diff 解析为空——不支持该格式' }
       snapshot(opts.path)
-      return applyDiffToFile(opts.path, changes)
+      const r = applyDiffToFile(opts.path, changes)
+      if (r.ok) {
+        try {
+          getChangeSetService().recordMutation(opts.sessionId ?? 'default', opts.path)
+        } catch {
+          /* 变更集记录失败不影响应用结果 */
+        }
+      }
+      return r
     },
   )
-  ipcMain.handle('delivery:revert-diff', (_e, opts: { path: string }) => revert(opts.path))
+  ipcMain.handle(
+    'delivery:revert-diff',
+    (_e, opts: { path: string; sessionId?: string }) => {
+      const r = revert(opts.path)
+      if (r.ok) {
+        try {
+          getChangeSetService().recordRevert(opts.sessionId ?? 'default', opts.path)
+        } catch {
+          /* 变更集状态同步失败不影响回滚结果 */
+        }
+      }
+      return r
+    },
+  )
+
+  // BC-10 变更与版本：查询/整集回滚/清理
+  ipcMain.handle('changeset:list', (_e, sessionId: string) =>
+    sessionId ? getChangeSetService().list(sessionId) : null,
+  )
+  ipcMain.handle('changeset:revert', (_e, sessionId: string) =>
+    sessionId
+      ? getChangeSetService().revert(sessionId)
+      : { ok: false, reverted: [], conflicted: [], error: '缺少 sessionId' },
+  )
+  ipcMain.handle('changeset:clear', (_e, sessionId: string) => {
+    if (sessionId) getChangeSetService().clear(sessionId)
+  })
 
   // ticket 03：打开项目 / 文件树 / 读文件（打开成功后自动连接 LSP——ticket 12 真实语言服务器）
   ipcMain.handle('workspace:open-folder', async (event) => {

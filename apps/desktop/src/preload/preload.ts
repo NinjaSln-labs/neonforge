@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld('neonforge', {
       level?: string
       tools?: boolean
       forceTool?: boolean
+      sessionId?: string
       messages: Array<{
         role: string
         content: string | null
@@ -70,15 +71,79 @@ contextBridge.exposeInMainWorld('neonforge', {
       return () => ipcRenderer.removeListener('gateway:stream-chunk', listener)
     },
   },
+  usage: {
+    summary: (sessionId?: string) => ipcRenderer.invoke('usage:summary', sessionId),
+    export: () => ipcRenderer.invoke('usage:export') as Promise<{
+      ok: boolean
+      path?: string
+      error?: string
+    }>,
+  },
+  acceptance: {
+    derive: (
+      sessionId: string,
+      verificationPlan: string[],
+      source?: 'plan-verification' | 'user-dod' | 'manual',
+    ) =>
+      ipcRenderer.invoke('acceptance:derive', { sessionId, verificationPlan, source }),
+    list: (sessionId: string) => ipcRenderer.invoke('acceptance:list', sessionId),
+    mark: (
+      sessionId: string,
+      itemId: string,
+      status: 'passed' | 'failed' | 'waived',
+      opts?: { evidenceRef?: string; manualReason?: string; reason?: string },
+    ) => ipcRenderer.invoke('acceptance:mark', { sessionId, itemId, status, ...opts }),
+    waive: (sessionId: string, itemId: string, reason: string) =>
+      ipcRenderer.invoke('acceptance:waive', { sessionId, itemId, reason }),
+    applyEvidence: (sessionId: string, evidenceRefs: string[]) =>
+      ipcRenderer.invoke('acceptance:apply-evidence', { sessionId, evidenceRefs }),
+    evaluate: (sessionId: string) => ipcRenderer.invoke('acceptance:evaluate', sessionId),
+    acceptEmpty: (sessionId: string) =>
+      ipcRenderer.invoke('acceptance:accept-empty', sessionId),
+    clear: (sessionId: string) => ipcRenderer.invoke('acceptance:clear', sessionId),
+  },
+  changeset: {
+    list: (sessionId: string) => ipcRenderer.invoke('changeset:list', sessionId),
+    revert: (sessionId: string) => ipcRenderer.invoke('changeset:revert', sessionId) as Promise<{
+      ok: boolean
+      reverted: string[]
+      conflicted: string[]
+      error?: string
+    }>,
+    clear: (sessionId: string) => ipcRenderer.invoke('changeset:clear', sessionId),
+  },
+  queue: {
+    list: (sessionId: string) => ipcRenderer.invoke('queue:list', sessionId),
+    enqueue: (sessionId: string, title: string) =>
+      ipcRenderer.invoke('queue:enqueue', { sessionId, title }),
+    start: (sessionId: string, entryId: string) =>
+      ipcRenderer.invoke('queue:start', { sessionId, entryId }),
+    block: (sessionId: string, entryId: string, reason: string) =>
+      ipcRenderer.invoke('queue:block', { sessionId, entryId, reason }),
+    resume: (sessionId: string, entryId: string) =>
+      ipcRenderer.invoke('queue:resume', { sessionId, entryId }),
+    pause: (sessionId: string, entryId: string) =>
+      ipcRenderer.invoke('queue:pause', { sessionId, entryId }),
+    complete: (sessionId: string, entryId: string) =>
+      ipcRenderer.invoke('queue:complete', { sessionId, entryId }),
+    fail: (sessionId: string, entryId: string, reason: string) =>
+      ipcRenderer.invoke('queue:fail', { sessionId, entryId, reason }),
+    cancel: (sessionId: string, entryId: string) =>
+      ipcRenderer.invoke('queue:cancel', { sessionId, entryId }),
+    reorder: (sessionId: string, entryId: string, position: number) =>
+      ipcRenderer.invoke('queue:reorder', { sessionId, entryId, position }),
+    clear: (sessionId: string) => ipcRenderer.invoke('queue:clear', sessionId),
+  },
   delivery: {
-    applyDiff: (path: string, diff: string, approved?: boolean) =>
+    applyDiff: (path: string, diff: string, approved?: boolean, sessionId?: string) =>
       ipcRenderer.invoke('delivery:apply-diff', {
         path,
         diff,
         approved: approved ?? false,
+        sessionId,
       }) as Promise<{ ok: boolean; file?: string; error?: string }>,
-    revertDiff: (path: string) =>
-      ipcRenderer.invoke('delivery:revert-diff', { path }) as Promise<{
+    revertDiff: (path: string, sessionId?: string) =>
+      ipcRenderer.invoke('delivery:revert-diff', { path, sessionId }) as Promise<{
         ok: boolean
         error?: string
       }>,

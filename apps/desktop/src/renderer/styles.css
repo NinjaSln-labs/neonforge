@@ -586,6 +586,37 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-tabs__item:focus-visible { outline: 1px solid var(--nf-accent); }
 
 .nf-task { display: flex; flex-direction: column; gap: var(--nf-space-2); }
+.nf-queue__add { display: flex; gap: var(--nf-space-1); }
+.nf-queue__add input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--nf-border);
+  border-radius: 4px;
+  background: var(--nf-bg-elevated);
+  color: var(--nf-text);
+}
+.nf-queue__add input:focus-visible { outline: 1px solid var(--nf-accent); }
+.nf-queue { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--nf-space-1); }
+.nf-queue__item {
+  padding: 6px 8px;
+  border: 1px solid var(--nf-border);
+  border-radius: 4px;
+  background: var(--nf-bg-elevated);
+}
+.nf-queue__title { font-size: 13px; color: var(--nf-text); overflow-wrap: anywhere; }
+.nf-queue__actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.nf-queue__actions button {
+  padding: 2px 8px;
+  font-size: 12px;
+  border: 1px solid var(--nf-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--nf-text-muted);
+  cursor: pointer;
+}
+.nf-queue__actions button:hover:not(:disabled) { border-color: var(--nf-accent); color: var(--nf-text); }
+.nf-queue__actions button:disabled { opacity: 0.5; cursor: default; }
 
 /* 思考中：边框呼吸（用户反馈：光晕太大，边框亮即可） */
 @keyframes nf-thinking-pulse {

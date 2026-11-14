@@ -78,6 +78,7 @@ export interface NeonForgeBridge {
       level?: string
       tools?: boolean
       forceTool?: boolean
+      sessionId?: string
       messages: Array<{
         role: string
         content: string | null
@@ -98,13 +99,82 @@ export interface NeonForgeBridge {
       }) => void,
     ) => () => void
   }
+  usage: {
+    summary: (sessionId?: string) => Promise<{
+      entries: number
+      promptTokens: number
+      completionTokens: number
+      reasoningTokens: number
+      totalTokens: number
+      cost: number
+      unknownCostEntries: number
+      cacheHitRate: number | null
+    }>
+    export: () => Promise<{ ok: boolean; path?: string; error?: string }>
+  }
+  acceptance: {
+    derive: (
+      sessionId: string,
+      verificationPlan: string[],
+      source?: 'plan-verification' | 'user-dod' | 'manual',
+    ) => Promise<AcceptanceRecord | null>
+    list: (sessionId: string) => Promise<AcceptanceRecord | null>
+    mark: (
+      sessionId: string,
+      itemId: string,
+      status: 'passed' | 'failed' | 'waived',
+      opts?: { evidenceRef?: string; manualReason?: string; reason?: string },
+    ) => Promise<AcceptanceRecord | null>
+    waive: (sessionId: string, itemId: string, reason: string) => Promise<AcceptanceRecord | null>
+    applyEvidence: (sessionId: string, evidenceRefs: string[]) => Promise<AcceptanceRecord | null>
+    evaluate: (sessionId: string) => Promise<GateResult | null>
+    acceptEmpty: (sessionId: string) => Promise<AcceptanceRecord | null>
+    clear: (sessionId: string) => Promise<void>
+  }
+  changeset: {
+    list: (sessionId: string) => Promise<{
+      id: string
+      status: 'proposed' | 'reviewed' | 'applied' | 'reverted' | 'conflicted' | 'superseded'
+      items: Array<{
+        id: string
+        path: string
+        status: 'pending' | 'approved' | 'rejected' | 'applied' | 'reverted' | 'conflicted'
+        baseHash: string | null
+        afterHash: string | null
+        snapshotRef: string | null
+      }>
+      createdAt: string
+      updatedAt: string
+    } | null>
+    revert: (sessionId: string) => Promise<{
+      ok: boolean
+      reverted: string[]
+      conflicted: string[]
+      error?: string
+    }>
+    clear: (sessionId: string) => Promise<void>
+  }
+  queue: {
+    list: (sessionId: string) => Promise<QueueState>
+    enqueue: (sessionId: string, title: string) => Promise<QueueResult>
+    start: (sessionId: string, entryId: string) => Promise<QueueResult>
+    block: (sessionId: string, entryId: string, reason: string) => Promise<QueueResult>
+    resume: (sessionId: string, entryId: string) => Promise<QueueResult>
+    pause: (sessionId: string, entryId: string) => Promise<QueueResult>
+    complete: (sessionId: string, entryId: string) => Promise<QueueResult>
+    fail: (sessionId: string, entryId: string, reason: string) => Promise<QueueResult>
+    cancel: (sessionId: string, entryId: string) => Promise<QueueResult>
+    reorder: (sessionId: string, entryId: string, position: number) => Promise<QueueResult>
+    clear: (sessionId: string) => Promise<void>
+  }
   delivery: {
     applyDiff: (
       path: string,
       diff: string,
       approved?: boolean,
+      sessionId?: string,
     ) => Promise<{ ok: boolean; file?: string; error?: string }>
-    revertDiff: (path: string) => Promise<{ ok: boolean; error?: string }>
+    revertDiff: (path: string, sessionId?: string) => Promise<{ ok: boolean; error?: string }>
   }
   // S4 完成对账 V1a：系统代跑只读验证命令（可选——旧 mock/降级环境无则走纯逻辑判定）
   completion?: {
@@ -203,6 +273,45 @@ export {}
 export interface AcceptanceItem {
   label: string
   done: boolean
+}
+/** BC-14 验收记录（与 domain/acceptance.ts 保持结构一致） */
+export interface AcceptanceRecord {
+  id: string
+  items: Array<{
+    id: string
+    label: string
+    source: 'plan-verification' | 'user-dod' | 'manual'
+    status: 'pending' | 'passed' | 'failed' | 'waived'
+    evidenceRef?: string
+    manualReason?: string
+    waivedReason?: string
+  }>
+  createdAt: string
+  updatedAt: string
+}
+export interface GateResult {
+  verdict: 'passed' | 'failed' | 'incomplete' | 'passed-with-waivers'
+  blocking: string[]
+  waived: string[]
+}
+/** BC-11 队列条目（与 domain/taskQueue.ts 保持结构一致） */
+export interface QueueEntry {
+  id: string
+  taskRef: string
+  title: string
+  status: 'queued' | 'running' | 'blocked' | 'paused' | 'completed' | 'failed' | 'cancelled'
+  createdAt: string
+  updatedAt: string
+  blockReason?: string
+  failReason?: string
+}
+export interface QueueState {
+  entries: QueueEntry[]
+}
+export interface QueueResult {
+  ok: boolean
+  queue?: QueueState
+  error?: string
 }
 export interface DeliveryPackage {
   status: 'draft' | 'delivered' | 'closed'

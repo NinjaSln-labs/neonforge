@@ -30,4 +30,6 @@ export interface ProviderDescriptor {
   howToGetKey: { zh: string; en: string }
   /** 文档/控制台入口（可选） */
   docsUrl?: string
+  /** 是否支持流式 usage（stream_options.include_usage）；不支持的接入方不发送该字段 */
+  streamUsage?: boolean
 }

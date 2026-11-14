@@ -24,6 +24,7 @@ import { classifyReadonly, isLocalhostCommand } from '../domain/conversationStat
 import { configStore } from './configStore.js'
 import { webSearch, webFetch } from './webTools.js'
 import { isKillablePid } from './processGuard.js'
+import { getChangeSetService } from './changeSetService.instance.js'
 
 // ToolRegistry（ticket 10 / A0 §2）：工具注册与执行分发
 // 边界判定：ToolRegistry=目录与分发；ShellAgent=bash 执行；Gateway=工具调用修复（02 已实现）
@@ -238,21 +239,31 @@ function readExecutor(args: Record<string, unknown>, ctx: { rootPath?: string })
     })
 }
 
+// BC-10：记录真实文件变更（失败不阻断工具执行）
+function recordChange(ctx: { rootPath?: string; sessionId?: string }, filePath: string): void {
+  try {
+    getChangeSetService().recordMutation(ctx.sessionId ?? ctx.rootPath ?? 'default', filePath)
+  } catch {
+    /* 变更集记录失败不影响写入本身 */
+  }
+}
+
 async function writeExecutor(
   args: Record<string, unknown>,
-  ctx: { rootPath?: string },
+  ctx: { rootPath?: string; sessionId?: string },
 ): Promise<unknown> {
   const filePath = resolvePath(args.path, ctx)
   await fs.mkdir(path.dirname(filePath), { recursive: true })
   // 先备份后写（基线 §11）：已存在文件写前快照 .nf-bak（新文件无旧内容——回滚语义为无快照）
   takeSnapshot(filePath)
   await fs.writeFile(filePath, String(args.content ?? ''), 'utf-8')
+  recordChange(ctx, filePath)
   return { file: filePath, bytes: String(args.content ?? '').length, snapshot: true }
 }
 
 async function editExecutor(
   args: Record<string, unknown>,
-  ctx: { rootPath?: string },
+  ctx: { rootPath?: string; sessionId?: string },
 ): Promise<unknown> {
   const filePath = resolvePath(args.path, ctx)
   const oldText = String(args.old ?? '')
@@ -262,6 +273,7 @@ async function editExecutor(
   // 先备份后写：替换前快照（回滚恢复原样）
   takeSnapshot(filePath)
   await fs.writeFile(filePath, content.replace(oldText, newText), 'utf-8')
+  recordChange(ctx, filePath)
   return { file: filePath, snapshot: true }
 }
 

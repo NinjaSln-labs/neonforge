@@ -4,21 +4,93 @@ import SettingsPanel from './SettingsPanel'
 // 2026-08-07 无阶段重构 S4：DeliveryFlowPanel（阶段卡/推进按钮/STAGE_HINT）删除——阶段体系移除
 import OutputPanel from './OutputPanel'
 import ConversationPanel from './ConversationPanel'
-import type { DeliveryPackage, ProblemInstance } from './types'
+import type { DeliveryPackage, ProblemInstance, QueueEntry, QueueResult, QueueState } from './types'
 import { createProblem, loadProblems, saveProblems, updateProblemSnapshot } from './problemStore'
 import { clearSession } from './sessionStore'
 import { IconSettings } from './icons'
 // 2026-08-15 Q10：demo 注入通道类型化单例
 import { getDemoBridge } from './demoBridge'
 
-// 任务工作台（对话面板「任务」Tab，06 任务队列前为结构占位）
-function TaskPanel() {
+// 任务工作台（对话面板「任务」Tab）——BC-12 真实用量 + BC-11 队列（用户排队的任务，non-auto-run）
+const QUEUE_APPROVAL_BLOCK = '等待用户授权'
+const QUEUE_STATUS_LABEL: Record<QueueEntry['status'], string> = {
+  queued: '排队中',
+  running: '进行中',
+  blocked: '已阻塞',
+  paused: '已暂停',
+  completed: '已完成',
+  failed: '失败',
+  cancelled: '已取消',
+}
+
+function TaskPanel({
+  sessionId,
+  refreshKey,
+  onStartTask,
+}: {
+  sessionId?: string
+  refreshKey?: number
+  onStartTask: (title: string) => void
+}) {
   const [preheatInfo, setPreheatInfo] = useState<{
     cache: { hash: string; history: Array<{ hit: boolean }> } | null
   } | null>(null)
+  const [usage, setUsage] = useState<{
+    entries: number
+    promptTokens: number
+    completionTokens: number
+    reasoningTokens: number
+    totalTokens: number
+    cost: number
+    unknownCostEntries: number
+    cacheHitRate: number | null
+  } | null>(null)
+  const [queue, setQueue] = useState<QueueState>({ entries: [] })
+  const [draft, setDraft] = useState('')
+  const [msg, setMsg] = useState<string | null>(null)
   useEffect(() => {
     void window.neonforge.preheat?.status?.().then(setPreheatInfo)
   }, [])
+  useEffect(() => {
+    void window.neonforge.usage?.summary(sessionId).then(setUsage)
+  }, [sessionId])
+  useEffect(() => {
+    if (!sessionId) {
+      setQueue({ entries: [] })
+      return
+    }
+    void window.neonforge.queue?.list(sessionId).then(setQueue)
+  }, [sessionId, refreshKey])
+
+  const applyResult = (r: QueueResult | undefined) => {
+    if (!r) return
+    if (r.ok && r.queue) {
+      setQueue(r.queue)
+      setMsg(null)
+    } else {
+      setMsg(r.error ?? '操作失败')
+    }
+  }
+  const run = (fn: () => Promise<QueueResult> | undefined) => {
+    void fn()?.then(applyResult)
+  }
+  const handleAdd = () => {
+    const title = draft.trim()
+    if (!sessionId || !title) return
+    void window.neonforge.queue?.enqueue(sessionId, title).then((r) => {
+      applyResult(r)
+      if (r?.ok) setDraft('')
+    })
+  }
+  const handleStart = (entry: QueueEntry) => {
+    if (!sessionId) return
+    void window.neonforge.queue?.start(sessionId, entry.id).then((r) => {
+      applyResult(r)
+      if (r?.ok) onStartTask(entry.title)
+    })
+  }
+
+  const running = queue.entries.find((e) => e.status === 'running')
   const history = preheatInfo?.cache?.history ?? []
   const hitRate =
     history.length > 0
@@ -26,11 +98,187 @@ function TaskPanel() {
       : 0
   return (
     <div className="nf-task">
-      {/* 2026-08-03 A7 审计修复：占位措辞诚实化——任务队列尚未实现（原「当前任务：无」永远假信息）；v35 去 V2/diff 术语 */}
-      <p className="nf-placeholder">任务队列：即将支持——暂时没有进行中的任务</p>
+      <details open>
+        <summary>任务队列</summary>
+        {running ? (
+          <p className="nf-meta">进行中：{running.title}</p>
+        ) : (
+          <p className="nf-placeholder">暂时没有进行中的任务</p>
+        )}
+        <form
+          className="nf-queue__add"
+          onSubmit={(e) => {
+            e.preventDefault()
+            handleAdd()
+          }}
+        >
+          <input
+            type="text"
+            value={draft}
+            placeholder="添加任务（描述你想完成的事）"
+            onChange={(e) => setDraft(e.target.value)}
+          />
+          <button type="submit" disabled={!draft.trim() || !sessionId}>
+            添加
+          </button>
+        </form>
+        {msg ? <p className="nf-meta">⚠ {msg}</p> : null}
+        {queue.entries.length === 0 ? (
+          <p className="nf-placeholder">队列为空</p>
+        ) : (
+          <ul className="nf-queue">
+            {queue.entries.map((entry, index) => (
+              <li key={entry.id} className="nf-queue__item">
+                <div className="nf-queue__title">
+                  {index + 1}. {entry.title}
+                </div>
+                <div className="nf-meta">
+                  状态：{QUEUE_STATUS_LABEL[entry.status]}
+                  {entry.blockReason ? ` · ${entry.blockReason}` : ''}
+                  {entry.failReason ? ` · ${entry.failReason}` : ''}
+                </div>
+                <div className="nf-queue__actions">
+                  {(entry.status === 'queued' || entry.status === 'paused') && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleStart(entry)}
+                        disabled={Boolean(running)}
+                        title={running ? '已有运行中的任务' : undefined}
+                      >
+                        开始
+                      </button>
+                      {entry.status === 'queued' && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            run(() => window.neonforge.queue.pause(sessionId!, entry.id))
+                          }
+                        >
+                          暂停
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          run(() => window.neonforge.queue.cancel(sessionId!, entry.id))
+                        }
+                      >
+                        取消
+                      </button>
+                      {index > 0 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            run(() =>
+                              window.neonforge.queue.reorder(sessionId!, entry.id, index - 1),
+                            )
+                          }
+                        >
+                          上移
+                        </button>
+                      )}
+                      {index < queue.entries.length - 1 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            run(() =>
+                              window.neonforge.queue.reorder(sessionId!, entry.id, index + 1),
+                            )
+                          }
+                        >
+                          下移
+                        </button>
+                      )}
+                    </>
+                  )}
+                  {entry.status === 'running' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          run(() => window.neonforge.queue.pause(sessionId!, entry.id))
+                        }
+                      >
+                        暂停
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          run(() => window.neonforge.queue.complete(sessionId!, entry.id))
+                        }
+                      >
+                        完成
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          run(() => window.neonforge.queue.cancel(sessionId!, entry.id))
+                        }
+                      >
+                        取消
+                      </button>
+                    </>
+                  )}
+                  {entry.status === 'blocked' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          run(() => window.neonforge.queue.resume(sessionId!, entry.id))
+                        }
+                        disabled={Boolean(running)}
+                      >
+                        恢复
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          run(() => window.neonforge.queue.complete(sessionId!, entry.id))
+                        }
+                      >
+                        完成
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          run(() => window.neonforge.queue.cancel(sessionId!, entry.id))
+                        }
+                      >
+                        取消
+                      </button>
+                    </>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </details>
+      {/* 2026-08-03 A7 审计修复：占位措辞诚实化；BC-10 变更集状态在 DeliveryPanel */}
       <p className="nf-placeholder">待审核变更：无（审核在「产物」区）</p>
-      <details>
+      <details open>
         <summary>本轮用量</summary>
+        {usage ? (
+          <>
+            <p className="nf-meta">
+              请求 {usage.entries} 次 · 输入 {usage.promptTokens} / 输出 {usage.completionTokens}{' '}
+              tokens
+              {usage.reasoningTokens > 0 ? `（推理 ${usage.reasoningTokens}）` : ''}
+            </p>
+            <p className="nf-meta">
+              成本{' '}
+              {usage.unknownCostEntries > 0
+                ? `未知（${usage.unknownCostEntries} 条无价格）`
+                : usage.cost.toFixed(4)}
+              {usage.cacheHitRate !== null
+                ? ` · 缓存命中率 ${Math.round(usage.cacheHitRate * 100)}%`
+                : ' · 缓存口径未知'}
+            </p>
+          </>
+        ) : (
+          <p className="nf-meta">—</p>
+        )}
         <p className="nf-meta">
           {preheatInfo?.cache ? `前缀缓存 ${hitRate}% 命中（hash ${preheatInfo.cache.hash}）` : '—'}
         </p>
@@ -66,6 +314,7 @@ export default function MainWorkspace({
   const [actionHint, setActionHint] = useState<string | null>(null)
   const [chatKey, setChatKey] = useState(0)
   const [rerunRequest, setRerunRequest] = useState<string | null>(null) // 05 B：复跑请求
+  const [queueRefreshKey, setQueueRefreshKey] = useState(0) // BC-11：队列变更后刷新任务面板
   const [showSettings, setShowSettings] = useState(false)
   // 竞品（Cursor/Claude）：模型名常驻可见——放状态栏右段，不抢对话区
   const [modelLabel, setModelLabel] = useState<string | null>(null)
@@ -158,6 +407,30 @@ export default function MainWorkspace({
   const handleSessionStart = (id: string) => {
     sessionIdRef.current = id
   }
+  // BC-11：授权状态与队列同步——等待授权时把运行中任务标为阻塞，授权解除后恢复（不得自动确认）
+  useEffect(() => {
+    const sid = sessionIdRef.current
+    if (!sid) return
+    void window.neonforge.queue?.list(sid).then((q) => {
+      const running = q.entries.find((e) => e.status === 'running')
+      if (pendingApproval && running) {
+        void window.neonforge.queue
+          .block(sid, running.id, QUEUE_APPROVAL_BLOCK)
+          .then((r) => r?.ok && setQueueRefreshKey((k) => k + 1))
+        return
+      }
+      if (!pendingApproval) {
+        const blocked = q.entries.find(
+          (e) => e.status === 'blocked' && e.blockReason === QUEUE_APPROVAL_BLOCK,
+        )
+        if (blocked) {
+          void window.neonforge.queue
+            .resume(sid, blocked.id)
+            .then((r) => r?.ok && setQueueRefreshKey((k) => k + 1))
+        }
+      }
+    })
+  }, [pendingApproval])
   // 2026-08-15 补齐：问题台账事件（06 §1.7 problem.*——M3 建模后接线）
   const tlog = (type: string, detail: Record<string, unknown>) => {
     try {
@@ -257,8 +530,23 @@ export default function MainWorkspace({
     const p = problems.find((x) => x.id === id)
     if (p && p.status === 'closed') setRerunRequest(p.title)
   }
+  // BC-11：用户从任务队列点「开始」→ 切回对话并发送该任务标题（走既有 externalRequest 通道）
+  const handleStartQueuedTask = (title: string) => {
+    setChatTab('chat')
+    setRerunRequest(title)
+  }
   // 2026-08-03 A5 审计修复：交付包「确认问题关闭」→ 同步问题台账（SessionPanel 状态 closed——跨组件状态一致）
   const handleConfirmClosed = () => {
+    const sid = sessionIdRef.current
+    if (sid) {
+      void window.neonforge.queue?.list(sid).then((q) => {
+        const active = q.entries.find((e) => e.status === 'running' || e.status === 'blocked')
+        if (!active) return
+        void window.neonforge.queue
+          ?.complete(sid, active.id)
+          .then((r) => r?.ok && setQueueRefreshKey((k) => k + 1))
+      })
+    }
     if (!activeProblem) return
     tlog('problem.closed', { problemId: activeProblem })
     setProblems((prev) =>
@@ -392,7 +680,11 @@ export default function MainWorkspace({
               }
             />
           ) : (
-            <TaskPanel />
+            <TaskPanel
+              sessionId={sessionIdRef.current}
+              refreshKey={queueRefreshKey}
+              onStartTask={handleStartQueuedTask}
+            />
           )}
         </div>
       </aside>
@@ -400,6 +692,7 @@ export default function MainWorkspace({
       {/* 右：产物区（工程 / 产物） */}
       <OutputPanel
         rootPath={rootPath ?? ''}
+        sessionId={sessionIdRef.current}
         activePath={activePath}
         content={content}
         deliveryPkg={deliveryPkg}
