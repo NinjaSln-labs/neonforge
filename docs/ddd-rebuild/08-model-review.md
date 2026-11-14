@@ -38,7 +38,7 @@
 | P1-02 | P1 | 无 Outbox/DLQ/事件版本；时间线写失败静默 | 审计不可靠；跨聚合一致性无投递保证；事件 schema 演进困难 | `timelineLogger.ts`、`timeline.ts` | 引入事件 `eventId/version`；失败可见化；跨上下文写库后发事件（Outbox） | 部分修复（2026-11-14）：`eventId/version` + 写失败计数 + DLQ 落盘 + 启动重放 + dedupe；跨上下文事务性 Outbox 仍后置 |
 | P1-03 | P1 | renderer 与 main 的计划确认镜像异步 | 极端时序下 main 门控仍关闭/仍开启，导致卡不渲染或越权 | `useConversationState.ts`（`confirm/reject`）、`ipc.ts` `session:plan-confirmed` | 确认转换 await 镜像结果；失败回滚/提示；增加竞态测试 | 已修复（2026-11-14）：`confirm/reject` await 镜像并重试 1 次；领域转换仍同步完成 |
 | P1-04 | P1 | IPC 契约无 schema 校验/生成 | preload、types.d.ts、main handler 三者可能漂移；调用方传入非法结构 | `preload.ts`、`renderer/types.d.ts`、`ipc.ts` | 生成式契约或 zod/JSON Schema 校验；契约测试 | 已修复（2026-11-15）：`ipcSchema.ts` 轻量校验器 + 全通道静态契约测试；运行时入口覆盖 tools/stream/config(set-key、set-web-access)/队列/验收/变更集/delivery diff/tools revert/completion verify/context/rag/plugins/planned-files/plan-confirmed；价格/预算/MCP 仍由各自 store 校验 |
-| P1-05 | P1 | `ConversationPanel.tsx` 拆分前 3372 行，应用编排与 UI 渲染混在一起 | 可维护性差、DDD 应用层边界侵蚀、测试困难 | `ConversationPanel.tsx` 全文 | 拆分为应用服务 hooks（send/stream/toolLoop/decision）与展示组件 | 已修复（2026-11-15）：阶段 1–5 完成（`conversationFormat`/`DecisionCards`/`ConversationComposer`/`conversationHistory`/`useChatStream`/`useChatEngine`/`useTimelineLog`/`useMessageStore`/`useConversationTelemetry`/`useEvidenceVerification`）；面板 3372 → 1320 行；行为不变，interaction 71/71 |
+| P1-05 | P1 | `ConversationPanel.tsx` 拆分前 3372 行，应用编排与 UI 渲染混在一起 | 可维护性差、DDD 应用层边界侵蚀、测试困难 | `ConversationPanel.tsx` 全文 | 拆分为应用服务 hooks（send/stream/toolLoop/decision）与展示组件 | 已修复（2026-11-15）：阶段 1–5 完成（`conversationFormat`/`DecisionCards`/`ConversationComposer`/`conversationHistory`/`useChatStream`/`useChatEngine`/`useTimelineLog`/`useMessageStore`/`useConversationTelemetry`/`useEvidenceVerification`）；面板 3372 → 1320 行；行为不变，interaction 74/74（含后续排队/重试回归） |
 | P1-06 | P1 | 演示/占位能力与生产能力混排 | 用户可能以为 DoD/数字交付/任务队列已可用；产品预期失真 | `ConversationPanel.tsx`（demo 面板仅经测试 bridge 注入）、`DoDAlignPanel.tsx`（演示）、`DigitalDeliveryPanel.tsx`（demo） | 明确标记/隐藏；或将 DoD/验收接入真实方案验证计划 | 已修复（结构性）：生产运行无 `demo` 字段，演示仅在测试注入时可达；任务队列/验收已真实化 |
 | P1-07 | P1 | 交付包验收项在生产路径为空 | `DeliveryPackage` 有验收字段，但无 DoD 来源；用户看不到“按什么验收” | `MainWorkspace.tsx`（历史 `acceptance: []`） | 方案确认时捕获 `verificationPlan` 作为验收项；或引入 DoD 决策点 | 已修复（BC-14）：`acceptance:derive` 取 `verificationPlan`；门禁阻断关闭 |
 | P1-08 | P1 | 路径相对/绝对双形态与末段匹配启发式 | 可能把同名不同目录文件误判为已产出；完成核验误通过/误拒绝 | `conversationState.ts` 的 `inPlannedFiles/deriveDiffs/matchesPlannedPath` | 统一绝对路径规范；保存文件标识（inode/realpath）；补测试 | 已修复（2026-11-14）：`normalizeComparePath` 规范化 + 裸文件名多候选 fail-closed；单测覆盖 |
@@ -52,7 +52,7 @@
 | P2-05 | P2 | `tool.executed` 可能重复（diff 派生 + 手工 tlog） | 时间线统计失真 | `timeline.ts`、`ConversationPanel.tsx`、`useToolApproval.ts` | 统一事件出口；按 eventId/去重 | 已修复（2026-11-14）：产出增量改 `task.files_produced`；`tool.executed` 只表示工具执行事实 |
 | P2-06 | P2 | `dedupeKey` 未与全局去重存储接线 | `card.shown` 等可能重复 | `timeline.ts`、`timelineLogger.ts` | 在 append 层实现 dedupe set | 已修复（2026-11-14）：`timelineLogger` 按会话+类型+detail 去重 |
 | P2-07 | P2 | 事件目录未版本化 | 事件载荷变更破坏旧日志解析 | `TimelineEvent` 仅 ts/seq/session/type/role/detail | 增加 `v` 字段；查询兼容 | 已修复（2026-11-14）：事件写 `eventId` + `version: 1` |
-| P2-08 | P2 | 部分 UI 文案与技术细节混用 | 非技术用户看到“L3/快照 .nf-bak”等 | `authModel.ts` 已部分人类化；仍有权衡 | 统一文案规范 | 部分修复（2026-11-14）：新增队列/扩展文案为人类可读；剩余文案后置 |
+| P2-08 | P2 | 部分 UI 文案与技术细节混用 | 非技术用户看到"L3/快照 .nf-bak"等 | `authModel.ts` 已部分人类化；仍有权衡 | 统一文案规范 | 已修复（2026-11-15）：生产主路径无内部术语（L3/.nf-bak 仅存于 demo 面板与代码注释）；高级设置文案统一为「外部工具服务器/计费表/预算，按接入方:模型填写」的可读句式，保留 MCP/token 等必要技术名词 |
 
 ### 2A. 目标领域完整性问题（to-be）
 
@@ -135,8 +135,8 @@
 
 - 已关闭（2026-11-14）：P1-03 镜像竞态、P1-06 演示通道隔离（结构性）、P1-08 路径规范化、P1-10 symlink、P2-01 事件命名、P2-03 progressMode、P2-04 原子写、P2-05 事件重复、P2-06 dedupe、P2-07 事件版本；P1-02 已有 DLQ/事件版本/重放，跨上下文 Outbox 后续；P1-04 已有校验基础与关键入口。
 - 二次代码评审修复（2026-11-14）：悬空 symlink/写边界硬阻断、变更集自有基线（快照缺失不误删原文件）、会话 ID 提升工作区（Tab 重挂载不失联）、价格表可配置 + 月度预算、`system_clarify` 按底层决策点执行副作用、异步预检异常收敛、授权拒绝不自动恢复队列、交付面板异步响应竞态、MCP UTF-8 分片与进程退出清理。
-- 待后续：P2-08 文案规范（P1-05 ConversationPanel 拆分已完成；P1-04 主要结构化入口已迁移，价格/预算/MCP 由 store 层校验）。
-- 交互回归稳定性（2026-11-15）：`playwright --project=interaction` 实跑 71 项，70 通过；剩余 1 项为既有 `.nf-start` 启动竞态（base 提交可复现），已把 expect/helper 超时提高到 15s 并修复设置页状态类名冲突，仍未以 flaky 结果关闭本项。
+- 待后续：跨上下文事务性 Outbox（设计预留——事件已有 eventId/version/DLQ/重放，但无跨库事务投递保证）。
+- 交互回归稳定性（2026-11-15）：`playwright --project=interaction` 全量 **74/74**；两个既有 flaky（`.nf-start` 网络变更、计划确认后重试双回合）根因已定位并在测试层（导航重载重试）与应用层（sid 归属/同步 working/多槽队列）修复；新增第二轮重试上下文、排队 FIFO/停止回填回归。
 
 ### 5.4 通过标准（建议）
 

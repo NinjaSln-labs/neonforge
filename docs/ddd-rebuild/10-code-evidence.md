@@ -124,6 +124,8 @@
 | 进展保证 | `tests/unit/progressGuarantee.test.ts` |
 | 动作承诺 | `tests/unit/actionPromise.test.ts` |
 | 计划清单存储 | `tests/unit/plannedFilesStore.test.ts` |
+| IPC 运行时契约 / 通道漂移 | `tests/unit/ipcSchema.test.ts`、`tests/unit/ipcContractParity.test.ts` |
+| 交互回归（重试上下文/排队 FIFO/停止回填/启动重试） | `tests/interaction/retry.interaction.ts`、`tests/interaction/queue.interaction.ts`、`tests/interaction/scenarios.ts`（`gotoStart`） |
 | 主路径 e2e-sim | `apps/desktop/e2e-sim/journey.mjs`、`signals.mjs`、`decide.mjs`、`convergence.mjs` |
 | 本轮安全修正 | `conversationState.test.ts`（危险参数形态）、`tools.test.ts`（read 边界/pid 守卫）、`verifyCompletionSystem.test.ts`（外网证据）、`webTools.test.ts`（SSRF/重定向） |
 

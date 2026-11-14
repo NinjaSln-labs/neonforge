@@ -17,7 +17,7 @@
    - [x] **4a 历史构建**（2026-11-15）：`buildHistory` → `conversationHistory.ts`（纯函数 + 单测；工具轮 rawResult/reasoning_content 语义不变）。
    - [x] **4b 流式事件**（2026-11-15）：`applyChunk` → `useChatStream.ts` 的 `createApplyChunk(deps)` 工厂（35 项显式依赖）；状态所有权仍归面板，闭包时序与 `applyChunkRef` 更新方式不变。interaction 71 项：69 通过 / 2 既有 flaky（`.nf-start`、自动续跑双发）；单测 760 通过。
    - [x] **4c 轮次编排**（2026-11-15）：`runChat` / `maybeContinue` / `send` / `finishError` / `retryFailedTurn` / `stopGeneration` / `flushPendingSend` → `useChatEngine.ts`（838 行 hook：链锁与跨轮重复检测内聚）。与 `useToolApproval` 的循环依赖用迟绑定 getter（`getApproveAllToolCalls`）解耦；`sendRef`/`doneNotifierRef`/`pendingSendRef` 仍由面板持有以保持 4b 时序。interaction 71 项：70 通过 / 1 既有 `.nf-start` flaky；单测 760 通过。
-5. [x] **面板收敛（应用逻辑）**（2026-11-15）：会话时间线 → `useTimelineLog.ts`；消息状态/恢复/持久化 → `useMessageStore.ts`；卡弹出与状态变化打点 → `useConversationTelemetry.ts`；完成声明对账 → `useEvidenceVerification.ts`。面板保留状态装配与渲染（确认卡/工具卡视图与回调用法属组合层；不再外迁以避免高耦合 props 膨胀）。interaction 72/72（两个既有 flaky 已在 tasks 4.4 处置；代码审查修复后新增「失败重试重放本回合」回归）；单测 765 通过。
+5. [x] **面板收敛（应用逻辑）**（2026-11-15）：会话时间线 → `useTimelineLog.ts`；消息状态/恢复/持久化 → `useMessageStore.ts`；卡弹出与状态变化打点 → `useConversationTelemetry.ts`；完成声明对账 → `useEvidenceVerification.ts`。面板保留状态装配与渲染（确认卡/工具卡视图与回调用法属组合层；不再外迁以避免高耦合 props 膨胀）。interaction 74/74（两个既有 flaky 已在 tasks 4.4 处置；代码审查修复后新增失败重试/排队回归）；单测 773 通过。
 
 ## 每阶段验收
 

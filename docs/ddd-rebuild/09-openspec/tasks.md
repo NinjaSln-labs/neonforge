@@ -69,7 +69,7 @@
 - [x] 4.4 `npx playwright test --project=interaction`（2026-11-15 全量 71/71 通过。两个既有 flaky 已定位并处置：
   ① `.nf-start` 启动竞态 = WSL/Chromium 偶发 `net::ERR_NETWORK_CHANGED`，网络栈变更取消模块请求，页面只剩空 `<div id="root">`（非应用启动逻辑 bug）——所有 interaction 入口统一走 `gotoStart`（启动超时一次重载重试 + DOM/bridge/hasKey/console 诊断），环境问题在测试层消除；
   ② 计划确认后重试双回合 = `finishError` 自动续跑与队列发送并发、旧回合清掉新回合 working、`messagesRef` 滞后导致失败路径覆盖消息——应用层改为 sid 归属校验 / 同步 working / 排队消息继任与自动续跑择一 / 引擎消息写入同步 ref；重试场景 10/10、全量 71/71。另修正 `use.expect` 配置被 Playwright 忽略的问题（断言超时 30s / 单测 90s）。
-  **2026-11-15 代码审查修复后**全量 72/72（新增「第二轮失败重试重放第二轮上下文」回归）；队列已改多槽 FIFO，既有 approve-files 用例改为等 working 释放后操作（不再依赖旧单槽覆盖行为）。）
+  **2026-11-15 代码审查修复后**全量 72/72（新增「第二轮失败重试重放第二轮上下文」回归）；队列已改多槽 FIFO，既有 approve-files 用例改为等 working 释放后操作（不再依赖旧单槽覆盖行为）。**排队回归补齐后**全量 74/74（新增「连续排队两条按序送达」「停止回填输入框」）。）
 - [x] 4.5 回归：现有 P0 用例与既有 `conversationState` / `tools` / `verifyCompletionSystem` 测试全部仍通过
 
 ---
@@ -95,7 +95,7 @@
 ## 6. 后续（本次不做，已设计预留）
 
 - [x] 6.1 事件 `eventId/version` + dedupe + DLQ/启动重放（跨上下文事务性 Outbox 仍预留）
-- [x] 6.2 `ConversationPanel.tsx` 拆分（应用层与领域编排分离）：阶段 1（纯格式化/展示辅助 → `conversationFormat.tsx`）、阶段 2（确认卡 → `DecisionCards.tsx`）、阶段 3（输入区 → `ConversationComposer.tsx`）、阶段 4a（历史构建 → `conversationHistory.ts`）、阶段 4b（流式事件 → `useChatStream.ts`）、阶段 4c（轮次编排 → `useChatEngine.ts`）、阶段 5（时间线/消息持久化/遥测/证据对账 → `useTimelineLog`/`useMessageStore`/`useConversationTelemetry`/`useEvidenceVerification`）已完成（2026-11-15，面板 3372 → 1320 行；审查修复后 interaction 72/72；单测 765），见 `09-openspec/p1-05-conversation-panel-split.md`
+- [x] 6.2 `ConversationPanel.tsx` 拆分（应用层与领域编排分离）：阶段 1（纯格式化/展示辅助 → `conversationFormat.tsx`）、阶段 2（确认卡 → `DecisionCards.tsx`）、阶段 3（输入区 → `ConversationComposer.tsx`）、阶段 4a（历史构建 → `conversationHistory.ts`）、阶段 4b（流式事件 → `useChatStream.ts`）、阶段 4c（轮次编排 → `useChatEngine.ts`）、阶段 5（时间线/消息持久化/遥测/证据对账 → `useTimelineLog`/`useMessageStore`/`useConversationTelemetry`/`useEvidenceVerification`）已完成（2026-11-15，面板 3372 → 1320 行；interaction 74/74；单测 773），见 `09-openspec/p1-05-conversation-panel-split.md`
 - [x] 6.3 演示面板与生产 UI 隔离（结构性）：生产运行无 `demo` 字段，仅测试桥注入
 - [x] 6.4 交付包验收来源（DoD 对齐）接入真实来源，消除空验收（与 5.7 协同）
 
@@ -103,12 +103,12 @@
 
 ## 7. 代码审查修复（2026-11-15，`a524c4c..HEAD`）
 
-> 来源：`/code-review`（medium；15 findings）。批次验收（ADR-012 测完再修）：双 tsconfig、单测 **765**（P1-04 第二批后 773）、ESLint 0 error / 6 既有 warning、构建、interaction **72/72**。
+> 来源：`/code-review`（medium；15 findings）。批次验收（ADR-012 测完再修）：双 tsconfig、单测 **765**（P1-04 第二批后 773）、ESLint 0 error / 6 既有 warning、构建、interaction **74/74**（review 批次 72/72 + 排队回归 2 项）。
 
 - [x] 7.1 **批准文本判定收紧**：新增领域函数 `isApprovalIntent`（仅精确批准词）；原正则裸子串 `|批准|同意` 会让「我不同意执行这个命令」自动批准全部待授权工具调用。新增单测（否定/条件/完整句不批准）。
 - [x] 7.2 **停止流归属**：`stopGeneration` 不再把 `streamingSidRef` 指向新 sid——旧流 chunk 继续被 `streamingSidRef !== sessionRef` 守卫丢弃（停止后不再落地 done/tool-call）。
 - [x] 7.3 **失败回合重试上下文**：`runChat` 在请求前记录 `chatRef`——第二回合失败后的重试重放本回合（原沿用上一成功回合，丢掉失败的用户消息）。新增 interaction 回归。
-- [x] 7.4 **排队衔接多槽 + 停止回填**：`pendingSendRef` 改 FIFO 数组（连续排队不再互相覆盖）；显式停止把排队中的**用户**消息回填输入框（系统对账引导丢弃），修复停止后滞留与下一轮乱序（b70e8ae 回归）。
+- [x] 7.4 **排队衔接多槽 + 停止回填**：`pendingSendRef` 改 FIFO 数组（连续排队不再互相覆盖）；显式停止把排队中的**用户**消息回填输入框（系统对账引导丢弃），修复停止后滞留与下一轮乱序（b70e8ae 回归）。新增 interaction 回归：连续排队两条按序送达、停止回填输入框。
 - [x] 7.5 **工具结果稳定 id 绑定**：`useChatStream` 四个卡更新路径改用 `isThisCall`（id 优先、旧存档回退 name），异步结果在全部消息中定位承载调用（迟到结果不再丢弃/挂错同名卡）。
 - [x] 7.6 **ask_user 已回复判定**：面板按消息对象引用反查消息位置（内层 toolCalls map 的 `i` 会遮蔽消息索引），第二轮起不再误标「已回复」。
 - [x] 7.7 **目标卡空值回退**：`??` → `||`（空 `initialPrompt/statement` 回退「你描述的目标」，不再写空标题）。
