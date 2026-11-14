@@ -72,6 +72,7 @@
   **2026-11-15 代码审查修复后**全量 72/72（新增「第二轮失败重试重放第二轮上下文」回归）；队列已改多槽 FIFO，既有 approve-files 用例改为等 working 释放后操作（不再依赖旧单槽覆盖行为）。**排队回归补齐后**全量 74/74（新增「连续排队两条按序送达」「停止回填输入框」）。）
 - [x] 4.5 回归：现有 P0 用例与既有 `conversationState` / `tools` / `verifyCompletionSystem` 测试全部仍通过
 - [x] 4.6 `npx prettier --check "src/**/*.{ts,tsx}" "tests/**/*.{ts,tsx}" "*.mjs" "*.config.*"`（qa.yml 格式门禁；2026-11-15 对齐 42 个既有文件，326 行格式化，无逻辑变更）
+- [x] 4.7 文档一致性（2026-11-15）：14 spec / 69 Requirement / 268 Scenario（单 Requirement ≤5 Scenario）；`10-code-evidence.md` 行号刷新并校验 0 越界；`docs/ddd-rebuild` 相对链接 0 缺失；`docs/tests/coverage-matrix.md` 增补 67 文件 / 773 用例 / 74 场景快照与 BC-10～BC-14 覆盖表
 
 ---
 
@@ -125,7 +126,7 @@
 
 ## 验收标准
 
-1. 14 个 spec 全部通过 OpenSpec 格式校验（Requirement/Scenario 计数、无技术细节渗透）。
+1. 14 个 spec 全部通过 OpenSpec 格式校验（Requirement/Scenario 计数、无技术细节渗透；2026-11-15 计数复核：69 Requirement / 268 Scenario，单 Requirement ≤5 Scenario）。
 2. P0-01..P0-05 全部有失败先行回归测试，修复后通过。
 3. 双 tsconfig 类型检查、单测、lint 全绿。
 4. 文档中的每条“现状”断言都能在 `10-code-evidence.md` 找到 `文件:行` 证据。
