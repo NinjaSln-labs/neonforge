@@ -17,6 +17,7 @@ import {
 } from './conversationFormat'
 import { GoalConfirmCard, PlanConfirmCard, ResolutionConfirmCard } from './DecisionCards'
 import { ConversationComposer } from './ConversationComposer'
+import { buildHistory } from './conversationHistory'
 // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层纯逻辑，双源调研驱动）
 import {
   evaluateTurnProgress,
@@ -1978,69 +1979,7 @@ export default function ConversationPanel({
   // 2026-08-06 根因修复（用户「说了做没做老问题——到底需要多少兜底」）：工具轮**不再转「（上一步执行：xxx）」自然语言文本**——
   // 那是模型文本模拟工具的模仿源（09:38 日志模型输出「（上一步执行：[read]）」= 模仿历史里我方塞的文本；9 层兜底全在补救症状，从没修模仿源）；
   // 改为保留**标准结构化 tool_calls + tool 消息**（与工具循环 497-505 行同格式——模型看到的是系统工具消息，不会模仿成正文）
-  const buildHistory = (
-    msgs: Msg[],
-  ): Array<{
-    role: string
-    content: string | null
-    tool_calls?: unknown[]
-    tool_call_id?: string
-    reasoning_content?: string
-  }> => {
-    let callSeq = 0 // 历史多轮工具的全局唯一 tool_call_id
-    return msgs
-      .filter((m) => m.role === 'user' || (m.role === 'assistant' && m.status === 'done'))
-      .flatMap(
-        (
-          m,
-        ): Array<{
-          role: string
-          content: string | null
-          tool_calls?: unknown[]
-          tool_call_id?: string
-          reasoning_content?: string
-        }> => {
-          // 2026-08-15 D4：工具轮完整回填——① 有正文+工具的消息也带 tool_calls（原 `!m.content` 条件丢弃工具结果）② tool 消息用
-          // rawResult 完整内容（原用 UI 摘要 c.result 且截断 300——模型后续轮看不到 read 内容 → 被迫反复 read——「一直读取操作」嫌疑）
-          // 与 maybeContinue（工具循环内）回填语义一致：c.rawResult ?? c.result
-          // 2026-08-21 ADR-007/provider 兼容：回放统一带 reasoning_content（pi #3636/#4678——DeepSeek V4 多轮 thinking 回放必须带；
-          // 与工具循环内 L1428 语义一致——本路径补缺）
-          if (m.role === 'assistant' && m.toolCalls && m.toolCalls.length > 0) {
-            const calls = m.toolCalls.map((c, i) => ({
-              id: `h${callSeq + i}`,
-              name: c.name,
-              args: c.args,
-              result: c.rawResult ?? c.result ?? c.status ?? '执行失败',
-            }))
-            callSeq += calls.length
-            return [
-              {
-                role: 'assistant',
-                content: m.content || null,
-                reasoning_content: m.reasoning ?? '',
-                tool_calls: calls.map((c) => ({
-                  id: c.id,
-                  type: 'function',
-                  function: { name: c.name, arguments: JSON.stringify(c.args) },
-                })),
-              },
-              ...calls.map((c) => ({
-                role: 'tool',
-                tool_call_id: c.id,
-                content: String(c.result),
-              })),
-            ]
-          }
-          return [
-            {
-              role: m.role,
-              content: m.content,
-              ...(m.role === 'assistant' ? { reasoning_content: m.reasoning ?? '' } : {}),
-            },
-          ]
-        },
-      )
-  }
+  // P1-05 阶段 4a：buildHistory 已提取到 conversationHistory.ts（纯函数）
   const workingRef = useRef(false)
   useEffect(() => {
     workingRef.current = working

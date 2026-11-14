@@ -64,7 +64,7 @@
 ## 4. 验证
 
 - [x] 4.1 `npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit`
-- [x] 4.2 `npx vitest run`（66 文件 / 758 用例通过，2026-11-15）
+- [x] 4.2 `npx vitest run`（67 文件 / 760 用例通过，2026-11-15）
 - [x] 4.3 `npx eslint .`（0 error，6 条既有 hook 依赖 warning）
 - [ ] 4.4 `npx playwright test --project=interaction`（环境可用时；2026-11-15 实跑 71 项：70 通过 / 1 既有 `.nf-start` 启动竞态 flaky——base 可复现，非本分支回归；超时已提高至 15s，未以 flaky 结果关闭本项）
 - [x] 4.5 回归：现有 P0 用例与既有 `conversationState` / `tools` / `verifyCompletionSystem` 测试全部仍通过
@@ -92,7 +92,7 @@
 ## 6. 后续（本次不做，已设计预留）
 
 - [x] 6.1 事件 `eventId/version` + dedupe + DLQ/启动重放（跨上下文事务性 Outbox 仍预留）
-- [ ] 6.2 `ConversationPanel.tsx` 拆分（应用层与领域编排分离）：阶段 1（纯格式化/展示辅助 → `conversationFormat.tsx`）、阶段 2（确认卡 → `DecisionCards.tsx`）与阶段 3（输入区 → `ConversationComposer.tsx`）已完成（2026-11-15）；后续阶段见 `09-openspec/p1-05-conversation-panel-split.md`
+- [ ] 6.2 `ConversationPanel.tsx` 拆分（应用层与领域编排分离）：阶段 1（纯格式化/展示辅助 → `conversationFormat.tsx`）、阶段 2（确认卡 → `DecisionCards.tsx`）、阶段 3（输入区 → `ConversationComposer.tsx`）与阶段 4a（历史构建 → `conversationHistory.ts`）已完成（2026-11-15）；后续阶段见 `09-openspec/p1-05-conversation-panel-split.md`
 - [x] 6.3 演示面板与生产 UI 隔离（结构性）：生产运行无 `demo` 字段，仅测试桥注入
 - [x] 6.4 交付包验收来源（DoD 对齐）接入真实来源，消除空验收（与 5.7 协同）
 
