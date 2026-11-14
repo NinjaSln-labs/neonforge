@@ -1677,6 +1677,11 @@ test('approve-files 多卡并存：连续 2 次批量授权 → 各自批准都�
   await page.getByRole('button', { name: '确认执行' }).click()
   // 卡1（第一批）出现——此时不批准（真实场景：模型第一次请求后没等批准，用户动作触发新轮次）
   await expect(page.getByRole('button', { name: '批准这批文件' })).toBeVisible({ timeout: 10000 })
+  // 等 working 释放再发送：否则「继续」会按排队语义进入 FIFO，第二卡可能在授权等待期间不生成——
+  // 本用例验证多卡并存与逐卡批准，不验证排队；排队已由 queue.interaction.ts 单独覆盖。
+  await expect(page.getByRole('button', { name: '停止搭档当前工作' })).toHaveCount(0, {
+    timeout: 10000,
+  })
   // 用户发送触发模型新轮 → 模型补充第二批 approve-files（filesApprovedRef 仍 false——卡1 未批准 → 卡2 弹卡）→ 两张卡并存
   await page.locator('.nf-chat__input textarea').fill('继续')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')

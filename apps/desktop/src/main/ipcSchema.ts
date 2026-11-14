@@ -314,4 +314,70 @@ export const IPC_SCHEMAS = {
     },
     required: ['path'],
   },
+  // P1-04 收尾：工作区/网关/日志入口的结构校验
+  gatewayValidate: {
+    type: 'object',
+    properties: {
+      apiKey: { type: 'string', minLength: 1, maxLength: 8192 },
+      providerId: { type: 'string', maxLength: 100 },
+      modelId: { type: 'string', maxLength: 500, nullable: true },
+    },
+    required: ['apiKey'],
+  },
+  workspacePath: { type: 'string', minLength: 1, maxLength: 4000 },
+  // init-project/update-title 的 title 来自用户首条需求（可能较长）——上限与路径同级，避免长需求被误拒
+  workspaceTitle: { type: 'string', minLength: 1, maxLength: 4000 },
+  workspaceUpdateTitle: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', minLength: 1, maxLength: 4000 },
+      title: { type: 'string', minLength: 1, maxLength: 4000 },
+    },
+    required: ['path', 'title'],
+  },
+  notebookRoot: { type: 'string', maxLength: 4000, nullable: true },
+  chatLogEntry: {
+    type: 'object',
+    properties: {
+      ts: { type: 'string', minLength: 1, maxLength: 100 },
+      role: { type: 'string', enum: ['user', 'assistant'] as const },
+      content: { type: 'string', maxLength: 2_000_000 },
+      toolCalls: {
+        type: 'array',
+        maxItems: 1000,
+        items: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', minLength: 1, maxLength: 200 },
+            status: { type: 'string', maxLength: 100 },
+          },
+          required: ['name'],
+        },
+      },
+      error: { type: 'string', maxLength: 2000 },
+      session: { type: 'string', maxLength: 200 },
+    },
+    required: ['ts', 'role'],
+  },
+  timelineLogEvent: {
+    type: 'object',
+    properties: {
+      session: { type: 'string', maxLength: 200 },
+      type: { type: 'string', minLength: 1, maxLength: 200 },
+      role: { type: 'string', enum: ['user', 'assistant', 'system', 'tool'] as const },
+      detail: { type: 'object' },
+    },
+    required: ['type'],
+  },
+  timelineQuery: {
+    type: 'object',
+    properties: {
+      session: { type: 'string', maxLength: 200 },
+      // string | string[]——轻量校验器不支持联合类型，元素形态由 timelineLogger.query 消费
+      type: { type: 'any' },
+      from: { type: 'string', maxLength: 100 },
+      to: { type: 'string', maxLength: 100 },
+      limit: { type: 'number', integer: true, min: 0, max: 10000 },
+    },
+  },
 } satisfies Record<string, IpcSchema>

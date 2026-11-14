@@ -184,6 +184,8 @@ export function registerIpc(): void {
   ipcMain.handle(
     'gateway:validate',
     async (_e, apiKey: string, providerId?: string, modelId?: string | null) => {
+      const valid = validateIpc({ apiKey, providerId, modelId }, IPC_SCHEMAS.gatewayValidate)
+      if (!valid.ok) return { ok: false, error: `参数校验失败（gateway:validate）：${valid.error}` }
       const id = isProviderId(providerId) ? providerId : configStore.getProviderId()
       return gateway.validateKey(apiKey, id, modelId ?? configStore.getModelId())
     },
@@ -598,14 +600,23 @@ export function registerIpc(): void {
     cache: prefixCache.get(),
     preheat: preheating.getStatus(),
   }))
-  ipcMain.handle('workspace:list-dir', (_e, dirPath: string) => workspace.listDir(dirPath))
-  ipcMain.handle('workspace:read-file', (_e, filePath: string) => workspace.readFile(filePath))
-  ipcMain.handle('workspace:read-notebook', (_e, rootPath: string | null) =>
-    workspace.readNotebook(rootPath),
-  )
+  ipcMain.handle('workspace:list-dir', (_e, dirPath: string) => {
+    const valid = validateIpc(dirPath, IPC_SCHEMAS.workspacePath)
+    return valid.ok ? workspace.listDir(dirPath) : []
+  })
+  ipcMain.handle('workspace:read-file', (_e, filePath: string) => {
+    const valid = validateIpc(filePath, IPC_SCHEMAS.workspacePath)
+    return valid.ok ? workspace.readFile(filePath) : { ok: false, error: valid.error }
+  })
+  ipcMain.handle('workspace:read-notebook', (_e, rootPath: string | null) => {
+    const valid = validateIpc(rootPath, IPC_SCHEMAS.notebookRoot)
+    return valid.ok ? workspace.readNotebook(rootPath) : null
+  })
   // ticket 07：0-1 项目初始化（从零开始 → 真实目录 + 骨架）
   // 2026-08-04 体验修复（用户「LSP 连接失败」）：0-1 项目也自动连接 LSP（原仅 open-folder 连接——从零开始项目 get_diagnostics 报「LSP 未连接」）
   ipcMain.handle('workspace:init-project', async (_e, title: string) => {
+    const valid = validateIpc(title, IPC_SCHEMAS.workspaceTitle)
+    if (!valid.ok) return { ok: false as const, error: `参数校验失败：${valid.error}` }
     const res = await workspace.initProject(title)
     if (res.ok && res.path) {
       void lsp
@@ -617,16 +628,25 @@ export function registerIpc(): void {
     return res
   })
   // 2026-08-04：需求确认后回写项目标题（README + package.json name——目录名不变）
-  ipcMain.handle('workspace:update-project-title', (_e, p: string, title: string) =>
-    workspace.updateProjectTitle(p, title),
-  )
+  ipcMain.handle('workspace:update-project-title', (_e, p: string, title: string) => {
+    const valid = validateIpc({ path: p, title }, IPC_SCHEMAS.workspaceUpdateTitle)
+    return valid.ok
+      ? workspace.updateProjectTitle(p, title)
+      : { ok: false, error: `参数校验失败：${valid.error}` }
+  })
   // 2026-08-04：对话日志（自动记录 + 导出——用户反馈时可提供完整对话给 AI）
-  ipcMain.handle('chat:log', (_e, entry: Parameters<typeof appendChatLog>[1]) =>
-    appendChatLog(app.getPath('userData'), entry),
-  )
+  ipcMain.handle('chat:log', (_e, entry: Parameters<typeof appendChatLog>[1]) => {
+    const valid = validateIpc(entry, IPC_SCHEMAS.chatLogEntry)
+    if (!valid.ok) return
+    return appendChatLog(app.getPath('userData'), entry)
+  })
   ipcMain.handle('chat:export', () => exportChatLog(app.getPath('userData')))
   // 2026-08-07 会话时间线（单会话所有步骤统一日志——用户/搭档/工具/授权/状态）
-  ipcMain.handle('timeline:log', (_e, evt: Parameters<typeof logTimeline>[0]) => logTimeline(evt))
+  ipcMain.handle('timeline:log', (_e, evt: Parameters<typeof logTimeline>[0]) => {
+    const valid = validateIpc(evt, IPC_SCHEMAS.timelineLogEvent)
+    if (!valid.ok) return
+    return logTimeline(evt)
+  })
   // 2026-08-15 DDD 重建：时间线查询（通用接入 A3——append 之外补 read）
   ipcMain.handle(
     'timeline:query',
@@ -639,7 +659,11 @@ export function registerIpc(): void {
         to?: string
         limit?: number
       },
-    ) => timelineLogger.query({ ...filter, type: filter.type as never }),
+    ) => {
+      const valid = validateIpc(filter, IPC_SCHEMAS.timelineQuery)
+      if (!valid.ok) return []
+      return timelineLogger.query({ ...filter, type: filter.type as never })
+    },
   )
 }
 // ticket 10：ToolRegistry（工具清单 + 执行分发——write/edit/bash 需 approved）

@@ -95,7 +95,7 @@
 | 文档断言 | 证据 |
 | :--- | :--- |
 | IPC 通道全集 | `M/ipc.ts:...`（`config:*`、`gateway:*`、`delivery:*`、`workspace:*`、`chat:*`、`timeline:*`、`tools:*`、`planned-files:*`、`session:plan-confirmed`、`context:resolve`、`rag:search`、`plugins:*`、`preheat:status`、`compaction:compact`、`completion:verify`） |
-| IPC 运行时契约校验（P1-04） | `M/ipcSchema.ts:100-320`（`validateIpc`/`IPC_SCHEMAS`）、`M/ipc.ts`（tools/stream/config/queue/acceptance/changeset/delivery/context 等入口）、`tests/unit/ipcSchema.test.ts` |
+| IPC 运行时契约校验（P1-04） | `M/ipcSchema.ts:100-382`（`validateIpc`/`IPC_SCHEMAS`）、`M/ipc.ts`（tools/stream/config/queue/acceptance/changeset/delivery/context/workspace/gateway/chat/timeline 等入口）、`tests/unit/ipcSchema.test.ts` |
 | 预加载桥接 API | `P/preload.ts`（`NeonForgeBridge`） |
 | 计划清单持久化（0600） | `M/plannedFilesStore.ts` |
 | 项目初始化（不覆盖已有目录） | `M/projectInit.ts` |

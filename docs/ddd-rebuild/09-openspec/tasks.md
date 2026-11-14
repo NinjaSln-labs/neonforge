@@ -57,22 +57,22 @@
 
 - [x] 3.1 **P1-01 Web 访问边界**：`webTools.ts` 的 `web_fetch` 拒绝 localhost/私网/链路本地/云元数据地址；`redirect:'manual'` 逐跳校验，最多 5 跳，非 http/https 拒绝；新增测试。
 - [x] 3.2 **P1-10 符号链接**：`isInSandbox`/`resolvePath` 对已存在路径使用 `realpath` 校验，根外链接不因“路径字符串在根内”被放行；悬空链接同样解析，write/edit 根内逃逸硬阻断（`sandboxSymlink.test.ts`）。
-- [x] 3.3 **P1-04 IPC 契约校验**：高风险通道运行时 schema（`ipcSchema.ts`：tools/stream）+ 全通道静态契约测试（`ipcContractParity.test.ts`：main handler ↔ preload invoke ↔ 推送通道），防 preload/main 漂移。**2026-11-15 第二批**：新增 `config:set-key`/`config:set-web-access`、队列命令（enqueue/entry/reason/reorder）、验收（derive/mark/waive/evidence）、变更集、`delivery:apply-diff`/`revert-diff`、`tools:revert`、`completion:verify`、`context:resolve`/`rag:search`、`plugins:toggle`、`planned-files:add`、`session:plan-confirmed` 入口校验；校验器修正「required 值为 undefined 仍通过」与新增 `nullable`；schema 单测扩充。**2026-11-15 收尾**：队列 `enqueue` 的 `title` 与 `block`/`fail` 的 `reason` 提升为必填，避免空载荷进入存储后才抛泛化 TypeError。
+- [x] 3.3 **P1-04 IPC 契约校验**：高风险通道运行时 schema（`ipcSchema.ts`：tools/stream）+ 全通道静态契约测试（`ipcContractParity.test.ts`：main handler ↔ preload invoke ↔ 推送通道），防 preload/main 漂移。**2026-11-15 第二批**：新增 `config:set-key`/`config:set-web-access`、队列命令（enqueue/entry/reason/reorder）、验收（derive/mark/waive/evidence）、变更集、`delivery:apply-diff`/`revert-diff`、`tools:revert`、`completion:verify`、`context:resolve`/`rag:search`、`plugins:toggle`、`planned-files:add`、`session:plan-confirmed` 入口校验；校验器修正「required 值为 undefined 仍通过」与新增 `nullable`；schema 单测扩充。**2026-11-15 收尾**：队列 `enqueue` 的 `title` 与 `block`/`fail` 的 `reason` 提升为必填，避免空载荷进入存储后才抛泛化 TypeError；同批补齐 `gateway:validate`、工作区（list-dir/read-file/read-notebook/init-project/update-project-title）、`chat:log`、`timeline:log`/`query` 结构校验。
 
 ---
 
 ## 4. 验证
 
 - [x] 4.1 `npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit`
-- [x] 4.2 `npx vitest run`（67 文件 / 773 用例通过，2026-11-15；含审查修复与 P1-04 第二批新增回归）
+- [x] 4.2 `npx vitest run`（67 文件 / 774 用例通过，2026-11-15；含审查修复、P1-04 第二批与入口硬化新增回归）
 - [x] 4.3 `npx eslint .`（0 error，6 条既有 hook 依赖 warning）
 - [x] 4.4 `npx playwright test --project=interaction`（2026-11-15 全量 71/71 通过。两个既有 flaky 已定位并处置：
   ① `.nf-start` 启动竞态 = WSL/Chromium 偶发 `net::ERR_NETWORK_CHANGED`，网络栈变更取消模块请求，页面只剩空 `<div id="root">`（非应用启动逻辑 bug）——所有 interaction 入口统一走 `gotoStart`（启动超时一次重载重试 + DOM/bridge/hasKey/console 诊断），环境问题在测试层消除；
   ② 计划确认后重试双回合 = `finishError` 自动续跑与队列发送并发、旧回合清掉新回合 working、`messagesRef` 滞后导致失败路径覆盖消息——应用层改为 sid 归属校验 / 同步 working / 排队消息继任与自动续跑择一 / 引擎消息写入同步 ref；重试场景 10/10、全量 71/71。另修正 `use.expect` 配置被 Playwright 忽略的问题（断言超时 30s / 单测 90s）。
-  **2026-11-15 代码审查修复后**全量 72/72（新增「第二轮失败重试重放第二轮上下文」回归）；队列已改多槽 FIFO，既有 approve-files 用例改为等 working 释放后操作（不再依赖旧单槽覆盖行为）。**排队回归补齐后**全量 74/74（新增「连续排队两条按序送达」「停止回填输入框」）。）
+  **2026-11-15 代码审查修复后**全量 72/72（新增「第二轮失败重试重放第二轮上下文」回归）；队列已改多槽 FIFO，既有 approve-files 用例（1804）改为等 working 释放后操作（不再依赖旧单槽覆盖行为）。**排队回归补齐后**全量 74/74（新增「连续排队两条按序送达」「停止回填输入框」）。**入口硬化批次**：`approve-files 多卡并存` 用例（1560）也改为等 working 释放后再发送「继续」——原在流式未结束时发送会按排队语义进入 FIFO，第二卡在授权等待期间可能不生成（排队语义已由 `queue.interaction.ts` 单独覆盖）；repeat-each=5 稳定。）
 - [x] 4.5 回归：现有 P0 用例与既有 `conversationState` / `tools` / `verifyCompletionSystem` 测试全部仍通过
 - [x] 4.6 `npx prettier --check "src/**/*.{ts,tsx}" "tests/**/*.{ts,tsx}" "*.mjs" "*.config.*"`（qa.yml 格式门禁；2026-11-15 对齐 42 个既有文件，326 行格式化，无逻辑变更）
-- [x] 4.7 文档一致性（2026-11-15）：14 spec / 69 Requirement / 268 Scenario（单 Requirement ≤5 Scenario）；`10-code-evidence.md` 行号刷新并校验 0 越界；`docs/ddd-rebuild` 相对链接 0 缺失；`docs/tests/coverage-matrix.md` 增补 67 文件 / 773 用例 / 74 场景快照与 BC-10～BC-14 覆盖表
+- [x] 4.7 文档一致性（2026-11-15）：14 spec / 69 Requirement / 268 Scenario（单 Requirement ≤5 Scenario）；`10-code-evidence.md` 行号刷新并校验 0 越界；`docs/ddd-rebuild` 相对链接 0 缺失；`docs/tests/coverage-matrix.md` 增补 67 文件 / 774 用例 / 74 场景快照与 BC-10～BC-14 覆盖表
 
 ---
 
@@ -97,7 +97,7 @@
 ## 6. 后续（本次不做，已设计预留）
 
 - [x] 6.1 事件 `eventId/version` + dedupe + DLQ/启动重放（跨上下文事务性 Outbox 仍预留）
-- [x] 6.2 `ConversationPanel.tsx` 拆分（应用层与领域编排分离）：阶段 1（纯格式化/展示辅助 → `conversationFormat.tsx`）、阶段 2（确认卡 → `DecisionCards.tsx`）、阶段 3（输入区 → `ConversationComposer.tsx`）、阶段 4a（历史构建 → `conversationHistory.ts`）、阶段 4b（流式事件 → `useChatStream.ts`）、阶段 4c（轮次编排 → `useChatEngine.ts`）、阶段 5（时间线/消息持久化/遥测/证据对账 → `useTimelineLog`/`useMessageStore`/`useConversationTelemetry`/`useEvidenceVerification`）已完成（2026-11-15，面板 3372 → 1320 行；interaction 74/74；单测 773），见 `09-openspec/p1-05-conversation-panel-split.md`
+- [x] 6.2 `ConversationPanel.tsx` 拆分（应用层与领域编排分离）：阶段 1（纯格式化/展示辅助 → `conversationFormat.tsx`）、阶段 2（确认卡 → `DecisionCards.tsx`）、阶段 3（输入区 → `ConversationComposer.tsx`）、阶段 4a（历史构建 → `conversationHistory.ts`）、阶段 4b（流式事件 → `useChatStream.ts`）、阶段 4c（轮次编排 → `useChatEngine.ts`）、阶段 5（时间线/消息持久化/遥测/证据对账 → `useTimelineLog`/`useMessageStore`/`useConversationTelemetry`/`useEvidenceVerification`）已完成（2026-11-15，面板 3372 → 1320 行；interaction 74/74；单测 774），见 `09-openspec/p1-05-conversation-panel-split.md`
 - [x] 6.3 演示面板与生产 UI 隔离（结构性）：生产运行无 `demo` 字段，仅测试桥注入
 - [x] 6.4 交付包验收来源（DoD 对齐）接入真实来源，消除空验收（与 5.7 协同）
 

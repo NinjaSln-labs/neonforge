@@ -114,4 +114,26 @@ describe('IPC 契约校验（P1-04）', () => {
     expect(validateIpc([1], IPC_SCHEMAS.fileList).ok).toBe(false)
     expect(validateIpc('a.js', IPC_SCHEMAS.fileList).ok).toBe(false)
   })
+
+  it('workspace/gateway/log 入口：结构、枚举与可空字段', () => {
+    expect(validateIpc({ apiKey: 'k' }, IPC_SCHEMAS.gatewayValidate).ok).toBe(true)
+    expect(validateIpc({ apiKey: 'k', modelId: null }, IPC_SCHEMAS.gatewayValidate).ok).toBe(true)
+    expect(validateIpc({}, IPC_SCHEMAS.gatewayValidate).ok).toBe(false)
+    expect(validateIpc('a.js', IPC_SCHEMAS.workspacePath).ok).toBe(true)
+    expect(validateIpc('', IPC_SCHEMAS.workspacePath).ok).toBe(false)
+    expect(validateIpc('长'.repeat(1000), IPC_SCHEMAS.workspaceTitle).ok).toBe(true)
+    expect(validateIpc('长'.repeat(4001), IPC_SCHEMAS.workspaceTitle).ok).toBe(false)
+    expect(validateIpc({ path: 'a.js', title: '标题' }, IPC_SCHEMAS.workspaceUpdateTitle).ok).toBe(
+      true,
+    )
+    expect(validateIpc({ path: 'a.js' }, IPC_SCHEMAS.workspaceUpdateTitle).ok).toBe(false)
+    expect(validateIpc(null, IPC_SCHEMAS.notebookRoot).ok).toBe(true)
+    expect(validateIpc(undefined, IPC_SCHEMAS.notebookRoot).ok).toBe(false)
+    expect(validateIpc({ ts: 't', role: 'user' }, IPC_SCHEMAS.chatLogEntry).ok).toBe(true)
+    expect(validateIpc({ ts: 't', role: 'system' }, IPC_SCHEMAS.chatLogEntry).ok).toBe(false)
+    expect(validateIpc({ type: 'task.goal_confirmed' }, IPC_SCHEMAS.timelineLogEvent).ok).toBe(true)
+    expect(validateIpc({ type: 'x', role: 'bad' }, IPC_SCHEMAS.timelineLogEvent).ok).toBe(false)
+    expect(validateIpc({}, IPC_SCHEMAS.timelineQuery).ok).toBe(true)
+    expect(validateIpc({ limit: 1.5 }, IPC_SCHEMAS.timelineQuery).ok).toBe(false)
+  })
 })
