@@ -102,7 +102,7 @@
 | 服务与端口 | `M/serviceManager.ts` |
 | 完成核验代跑 | `M/verification.ts:9-13`（`isSystemVerifiable`） |
 | Web 访问（当前无私网拦截） | `M/webTools.ts:260-296`（`web_fetch`） |
-| 配置存储（safeStorage + 明文 fallback） | `M/configStore.ts` |
+| 配置存储（env/凭据文件优先 + safeStorage；明文 fallback 显式 opt-in） | `M/configStore.ts` |
 | 插件注册表 | `M/pluginSystem.ts` |
 | 网关（SSE/重试/工具修复） | `M/gateway.ts:35-84`（错误分类）、`103-128`（`toolCallRepair`）、`559-747`（`streamChatOnce`） |
 | 模型刷新与 Key 验证 | `M/gateway.ts:436-554` |

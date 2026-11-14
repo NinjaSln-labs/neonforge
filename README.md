@@ -65,6 +65,7 @@ npm run dev:electron       # 完整应用（dev 模式，连接 :5173）
 ```
 
 - 首次启动选择接入方并粘贴 API Key（Key 存系统级 `safeStorage`，绝不上传）
+- 安全存储不可用（无 keyring/未签名环境）时默认不落盘明文：改用 `NEONFORGE_API_KEY` 或 `NEONFORGE_API_KEY_FILE`；确需本机明文副本时显式设置 `NEONFORGE_ALLOW_PLAINTEXT_KEY=1`
 - **打开已有项目** → 在对话里说出问题 → 确认卡 + 分步授权 → 拿到交付结果
 - **从零开始** → 自动创建项目骨架 → 0-1 交付
 

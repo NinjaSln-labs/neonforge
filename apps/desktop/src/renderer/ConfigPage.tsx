@@ -53,7 +53,18 @@ export default function ConfigPage({ onDone }: { onDone: () => void }) {
     const mid = modelId.trim() || null
     const res = await window.neonforge.gateway.validate(k, providerId, mid)
     if (res.ok) {
-      await window.neonforge.config.setKey(k, providerId, res.modelSource === 'manual' ? mid : null)
+      try {
+        await window.neonforge.config.setKey(
+          k,
+          providerId,
+          res.modelSource === 'manual' ? mid : null,
+        )
+      } catch (e) {
+        // P1-09：系统安全存储不可用且未显式允许明文 → 不落盘，提示改用 env/凭据文件
+        setStatus('fail')
+        setErrorText(e instanceof Error ? e.message : String(e))
+        return
+      }
       onDone()
       return
     }
