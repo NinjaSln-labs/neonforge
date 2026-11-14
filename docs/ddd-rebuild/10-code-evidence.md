@@ -77,15 +77,15 @@
 | 文档断言 | 证据 |
 | :--- | :--- |
 | 完成核验 → 解决确认 | `R/ConversationPanel.tsx:733-792`（`verifyThenResolve`） |
-| 流式增量处理（含 `propose_plan` 提前 `addPlannedFiles`） | `R/ConversationPanel.tsx:793-...`、`880-883` |
-| done 分支文本方案降级（提前 `addPlannedFiles`） | `R/ConversationPanel.tsx:1145-1153` |
-| 续聊与最大轮次 | `R/ConversationPanel.tsx:1689-1834`（`maybeContinue`） |
-| 主回合（历史组装、压缩、互斥） | `R/ConversationPanel.tsx:1837-2075`（`runChat`） |
-| 历史构建（结构化 tool_calls/tool 消息） | `R/ConversationPanel.tsx:2083-...`（`buildHistory`） |
-| 发送入口与 pending 文本意图 | `R/ConversationPanel.tsx:2242-2428`（`send`） |
-| 错误收口 | `R/ConversationPanel.tsx:2472-2516`（`finishError`） |
-| 演示数据门控 | `R/ConversationPanel.tsx:2555-2576` |
-| 信任集合追加 | `R/ConversationPanel.tsx:2170-2180`（`addTrust`） |
+| 流式增量处理（`propose_plan`/done 分支均不再写 plannedFiles——P0-03） | `R/useChatStream.ts:80-...`（`createApplyChunk`） |
+| done 分支文本方案降级（降级引导，不落清单） | `R/useChatStream.ts`（`createApplyChunk` done 分支） |
+| 续聊与最大轮次 | `R/useChatEngine.ts:147-...`（`maybeContinue`） |
+| 主回合（历史组装、压缩、互斥） | `R/useChatEngine.ts:291-...`（`runChat`） |
+| 历史构建（结构化 tool_calls/tool 消息） | `R/conversationHistory.ts:13-...`（`buildHistory`） |
+| 发送入口与 pending 文本意图 | `R/useChatEngine.ts:557-...`（`send`） |
+| 错误收口（含 auto-retry 与 sid 归属） | `R/useChatEngine.ts:774-...`（`finishError`） |
+| 演示数据门控 | `R/ConversationPanel.tsx:647-663`（`getDemoBridge`/`demoDigital`） |
+| 信任集合追加 | `R/ConversationPanel.tsx:571-...`（`addTrust`） |
 | 会话状态 hook | `R/useConversationState.ts`（`transition`/`stateRef`） |
 | 工具授权卡状态机 | `R/useToolApproval.ts` |
 | 问题台账 7 态与迁移 | `R/problemStore.ts` |
