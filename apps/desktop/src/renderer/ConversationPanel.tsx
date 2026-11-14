@@ -16,6 +16,7 @@ import {
   hasProtoCall,
 } from './conversationFormat'
 import { GoalConfirmCard, PlanConfirmCard, ResolutionConfirmCard } from './DecisionCards'
+import { ConversationComposer } from './ConversationComposer'
 // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层纯逻辑，双源调研驱动）
 import {
   evaluateTurnProgress,
@@ -74,7 +75,6 @@ import {
   IconCheck,
   IconClock,
   IconDot,
-  IconFile,
   IconLock,
   IconRotateCcw,
   IconShield,
@@ -599,31 +599,7 @@ export default function ConversationPanel({
   // execConfirmedHandledRef 自动 silent 触发删除——执行确认现在靠用户打字确认词（「可以/确认」）作为普通用户消息
   // 发送（模型看到确认 + planConfirmed=true → forceTool 强制产出）——旧 effect 与用户消息双重发送冲突
   // （398 实测：「可以」消息 + silent「用户已确认执行」排队/打断——双触发）
-  const [mentionOpen, setMentionOpen] = useState(false)
-  const [recentFiles, setRecentFiles] = useState<string[]>([])
-  // 2026-08-04 审计修复（A2）：浮层方向键高亮索引（-1=未高亮）——listbox 键盘语义落地（原仅 Tab 可达，Arrow 无反应）
-  const [mentionActive, setMentionActive] = useState(-1)
-  const demoFiles =
-    recentFilesExternal && recentFilesExternal.length > 0
-      ? recentFilesExternal
-      : (getDemoBridge()?.recentFiles ?? [])
-  // 2026-08-04 审计修复（A2）：选择浮层项（输入框 @后插入文件名）——点击/Enter 共用
-  const pickMention = (idx: number) => {
-    const f = recentFiles[idx]
-    if (!f) return
-    const before = inputRef.current.replace(/@[^@]*$/, '')
-    const next = before + '@' + f + ' '
-    inputRef.current = next
-    setInput(next)
-    setMentionOpen(false)
-    setMentionActive(-1)
-    textareaRef.current?.focus()
-  }
-  // 2026-08-04 审计修复（A2）：浮层打开/内容变化时重置高亮
-  useEffect(() => {
-    if (!mentionOpen) setMentionActive(-1)
-    else setMentionActive(recentFiles.length > 0 ? 0 : -1)
-  }, [mentionOpen, recentFiles])
+  // P1-05 阶段 3：@引用浮层与输入区本地状态已移至 ConversationComposer
 
   // 处理单个流式事件（当前轮次——写入最后一条 assistant 消息）
   // 2026-08-04：流式累积（事件层）——React StrictMode 会双调 setMessages updater，副作用（日志/工具执行）放 updater 内会重复执行（实测对话日志每条记录两次）
@@ -3139,125 +3115,22 @@ export default function ConversationPanel({
             </div>
           )
         })()}
-      <div className="nf-chat__input">
-        {/* 2026-09-07 用户决策：发送/停止合并为一个按钮，置于输入框内右侧——working=停止（红），空闲=发送 */}
-        <div className="nf-chat__field">
-          <textarea
-            ref={textareaRef}
-            value={input}
-            placeholder={
-              stateRef.current.pending === 'system_clarify'
-                ? '请先在上方卡片做出选择（文字回复不能替代确认）'
-                : '输入想法…（Enter 发送 · Shift+Enter 换行）'
-            }
-            aria-label="给搭档的消息"
-            role="combobox"
-            aria-haspopup="listbox"
-            aria-expanded={mentionOpen}
-            aria-controls="nf-mention-list"
-            aria-autocomplete="list"
-            rows={2}
-            onChange={(e) => {
-              inputRef.current = e.target.value
-              setInput(e.target.value)
-              const v = e.target.value
-              if (v.includes('@') && demoFiles.length > 0) {
-                setRecentFiles(demoFiles)
-                setMentionOpen(true)
-              } else if (!v.includes('@')) {
-                setMentionOpen(false)
-              }
-            }}
-            onKeyDown={(e) => {
-              // 输入法组合中（拼音/候选确认的回车 isComposing=true）——不拦截，交给输入法
-              if (e.nativeEvent.isComposing) return
-              // 08 快捷键（D0 §6）：Cmd/Ctrl+E = @引用当前选中文件（插入 @文件名 到输入框——发送时 ContextEngine 注入）
-              if (e.key === 'e' && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault()
-                if (currentFile) {
-                  const name = currentFile.split('/').pop() ?? currentFile
-                  inputRef.current = inputRef.current + `@${name} `
-                  setInput(inputRef.current)
-                  if (inputRef.current.includes('@') && demoFiles.length > 0) {
-                    setRecentFiles(demoFiles)
-                    setMentionOpen(true)
-                  }
-                }
-                return
-              }
-              // 2026-08-04 审计修复（A2）：浮层打开时——方向键移动高亮 / Esc 关闭 / Enter 选择
-              if (mentionOpen) {
-                if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-                  e.preventDefault()
-                  const len = recentFiles.length
-                  if (len === 0) return
-                  setMentionActive((cur) => {
-                    if (cur === -1) return e.key === 'ArrowDown' ? 0 : len - 1
-                    return e.key === 'ArrowDown' ? (cur + 1) % len : (cur - 1 + len) % len
-                  })
-                  return
-                }
-                if (e.key === 'Escape') {
-                  e.preventDefault()
-                  setMentionOpen(false)
-                  return
-                }
-                if (e.key === 'Enter' && !e.shiftKey && mentionActive >= 0) {
-                  e.preventDefault()
-                  pickMention(mentionActive)
-                  return
-                }
-              }
-              // 2026-08-03 A6 审计修复：Enter=发送（非技术用户直觉——V1 主受众）；Shift+Enter=换行；⌘/Ctrl+Enter 也发送（兼容旧习惯）
-              // 注意：⌘+Enter 也命中 Enter 分支（metaKey 不排除）——发送；Shift+Enter 不拦截——textarea 默认换行
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                void send()
-              }
-            }}
-          />
-          {/* 2026-08-03 v34：@引用浮层移到 textarea 之后（Tab 顺序 textarea→option→发送——修复键盘不可达；absolute 定位在输入框上方） */}
-          {mentionOpen && (
-            <div id="nf-mention-list" className="nf-mention" role="listbox" aria-label="引用文件">
-              <span className="nf-mention__title">引用文件</span>
-              {recentFiles.map((f, i) => (
-                <button
-                  key={f}
-                  type="button"
-                  role="option"
-                  aria-selected={i === mentionActive}
-                  className={`nf-mention__item${i === mentionActive ? ' nf-mention__item--active' : ''}`}
-                  onClick={() => pickMention(i)}
-                >
-                  <IconFile size={12} /> {f}
-                </button>
-              ))}
-            </div>
-          )}
-          {/* 2026-08-05 用户反馈 4 + 2026-09-07 合并：单按钮双态——working=停止（打断当前流/杀 bash），空闲=发送；
-            处理中打字仍可 Enter 发送（send 自带打断语义——按钮只承载停止入口） */}
-          {working ? (
-            <button
-              type="button"
-              className="nf-chat__send nf-chat__send--stop"
-              onClick={() => void stopGeneration()}
-              aria-label="停止搭档当前工作"
-            >
-              ⏹ 停止
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="nf-chat__send"
-              onClick={() => void send()}
-              disabled={!input.trim()}
-              aria-label="发送"
-            >
-              发送
-            </button>
-          )}
-        </div>
-      </div>
+      <ConversationComposer
+        input={input}
+        setInput={setInput}
+        inputRef={inputRef}
+        textareaRef={textareaRef}
+        currentFile={currentFile}
+        availableFiles={
+          recentFilesExternal && recentFilesExternal.length > 0
+            ? recentFilesExternal
+            : (getDemoBridge()?.recentFiles ?? [])
+        }
+        working={working}
+        pending={stateRef.current.pending}
+        onSend={() => void send()}
+        onStop={() => void stopGeneration()}
+      />
     </div>
   )
 }
