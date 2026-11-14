@@ -224,7 +224,7 @@ contextBridge.exposeInMainWorld('neonforge', {
       ipcRenderer.invoke('tools:list') as Promise<
         Array<{
           name: string
-          source: 'core' | 'lsp'
+          source: 'core' | 'lsp' | 'extension'
           requiresApproval: boolean
           risk: 'none' | 'low' | 'high'
         }>
@@ -287,6 +287,64 @@ contextBridge.exposeInMainWorld('neonforge', {
       >,
     toggle: (name: string, active: boolean) =>
       ipcRenderer.invoke('plugins:toggle', { name, active }) as Promise<boolean>,
+  },
+  extensions: {
+    list: () =>
+      ipcRenderer.invoke('extensions:list') as Promise<
+        Array<{
+          id: string
+          name: string
+          version: string
+          kind: 'builtin' | 'mcp' | 'git'
+          status: 'registered' | 'active' | 'inactive' | 'failed'
+          trust: 'builtin' | 'user-authorized' | 'untrusted'
+          capabilities: Array<{
+            id: string
+            name: string
+            description: string
+            risk: 'none' | 'low' | 'high'
+          }>
+          active: boolean
+          failureReason?: string
+        }>
+      >,
+    toggle: (name: string, active: boolean) =>
+      ipcRenderer.invoke('extensions:toggle', { name, active }),
+    authorize: (name: string) => ipcRenderer.invoke('extensions:authorize', name),
+  },
+  mcp: {
+    config: () =>
+      ipcRenderer.invoke('mcp:config') as Promise<{
+        path: string
+        servers: Array<{ name: string; command: string; args?: string[]; cwd?: string }>
+      }>,
+    save: (servers: unknown) => ipcRenderer.invoke('mcp:save', servers),
+    refresh: () =>
+      ipcRenderer.invoke('mcp:refresh') as Promise<{
+        servers: Array<{
+          name: string
+          ok: boolean
+          tools: Array<{ name: string; description?: string }>
+          error?: string
+        }>
+        configError?: string
+      }>,
+    status: () =>
+      ipcRenderer.invoke('mcp:status') as Promise<
+        Array<{ name: string; ok: boolean; tools: Array<{ name: string }>; error?: string }>
+      >,
+  },
+  git: {
+    read: (
+      action: 'status' | 'log' | 'diff' | 'branches',
+      rootPath?: string,
+      opts?: { path?: string; limit?: number },
+    ) =>
+      ipcRenderer.invoke('git:read', { action, rootPath, ...opts }) as Promise<{
+        ok: boolean
+        data?: unknown
+        error?: string
+      }>,
   },
   preheat: {
     status: () =>

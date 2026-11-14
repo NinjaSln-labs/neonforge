@@ -19,7 +19,7 @@
 | 行业对标偏离 | 8 | 已吸收 Claude/Codex/Cursor 授权、Aider/Cline 验证与拒绝原因、reasonix/deer-flow 循环与挂起；缺口在 Outbox、事件版本、契约 schema | 代码注释中的对标记录；`02 §4`、`07 §9` |
 | **加权平均** | **7.5 / 10** | 模型主干强，工程边界与安全边界需要硬化 | — |
 
-> 另按**目标态领域完整度**评估：5 / 10。现有 9 个上下文中，交付真实性相关领域（变更集、验收门禁）与工作台承诺领域（任务队列、用量、扩展集成）只有字段、占位或演示；缺口见 §2A。该评分不并入上表的“现有模型”评分。
+> 另按**目标态领域完整度**评估：9 / 10（2026-11-14 复评）。BC-10～BC-14 五个目标态领域已落地（领域状态机 + 持久化 + IPC/preload + 生产 UI + 单测）；剩余 1 分来自演示面板隔离机制化与部分硬化项（见 §2 与 §5.3）。该评分不并入上表的“现有模型”评分。
 
 ---
 
@@ -39,8 +39,8 @@
 | P1-03 | P1 | renderer 与 main 的计划确认镜像异步 | 极端时序下 main 门控仍关闭/仍开启，导致卡不渲染或越权 | `useConversationState.ts:58-68`（`void setPlanConfirmed`）、`ipc.ts:329-331` | 确认转换 await 镜像结果；失败回滚/提示；增加竞态测试 | 待修复（后续） |
 | P1-04 | P1 | IPC 契约无 schema 校验/生成 | preload、types.d.ts、main handler 三者可能漂移；调用方传入非法结构 | `preload.ts:10-250`、`renderer/types.d.ts:8-192`、`ipc.ts:33-409` | 生成式契约或 zod/JSON Schema 校验；契约测试 | 待修复（后续） |
 | P1-05 | P1 | `ConversationPanel.tsx` 3437 行，应用编排与 UI 渲染混在一起 | 可维护性差、DDD 应用层边界侵蚀、测试困难 | `ConversationPanel.tsx` 全文 | 拆分为应用服务 hooks（send/stream/toolLoop/decision）与展示组件 | 待修复（重构） |
-| P1-06 | P1 | 演示/占位能力与生产能力混排 | 用户可能以为 DoD/数字交付/任务队列已可用；产品预期失真 | `MainWorkspace.tsx:29-31`（任务队列占位）、`ConversationPanel.tsx:2568-2576`（demo 面板）、`DoDAlignPanel.tsx:9-13`（硬编码）、`DigitalDeliveryPanel.tsx:14-67`（demo） | 明确标记/隐藏；或将 DoD/验收接入真实方案验证计划 | 待修复（产品决策） |
-| P1-07 | P1 | 交付包验收项在生产路径为空 | `DeliveryPackage` 有验收字段，但无 DoD 来源；用户看不到“按什么验收” | `MainWorkspace.tsx:282-293`（`acceptance: prev?.acceptance ?? []`） | 方案确认时捕获 `verificationPlan` 作为验收项；或引入 DoD 决策点 | 待修复（产品决策） |
+| P1-06 | P1 | 演示/占位能力与生产能力混排 | 用户可能以为 DoD/数字交付/任务队列已可用；产品预期失真 | `MainWorkspace.tsx`（任务队列已真实）、`ConversationPanel.tsx:2568-2576`（demo 面板）、`DoDAlignPanel.tsx:9-13`（硬编码）、`DigitalDeliveryPanel.tsx:14-67`（demo） | 明确标记/隐藏；或将 DoD/验收接入真实方案验证计划 | 部分修复（2026-11-14）：任务队列/验收已真实；演示面板仍在，隔离机制化列入后续 |
+| P1-07 | P1 | 交付包验收项在生产路径为空 | `DeliveryPackage` 有验收字段，但无 DoD 来源；用户看不到“按什么验收” | `MainWorkspace.tsx`（历史 `acceptance: []`） | 方案确认时捕获 `verificationPlan` 作为验收项；或引入 DoD 决策点 | 已修复（BC-14）：`acceptance:derive` 取 `verificationPlan`；门禁阻断关闭 |
 | P1-08 | P1 | 路径相对/绝对双形态与末段匹配启发式 | 可能把同名不同目录文件误判为已产出；完成核验误通过/误拒绝 | `conversationState.ts:783-798`、`791-798` | 统一绝对路径规范；保存文件标识（inode/realpath）；补测试 | 待修复（后续） |
 | P1-09 | P1 | API Key/Web Key 明文 fallback 0600 | 本机其他进程可读；macOS 未签名场景的安全折衷 | `configStore.ts:1-3`、`24-28`、`92-106` | 优先 OS keychain；明文 fallback 加显式设置/到期提醒 | 待修复（安全决策） |
 | P1-10 | P1 | 沙箱仅字符串前缀，未解析符号链接 | 根内 symlink 指向根外可绕过 trust/open 检查 | `tools.ts:57-69`；`ConversationPanel.tsx:2170-2180`（trust 前缀） | realpath 解析；拒绝 symlink 逃逸；测试 | 待修复 |
@@ -57,6 +57,8 @@
 ### 2A. 目标领域完整性问题（to-be）
 
 > 这些不是“代码 bug”，而是“产品应该有、当前没有完整落地”的领域缺口。判定依据见 `00-domain-blueprint.md`。优先级 P0/P1 仅表示目标态建设的先后，不改变本轮已关闭的源码 P0。
+>
+> **实现状态（2026-11-14）**：G01～G05 均已实现并通过单测；本表保留为设计依据与回归验收清单（对应 `09-openspec/tasks.md` 5.6–5.10）。
 
 | 编号 | 优先级 | 缺口 | 影响 | 代码证据 | 目标上下文 | 建议 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -132,14 +134,14 @@
 ### 5.3 非阻塞但建议尽快处理
 
 - P1-03 状态镜像竞态、P1-04 契约 schema、P1-08 路径规范化、P1-09 密钥存储、P1-10 symlink、P2-01 事件命名、P2-04 原子写。
-- 目标态领域缺口 G01-G05（见 §2A）：变更集、任务队列、用量、扩展集成、验收门禁。实现顺序见 `00-domain-blueprint.md §6`。
+- 目标态领域缺口 G01-G05（见 §2A）已于 2026-11-14 实现；实现记录见 `00-domain-blueprint.md §6`。
 
 ### 5.4 通过标准（建议）
 
 | 门禁 | 标准 |
 | :--- | :--- |
 | 安全回归 | P0/P1 安全用例全部通过；未授权写入/读取测试 0 失败 |
-| 不变量回归 | `conversationState.test.ts` 的 Inv 1-8 全绿；I06 领域派生路径有测试；目标态 I17-I21 待实现后补齐 |
+| 不变量回归 | `conversationState.test.ts` 的 Inv 1-8 全绿；I06 领域派生路径有测试；目标态 I17-I21 随实现补齐（见 `changeSet/acceptance/taskQueue/usageLedger/extension` 单测） |
 | 类型/构建 | `tsc` 双配置通过；`eslint` 通过 |
 | 交互回归 | `vitest` + interaction 测试通过；主路径 e2e-sim 收敛 |
 | 文档一致性 | 08 问题状态更新；10 证据索引指向修复后代码 |
@@ -158,4 +160,4 @@ NeonForge 的领域模型主干是清晰的：**用户决策驱动的任务状�
 
 这些都可以在不改变产品方向的前提下修复。修复完成后，本模型可以从 Conditional Ready 进入 Ready。
 
-但“现有模型可用”不等于“产品领域完整”。按 `00-domain-blueprint.md` 的目标态目录，产品还缺 5 个应有领域（变更集、任务队列、用量成本、扩展集成、验收门禁），其中变更集与验收门禁直接决定“交付是否可信”，应优先补齐。现有文档已把目标态设计、聚合/不变量/事件与实现顺序写入 00/03-07/09，读者不应把占位或演示误认为已落地能力。
+但“现有模型可用”不等于“产品领域完整”。按 `00-domain-blueprint.md` 的目标态目录，产品应有 5 个目标态领域（变更集、任务队列、用量成本、扩展集成、验收门禁）；截至 2026-11-14 已全部实现：变更集与验收门禁补齐了“交付是否可信”，任务队列/用量/扩展补齐了工作台承诺。演示面板仍在 UI 中保留，但生产交付路径不再依赖它们；后续工作集中在 Outbox/事件版本、IPC 契约校验、ConversationPanel 拆分与演示隔离机制化。

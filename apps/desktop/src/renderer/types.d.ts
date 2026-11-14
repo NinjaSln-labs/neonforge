@@ -237,6 +237,31 @@ export interface NeonForgeBridge {
     list: () => Promise<Array<{ name: string; version: string; active: boolean }>>
     toggle: (name: string, active: boolean) => Promise<boolean>
   }
+  extensions: {
+    list: () => Promise<ExtensionInfo[]>
+    toggle: (name: string, active: boolean) => Promise<{
+      ok: boolean
+      extension: ExtensionInfo | null
+    }>
+    authorize: (name: string) => Promise<{ ok: boolean; extension: ExtensionInfo | null }>
+  }
+  mcp: {
+    config: () => Promise<{ path: string; servers: McpServerConfigView[] }>
+    save: (servers: unknown) => Promise<{
+      ok: boolean
+      servers?: McpServerConfigView[]
+      error?: string
+    }>
+    refresh: () => Promise<{ servers: McpServerStatus[]; configError?: string }>
+    status: () => Promise<McpServerStatus[]>
+  }
+  git: {
+    read: (
+      action: 'status' | 'log' | 'diff' | 'branches',
+      rootPath?: string,
+      opts?: { path?: string; limit?: number },
+    ) => Promise<{ ok: boolean; data?: unknown; error?: string }>
+  }
   preheat: {
     status: () => Promise<{
       plan: { shouldPreheat: boolean; why: string; actions: string[] }
@@ -313,6 +338,37 @@ export interface QueueResult {
   queue?: QueueState
   error?: string
 }
+/** BC-13 扩展视图（与 domain/extension.ts 保持结构一致） */
+export interface ExtensionCapability {
+  id: string
+  name: string
+  description: string
+  risk: 'none' | 'low' | 'high'
+}
+export interface ExtensionInfo {
+  id: string
+  name: string
+  version: string
+  kind: 'builtin' | 'mcp' | 'git'
+  status: 'registered' | 'active' | 'inactive' | 'failed'
+  trust: 'builtin' | 'user-authorized' | 'untrusted'
+  capabilities: ExtensionCapability[]
+  active: boolean
+  failureReason?: string
+  authorizedAt?: string
+}
+export interface McpServerConfigView {
+  name: string
+  command: string
+  args?: string[]
+  cwd?: string
+}
+export interface McpServerStatus {
+  name: string
+  ok: boolean
+  tools: Array<{ name: string; description?: string }>
+  error?: string
+}
 export interface DeliveryPackage {
   status: 'draft' | 'delivered' | 'closed'
   summary: string // 做了什么（人话摘要）
@@ -365,7 +421,7 @@ export interface NeonForgeTools {
   list: () => Promise<
     Array<{
       name: string
-      source: 'core' | 'lsp'
+      source: 'core' | 'lsp' | 'extension'
       requiresApproval: boolean
       risk: 'none' | 'low' | 'high'
     }>

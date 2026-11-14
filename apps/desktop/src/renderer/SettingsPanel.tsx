@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { IconCheck, IconDot, IconSettings } from './icons'
+import type { ExtensionInfo, McpServerStatus } from './types'
 
 // 设置（ticket 08 / D0 §9 最小集）——2026-08-03 A1 审计修复：移除不生效的假设置（语言/默认视图/主动提醒无消费方——诚实性优先）
 // 保留真实内容：内置插件（真实 IPC 注册表）+ 快捷键表（真实已实现）
@@ -38,6 +39,60 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
     void window.neonforge.plugins?.toggle?.(name, active).then((ok) => {
       if (ok)
         setPlugins((prev) => prev?.map((p) => (p.name === name ? { ...p, active } : p)) ?? null)
+    })
+  }
+
+  // BC-13 扩展与集成：扩展视图 + MCP 配置（只存命令/参数，不存凭据值）
+  const [extensions, setExtensions] = useState<ExtensionInfo[] | null>(null)
+  const refreshExtensions = () => {
+    void window.neonforge.extensions?.list?.().then(setExtensions)
+  }
+  useEffect(() => {
+    refreshExtensions()
+  }, [])
+  const toggleExtension = (name: string, active: boolean) => {
+    void window.neonforge.extensions?.toggle?.(name, active).then((r) => {
+      if (r?.ok) refreshExtensions()
+    })
+  }
+  const authorizeExtension = (name: string) => {
+    void window.neonforge.extensions?.authorize?.(name).then(() => refreshExtensions())
+  }
+
+  const [mcpPath, setMcpPath] = useState<string>('')
+  const [mcpDraft, setMcpDraft] = useState<string>('{\n  "servers": []\n}')
+  const [mcpMsg, setMcpMsg] = useState<string | null>(null)
+  const [mcpStatus, setMcpStatus] = useState<McpServerStatus[]>([])
+  useEffect(() => {
+    void window.neonforge.mcp?.config?.().then((config) => {
+      setMcpPath(config.path)
+      setMcpDraft(JSON.stringify({ servers: config.servers }, null, 2))
+    })
+  }, [])
+  const saveMcpConfig = () => {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(mcpDraft)
+    } catch {
+      setMcpMsg('JSON 格式错误——请检查逗号/引号')
+      return
+    }
+    void window.neonforge.mcp?.save?.(parsed).then((r) => {
+      if (r?.ok) {
+        setMcpMsg('已保存（尚未连接——点「刷新工具」建立连接）')
+        setMcpDraft(JSON.stringify({ servers: r.servers ?? [] }, null, 2))
+        refreshExtensions()
+      } else {
+        setMcpMsg(r?.error ?? '保存失败')
+      }
+    })
+  }
+  const refreshMcp = () => {
+    setMcpMsg('正在连接 MCP 服务器…')
+    void window.neonforge.mcp?.refresh?.().then((r) => {
+      setMcpStatus(r?.servers ?? [])
+      setMcpMsg(r?.configError ?? null)
+      refreshExtensions()
     })
   }
 
@@ -229,22 +284,82 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
       </div>
 
       <div className="nf-settings__plugins">
-        <span className="nf-settings__plugins-title">内置插件（暂不支持安装新插件）</span>
+        <span className="nf-settings__plugins-title">
+          扩展（内置 / Git 只读 / MCP 外部工具——能力调用统一经授权与沙箱）
+        </span>
         <div className="nf-settings__plugins-list">
-          {pluginList.map((p) => (
-            <span key={p.name} className="nf-settings__plugin">
-              {p.name} <em>{p.active ? <IconCheck size={11} /> : <IconDot size={11} />}</em>
-              <button
-                type="button"
-                className="nf-settings__plugin-toggle"
-                aria-label={`${p.active ? '停用' : '启用'} ${p.name}`}
-                onClick={() => togglePlugin(p.name, !p.active)}
-              >
-                {p.active ? '停用' : '启用'}
-              </button>
-            </span>
-          ))}
+          {extensions
+            ? extensions.map((ext) => (
+                <span key={ext.name} className="nf-settings__plugin">
+                  {ext.name} · {ext.kind} · {ext.status === 'active' ? '已启用' : ext.status}
+                  {ext.kind !== 'builtin'
+                    ? ` · ${ext.trust === 'builtin' ? '内置信任' : ext.trust === 'user-authorized' ? '已授权' : '未授权'}`
+                    : ''}
+                  {ext.failureReason ? ` · 失败：${ext.failureReason}` : ''}
+                  {ext.capabilities.length > 0 ? ` · ${ext.capabilities.length} 项能力` : ''}
+                  <button
+                    type="button"
+                    className="nf-settings__plugin-toggle"
+                    aria-label={`${ext.active ? '停用' : '启用'} ${ext.name}`}
+                    onClick={() => toggleExtension(ext.name, !ext.active)}
+                  >
+                    {ext.active ? '停用' : '启用'}
+                  </button>
+                  {ext.kind === 'mcp' && ext.status === 'active' && ext.trust === 'untrusted' ? (
+                    <button
+                      type="button"
+                      className="nf-settings__plugin-toggle"
+                      onClick={() => authorizeExtension(ext.name)}
+                    >
+                      授权
+                    </button>
+                  ) : null}
+                </span>
+              ))
+            : pluginList.map((p) => (
+                <span key={p.name} className="nf-settings__plugin">
+                  {p.name} <em>{p.active ? <IconCheck size={11} /> : <IconDot size={11} />}</em>
+                  <button
+                    type="button"
+                    className="nf-settings__plugin-toggle"
+                    aria-label={`${p.active ? '停用' : '启用'} ${p.name}`}
+                    onClick={() => togglePlugin(p.name, !p.active)}
+                  >
+                    {p.active ? '停用' : '启用'}
+                  </button>
+                </span>
+              ))}
         </div>
+      </div>
+
+      <div className="nf-settings__plugins">
+        <span className="nf-settings__plugins-title">
+          MCP 服务器（外部工具；配置只存命令/参数，不存凭据——凭据请用环境变量）
+        </span>
+        {mcpPath ? <p className="nf-settings__export-msg">配置：{mcpPath}</p> : null}
+        <textarea
+          className="nf-settings__mcp-editor"
+          rows={6}
+          spellCheck={false}
+          value={mcpDraft}
+          onChange={(e) => setMcpDraft(e.target.value)}
+          aria-label="MCP 服务器配置（JSON）"
+        />
+        <div className="nf-settings__mcp-actions">
+          <button type="button" onClick={saveMcpConfig}>
+            保存配置
+          </button>
+          <button type="button" onClick={refreshMcp}>
+            刷新工具
+          </button>
+        </div>
+        {mcpMsg ? <p className="nf-settings__export-msg">{mcpMsg}</p> : null}
+        {mcpStatus.map((s) => (
+          <p key={s.name} className="nf-settings__export-msg">
+            {s.ok ? '✓' : '✗'} {s.name}
+            {s.ok ? `：${s.tools.map((t) => t.name).join('、') || '（无工具）'}` : `：${s.error}`}
+          </p>
+        ))}
       </div>
 
       <div className="nf-settings__row">

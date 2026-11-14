@@ -27,10 +27,12 @@ function TaskPanel({
   sessionId,
   refreshKey,
   onStartTask,
+  rootPath,
 }: {
   sessionId?: string
   refreshKey?: number
   onStartTask: (title: string) => void
+  rootPath?: string | null
 }) {
   const [preheatInfo, setPreheatInfo] = useState<{
     cache: { hash: string; history: Array<{ hit: boolean }> } | null
@@ -48,6 +50,47 @@ function TaskPanel({
   const [queue, setQueue] = useState<QueueState>({ entries: [] })
   const [draft, setDraft] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
+  // BC-13 Git 只读视图（status + 最近提交；写操作走对话授权）
+  const [git, setGit] = useState<{
+    branch: string | null
+    dirty: boolean
+    files: Array<{ path: string }>
+    log: Array<{ shortHash: string; subject: string }>
+  } | null>(null)
+  const [gitMsg, setGitMsg] = useState<string | null>(null)
+  useEffect(() => {
+    if (!rootPath) {
+      setGit(null)
+      setGitMsg(null)
+      return
+    }
+    let cancelled = false
+    void Promise.all([
+      window.neonforge.git?.read('status', rootPath),
+      window.neonforge.git?.read('log', rootPath, { limit: 5 }),
+    ]).then(([statusRes, logRes]) => {
+      if (cancelled) return
+      if (!statusRes?.ok) {
+        setGit(null)
+        setGitMsg(statusRes?.error ?? '无法读取 Git 状态')
+        return
+      }
+      setGitMsg(null)
+      setGit({
+        ...(statusRes.data as {
+          branch: string | null
+          dirty: boolean
+          files: Array<{ path: string }>
+        }),
+        log: logRes?.ok
+          ? (logRes.data as Array<{ shortHash: string; subject: string }>)
+          : [],
+      })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [rootPath])
   useEffect(() => {
     void window.neonforge.preheat?.status?.().then(setPreheatInfo)
   }, [])
@@ -256,6 +299,29 @@ function TaskPanel({
         )}
       </details>
       {/* 2026-08-03 A7 审计修复：占位措辞诚实化；BC-10 变更集状态在 DeliveryPanel */}
+      <details>
+        <summary>Git（只读）</summary>
+        {gitMsg ? <p className="nf-meta">⚠ {gitMsg}</p> : null}
+        {git ? (
+          <>
+            <p className="nf-meta">
+              分支：{git.branch ?? '—'} ·{' '}
+              {git.dirty ? `${git.files.length} 个未提交变更` : '工作区干净'}
+            </p>
+            {git.files.slice(0, 10).map((f) => (
+              <p key={f.path} className="nf-meta">
+                · {f.path}
+              </p>
+            ))}
+            {git.log.length > 0 ? <p className="nf-meta">最近提交：</p> : null}
+            {git.log.slice(0, 5).map((entry) => (
+              <p key={entry.shortHash} className="nf-meta">
+                · {entry.shortHash} {entry.subject}
+              </p>
+            ))}
+          </>
+        ) : null}
+      </details>
       <p className="nf-placeholder">待审核变更：无（审核在「产物」区）</p>
       <details open>
         <summary>本轮用量</summary>
@@ -684,6 +750,7 @@ export default function MainWorkspace({
               sessionId={sessionIdRef.current}
               refreshKey={queueRefreshKey}
               onStartTask={handleStartQueuedTask}
+              rootPath={rootPath}
             />
           )}
         </div>

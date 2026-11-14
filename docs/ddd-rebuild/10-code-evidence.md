@@ -134,11 +134,11 @@
 
 | 目标领域 | 证据 | 说明 |
 | :--- | :--- | :--- |
-| BC-10 变更与版本 | `M/applyDiff.ts`（snapshot/revert）、`M/ipc.ts:219-227`（`delivery:apply-diff/revert-diff`）、`R/DeliveryPanel.tsx`（审核 UI）、`M/pluginSystem.ts:22`（git 占位） | diff/快照已有；变更集对象、基线校验、Git 只读桥缺失 |
-| BC-11 任务编排 | `R/MainWorkspace.tsx:15-40`（TaskPanel）、`30`（“任务队列：即将支持”）、`31`（“待审核变更：无”） | 队列仅占位 |
-| BC-12 用量与成本 | `R/MainWorkspace.tsx:33-36`（“本轮用量”仅前缀缓存）、`M/pluginSystem.ts:23`（stats 占位）、`M/gateway.ts:559-747`（未解析 usage） | 无真实 token/成本台账 |
-| BC-13 扩展与集成 | `M/pluginSystem.ts:19-25`（`mcp-bridge`/`git`/`stats` 占位）、`M/ipc.ts` `plugins:*` | 注册表有；MCP/Git 集成缺失 |
-| BC-14 验收与质量门禁 | `R/DeliveryPanel.tsx:332-350`（验收勾选/“请先勾选全部验收项”）、`R/MainWorkspace.tsx:282-293`（`acceptance` 为空）、`R/DoDAlignPanel.tsx:9-13`（演示）、`D/conversationState.ts` 的 `PlanProposal.verificationPlan` | 字段/UI 有；验收来源与门禁判定缺失 |
+| BC-10 变更与版本 | 历史证据：`M/applyDiff.ts`（snapshot/revert）、`M/ipc.ts`（`delivery:apply-diff/revert-diff`）、`R/DeliveryPanel.tsx`（审核 UI）；实现：`domain/changeSet.ts`、`main/changeSetService.ts`、`main/gitBridge.ts`、`ipc.ts` `changeset:*`/`git:read` | 已落地（2026-11-14）：变更集状态机 + 基线哈希 + 冲突回滚 |
+| BC-11 任务编排 | 历史证据：`R/MainWorkspace.tsx` TaskPanel 占位；实现：`domain/taskQueue.ts`、`main/taskQueueStore.ts`、`ipc.ts` `queue:*`、TaskPanel 队列 UI | 已落地（2026-11-14）：单活跃队列 + 暂停/恢复/重排 + 授权阻塞同步 |
+| BC-12 用量与成本 | 历史证据：TaskPanel“本轮用量”仅前缀缓存、`M/gateway.ts` 未解析 usage；实现：`domain/usageLedger.ts`、`main/usageStore.ts`、`gateway.ts` usage 解析、`ipc.ts` `usage:*` | 已落地（2026-11-14）：token/成本/缓存口径 + append-only 台账 |
+| BC-13 扩展与集成 | 历史证据：`M/pluginSystem.ts:19-25`（`mcp-bridge`/`git`/`stats` 占位）、`M/ipc.ts` `plugins:*`；实现：`domain/extension.ts`、`main/pluginSystem.ts`、`main/mcpClient.ts`、`main/mcpConfig.ts`、`main/mcpManager.ts`、`main/gitBridge.ts`、`ipc.ts` `extensions:*`/`mcp:*`/`git:read` | 已落地（2026-11-14）：注册/信任/生命周期 + MCP stdio + Git 只读桥 |
+| BC-14 验收与质量门禁 | 历史证据：`R/DeliveryPanel.tsx`（验收勾选）、`R/DoDAlignPanel.tsx:9-13`（演示）、`D/conversationState.ts` 的 `PlanProposal.verificationPlan`；实现：`domain/acceptance.ts`、`main/acceptanceStore.ts`、`ipc.ts` `acceptance:*`、`DeliveryPanel.tsx` 门禁 | 已落地（2026-11-14）：来源派生 + 证据/豁免 + 门禁判定 |
 | 演示面板（非目标域） | `R/DigitalDeliveryPanel.tsx:14-67`、`R/DoDAlignPanel.tsx`、`R/TrustLadderPanel.tsx` | 仅 demo bridge 可达；生产路径不得注入 |
 | 场景卡（产品内容） | `R/scenes.tsx:1`、`R/StartPage.tsx:4`、`R/ConversationPanel.tsx:82` | 不构成业务领域 |
 

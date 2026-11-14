@@ -455,6 +455,45 @@ export const TOOL_DEFS = [
       },
     },
   },
+  // BC-13 扩展与集成：Git 只读桥 + MCP 外部工具（MCP 每次调用需 L3 授权）
+  {
+    type: 'function',
+    function: {
+      name: 'git',
+      description:
+        'Git 只读查询（status/log/diff/branches）——不会修改仓库；写操作（add/commit/push 等）请用 bash 并等待用户授权',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            description: 'status | log | diff | branches',
+          },
+          path: { type: 'string', description: 'diff 时可选：项目内相对路径' },
+          limit: { type: 'number', description: 'log 条数（默认 10，最多 50）' },
+        },
+        required: ['action'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'mcp',
+      description:
+        'MCP 外部工具（需 L3 授权）：action=list 刷新并列出已配置服务器与工具；action=call 调用指定服务器的工具。首次调用第三方扩展会在授权卡上确认信任',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', description: 'list | call' },
+          server: { type: 'string', description: 'MCP 服务器名称（action=call）' },
+          tool: { type: 'string', description: 'MCP 工具名称（action=call）' },
+          args: { type: 'object', description: '传给 MCP 工具的参数对象' },
+        },
+        required: ['action'],
+      },
+    },
+  },
   // V1.5 S1 Task 1.3：协议工具（propose_goal/propose_plan/report_completion/ask_user——ADR-009
   // 模型主动产出决策内容的通道）。形状适配：domain ProtocolToolDef {name,description,parameters}
   // → OpenAI function tool {type:'function',function:{…}}（适配留在本文件——domain 层保持纯净）

@@ -44,11 +44,13 @@
 | BC-07 | 配置与凭据 | Generic | 已落地 | `configStore.ts` | 04/06/07 + `configuration-secrets` spec |
 | BC-08 | 上下文与检索 | Supporting | 已落地 | `context.ts`、`codeRag.ts`、`lsp.ts`、`compact.ts` | 04/06/07 + `context-retrieval` spec |
 | BC-09 | 平台运行 | Generic | 已落地（插件仅注册） | `main.ts`、`pluginSystem.ts`、`preload.ts` | 04/06/07 + `platform-runtime` spec |
-| **BC-10** | **变更与版本** | Supporting | **部分落地**（diff/快照有，Git 仅占位） | `applyDiff.ts`、`ipc.ts` `delivery:*`、`pluginSystem.ts:22`（git 占位） | 本节 + `change-version` spec |
-| **BC-11** | **任务编排** | Supporting | **缺失（占位）** | `MainWorkspace.tsx:15-40`（“任务队列：即将支持”） | 本节 + `task-orchestration` spec |
-| **BC-12** | **用量与成本** | Generic | **缺失（占位）** | `MainWorkspace.tsx:33-36`（仅前缀缓存）、`pluginSystem.ts:23`（stats 占位）、`gateway.ts` 无 usage 解析 | 本节 + `usage-cost` spec |
-| **BC-13** | **扩展与集成** | Supporting | **部分落地**（注册表有，MCP/Git 集成缺失） | `pluginSystem.ts:19-25`（mcp-bridge 占位）、`plugins:*` IPC | 本节 + `extension-integration` spec |
-| **BC-14** | **验收与质量门禁** | Core | **部分落地 / 演示** | `DeliveryPanel.tsx:347`（验收勾选）、`DoDAlignPanel.tsx:9-13`（演示）、`MainWorkspace.tsx:282-293`（空验收） | 本节 + `acceptance-quality` spec |
+| **BC-10** | **变更与版本** | Supporting | **已落地** | `domain/changeSet.ts`、`main/changeSetService.ts`、`main/gitBridge.ts`、`ipc.ts` `changeset:*`/`git:read` | 本节 + `change-version` spec |
+| **BC-11** | **任务编排** | Supporting | **已落地** | `domain/taskQueue.ts`、`main/taskQueueStore.ts`、`ipc.ts` `queue:*`、`MainWorkspace.tsx` TaskPanel | 本节 + `task-orchestration` spec |
+| **BC-12** | **用量与成本** | Generic | **已落地** | `domain/usageLedger.ts`、`main/usageStore.ts`、`gateway.ts` usage 解析、`ipc.ts` `usage:*` | 本节 + `usage-cost` spec |
+| **BC-13** | **扩展与集成** | Supporting | **已落地** | `domain/extension.ts`、`main/pluginSystem.ts`、`main/mcpClient.ts`、`main/gitBridge.ts`、`ipc.ts` `extensions:*`/`mcp:*`/`git:read` | 本节 + `extension-integration` spec |
+| **BC-14** | **验收与质量门禁** | Core | **已落地** | `domain/acceptance.ts`、`main/acceptanceStore.ts`、`ipc.ts` `acceptance:*`、`DeliveryPanel.tsx` 门禁 | 本节 + `acceptance-quality` spec |
+
+> 实现状态（2026-11-14）：BC-10～BC-14 目标态领域已全部落地（领域状态机 + 本机持久化 + IPC/preload + 生产 UI + 单测）；演示面板仍保留为演示，但生产交付路径不再依赖它们。
 
 **非领域内容（故意不建模）**：`scenes.tsx` 的启动场景卡、图标、样式 token 属于产品内容/UI 素材，不构成业务领域；它们作为 BC-01 的 UI 素材被引用，不单独立上下文。
 
@@ -123,7 +125,7 @@
 - 关键命令：`RegisterExtension`、`ActivateExtension`、`DeactivateExtension`、`InvokeCapability`
 - 关键事件：`extension.registered`、`extension.activated`、`extension.deactivated`、`extension.invocation_denied`
 - 代码落点：`pluginSystem.ts`、`ipc.ts` `plugins:*`
-- 现状：注册表有；MCP 连接、外部工具描述符、Git 只读桥缺失。
+- 现状：已落地。注册表返回 kind/trust/status/capabilities；MCP stdio 客户端拉取工具清单并按 `high` 风险映射；Git 只读桥固定 argv（status/log/diff/branches）；第三方扩展首次调用需授权。
 
 ### 3.5 BC-14 验收与质量门禁（Acceptance & Quality Gate）
 
@@ -183,10 +185,8 @@
 | 阶段 | 内容 | 理由 |
 | :--- | :--- | :--- |
 | 已完成 | P0 安全/不变量修正（P0-01～P0-05、P1-01） | 先保证现有核心可信 |
-| 下一步 | BC-10 变更集 + BC-14 验收门禁 | 直接补“交付真实性”，与现有交付/问题台账闭环 |
-| 其次 | BC-12 用量台账 | 成本可见，依赖 BC-05 的 usage 解析 |
-| 再次 | BC-11 任务队列 | 需要 BC-01 状态事件稳定后再调度 |
-| 最后 | BC-13 MCP/Git 集成 | 外部能力接入，安全边界依赖 BC-02 成熟 |
+| 已完成（2026-11-14） | BC-10 变更集、BC-14 验收门禁、BC-12 用量台账、BC-11 任务队列、BC-13 MCP/Git 集成 | 目标态五领域已落地 |
+| 后续 | Outbox/DLQ/事件版本、IPC 契约校验、ConversationPanel 拆分、演示隔离机制化 | 见 `08-model-review.md` 与 `09-openspec/tasks.md §6` |
 
 ---
 

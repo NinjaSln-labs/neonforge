@@ -25,6 +25,9 @@ import { configStore } from './configStore.js'
 import { webSearch, webFetch } from './webTools.js'
 import { isKillablePid } from './processGuard.js'
 import { getChangeSetService } from './changeSetService.instance.js'
+import { gitRead } from './gitBridge.js'
+import { getMcpManager } from './mcpManager.instance.js'
+import { pluginRegistry } from './pluginSystem.js'
 
 // ToolRegistry（ticket 10 / A0 §2）：工具注册与执行分发
 // 边界判定：ToolRegistry=目录与分发；ShellAgent=bash 执行；Gateway=工具调用修复（02 已实现）
@@ -32,7 +35,6 @@ import { getChangeSetService } from './changeSetService.instance.js'
 // risk 等级：none=L1 观察（read/search/LSP 无需授权）；low=L3 文件操作（write/edit 写前快照可回滚）；high=L3 命令执行（bash 高危——永远单独确认）
 
 export type ToolRisk = 'none' | 'low' | 'high'
-
 // 2026-08-04 授权架构 v4（竞品多源交叉验证共识——Claude/Codex/Cursor 统一 Tool(specifier) 格式）：
 // 规则引擎 deny > allow > ask；未匹配默认 ask（fail-closed）+ preApproval 只读自动
 export type RuleAction = 'allow' | 'deny' | 'ask'
@@ -72,12 +74,12 @@ export function isInSandbox(p: unknown, rootPath?: string): boolean {
 
 export interface Tool {
   name: string
-  source: 'core' | 'lsp'
+  source: 'core' | 'lsp' | 'extension'
   requiresApproval: boolean
   risk: ToolRisk
   execute: (
     args: Record<string, unknown>,
-    ctx: { rootPath?: string; sessionId?: string },
+    ctx: { rootPath?: string; sessionId?: string; approved?: boolean },
   ) => Promise<unknown>
   // 2026-08-04 授权架构重构（用户授权疲劳）：执行前裁决——requiresApproval 工具若 preApproval 判定 auto=true → 免授权直接执行
   // （main 进程裁决——bash 只读命令自动；renderer 不判断，防绕过）
@@ -177,7 +179,11 @@ class ToolRegistry {
       }
     }
     try {
-      const data = await tool.execute(args, { rootPath: opts.rootPath, sessionId: opts.sessionId })
+      const data = await tool.execute(args, {
+        rootPath: opts.rootPath,
+        sessionId: opts.sessionId,
+        approved: opts.approved,
+      })
       // ADR-011：内层 {ok:false} 透传为外层失败（原恒 ok:true 吞掉工具命题失败）
       if (data !== null && typeof data === 'object' && (data as { ok?: unknown }).ok === false) {
         const err = (data as { error?: unknown }).error
@@ -748,6 +754,65 @@ export function initTools(): void {
       const dir = String(args.dir ?? '')
       if (!dir) return { ok: false, error: 'stop-server: 缺少 dir（项目目录绝对路径）' }
       return stopServer(dir)
+    },
+  })
+  // BC-13 Git 只读桥（status/log/diff/branches）——固定 argv；写操作不在工具面（走 bash 授权）
+  toolRegistry.register({
+    name: 'git',
+    source: 'extension',
+    requiresApproval: false,
+    risk: 'none',
+    execute: async (args, ctx) => {
+      const action = String(args.action ?? 'status')
+      if (!ctx?.rootPath) return { ok: false, error: 'git: 缺少项目 rootPath' }
+      const decision = pluginRegistry.canInvoke('git', action)
+      if (!decision.allowed) return { ok: false, error: decision.reason }
+      try {
+        return {
+          ok: true,
+          data: await gitRead(action, ctx.rootPath, {
+            path: args.path,
+            limit: args.limit,
+          }),
+        }
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : String(e) }
+      }
+    },
+  })
+  // BC-13 MCP 外部工具——high 风险：每次调用必须经 BC-02 授权卡；第三方扩展首次授权后记录信任
+  toolRegistry.register({
+    name: 'mcp',
+    source: 'extension',
+    requiresApproval: true,
+    risk: 'high',
+    execute: async (args, ctx) => {
+      const action = String(args.action ?? 'call')
+      if (action === 'list') {
+        const result = await getMcpManager().refresh()
+        return { ok: true, data: result }
+      }
+      if (action !== 'call') {
+        return { ok: false, error: `mcp: 未知 action（list/call）：${action}` }
+      }
+      const server = String(args.server ?? '').trim()
+      const tool = String(args.tool ?? '').trim()
+      if (!server || !tool) return { ok: false, error: 'mcp: 缺少 server/tool' }
+      const extName = `mcp:${server}`
+      let decision = pluginRegistry.canInvoke(extName, tool)
+      if (!decision.allowed) {
+        // 用户在授权卡上批准（approved=true）= 首次调用授权——记录信任后重判
+        if (decision.requiresApproval && ctx?.approved) {
+          pluginRegistry.authorize(extName)
+          decision = pluginRegistry.canInvoke(extName, tool)
+        }
+        if (!decision.allowed) return { ok: false, error: decision.reason }
+      }
+      const toolArgs =
+        args.args && typeof args.args === 'object'
+          ? (args.args as Record<string, unknown>)
+          : {}
+      return getMcpManager().callTool(server, tool, toolArgs)
     },
   })
 }

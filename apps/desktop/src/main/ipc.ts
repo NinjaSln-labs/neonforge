@@ -35,6 +35,8 @@ import { getAcceptanceStore } from './acceptanceStore.instance.js'
 import type { AcceptanceSource } from '../domain/acceptance.js'
 import { getChangeSetService } from './changeSetService.instance.js'
 import { getTaskQueueStore } from './taskQueueStore.instance.js'
+import { getMcpManager } from './mcpManager.instance.js'
+import { gitRead } from './gitBridge.js'
 
 export function registerIpc(): void {
   initTools()
@@ -591,6 +593,47 @@ ipcMain.handle('rag:search', (_e, opts: { query: string }) =>
 ipcMain.handle('plugins:list', () => pluginRegistry.list())
 ipcMain.handle('plugins:toggle', (_e, opts: { name: string; active: boolean }) =>
   pluginRegistry.setActive(opts.name, opts.active),
+)
+// BC-13 扩展与集成：扩展视图（kind/trust/capabilities）+ 第三方授权 + MCP 配置/刷新 + Git 只读
+ipcMain.handle('extensions:list', () => pluginRegistry.listExtensions())
+ipcMain.handle(
+  'extensions:toggle',
+  (_e, opts: { name: string; active: boolean }) => {
+    const ok = pluginRegistry.setActive(opts.name, opts.active)
+    return { ok, extension: pluginRegistry.getExtension(opts.name) }
+  },
+)
+ipcMain.handle('extensions:authorize', (_e, name: string) => ({
+  ok: pluginRegistry.authorize(name),
+  extension: pluginRegistry.getExtension(name),
+}))
+ipcMain.handle('mcp:config', () => {
+  const manager = getMcpManager()
+  const loaded = manager.configPath()
+  return { path: loaded, servers: manager.listServers() }
+})
+ipcMain.handle('mcp:save', (_e, input: unknown) => getMcpManager().saveConfig(input))
+ipcMain.handle('mcp:refresh', () => getMcpManager().refresh())
+ipcMain.handle('mcp:status', () => getMcpManager().status())
+ipcMain.handle(
+  'git:read',
+  async (
+    _e,
+    opts: { action: string; rootPath?: string; path?: string; limit?: number },
+  ) => {
+    try {
+      const root = opts?.rootPath || workspace.getCurrentRoot() || ''
+      return {
+        ok: true,
+        data: await gitRead(opts?.action ?? 'status', root, {
+          path: opts?.path,
+          limit: opts?.limit,
+        }),
+      }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+  },
 )
 // ticket 11 Compaction：对话历史压缩（触发判定 + 真实摘要 compactor——Gateway.summarize）
 ipcMain.handle(
