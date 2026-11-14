@@ -9,15 +9,19 @@ import { buildAuthHint, canMergeApprove, toolRisk } from './authModel'
 // 2026-08-03 v33：思考过程内容清洗（reasoning 含 Markdown 标记 → 展示为可读纯文字）
 // 2026-08-04：cleanContent 回复正文展示清洗（字面转义/连续换行杂音）
 import { cleanContent, stripMarkdown } from './textClean'
+// P1-05 阶段 1：纯格式化/展示辅助（工具卡文案、假设列表、协议信号、行动承诺判定）
+import {
+  AssumptionList,
+  fmtToolArgs,
+  fmtToolResult,
+  hasProtoCall,
+} from './conversationFormat'
 // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层纯逻辑，双源调研驱动）
 import {
   evaluateTurnProgress,
   detectStuck,
   initialStuckState,
-  isQuestionLike,
-  isCommunicationLike,
   isConfirmIntent,
-  isDoneLike,
   summarizeCapability,
   // V1.5-S4 退役——goalFallbackTrigger 仅剩兜底探测（text_fallback 路径），见 ADR-009
   goalFallbackTrigger,
@@ -124,116 +128,10 @@ interface Msg {
 }
 export type { Msg }
 
-// 2026-08-04 体验修复：工具结果展示清洗——bash 只显示 stdout（原 JSON.stringify 显示 {stdout:...} 括号输出）；write/edit 显示路径；read 长内容摘要化（用户不想看整篇文件）
-// 2026-08-05 体验反馈（用户「工具输出太偏代码，冗余不想看」）：工具结果精简为人类可读一句话——详细输出在工具卡 details 折叠查看（rawResult）
-function fmtToolResult(r: { ok: boolean; data?: unknown }): string {
-  if (typeof r.data === 'string') {
-    return `已读取（${r.data.length} 字符）`
-  }
-  const d = r.data as Record<string, unknown> | undefined
-  if (d && typeof d === 'object') {
-    if ('stdout' in d) {
-      const lines = String(d.stdout ?? '')
-        .split('\n')
-        .filter((l) => l.trim()).length
-      return `执行完成（输出 ${lines} 行）`
-    }
-    if ('file' in d) return `已写入：${String(d.file)}`
-  }
-  return '完成'
-}
+// P1-05 阶段 1：工具格式化/关键假设/协议信号/行动承诺判定已提取到 conversationFormat.tsx
 
-// S3（§8.1 C ⑬ 契约）：目标提议「关键假设：」行提取——A-008 单源（领域层 extractAssumptionsSection）
-// 定义在 ConversationPanel 顶部 import 处——此处不再重复实现
 
-// A-008：关键假设/验证计划列表渲染共享（目标卡 + 方案卡共用——消除 IIFE 重复）
-function AssumptionList({ items }: { items: string[] }): React.ReactElement | null {
-  if (!items || items.length === 0) return null
-  return (
-    <div className="nf-confirmcard__plan-section">
-      <div className="nf-confirmcard__plan-label">关键假设</div>
-      <ul>
-        {items.map((a, idx) => (
-          <li key={idx}>{a}</li>
-        ))}
-      </ul>
-    </div>
-  )
-}
 
-// 2026-08-05：工具卡参数人类化（原 JSON.stringify(args) 技术化——普通用户看不懂）——「读取 xxx / 执行 xxx」
-function fmtToolArgs(tc: { name: string; args: Record<string, unknown> }): string {
-  const a = tc.args
-  switch (tc.name) {
-    case 'read':
-      return a.path ? `读取 ${String(a.path)}` : '读取文件'
-    case 'write':
-      return a.path ? `写入 ${String(a.path)}` : '写入文件'
-    case 'edit':
-      return a.path ? `修改 ${String(a.path)}` : '修改文件'
-    case 'bash':
-      return a.command ? `执行 ${String(a.command).slice(0, 60)}` : '执行命令'
-    case 'search':
-      return a.query ? `搜索 ${String(a.query)}` : '搜索代码'
-    case 'web_search':
-      return a.query ? `联网搜索：${String(a.query)}` : '联网搜索'
-    case 'web_fetch':
-      return a.url ? `读取网页：${String(a.url)}` : '读取网页'
-    case 'approve-files':
-      return `批量授权 ${((a.files ?? []) as unknown[]).length} 个文件`
-    // 2026-08-06 用户反馈「get_diagnostics 具体干什么了不知道」：LSP 工具名技术化 → 人类化描述（工具卡显示）
-    case 'get_diagnostics':
-      return a.path ? `检查代码错误：${String(a.path)}` : '检查代码错误'
-    case 'get_imports':
-      return a.path ? `查看文件依赖：${String(a.path)}` : '查看文件依赖'
-    case 'find_definition':
-      return a.path ? `定位定义：${String(a.symbol ?? a.path)}` : '定位代码定义'
-    case 'find_references':
-      return a.path ? `查找引用：${String(a.symbol ?? a.path)}` : '查找代码引用'
-    case 'get_type_info':
-      return a.path ? `查看类型：${String(a.symbol ?? a.path)}` : '查看类型信息'
-    case 'get_call_chain':
-      return a.path ? `查看代码结构：${String(a.path)}` : '查看代码结构'
-    case 'open':
-      return a.url ? `打开网页：${String(a.url)}` : '打开网页'
-    // 2026-08-06 设计层升级：服务工具人类化；2026-08-07 无阶段重构 S2：check-env → check-capability
-    case 'check-capability':
-      return a.dir ? `检查能力：${String(a.dir)}` : '检查能力'
-    case 'start-server':
-      return a.dir ? `启动服务器：${String(a.dir)}` : '启动服务器'
-    case 'check-server':
-      return a.dir ? `检查服务：${String(a.dir)}` : '检查服务状态'
-    case 'stop-server':
-      return a.dir ? `停止服务：${String(a.dir)}` : '停止服务'
-    default:
-      return tc.name
-  }
-}
-
-// V1.5 S2（A-017 渲染信号单源）：消息是否含指定协议工具调用——lastSignalIdx 与卡渲染共用
-// （协议工具消息 content 为空——信号判定不能只靠文本标记）
-function hasProtoCall(msg: { toolCalls?: Array<{ name: string }> }, ...names: string[]): boolean {
-  return (msg.toolCalls ?? []).some((c) => names.includes(c.name))
-}
-
-// 2026-08-05 体验反馈（用户「最后一条像卡住」——模型承诺行动但没调工具，如「我先打开服务端看看再动手」后停住）：
-// 检测开发阶段模型回复「承诺要做事但没实际调工具」→ 对话区提示用户可回复「继续」（非卡死——working 已释放，只是模型停住等指令）
-// 2026-08-05 第五轮修复：排除「确认/沟通」类（「我先和你确认一下…建造游戏」——模型在引导候选/确认需求，不是行动承诺；
-// 误判 → 插入提示消息 → done updater 被拦截 → 候选按钮 status 卡 streaming 不渲染）——沟通动词（确认/复述/说明等）不是行动
-// 2026-08-06 设计层翻转（用户「还在用正则文字匹配，除非穷举匹配不完」——坑 74 教训重演）：
-// 旧方案匹配「承诺词」（我先/我读/我看/…promise+action 正则）——措辞无限匹配不完；
-// 新方案**结构判定**：不检测「说了要做」，检测「该行动却没行动」——排除 问句（模型在问用户等决策）/ 沟通词（模型在对话）/ **完成态词（有限集——模型在汇报成果，正常不需要行动）**；
-// 剩余情况（无工具调用 + 非问句 + 非沟通 + 非完成态）= 模型停在「要行动没行动」状态（调用方再结合 flowStage/toolCalls 判定）
-export function isActionPromise(content: string): boolean {
-  if (!content) return false
-  const t = content.trim()
-  if (!t) return false
-  // 2026-08-07 质量把关 C 类：判定合并到领域层 agentLoop（isQuestionLike/isCommunicationLike/isDoneLike——唯一实现，防双源）
-  if (isQuestionLike(t)) return false // 问句/征求同意——模型在等用户，不是承诺
-  if (isCommunicationLike(t)) return false // 沟通/澄清/确认类（模型在对话不是在干活）
-  if (isDoneLike(t)) return false // 完成态/收尾词（有限集）——模型在汇报成果（「改好了/做好了/解决了」= 已行动完成，不需要再催）；检测「完成」易（有限），检测「承诺」难（无限）
-  return true
-}
 
 export default function ConversationPanel({
   rootPath,

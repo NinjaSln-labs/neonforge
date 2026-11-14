@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isActionPromise } from '../../src/renderer/ConversationPanel'
+import { isActionPromise } from '../../src/renderer/conversationFormat'
 
 // 2026-08-05 体验反馈（用户「最后一条像卡住」——模型承诺行动但没调工具）：检测「说了要做但没动手」的回复
 // 不限开发阶段——任何阶段说「先看/先读/先写」就该调工具；「确认/思考」类对话行为不触发

@@ -92,7 +92,7 @@
 ## 6. 后续（本次不做，已设计预留）
 
 - [x] 6.1 事件 `eventId/version` + dedupe + DLQ/启动重放（跨上下文事务性 Outbox 仍预留）
-- [ ] 6.2 `ConversationPanel.tsx` 拆分（应用层与领域编排分离）
+- [ ] 6.2 `ConversationPanel.tsx` 拆分（应用层与领域编排分离）：阶段 1（纯格式化/展示辅助 → `conversationFormat.tsx`）已完成（2026-11-14）；后续阶段见 `09-openspec/p1-05-conversation-panel-split.md`
 - [x] 6.3 演示面板与生产 UI 隔离（结构性）：生产运行无 `demo` 字段，仅测试桥注入
 - [x] 6.4 交付包验收来源（DoD 对齐）接入真实来源，消除空验收（与 5.7 协同）
 
