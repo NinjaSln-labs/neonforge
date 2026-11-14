@@ -152,10 +152,38 @@ export function deliveredPackage(pkg: Partial<DeliveryFixture> = {}): DeliveryFi
 import type { Page } from '@playwright/test'
 import { expectVisible } from '../helpers/assertions'
 
+/**
+ * 启动页等待 + 失败诊断（flaky 定位）：超时时把页面真实状态（DOM/桥注入/href）带进错误，
+ * 避免只看到「element(s) not found」而无法区分「Vite 未渲染」「bridge 缺失→配置页」「渲染崩溃」。
+ */
+async function expectStartPage(page: Page): Promise<void> {
+  try {
+    await expectVisible(page.locator('.nf-start'))
+  } catch (e) {
+    const diag = await page
+      .evaluate(() => {
+        const b = (window as unknown as { neonforge?: { config?: { hasKey?: unknown } } })
+          .neonforge
+        const app = document.querySelector('.nf-app')
+        return {
+          href: location.href,
+          title: document.title,
+          appClass: app?.className ?? null,
+          bodyLen: document.body.innerHTML.length,
+          bodyHead: document.body.innerHTML.slice(0, 400),
+          neonforge: typeof b,
+          hasKey: typeof b?.config?.hasKey,
+        }
+      })
+      .catch((err) => ({ evalError: String(err) }))
+    throw new Error(`启动页未出现：${JSON.stringify(diag)}`, { cause: e })
+  }
+}
+
 /** 打开已有项目（配合 project: 'open'） */
 export async function enterWorkspace(page: Page): Promise<void> {
   await page.goto('http://localhost:5175/')
-  await expectVisible(page.locator('.nf-start'))
+  await expectStartPage(page)
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.waitForSelector('.nf-chat__input textarea', { timeout: 8000 })
 }
@@ -165,7 +193,7 @@ export async function enterWorkspace(page: Page): Promise<void> {
  * 导致点击确认目标时首轮尚未完成——forceTool 断言错位；按钮路径与旧测试（根因3）一致，确定性稳定） */
 export async function startFromScratch(page: Page, text?: string): Promise<void> {
   await page.goto('http://localhost:5175/')
-  await expectVisible(page.locator('.nf-start'))
+  await expectStartPage(page)
   if (text !== undefined) {
     await page.locator('.nf-start__input').fill(text)
     await page.getByRole('button', { name: '从零开始' }).click()

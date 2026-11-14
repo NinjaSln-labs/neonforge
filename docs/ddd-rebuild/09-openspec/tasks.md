@@ -66,7 +66,7 @@
 - [x] 4.1 `npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit`
 - [x] 4.2 `npx vitest run`（67 文件 / 760 用例通过，2026-11-15）
 - [x] 4.3 `npx eslint .`（0 error，6 条既有 hook 依赖 warning）
-- [ ] 4.4 `npx playwright test --project=interaction`（环境可用时；2026-11-15 最新全量 71 项：70 通过 / 1 既有重试双回合竞态 flaky；`.nf-start` 启动竞态可隔离复现 1/4，30s 超时下仍偶发；两者在 base 提交均可复现，非本分支回归。本轮已修正 `use.expect` 配置被 Playwright 忽略的问题（断言超时提升 30s / 单测 90s），flaky 未以结果关闭本项）
+- [ ] 4.4 `npx playwright test --project=interaction`（环境可用时；2026-11-15 带启动诊断复跑 71/71 全通过。此前多轮为 69–70/71：`.nf-start` 启动竞态（可隔离复现，30s 下仍偶发）与计划确认后重试双回合竞态仍存在，两者在 base 提交可复现、非本分支回归；故不以单次绿灯关闭本项。本轮已修正 `use.expect` 配置被 Playwright 忽略的问题（断言超时 30s / 单测 90s））
 - [x] 4.5 回归：现有 P0 用例与既有 `conversationState` / `tools` / `verifyCompletionSystem` 测试全部仍通过
 
 ---
