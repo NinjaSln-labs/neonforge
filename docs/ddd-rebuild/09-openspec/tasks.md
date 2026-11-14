@@ -64,7 +64,7 @@
 ## 4. 验证
 
 - [x] 4.1 `npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit`
-- [x] 4.2 `npx vitest run`（65 文件 / 748 用例通过，2026-11-14）
+- [x] 4.2 `npx vitest run`（66 文件 / 757 用例通过，2026-11-14）
 - [x] 4.3 `npx eslint .`（0 error，6 条既有 hook 依赖 warning）
 - [ ] 4.4 `npx playwright test --project=interaction`（环境可用时；2026-11-14 实跑 71 项：68 通过 / 3 flaky——start 页竞态与自动续跑竞态，base 复现，非本分支回归；未以 flaky 结果关闭本项）
 - [x] 4.5 回归：现有 P0 用例与既有 `conversationState` / `tools` / `verifyCompletionSystem` 测试全部仍通过
