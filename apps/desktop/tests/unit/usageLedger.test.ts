@@ -12,7 +12,11 @@ import {
 const table: PriceTable = {
   version: 'test-v1',
   models: {
-    'deepseek:deepseek-flash': { promptPerMillion: 1, completionPerMillion: 2, cacheHitPerMillion: 0.2 },
+    'deepseek:deepseek-flash': {
+      promptPerMillion: 1,
+      completionPerMillion: 2,
+      cacheHitPerMillion: 0.2,
+    },
   },
 }
 

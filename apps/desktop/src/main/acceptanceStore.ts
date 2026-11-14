@@ -141,12 +141,7 @@ export class AcceptanceStore {
   /** 用户显式接受“无验收来源”：生成一条带理由的豁免项（门禁 passed-with-waivers）。 */
   acceptEmpty(sessionId: string): AcceptanceRecord {
     const at = new Date().toISOString()
-    const record = deriveAcceptance(
-      sessionId,
-      ['无验收来源（用户确认按交付关闭）'],
-      'manual',
-      at,
-    )
+    const record = deriveAcceptance(sessionId, ['无验收来源（用户确认按交付关闭）'], 'manual', at)
     const waived = waiveItem(record, record.items[0].id, '用户显式确认接受空验收', at)
     const data = this.loadAll()
     data.records[sessionId] = waived

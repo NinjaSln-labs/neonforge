@@ -1412,7 +1412,7 @@ describe('安全修正——危险参数形态判为 hazardous', () => {
   it('awk system/print 重定向 → hazardous；纯打印仍 readonly', () => {
     expect(classifyReadonly('bash', 'awk \'BEGIN{system("rm -rf /")}\'')).toBe('hazardous')
     expect(classifyReadonly('bash', 'awk \'{print > "out"}\' a.txt')).toBe('hazardous')
-    expect(classifyReadonly('bash', 'awk \'{print $1}\' a.txt')).toBe('readonly')
+    expect(classifyReadonly('bash', "awk '{print $1}' a.txt")).toBe('readonly')
   })
 
   it('sort -o / rg --pre → hazardous', () => {

@@ -55,9 +55,9 @@ export class McpManager {
   }
 
   /** 保存用户配置（仅命令/参数/目录；不存凭据值） */
-  saveConfig(input: unknown):
-    | { ok: true; servers: McpServerConfig[] }
-    | { ok: false; error: string } {
+  saveConfig(
+    input: unknown,
+  ): { ok: true; servers: McpServerConfig[] } | { ok: false; error: string } {
     return this.configStore.save(input)
   }
 

@@ -103,11 +103,16 @@ describe('Extension（A16 领域状态机）', () => {
   })
 
   it('grantTrust：内置保持 builtin；updateCapabilities 更新声明', () => {
-    const builtin = createExtension({ name: 'git', version: '1', kind: 'git', trust: 'builtin' }, AT)
+    const builtin = createExtension(
+      { name: 'git', version: '1', kind: 'git', trust: 'builtin' },
+      AT,
+    )
     expect(grantTrust(builtin, AT)).toBe(builtin)
-    const updated = updateCapabilities(builtin, [
-      { id: 'log', name: 'log', description: '', risk: 'none' },
-    ], AT)
+    const updated = updateCapabilities(
+      builtin,
+      [{ id: 'log', name: 'log', description: '', risk: 'none' }],
+      AT,
+    )
     expect(updated.capabilities.map((c) => c.id)).toEqual(['log'])
   })
 })

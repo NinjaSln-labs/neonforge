@@ -6,20 +6,10 @@
 // 文件 IO 与哈希在 main/changeSetService.ts；本模块只做状态转换。
 
 export type ChangeItemStatus =
-  | 'pending'
-  | 'approved'
-  | 'rejected'
-  | 'applied'
-  | 'reverted'
-  | 'conflicted'
+  'pending' | 'approved' | 'rejected' | 'applied' | 'reverted' | 'conflicted'
 
 export type ChangeSetStatus =
-  | 'proposed'
-  | 'reviewed'
-  | 'applied'
-  | 'reverted'
-  | 'conflicted'
-  | 'superseded'
+  'proposed' | 'reviewed' | 'applied' | 'reverted' | 'conflicted' | 'superseded'
 
 export interface ChangeItemInput {
   id: string
@@ -68,7 +58,9 @@ function deriveStatus(items: ChangeItem[], previous: ChangeSetStatus): ChangeSet
   const appliedLike = items.filter((i) => i.status === 'applied' || i.status === 'reverted')
   if (appliedLike.length > 0) {
     const allReverted = appliedLike.every((i) => i.status === 'reverted')
-    const allDone = items.every((i) => i.status === 'applied' || i.status === 'reverted' || i.status === 'rejected')
+    const allDone = items.every(
+      (i) => i.status === 'applied' || i.status === 'reverted' || i.status === 'rejected',
+    )
     if (allReverted && allDone) return 'reverted'
     return 'applied'
   }

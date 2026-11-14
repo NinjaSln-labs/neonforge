@@ -88,7 +88,10 @@ function computeCost(input: UsageInput, table: PriceTable): number | null {
   )
 }
 
-export function createUsageEntry(input: UsageInput, table: PriceTable = EMPTY_PRICE_TABLE): UsageEntry {
+export function createUsageEntry(
+  input: UsageInput,
+  table: PriceTable = EMPTY_PRICE_TABLE,
+): UsageEntry {
   return {
     ...input,
     promptTokens: Math.max(0, Math.floor(input.promptTokens)),
@@ -131,7 +134,10 @@ export function summarizeUsage(entries: readonly UsageEntry[]): UsageSummary {
   }
 }
 
-export function evaluateBudget(summary: UsageSummary, limit: number | null | undefined): BudgetState {
+export function evaluateBudget(
+  summary: UsageSummary,
+  limit: number | null | undefined,
+): BudgetState {
   if (limit === null || limit === undefined || limit < 0) {
     return { limit: null, spent: summary.cost, reached: false }
   }

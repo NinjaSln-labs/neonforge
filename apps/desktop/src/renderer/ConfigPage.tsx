@@ -25,9 +25,9 @@ export default function ConfigPage({ onDone }: { onDone: () => void }) {
   const [status, setStatus] = useState<'idle' | 'validating' | 'fail' | 'network'>('idle')
   const [errorText, setErrorText] = useState('')
   // 2026-11-15 审查修复：env/凭据文件优先于本地保存——页面须提示，避免「保存成功但请求仍失败」的循环
-  const [keySource, setKeySource] = useState<'env' | 'file' | 'encrypted' | 'plaintext' | 'none' | null>(
-    null,
-  )
+  const [keySource, setKeySource] = useState<
+    'env' | 'file' | 'encrypted' | 'plaintext' | 'none' | null
+  >(null)
 
   useEffect(() => {
     const cfg = window.neonforge?.config
@@ -193,8 +193,9 @@ export default function ConfigPage({ onDone }: { onDone: () => void }) {
 
         {(keySource === 'env' || keySource === 'file') && (
           <p className="nf-config__err" aria-live="polite">
-            当前 Key 来源：{keySource === 'env' ? '环境变量' : '凭据文件'}（优先于应用内保存）——如已失效，
-            请更新或移除该来源后重启应用；此处保存的新 Key 不会覆盖它。
+            当前 Key 来源：{keySource === 'env' ? '环境变量' : '凭据文件'}
+            （优先于应用内保存）——如已失效， 请更新或移除该来源后重启应用；此处保存的新 Key
+            不会覆盖它。
           </p>
         )}
         {status === 'fail' && (

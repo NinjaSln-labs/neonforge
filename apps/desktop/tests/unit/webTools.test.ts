@@ -240,9 +240,11 @@ describe('web_fetch SSRF 边界', () => {
   })
 
   it('重定向到私网 → 阻断（只发起第一跳）', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response('', { status: 302, headers: { Location: 'http://127.0.0.1/admin' } }),
-    )
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response('', { status: 302, headers: { Location: 'http://127.0.0.1/admin' } }),
+      )
     vi.stubGlobal('fetch', fetchMock)
     const r = await webFetch('https://example.com/redirect', cfg({ enabled: true }))
     expect(r).toMatchObject({ ok: false })
@@ -266,9 +268,11 @@ describe('web_fetch SSRF 边界', () => {
   })
 
   it('重定向协议非 http(s) → 拒绝', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response('', { status: 302, headers: { Location: 'file:///etc/passwd' } }),
-    )
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response('', { status: 302, headers: { Location: 'file:///etc/passwd' } }),
+      )
     vi.stubGlobal('fetch', fetchMock)
     const r = await webFetch('https://example.com/x', cfg({ enabled: true }))
     expect(r).toMatchObject({ ok: false })

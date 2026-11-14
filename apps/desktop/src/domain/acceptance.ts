@@ -120,7 +120,12 @@ export function waiveItem(
   if (!String(reason ?? '').trim()) {
     throw new TypeError('豁免验收项必须填写理由（不变量 I21）')
   }
-  return replaceItem(record, itemId, (item) => ({ ...item, status: 'waived', waivedReason: reason }), at)
+  return replaceItem(
+    record,
+    itemId,
+    (item) => ({ ...item, status: 'waived', waivedReason: reason }),
+    at,
+  )
 }
 
 export function evaluateGate(record: AcceptanceRecord): GateResult {
@@ -128,9 +133,13 @@ export function evaluateGate(record: AcceptanceRecord): GateResult {
     return { verdict: 'incomplete', blocking: ['no-acceptance-source'], waived: [] }
   }
   const waived = record.items.filter((i) => i.status === 'waived').map((i) => i.id)
-  const blocking = record.items.filter((i) => i.status === 'pending' || i.status === 'failed').map((i) => i.id)
+  const blocking = record.items
+    .filter((i) => i.status === 'pending' || i.status === 'failed')
+    .map((i) => i.id)
   if (blocking.length > 0) {
-    const verdict: GateVerdict = record.items.some((i) => i.status === 'failed') ? 'failed' : 'incomplete'
+    const verdict: GateVerdict = record.items.some((i) => i.status === 'failed')
+      ? 'failed'
+      : 'incomplete'
     return { verdict, blocking, waived }
   }
   if (record.items.every((i) => i.status === 'waived')) {

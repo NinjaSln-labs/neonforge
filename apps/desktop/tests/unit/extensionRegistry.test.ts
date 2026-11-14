@@ -35,7 +35,13 @@ describe('PluginRegistry（BC-13 扩展注册/生命周期/信任）', () => {
 
   it('生命周期钩子失败隔离：记录 failed，不影响其他扩展', () => {
     const r = new PluginRegistry()
-    r.register({ name: 'boom', version: '1', init: () => { throw new Error('init failed') } })
+    r.register({
+      name: 'boom',
+      version: '1',
+      init: () => {
+        throw new Error('init failed')
+      },
+    })
     r.register({ name: 'ok', version: '1' })
     expect(r.getExtension('boom')?.status).toBe('failed')
     expect(r.getExtension('boom')?.failureReason).toBe('init failed')

@@ -52,7 +52,11 @@ describe('ChangeSet（BC-10）', () => {
   it('markConflict：记录期望/实际哈希', () => {
     const s = makeSet()
     const c = markConflict(reviewItem(s, 'i1', 'approved'), 'i1', 'b1', 'external')
-    expect(c.items[0]).toMatchObject({ status: 'conflicted', baseHash: 'b1', afterHash: 'external' })
+    expect(c.items[0]).toMatchObject({
+      status: 'conflicted',
+      baseHash: 'b1',
+      afterHash: 'external',
+    })
     expect(c.status).toBe('conflicted')
   })
 

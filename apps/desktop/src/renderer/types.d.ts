@@ -283,7 +283,10 @@ export interface NeonForgeBridge {
   }
   extensions: {
     list: () => Promise<ExtensionInfo[]>
-    toggle: (name: string, active: boolean) => Promise<{
+    toggle: (
+      name: string,
+      active: boolean,
+    ) => Promise<{
       ok: boolean
       extension: ExtensionInfo | null
     }>

@@ -6,13 +6,7 @@
 // - 顺序稳定；重排仅由用户显式触发，且只能重排排队项。
 
 export type QueueStatus =
-  | 'queued'
-  | 'running'
-  | 'blocked'
-  | 'paused'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
+  'queued' | 'running' | 'blocked' | 'paused' | 'completed' | 'failed' | 'cancelled'
 
 export interface QueueEntry {
   id: string
@@ -101,12 +95,7 @@ export function resumeTask(state: TaskQueueState, entryId: string, at: string): 
     throw new TypeError('只有阻塞任务可恢复')
   }
   if (activeTask(state)) throw new TypeError('已有运行中的任务（每工作区单活跃，不变量 I18）')
-  return replace(
-    state,
-    entryId,
-    (e) => ({ ...e, status: 'running', blockReason: undefined }),
-    at,
-  )
+  return replace(state, entryId, (e) => ({ ...e, status: 'running', blockReason: undefined }), at)
 }
 
 export function pauseTask(state: TaskQueueState, entryId: string, at: string): TaskQueueState {
@@ -143,12 +132,7 @@ export function failTask(
   reason: string,
   at: string,
 ): TaskQueueState {
-  return replace(
-    state,
-    entryId,
-    (e) => ({ ...e, status: 'failed', failReason: reason }),
-    at,
-  )
+  return replace(state, entryId, (e) => ({ ...e, status: 'failed', failReason: reason }), at)
 }
 
 export function cancelTask(state: TaskQueueState, entryId: string, at: string): TaskQueueState {
@@ -165,7 +149,12 @@ export function cancelTask(state: TaskQueueState, entryId: string, at: string): 
   )
 }
 
-export function reorderTask(state: TaskQueueState, entryId: string, position: number, at: string): TaskQueueState {
+export function reorderTask(
+  state: TaskQueueState,
+  entryId: string,
+  position: number,
+  at: string,
+): TaskQueueState {
   const target = state.entries.find((e) => e.id === entryId)
   if (!target) throw new TypeError(`队列条目不存在：${entryId}`)
   if (target.status !== 'queued' && target.status !== 'paused') {

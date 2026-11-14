@@ -155,9 +155,7 @@ describe('ConfigStore 密钥存储（P1-09）', () => {
 
   it('Web Key 加密不可用且未 opt-in：拒绝落盘', () => {
     const store = new ConfigStore()
-    expect(() => store.setWebAccess({ searchKey: 'search-secret' })).toThrow(
-      /系统安全存储不可用/,
-    )
+    expect(() => store.setWebAccess({ searchKey: 'search-secret' })).toThrow(/系统安全存储不可用/)
     expect(existsSync(configFile())).toBe(false)
   })
 

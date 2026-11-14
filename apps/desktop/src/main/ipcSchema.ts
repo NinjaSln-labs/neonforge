@@ -11,7 +11,12 @@ export type IpcSchema =
     }
   | { type: 'number'; min?: number; max?: number; integer?: boolean }
   | { type: 'boolean' }
-  | { type: 'object'; properties?: Record<string, IpcSchema>; required?: readonly string[]; allowUnknown?: boolean }
+  | {
+      type: 'object'
+      properties?: Record<string, IpcSchema>
+      required?: readonly string[]
+      allowUnknown?: boolean
+    }
   | { type: 'array'; items?: IpcSchema; maxItems?: number }
   | { type: 'null' }
   | { type: 'any' }
@@ -192,7 +197,13 @@ export const IPC_SCHEMAS = {
   },
   contextResolve: {
     type: 'object',
-    properties: { files: { type: 'array', maxItems: 100, items: { type: 'string', minLength: 1, maxLength: 4000 } } },
+    properties: {
+      files: {
+        type: 'array',
+        maxItems: 100,
+        items: { type: 'string', minLength: 1, maxLength: 4000 },
+      },
+    },
     required: ['files'],
   },
   ragSearch: {

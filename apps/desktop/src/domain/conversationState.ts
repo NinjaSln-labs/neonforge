@@ -431,9 +431,7 @@ function hasDangerousArgumentShape(seg: string): boolean {
     }
     case 'find':
       // -exec/-execdir 执行命令；-delete 删除；-fprint/-fprintf/-fls 写文件；-ok/-okdir 执行
-      return args.some((t) =>
-        /^(-exec|-execdir|-delete|-fprint|-fprintf|-fls|-ok|-okdir)$/.test(t),
-      )
+      return args.some((t) => /^(-exec|-execdir|-delete|-fprint|-fprintf|-fls|-ok|-okdir)$/.test(t))
     case 'awk':
       // system() 执行命令；print/printf 重定向到文件或管道到命令
       return /system\s*\(|\bprint(?:f)?\s*(?:>|\|)/.test(joined)
@@ -457,7 +455,12 @@ function hasDangerousArgumentShape(seg: string): boolean {
         // 仅列出/查询只读；add/remove/rename/set-url/prune/set-head 均为写
         const rest = args.slice(1).filter((t) => t !== '-v' && t !== '--verbose')
         if (rest.length === 0) return false
-        return !(rest[0] === 'show' || rest[0] === 'get-url' || rest[0] === '-h' || rest[0] === '--help')
+        return !(
+          rest[0] === 'show' ||
+          rest[0] === 'get-url' ||
+          rest[0] === '-h' ||
+          rest[0] === '--help'
+        )
       }
       return false
     }
@@ -607,7 +610,9 @@ export function sessionGate(
 
 // P1-08：路径规范化（比较用）——统一分隔符、去 ./ 与前导尾斜杠、折叠重复分隔符
 export function normalizeComparePath(p: unknown): string {
-  const raw = String(p ?? '').trim().replace(/\\/g, '/')
+  const raw = String(p ?? '')
+    .trim()
+    .replace(/\\/g, '/')
   if (!raw) return ''
   const absolute = raw.startsWith('/')
   const segments: string[] = []

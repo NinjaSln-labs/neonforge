@@ -95,7 +95,9 @@ export class JsonRpcPeer {
     clearTimeout(pending.timer)
     this.pending.delete(id)
     if (msg.error) {
-      pending.reject(new McpRpcError(msg.error.message || `MCP 错误（code ${msg.error.code}）`, msg.error.code))
+      pending.reject(
+        new McpRpcError(msg.error.message || `MCP 错误（code ${msg.error.code}）`, msg.error.code),
+      )
       return
     }
     pending.resolve(msg.result)
@@ -228,10 +230,7 @@ export class McpClient {
     private readonly transport: McpTransport,
     private readonly options: McpClientOptions = {},
   ) {
-    this.peer = new JsonRpcPeer(
-      (message) => transport.send(message),
-      options.timeoutMs ?? 15_000,
-    )
+    this.peer = new JsonRpcPeer((message) => transport.send(message), options.timeoutMs ?? 15_000)
     transport.onMessage((message) => this.peer.handleMessage(message))
     transport.onClose((reason) => {
       this.initialized = false

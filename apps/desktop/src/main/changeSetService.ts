@@ -1,8 +1,6 @@
 // BC-10 变更集应用服务（main）：记录真实变更、基线校验、回滚。
 // 领域状态机在 domain/changeSet.ts；文件快照复用 applyDiff 的 `.nf-bak`。
-import {
-  createHash,
-} from 'node:crypto'
+import { createHash } from 'node:crypto'
 import {
   existsSync,
   mkdirSync,
@@ -309,7 +307,9 @@ export class ChangeSetService {
       ok: conflicted.length === 0 && reverted.length > 0,
       reverted,
       conflicted,
-      ...(conflicted.length > 0 ? { error: `有 ${conflicted.length} 个文件与基线不一致，已拒绝覆盖` } : {}),
+      ...(conflicted.length > 0
+        ? { error: `有 ${conflicted.length} 个文件与基线不一致，已拒绝覆盖` }
+        : {}),
     }
   }
 

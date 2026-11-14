@@ -56,7 +56,9 @@ export interface ApplyChunkDeps {
   recentFilesExternal?: string[]
   researchProposeNudgedRef: RefObject<boolean>
   rootPath?: string | null
-  sendRef: RefObject<(opts?: { silent?: boolean; text?: string; queued?: boolean }) => Promise<void>>
+  sendRef: RefObject<
+    (opts?: { silent?: boolean; text?: string; queued?: boolean }) => Promise<void>
+  >
   sessionId: string
   setMessages: Dispatch<SetStateAction<Msg[]>>
   setPendingState: SetPending

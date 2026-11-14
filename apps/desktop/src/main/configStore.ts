@@ -76,7 +76,9 @@ function revealSecret(stored: string | undefined): string | null {
   if (!stored.startsWith(SECRET_PREFIX)) return stored
   if (!safeStorage.isEncryptionAvailable()) return null
   try {
-    return safeStorage.decryptString(Buffer.from(stored.slice(SECRET_PREFIX.length), 'base64')) || null
+    return (
+      safeStorage.decryptString(Buffer.from(stored.slice(SECRET_PREFIX.length), 'base64')) || null
+    )
   } catch {
     return null
   }
@@ -305,10 +307,8 @@ export class ConfigStore {
       revealSecret(this.config.webKeenableApiKey) ??
       this.config.webKeenableApiKeyPlain ??
       null
-    const searchKeySource: WebSecretSource =
-      envSearch.source ?? (searchKey ? 'config' : 'none')
-    const keenableApiKeySource: WebSecretSource =
-      envKeen.source ?? (keenKey ? 'config' : 'none')
+    const searchKeySource: WebSecretSource = envSearch.source ?? (searchKey ? 'config' : 'none')
+    const keenableApiKeySource: WebSecretSource = envKeen.source ?? (keenKey ? 'config' : 'none')
     const b = this.config.webAccessBuiltin
     return {
       enabled: Boolean(this.config.webAccessEnabled),

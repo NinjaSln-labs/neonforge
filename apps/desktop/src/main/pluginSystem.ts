@@ -60,11 +60,7 @@ function nowIso(): string {
   return new Date().toISOString()
 }
 
-function failedState(
-  p: Omit<Plugin, 'active'>,
-  reason: string,
-  at: string,
-): ExtensionState {
+function failedState(p: Omit<Plugin, 'active'>, reason: string, at: string): ExtensionState {
   const kind = p.kind ?? 'builtin'
   return {
     id: p.name || 'invalid-extension',
@@ -121,7 +117,12 @@ export class PluginRegistry {
       eventSink({
         type: 'extension.registered',
         role: 'system',
-        detail: { extensionId: state.id, kind: state.kind, version: state.version, failureReason: reason },
+        detail: {
+          extensionId: state.id,
+          kind: state.kind,
+          version: state.version,
+          failureReason: reason,
+        },
       })
       return plugin
     }
@@ -174,7 +175,9 @@ export class PluginRegistry {
 
   getExtension(name: string): ExtensionInfo | null {
     const entry = this.plugins.get(name)
-    return entry ? { ...describeExtension(entry.state), active: entry.state.status === 'active' } : null
+    return entry
+      ? { ...describeExtension(entry.state), active: entry.state.status === 'active' }
+      : null
   }
 
   /** 激活/停用（幂等；钩子失败 → failed，返回 false；未注册返回 false） */
@@ -220,11 +223,7 @@ export class PluginRegistry {
       })
       return true
     } catch (e) {
-      entry.state = markExtensionFailed(
-        entry.state,
-        e instanceof Error ? e.message : String(e),
-        at,
-      )
+      entry.state = markExtensionFailed(entry.state, e instanceof Error ? e.message : String(e), at)
       entry.plugin.active = false
       return false
     }
@@ -298,7 +297,12 @@ export const BUILTIN_EXTENSIONS: Array<Omit<Plugin, 'active'>> = [
     version: '0.1.0',
     kind: 'builtin',
     capabilities: [
-      { id: 'call', name: 'MCP 工具调用', description: '调用已配置的 MCP 服务器工具', risk: 'high' },
+      {
+        id: 'call',
+        name: 'MCP 工具调用',
+        description: '调用已配置的 MCP 服务器工具',
+        risk: 'high',
+      },
     ],
   },
   {

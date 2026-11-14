@@ -228,8 +228,16 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
   'problem.rerun': { domain: 'problem', role: 'system', detailKeys: ['problemId', 'title'] },
   'problem.snapshot_updated': { domain: 'problem', role: 'system', detailKeys: ['problemId'] },
   'problem.closed': { domain: 'problem', role: 'system', detailKeys: ['problemId'] },
-  'usage.recorded': { domain: 'usage', role: 'system', detailKeys: ['provider', 'model', 'tokens', 'cost'] },
-  'usage.budget_threshold_reached': { domain: 'usage', role: 'system', detailKeys: ['limit', 'spent'] },
+  'usage.recorded': {
+    domain: 'usage',
+    role: 'system',
+    detailKeys: ['provider', 'model', 'tokens', 'cost'],
+  },
+  'usage.budget_threshold_reached': {
+    domain: 'usage',
+    role: 'system',
+    detailKeys: ['limit', 'spent'],
+  },
   'usage.period_closed': { domain: 'usage', role: 'system', detailKeys: ['period', 'total'] },
   'changeset.proposed': { domain: 'changeset', role: 'system', detailKeys: ['changeId', 'files'] },
   'changeset.reviewed': {
@@ -496,7 +504,6 @@ export function detectProposed(content: string): Array<{
       detail: { goalText: t.match(/【目标确认[:：]\s*([^】]+)/)?.[1]?.trim() ?? '' },
     })
   if (t.includes('【执行方案')) out.push({ type: 'task.plan_proposed', detail: { plan: t } })
-  if (t.includes('【已达成'))
-    out.push({ type: 'task.resolution_proposed', detail: { summary: t } })
+  if (t.includes('【已达成')) out.push({ type: 'task.resolution_proposed', detail: { summary: t } })
   return out
 }

@@ -53,7 +53,11 @@ export function registerIpc(): void {
   // BC-12：预算按自然月累计（周期预算语义；usage 台账本身保留全部历史）
   const currentPeriodSummary = () => {
     const prefix = new Date().toISOString().slice(0, 7) // YYYY-MM
-    return summarizeUsage(getUsageStore().load().filter((e) => e.at.startsWith(prefix)))
+    return summarizeUsage(
+      getUsageStore()
+        .load()
+        .filter((e) => e.at.startsWith(prefix)),
+    )
   }
   // BC-12：预算阈值提醒去重（每进程周期；budget:set 重置）
   const budgetNotified = new Set<string>()
@@ -82,10 +86,7 @@ export function registerIpc(): void {
   ipcMain.handle(
     'config:set-key',
     (_e, key: string, providerId?: string, modelId?: string | null) => {
-      const valid = validateIpc(
-        { key, providerId, modelId },
-        IPC_SCHEMAS.apiKeySet,
-      )
+      const valid = validateIpc({ key, providerId, modelId }, IPC_SCHEMAS.apiKeySet)
       if (!valid.ok) throw new Error(`参数校验失败（config:set-key）：${valid.error}`)
       return configStore.setApiKey(
         key,
@@ -246,8 +247,7 @@ export function registerIpc(): void {
           level: opts.level ?? 'basic',
           tools: opts.tools ?? false,
           forceTool: opts.forceTool ?? false,
-          progressMode:
-            opts.progressMode ?? (opts.forceTool ? 'require-action' : 'auto'),
+          progressMode: opts.progressMode ?? (opts.forceTool ? 'require-action' : 'auto'),
           messages: opts.messages,
           onDelta: (chunk) =>
             send(chunk.type, chunk.text, 'toolCall' in chunk ? chunk.toolCall : undefined),
@@ -437,15 +437,12 @@ export function registerIpc(): void {
       ? queueSafe(() => getTaskQueueStore().enqueue(opts.sessionId, opts.title))
       : queueInvalid(valid.error)
   })
-  ipcMain.handle(
-    'queue:start',
-    (_e, opts: { sessionId: string; entryId: string }) => {
-      const valid = validateIpc(opts, IPC_SCHEMAS.queueEntry)
-      return valid.ok
-        ? queueSafe(() => getTaskQueueStore().start(opts.sessionId, opts.entryId))
-        : queueInvalid(valid.error)
-    },
-  )
+  ipcMain.handle('queue:start', (_e, opts: { sessionId: string; entryId: string }) => {
+    const valid = validateIpc(opts, IPC_SCHEMAS.queueEntry)
+    return valid.ok
+      ? queueSafe(() => getTaskQueueStore().start(opts.sessionId, opts.entryId))
+      : queueInvalid(valid.error)
+  })
   ipcMain.handle(
     'queue:block',
     (_e, opts: { sessionId: string; entryId: string; reason: string }) => {
@@ -455,33 +452,24 @@ export function registerIpc(): void {
         : queueInvalid(valid.error)
     },
   )
-  ipcMain.handle(
-    'queue:resume',
-    (_e, opts: { sessionId: string; entryId: string }) => {
-      const valid = validateIpc(opts, IPC_SCHEMAS.queueEntry)
-      return valid.ok
-        ? queueSafe(() => getTaskQueueStore().resume(opts.sessionId, opts.entryId))
-        : queueInvalid(valid.error)
-    },
-  )
-  ipcMain.handle(
-    'queue:pause',
-    (_e, opts: { sessionId: string; entryId: string }) => {
-      const valid = validateIpc(opts, IPC_SCHEMAS.queueEntry)
-      return valid.ok
-        ? queueSafe(() => getTaskQueueStore().pause(opts.sessionId, opts.entryId))
-        : queueInvalid(valid.error)
-    },
-  )
-  ipcMain.handle(
-    'queue:complete',
-    (_e, opts: { sessionId: string; entryId: string }) => {
-      const valid = validateIpc(opts, IPC_SCHEMAS.queueEntry)
-      return valid.ok
-        ? queueSafe(() => getTaskQueueStore().complete(opts.sessionId, opts.entryId))
-        : queueInvalid(valid.error)
-    },
-  )
+  ipcMain.handle('queue:resume', (_e, opts: { sessionId: string; entryId: string }) => {
+    const valid = validateIpc(opts, IPC_SCHEMAS.queueEntry)
+    return valid.ok
+      ? queueSafe(() => getTaskQueueStore().resume(opts.sessionId, opts.entryId))
+      : queueInvalid(valid.error)
+  })
+  ipcMain.handle('queue:pause', (_e, opts: { sessionId: string; entryId: string }) => {
+    const valid = validateIpc(opts, IPC_SCHEMAS.queueEntry)
+    return valid.ok
+      ? queueSafe(() => getTaskQueueStore().pause(opts.sessionId, opts.entryId))
+      : queueInvalid(valid.error)
+  })
+  ipcMain.handle('queue:complete', (_e, opts: { sessionId: string; entryId: string }) => {
+    const valid = validateIpc(opts, IPC_SCHEMAS.queueEntry)
+    return valid.ok
+      ? queueSafe(() => getTaskQueueStore().complete(opts.sessionId, opts.entryId))
+      : queueInvalid(valid.error)
+  })
   ipcMain.handle(
     'queue:fail',
     (_e, opts: { sessionId: string; entryId: string; reason: string }) => {
@@ -491,23 +479,18 @@ export function registerIpc(): void {
         : queueInvalid(valid.error)
     },
   )
-  ipcMain.handle(
-    'queue:cancel',
-    (_e, opts: { sessionId: string; entryId: string }) => {
-      const valid = validateIpc(opts, IPC_SCHEMAS.queueEntry)
-      return valid.ok
-        ? queueSafe(() => getTaskQueueStore().cancel(opts.sessionId, opts.entryId))
-        : queueInvalid(valid.error)
-    },
-  )
+  ipcMain.handle('queue:cancel', (_e, opts: { sessionId: string; entryId: string }) => {
+    const valid = validateIpc(opts, IPC_SCHEMAS.queueEntry)
+    return valid.ok
+      ? queueSafe(() => getTaskQueueStore().cancel(opts.sessionId, opts.entryId))
+      : queueInvalid(valid.error)
+  })
   ipcMain.handle(
     'queue:reorder',
     (_e, opts: { sessionId: string; entryId: string; position: number }) => {
       const valid = validateIpc(opts, IPC_SCHEMAS.queueReorder)
       return valid.ok
-        ? queueSafe(() =>
-            getTaskQueueStore().reorder(opts.sessionId, opts.entryId, opts.position),
-          )
+        ? queueSafe(() => getTaskQueueStore().reorder(opts.sessionId, opts.entryId, opts.position))
         : queueInvalid(valid.error)
     },
   )
@@ -546,22 +529,19 @@ export function registerIpc(): void {
       return r
     },
   )
-  ipcMain.handle(
-    'delivery:revert-diff',
-    (_e, opts: { path: string; sessionId?: string }) => {
-      const valid = validateIpc(opts, IPC_SCHEMAS.deliveryRevertDiff)
-      if (!valid.ok) return { ok: false, error: `参数校验失败：${valid.error}` }
-      const r = revert(opts.path)
-      if (r.ok) {
-        try {
-          getChangeSetService().recordRevert(opts.sessionId ?? 'default', opts.path)
-        } catch {
-          /* 变更集状态同步失败不影响回滚结果 */
-        }
+  ipcMain.handle('delivery:revert-diff', (_e, opts: { path: string; sessionId?: string }) => {
+    const valid = validateIpc(opts, IPC_SCHEMAS.deliveryRevertDiff)
+    if (!valid.ok) return { ok: false, error: `参数校验失败：${valid.error}` }
+    const r = revert(opts.path)
+    if (r.ok) {
+      try {
+        getChangeSetService().recordRevert(opts.sessionId ?? 'default', opts.path)
+      } catch {
+        /* 变更集状态同步失败不影响回滚结果 */
       }
-      return r
-    },
-  )
+    }
+    return r
+  })
 
   // BC-10 变更与版本：查询/整集回滚/清理
   ipcMain.handle('changeset:list', (_e, sessionId: string) => {
@@ -726,16 +706,13 @@ ipcMain.handle(
   },
 )
 // 工具写文件回滚（write/edit 写前已快照 .nf-bak——回滚恢复原样）
-ipcMain.handle(
-  'tools:revert',
-  (_e, opts: { path: string; sessionId?: string }) => {
-    const valid = validateIpc(opts, IPC_SCHEMAS.toolsRevert)
-    if (!valid.ok) return { ok: false, error: `参数校验失败：${valid.error}` }
-    const r = revertToolFile(opts.path)
-    if (r.ok && opts.sessionId) getChangeSetService().recordRevert(opts.sessionId, opts.path)
-    return r
-  },
-)
+ipcMain.handle('tools:revert', (_e, opts: { path: string; sessionId?: string }) => {
+  const valid = validateIpc(opts, IPC_SCHEMAS.toolsRevert)
+  if (!valid.ok) return { ok: false, error: `参数校验失败：${valid.error}` }
+  const r = revertToolFile(opts.path)
+  if (r.ok && opts.sessionId) getChangeSetService().recordRevert(opts.sessionId, opts.path)
+  return r
+})
 // ticket 14 可撤销：任何时刻停止当前操作（bash 高危——cancelActiveCommand kill；无活动命令返回错误）
 ipcMain.handle('tools:cancel', () => cancelActiveCommand())
 // ticket 12 ContextEngine：@引用文件 → 精准上下文片段（注入对话）
@@ -758,13 +735,10 @@ ipcMain.handle('plugins:toggle', (_e, opts: { name: string; active: boolean }) =
 })
 // BC-13 扩展与集成：扩展视图（kind/trust/capabilities）+ 第三方授权 + MCP 配置/刷新 + Git 只读
 ipcMain.handle('extensions:list', () => pluginRegistry.listExtensions())
-ipcMain.handle(
-  'extensions:toggle',
-  (_e, opts: { name: string; active: boolean }) => {
-    const ok = pluginRegistry.setActive(opts.name, opts.active)
-    return { ok, extension: pluginRegistry.getExtension(opts.name) }
-  },
-)
+ipcMain.handle('extensions:toggle', (_e, opts: { name: string; active: boolean }) => {
+  const ok = pluginRegistry.setActive(opts.name, opts.active)
+  return { ok, extension: pluginRegistry.getExtension(opts.name) }
+})
 ipcMain.handle('extensions:authorize', (_e, name: string) => ({
   ok: pluginRegistry.authorize(name),
   extension: pluginRegistry.getExtension(name),
@@ -779,10 +753,7 @@ ipcMain.handle('mcp:refresh', () => getMcpManager().refresh())
 ipcMain.handle('mcp:status', () => getMcpManager().status())
 ipcMain.handle(
   'git:read',
-  async (
-    _e,
-    opts: { action: string; rootPath?: string; path?: string; limit?: number },
-  ) => {
+  async (_e, opts: { action: string; rootPath?: string; path?: string; limit?: number }) => {
     try {
       const root = opts?.rootPath || workspace.getCurrentRoot() || ''
       return {
@@ -814,8 +785,11 @@ ipcMain.handle(
   },
 )
 // S4 完成对账 V1a：系统代跑只读验证命令（fail-closed——非只读不执行；超时/截断护栏见 verification.ts）
-ipcMain.handle('completion:verify', (_e, opts: { commands: string[]; rootPath?: string | null }) => {
-  const valid = validateIpc(opts, IPC_SCHEMAS.completionVerify)
-  if (!valid.ok) return {}
-  return runVerificationCommands(opts.commands, { cwd: opts.rootPath ?? undefined })
-})
+ipcMain.handle(
+  'completion:verify',
+  (_e, opts: { commands: string[]; rootPath?: string | null }) => {
+    const valid = validateIpc(opts, IPC_SCHEMAS.completionVerify)
+    if (!valid.ok) return {}
+    return runVerificationCommands(opts.commands, { cwd: opts.rootPath ?? undefined })
+  },
+)

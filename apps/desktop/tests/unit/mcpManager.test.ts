@@ -18,7 +18,7 @@ class FakeClient implements McpClientLike {
     if (this.failOnInit) throw new Error('初始化失败')
     this.initialized = true
     return {}
-    }
+  }
   async listTools() {
     return this.tools
   }

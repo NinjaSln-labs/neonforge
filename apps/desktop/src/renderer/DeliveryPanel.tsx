@@ -225,7 +225,11 @@ export default function DeliveryPanel({
   const gatePassed = gate
     ? gate.verdict === 'passed' || gate.verdict === 'passed-with-waivers'
     : false
-  const allDone = hasRecord ? gatePassed : items.length === 0 ? acceptEmpty : items.every((i) => i.done)
+  const allDone = hasRecord
+    ? gatePassed
+    : items.length === 0
+      ? acceptEmpty
+      : items.every((i) => i.done)
   const gateLabel = gate
     ? {
         passed: '验收通过',
@@ -238,14 +242,14 @@ export default function DeliveryPanel({
     .map((id) => recordItems.find((i) => i.id === id)?.label ?? id)
     .filter(Boolean)
   const changeSetLabel = changeSet
-    ? {
+    ? ({
         proposed: '待审核',
         reviewed: '已审核',
         applied: '已应用',
         reverted: '已回滚',
         conflicted: '有冲突',
         superseded: '已替代',
-      }[changeSet.status as 'proposed'] ?? changeSet.status
+      }[changeSet.status as 'proposed'] ?? changeSet.status)
     : null
 
   const toggle = (idx: number) => {

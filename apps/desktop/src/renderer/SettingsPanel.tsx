@@ -404,7 +404,8 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
             {(keenableKeySource === 'env' || keenableKeySource === 'file') && (
               <em>
                 {' '}
-                当前由{keenableKeySource === 'env' ? '环境变量' : '凭据文件'}提供（优先于应用内保存）
+                当前由{keenableKeySource === 'env' ? '环境变量' : '凭据文件'}
+                提供（优先于应用内保存）
               </em>
             )}
           </span>
@@ -560,7 +561,8 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
 
       <div className="nf-settings__plugins">
         <span className="nf-settings__plugins-title">
-          计费表（按“接入方:模型”填写每百万 token 单价，美元；未配置时成本显示为“未设置”，预算不累计）
+          计费表（按“接入方:模型”填写每百万 token
+          单价，美元；未配置时成本显示为“未设置”，预算不累计）
         </span>
         <textarea
           className="nf-settings__mcp-editor"

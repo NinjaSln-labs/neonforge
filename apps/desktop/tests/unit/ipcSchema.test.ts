@@ -3,9 +3,11 @@ import { IPC_SCHEMAS, validateIpc } from '../../src/main/ipcSchema'
 
 describe('IPC 契约校验（P1-04）', () => {
   it('toolsExecute：必填 name + 类型/长度约束', () => {
-    expect(validateIpc({ name: 'read', args: { path: 'a.js' } }, IPC_SCHEMAS.toolsExecute)).toEqual({
-      ok: true,
-    })
+    expect(validateIpc({ name: 'read', args: { path: 'a.js' } }, IPC_SCHEMAS.toolsExecute)).toEqual(
+      {
+        ok: true,
+      },
+    )
     expect(validateIpc({ args: {} }, IPC_SCHEMAS.toolsExecute).ok).toBe(false)
     expect(validateIpc({ name: '' }, IPC_SCHEMAS.toolsExecute).ok).toBe(false)
     expect(validateIpc({ name: 'read', args: 'nope' }, IPC_SCHEMAS.toolsExecute).ok).toBe(false)
@@ -20,14 +22,11 @@ describe('IPC 契约校验（P1-04）', () => {
       ).ok,
     ).toBe(true)
     expect(validateIpc({ apiKey: 'k', messages: [] }, IPC_SCHEMAS.streamChat).ok).toBe(true)
-    expect(validateIpc({ apiKey: 'k', messages: [{ content: 'x' }] }, IPC_SCHEMAS.streamChat).ok).toBe(
-      false,
-    )
     expect(
-      validateIpc(
-        { apiKey: 'k', messages: [], level: 'extreme' },
-        IPC_SCHEMAS.streamChat,
-      ).ok,
+      validateIpc({ apiKey: 'k', messages: [{ content: 'x' }] }, IPC_SCHEMAS.streamChat).ok,
+    ).toBe(false)
+    expect(
+      validateIpc({ apiKey: 'k', messages: [], level: 'extreme' }, IPC_SCHEMAS.streamChat).ok,
     ).toBe(false)
     expect(
       validateIpc(
@@ -47,10 +46,8 @@ describe('IPC 契约校验（P1-04）', () => {
 
   it('可空字符串：nullable 允许 null，非 nullable 拒绝 null', () => {
     expect(
-      validateIpc(
-        { enabled: true, searchUrl: null, searchKey: null },
-        IPC_SCHEMAS.webAccessPatch,
-      ).ok,
+      validateIpc({ enabled: true, searchUrl: null, searchKey: null }, IPC_SCHEMAS.webAccessPatch)
+        .ok,
     ).toBe(true)
     expect(validateIpc({ path: null }, IPC_SCHEMAS.toolsRevert).ok).toBe(false)
   })
@@ -71,9 +68,7 @@ describe('IPC 契约校验（P1-04）', () => {
   })
 
   it('queue 命令：entryId 必填；reorder position 整数', () => {
-    expect(
-      validateIpc({ sessionId: 's', entryId: 'e' }, IPC_SCHEMAS.queueEntry).ok,
-    ).toBe(true)
+    expect(validateIpc({ sessionId: 's', entryId: 'e' }, IPC_SCHEMAS.queueEntry).ok).toBe(true)
     expect(validateIpc({ sessionId: 's' }, IPC_SCHEMAS.queueEntry).ok).toBe(false)
     expect(
       validateIpc({ sessionId: 's', entryId: 'e', position: 1.5 }, IPC_SCHEMAS.queueReorder).ok,
@@ -86,10 +81,7 @@ describe('IPC 契约校验（P1-04）', () => {
 
   it('acceptance：状态枚举与豁免原因必填', () => {
     expect(
-      validateIpc(
-        { sessionId: 's', itemId: 'i', status: 'passed' },
-        IPC_SCHEMAS.acceptanceMark,
-      ).ok,
+      validateIpc({ sessionId: 's', itemId: 'i', status: 'passed' }, IPC_SCHEMAS.acceptanceMark).ok,
     ).toBe(true)
     expect(
       validateIpc({ sessionId: 's', itemId: 'i', status: 'ok' }, IPC_SCHEMAS.acceptanceMark).ok,

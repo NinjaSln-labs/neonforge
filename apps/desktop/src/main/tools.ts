@@ -905,9 +905,7 @@ export function initTools(): void {
         if (!decision.allowed) return { ok: false, error: decision.reason }
       }
       const toolArgs =
-        args.args && typeof args.args === 'object'
-          ? (args.args as Record<string, unknown>)
-          : {}
+        args.args && typeof args.args === 'object' ? (args.args as Record<string, unknown>) : {}
       return getMcpManager().callTool(server, tool, toolArgs)
     },
   })

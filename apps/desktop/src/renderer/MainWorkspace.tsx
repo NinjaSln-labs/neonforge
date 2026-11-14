@@ -92,9 +92,7 @@ function TaskPanel({
           dirty: boolean
           files: Array<{ path: string }>
         }),
-        log: logRes?.ok
-          ? (logRes.data as Array<{ shortHash: string; subject: string }>)
-          : [],
+        log: logRes?.ok ? (logRes.data as Array<{ shortHash: string; subject: string }>) : [],
       })
     })
     return () => {

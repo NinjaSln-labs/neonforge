@@ -47,7 +47,9 @@ export interface ChatEngineDeps {
   reject: Reject
   rootPath?: string | null
   /** externalRequest / verifyThenResolve / applyChunk 共享的发送入口引用 */
-  sendRef: RefObject<(opts?: { silent?: boolean; text?: string; queued?: boolean }) => Promise<void>>
+  sendRef: RefObject<
+    (opts?: { silent?: boolean; text?: string; queued?: boolean }) => Promise<void>
+  >
   sessionId: string
   sessionRef: RefObject<number>
   setInput: (v: string) => void
@@ -659,10 +661,7 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
       const lastMsg = messagesRef.current[messagesRef.current.length - 1]
       const dropError = fromQueue && lastMsg?.role === 'assistant' && lastMsg.status === 'error'
       const base = dropError ? messagesRef.current.slice(0, -1) : messagesRef.current
-      commitMessages([
-        ...base,
-        { role: 'user', content: text, status: 'done', id: nextMsgId() },
-      ])
+      commitMessages([...base, { role: 'user', content: text, status: 'done', id: nextMsgId() }])
     } else {
       // 系统引导/提示：不经用户通道（气泡/输入框/message_sent/chatLog）；时间线记一条便于事后查
       tlog('conversation.system_nudge', { content: text, kind: systemNudgeKind(text) }, 'system')

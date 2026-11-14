@@ -84,7 +84,12 @@ describe('timelineLogger（会话时间线——2026-08-08 会话级文件）', 
 
   it('P2-07：事件携带 eventId/version', () => {
     const sid = 'eventid-0000-4000-8000-00000000001'
-    logTimeline({ session: sid, type: 'conversation.message_sent', role: 'user', detail: { content: 'hi' } })
+    logTimeline({
+      session: sid,
+      type: 'conversation.message_sent',
+      role: 'user',
+      detail: { content: 'hi' },
+    })
     const event = JSON.parse(readFileSync(timelineFile(sid), 'utf-8').trim())
     expect(event.eventId).toBe(`${sid}:1`)
     expect(event.version).toBe(1)
@@ -94,7 +99,12 @@ describe('timelineLogger（会话时间线——2026-08-08 会话级文件）', 
     const sid = 'dlq-0000-4000-8000-000000000001'
     const f = timelineFile(sid)
     mkdirSync(f) // 同名目录让 appendFileSync 失败（EISDIR）
-    logTimeline({ session: sid, type: 'conversation.message_sent', role: 'user', detail: { content: 'dlq' } })
+    logTimeline({
+      session: sid,
+      type: 'conversation.message_sent',
+      role: 'user',
+      detail: { content: 'dlq' },
+    })
     const dlq = f.replace('timeline-' + sid + '.jsonl', 'timeline-dlq.jsonl')
     expect(existsSync(dlq)).toBe(true)
     expect(readFileSync(dlq, 'utf-8')).toContain('conversation.message_sent')

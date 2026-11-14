@@ -21,7 +21,9 @@ export interface EvidenceVerificationDeps {
   /** 排队队列（对账引导在 working 时入队，按序 flush） */
   pendingSendRef: RefObject<string[]>
   rootPath?: string | null
-  sendRef: RefObject<(opts?: { silent?: boolean; text?: string; queued?: boolean }) => Promise<void>>
+  sendRef: RefObject<
+    (opts?: { silent?: boolean; text?: string; queued?: boolean }) => Promise<void>
+  >
   sessionId: string
   /** 回合归属（停止/新回合会自增——异步核验结果不得落到旧/新回合） */
   sessionRef: RefObject<number>

@@ -14,11 +14,7 @@ import { buildAuthHint, canMergeApprove } from './authModel'
 // 2026-08-04：cleanContent 回复正文展示清洗（字面转义/连续换行杂音）
 import { cleanContent, stripMarkdown } from './textClean'
 // P1-05 阶段 1：纯格式化/展示辅助（工具卡文案、假设列表、协议信号、行动承诺判定）
-import {
-  fmtToolArgs,
-  fmtToolResult,
-  hasProtoCall,
-} from './conversationFormat'
+import { fmtToolArgs, fmtToolResult, hasProtoCall } from './conversationFormat'
 import { GoalConfirmCard, PlanConfirmCard, ResolutionConfirmCard } from './DecisionCards'
 import { ConversationComposer } from './ConversationComposer'
 // P1-05 阶段 4b/4c：流式事件与应用层轮次编排（历史构建/错误分类/系统提示词随 hook 内聚）
@@ -98,9 +94,6 @@ interface Msg {
 export type { Msg }
 
 // P1-05 阶段 1：工具格式化/关键假设/协议信号/行动承诺判定已提取到 conversationFormat.tsx
-
-
-
 
 export default function ConversationPanel({
   rootPath,
@@ -262,9 +255,9 @@ export default function ConversationPanel({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   // 2026-08-04 体验修复（用户实测：启动页输入句预填多余）：initialPrompt 进入工作区自动发送——说了就直接开始
   // （区别于 externalRequest「预填+自动发送」复跑语义；initialPrompt 只用于启动页首句）
-  const sendRef = useRef<(opts?: { silent?: boolean; text?: string; queued?: boolean }) => Promise<void>>(
-    async () => {},
-  )
+  const sendRef = useRef<
+    (opts?: { silent?: boolean; text?: string; queued?: boolean }) => Promise<void>
+  >(async () => {})
   // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层状态）：连续无进展计数 + 升级次数（不可变 StuckState）+ 已读文件集合
   const stuckStateRef = useRef(initialStuckState)
   // research→propose：分析期连续纯 web 轮 streak（与 StuckDetector 分立；确认后清零）
@@ -458,8 +451,6 @@ export default function ConversationPanel({
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
   }, [messages, working])
 
-
-
   // P1-05 阶段 4c：轮次编排已提取到 useChatEngine.ts（send/runChat/maybeContinue/finishError/retryFailedTurn）
   const workingRef = useRef(false)
   useEffect(() => {
@@ -601,9 +592,6 @@ export default function ConversationPanel({
     }
   }
 
-
-
-
   // 2026-08-07 无阶段重构 S4：advanceChat（阶段推进自动触发）删除——无阶段无阶段切换；
   // 目标确认/执行确认后由用户消息驱动（send 正常流程），不再有内部阶段指令
 
@@ -643,7 +631,6 @@ export default function ConversationPanel({
     onWorkingChange,
     setWorkingStage,
   })
-
 
   const demo = getDemoBridge()
   // 2026-08-07 无阶段重构 S4：demoFlow（DeliveryFlowPanel demo 通道）删除——阶段卡随阶段体系移除
@@ -904,11 +891,7 @@ export default function ConversationPanel({
                           confirm('plan')
                           planWasRejectedRef.current = false
                           planRejectNudgedRef.current = false
-                          tlog(
-                            'card.resolved',
-                            { card: 'execution', action: 'confirm' },
-                            'system',
-                          )
+                          tlog('card.resolved', { card: 'execution', action: 'confirm' }, 'system')
                           onPlanConfirmed?.()
                           void sendRef.current({ text: '确认，按方案执行' })
                         }}
@@ -1031,9 +1014,9 @@ export default function ConversationPanel({
                           if (opts.length === 0) return null
                           // 2026-11-15 审查修复：此处内层 map 的 i 是 toolCalls 索引（遮蔽消息索引），
                           // 已回复判定必须按**消息位置**切片——用 m 的引用反查（O(n)，候选卡极少）。
-                          const replied = messages.slice(messages.indexOf(m) + 1).some(
-                            (mm) => mm.role === 'user',
-                          )
+                          const replied = messages
+                            .slice(messages.indexOf(m) + 1)
+                            .some((mm) => mm.role === 'user')
                           return (
                             <CandidateButtons
                               options={opts}

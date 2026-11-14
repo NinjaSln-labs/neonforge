@@ -81,11 +81,12 @@ contextBridge.exposeInMainWorld('neonforge', {
   },
   usage: {
     summary: (sessionId?: string) => ipcRenderer.invoke('usage:summary', sessionId),
-    export: () => ipcRenderer.invoke('usage:export') as Promise<{
-      ok: boolean
-      path?: string
-      error?: string
-    }>,
+    export: () =>
+      ipcRenderer.invoke('usage:export') as Promise<{
+        ok: boolean
+        path?: string
+        error?: string
+      }>,
   },
   budget: {
     get: () =>
@@ -135,8 +136,7 @@ contextBridge.exposeInMainWorld('neonforge', {
       sessionId: string,
       verificationPlan: string[],
       source?: 'plan-verification' | 'user-dod' | 'manual',
-    ) =>
-      ipcRenderer.invoke('acceptance:derive', { sessionId, verificationPlan, source }),
+    ) => ipcRenderer.invoke('acceptance:derive', { sessionId, verificationPlan, source }),
     list: (sessionId: string) => ipcRenderer.invoke('acceptance:list', sessionId),
     mark: (
       sessionId: string,
@@ -149,18 +149,18 @@ contextBridge.exposeInMainWorld('neonforge', {
     applyEvidence: (sessionId: string, evidenceRefs: string[]) =>
       ipcRenderer.invoke('acceptance:apply-evidence', { sessionId, evidenceRefs }),
     evaluate: (sessionId: string) => ipcRenderer.invoke('acceptance:evaluate', sessionId),
-    acceptEmpty: (sessionId: string) =>
-      ipcRenderer.invoke('acceptance:accept-empty', sessionId),
+    acceptEmpty: (sessionId: string) => ipcRenderer.invoke('acceptance:accept-empty', sessionId),
     clear: (sessionId: string) => ipcRenderer.invoke('acceptance:clear', sessionId),
   },
   changeset: {
     list: (sessionId: string) => ipcRenderer.invoke('changeset:list', sessionId),
-    revert: (sessionId: string) => ipcRenderer.invoke('changeset:revert', sessionId) as Promise<{
-      ok: boolean
-      reverted: string[]
-      conflicted: string[]
-      error?: string
-    }>,
+    revert: (sessionId: string) =>
+      ipcRenderer.invoke('changeset:revert', sessionId) as Promise<{
+        ok: boolean
+        reverted: string[]
+        conflicted: string[]
+        error?: string
+      }>,
     clear: (sessionId: string) => ipcRenderer.invoke('changeset:clear', sessionId),
   },
   queue: {

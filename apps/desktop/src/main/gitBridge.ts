@@ -62,10 +62,9 @@ async function assertGitRepo(root: string): Promise<string> {
     const inside = (await runGit(resolved, ['rev-parse', '--is-inside-work-tree'])).trim()
     if (inside !== 'true') throw new Error('not a work tree')
   } catch (e) {
-    throw new Error(
-      `不是 Git 仓库：${resolved}（${e instanceof Error ? e.message : String(e)}）`,
-      { cause: e },
-    )
+    throw new Error(`不是 Git 仓库：${resolved}（${e instanceof Error ? e.message : String(e)}）`, {
+      cause: e,
+    })
   }
   return resolved
 }
@@ -107,8 +106,7 @@ export async function gitLog(root: string, limit = 10): Promise<GitLogEntry[]> {
     .map((chunk) => chunk.trim())
     .filter(Boolean)
     .map((chunk) => {
-      const [hash = '', shortHash = '', author = '', date = '', subject = ''] =
-        chunk.split(sep)
+      const [hash = '', shortHash = '', author = '', date = '', subject = ''] = chunk.split(sep)
       return { hash, shortHash, author, date, subject }
     })
 }

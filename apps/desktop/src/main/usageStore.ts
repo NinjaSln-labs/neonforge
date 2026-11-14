@@ -1,12 +1,6 @@
 // BC-12 用量台账持久化（main）：append-only JSONL + 脱敏 CSV 导出。
 // 隐私边界：只写计量字段，不写 prompt/文件内容/密钥；导出使用 in/out token 命名。
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-} from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { summarizeUsage, type UsageEntry, type UsageSummary } from '../domain/usageLedger.js'
 
@@ -57,9 +51,7 @@ export class UsageStore {
   }
 
   summary(sessionId?: string): UsageSummary {
-    const entries = sessionId
-      ? this.load().filter((e) => e.sessionId === sessionId)
-      : this.load()
+    const entries = sessionId ? this.load().filter((e) => e.sessionId === sessionId) : this.load()
     return summarizeUsage(entries)
   }
 

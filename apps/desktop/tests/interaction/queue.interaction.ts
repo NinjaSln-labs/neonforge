@@ -100,8 +100,8 @@ test('连续排队两条消息按序送达（后发不覆盖先发）', async ({
   await expect(page.getByText('回复:第二条')).toBeVisible({ timeout: 15000 })
   await expect(page.getByText('回复:第三条')).toBeVisible({ timeout: 15000 })
   expect(
-    await page.evaluate(
-      () => (window as unknown as { __queueSeen: string[] }).__queueSeen.slice(0, 3),
+    await page.evaluate(() =>
+      (window as unknown as { __queueSeen: string[] }).__queueSeen.slice(0, 3),
     ),
   ).toEqual(['第一条', '第二条', '第三条'])
 })

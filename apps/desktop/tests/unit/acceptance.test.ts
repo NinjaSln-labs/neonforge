@@ -30,7 +30,10 @@ describe('AcceptanceRecord（BC-14）', () => {
     const r = record(['a'])
     expect(() => markPassed(r, 'item-1')).toThrow(/证据/)
     const passed = markPassed(r, 'item-1', { evidenceRef: 'verification:npm test' })
-    expect(passed.items[0]).toMatchObject({ status: 'passed', evidenceRef: 'verification:npm test' })
+    expect(passed.items[0]).toMatchObject({
+      status: 'passed',
+      evidenceRef: 'verification:npm test',
+    })
     const manual = markPassed(r, 'item-1', { manualReason: '用户目视确认' })
     expect(manual.items[0].status).toBe('passed')
   })
@@ -48,9 +51,13 @@ describe('AcceptanceRecord（BC-14）', () => {
     const failed = markFailed(record(['a', 'b']), 'item-2', 'x')
     expect(evaluateGate(failed).verdict).toBe('failed')
     expect(evaluateGate(failed).blocking).toContain('item-2')
-    const passed = markPassed(markPassed(record(['a', 'b']), 'item-1', { evidenceRef: 'e1' }), 'item-2', {
-      evidenceRef: 'e2',
-    })
+    const passed = markPassed(
+      markPassed(record(['a', 'b']), 'item-1', { evidenceRef: 'e1' }),
+      'item-2',
+      {
+        evidenceRef: 'e2',
+      },
+    )
     expect(evaluateGate(passed).verdict).toBe('passed')
   })
 

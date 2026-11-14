@@ -143,7 +143,10 @@ async function mockAutoRetryAfterPlan(page: Page): Promise<void> {
           // 自动续跑及 StrictMode 多余序号：一律成功（与首版 interaction 一致）
           // 2026-11-15：StuckDetector 在成功轮无产出时会 silent 续聊（系统推进 nudge，属预期行为）；
           // 后续轮使用不同文案，避免与「自动续跑成功」断言计数混淆（此前 flaky 即 nudge 轮同文案）
-          emit([{ type: 'content', text: chat.n === 4 ? '自动续跑成功' : '静默推进' }, { type: 'done' }])
+          emit([
+            { type: 'content', text: chat.n === 4 ? '自动续跑成功' : '静默推进' },
+            { type: 'done' },
+          ])
           return { ok: true }
         },
         onStreamChunk: (cb: (c: unknown) => void) => {

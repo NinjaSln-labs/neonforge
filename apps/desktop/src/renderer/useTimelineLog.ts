@@ -1,11 +1,7 @@
 // P1-05 阶段 5：会话时间线写入口（从 ConversationPanel 提取；行为不变）。
 // tlog = 注册表校验 + dedupe + IPC 落盘；会话归属由 sessionId 决定。
 import { useRef } from 'react'
-import {
-  validateTimelineEvent,
-  TIMELINE_EVENT_SPECS,
-  dedupeKey,
-} from '../domain/timeline'
+import { validateTimelineEvent, TIMELINE_EVENT_SPECS, dedupeKey } from '../domain/timeline'
 
 export type TimelineLog = (
   type: string,

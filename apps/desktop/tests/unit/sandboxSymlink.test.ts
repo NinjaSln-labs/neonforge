@@ -1,12 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
+import {
+  mkdtempSync,
+  mkdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+  readFileSync,
+  existsSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import {
-  initTools,
-  isInSandboxRealpath,
-  toolRegistry,
-} from '../../src/main/tools'
+import { initTools, isInSandboxRealpath, toolRegistry } from '../../src/main/tools'
 
 let base = ''
 let root = ''
