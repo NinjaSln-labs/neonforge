@@ -9,20 +9,56 @@ import { DEFAULT_PROVIDER_ID, isProviderId, type ProviderId } from './providers/
 
 const API_KEY_ENV = 'NEONFORGE_API_KEY'
 const API_KEY_FILE_ENV = 'NEONFORGE_API_KEY_FILE'
+const WEB_SEARCH_KEY_ENV = 'NEONFORGE_SEARCH_KEY'
+const WEB_SEARCH_KEY_FILE_ENV = 'NEONFORGE_SEARCH_KEY_FILE'
+const KEENABLE_KEY_ENV = 'NEONFORGE_KEENABLE_API_KEY'
+const KEENABLE_KEY_FILE_ENV = 'NEONFORGE_KEENABLE_API_KEY_FILE'
 const ALLOW_PLAINTEXT_ENV = 'NEONFORGE_ALLOW_PLAINTEXT_KEY'
+const SECRET_PREFIX = 'enc1:'
 
-/** 环境变量/凭据文件优先（不落盘、不进日志）；文件内容只取首行 trim */
-function keyFromEnv(): string | null {
-  const value = process.env[API_KEY_ENV]?.trim()
-  return value || null
-}
-
-function keyFromFile(): string | null {
-  const file = process.env[API_KEY_FILE_ENV]?.trim()
+/** 环境变量/凭据文件优先（不落盘、不进日志）；文件内容 trim */
+function secretFromEnv(valueEnv: string, fileEnv: string): string | null {
+  const value = process.env[valueEnv]?.trim()
+  if (value) return value
+  const file = process.env[fileEnv]?.trim()
   if (!file) return null
   try {
-    const value = readFileSync(file, 'utf-8').trim()
-    return value || null
+    const fromFile = readFileSync(file, 'utf-8').trim()
+    return fromFile || null
+  } catch {
+    return null
+  }
+}
+
+function keyFromEnv(): string | null {
+  return secretFromEnv(API_KEY_ENV, API_KEY_FILE_ENV)
+}
+
+/** 写入前加密（safeStorage）；不可用时仅显式 opt-in 允许明文 */
+function protectSecret(value: string): string {
+  if (safeStorage.isEncryptionAvailable()) {
+    try {
+      return SECRET_PREFIX + safeStorage.encryptString(value).toString('base64')
+    } catch {
+      /* 加密失败 → 走 opt-in 判定 */
+    }
+  }
+  if (!allowPlaintextFallback()) {
+    throw new Error(
+      '系统安全存储不可用——密钥未保存；请设置对应环境变量/凭据文件，' +
+        '或显式设置 NEONFORGE_ALLOW_PLAINTEXT_KEY=1',
+    )
+  }
+  return value
+}
+
+/** 读取时解密；旧明文配置（无前缀）兼容；密文无法解密 → null */
+function revealSecret(stored: string | undefined): string | null {
+  if (!stored) return null
+  if (!stored.startsWith(SECRET_PREFIX)) return stored
+  if (!safeStorage.isEncryptionAvailable()) return null
+  try {
+    return safeStorage.decryptString(Buffer.from(stored.slice(SECRET_PREFIX.length), 'base64')) || null
   } catch {
     return null
   }
@@ -47,9 +83,9 @@ interface NeonForgeConfig {
   webAccessBuiltin?: 'keenable' | 'ddg'
   /** 用户自有搜索 HTTP 端点（有则跳过内置探测） */
   webSearchUrl?: string
-  /** 覆盖端点可选 Bearer Key（明文 0600——与 apiKeyPlain 同级） */
+  /** 覆盖端点可选 Bearer Key（safeStorage 加密 `enc1:` 或旧明文） */
   webSearchKey?: string
-  /** Keenable API Key（明文 0600——与 webSearchKey 同级） */
+  /** Keenable API Key（safeStorage 加密 `enc1:` 或旧明文） */
   webKeenableApiKey?: string
   /** 允许无 Key 时走 Keenable 公共试用（默认关） */
   webKeenablePublicTrial?: boolean
@@ -121,8 +157,6 @@ export class ConfigStore {
   getApiKey(): string | null {
     const fromEnv = keyFromEnv()
     if (fromEnv) return fromEnv
-    const fromFile = keyFromFile()
-    if (fromFile) return fromFile
     if (this.config.apiKey) {
       try {
         if (safeStorage.isEncryptionAvailable()) {
@@ -186,8 +220,12 @@ export class ConfigStore {
 
   getWebAccess(): WebAccessConfig {
     const url = this.config.webSearchUrl?.trim() || null
-    const key = this.config.webSearchKey?.trim() || null
-    const keenKey = this.config.webKeenableApiKey?.trim() || null
+    const key =
+      secretFromEnv(WEB_SEARCH_KEY_ENV, WEB_SEARCH_KEY_FILE_ENV) ??
+      revealSecret(this.config.webSearchKey)
+    const keenKey =
+      secretFromEnv(KEENABLE_KEY_ENV, KEENABLE_KEY_FILE_ENV) ??
+      revealSecret(this.config.webKeenableApiKey)
     const b = this.config.webAccessBuiltin
     return {
       enabled: Boolean(this.config.webAccessEnabled),
@@ -212,37 +250,40 @@ export class ConfigStore {
     keenableApiKey?: string | null
     keenablePublicTrial?: boolean
   }): WebAccessConfig {
-    if (patch.enabled !== undefined) this.config.webAccessEnabled = patch.enabled
-    if (patch.probeOk !== undefined) this.config.webAccessProbeOk = patch.probeOk
+    // 先改副本：任一新密钥无法安全写入（加密不可用且未 opt-in）时，不留下半更新配置
+    const next: NeonForgeConfig = { ...this.config }
+    if (patch.enabled !== undefined) next.webAccessEnabled = patch.enabled
+    if (patch.probeOk !== undefined) next.webAccessProbeOk = patch.probeOk
     if (patch.builtinProvider !== undefined) {
       if (patch.builtinProvider === 'keenable' || patch.builtinProvider === 'ddg') {
-        this.config.webAccessBuiltin = patch.builtinProvider
+        next.webAccessBuiltin = patch.builtinProvider
       } else {
-        delete this.config.webAccessBuiltin
+        delete next.webAccessBuiltin
       }
     }
     if (patch.searchUrl !== undefined) {
       const u = patch.searchUrl?.trim()
-      if (u) this.config.webSearchUrl = u
-      else delete this.config.webSearchUrl
+      if (u) next.webSearchUrl = u
+      else delete next.webSearchUrl
     }
     if (patch.searchKey !== undefined) {
       const k = patch.searchKey?.trim()
-      if (k) this.config.webSearchKey = k
-      else delete this.config.webSearchKey
+      if (k) next.webSearchKey = protectSecret(k)
+      else delete next.webSearchKey
     }
     if (patch.keenableApiKey !== undefined) {
       const k = patch.keenableApiKey?.trim()
-      if (k) this.config.webKeenableApiKey = k
-      else delete this.config.webKeenableApiKey
+      if (k) next.webKeenableApiKey = protectSecret(k)
+      else delete next.webKeenableApiKey
     }
     if (patch.keenablePublicTrial !== undefined) {
-      this.config.webKeenablePublicTrial = patch.keenablePublicTrial
+      next.webKeenablePublicTrial = patch.keenablePublicTrial
     }
     if (patch.enabled === false) {
-      this.config.webAccessProbeOk = false
-      delete this.config.webAccessBuiltin
+      next.webAccessProbeOk = false
+      delete next.webAccessBuiltin
     }
+    this.config = next
     writeFileSync(configPath(), JSON.stringify(this.config, null, 2), { mode: 0o600 })
     return this.getWebAccess()
   }

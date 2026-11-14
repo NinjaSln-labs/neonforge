@@ -198,42 +198,48 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
     setWebBusy(true)
     setWebMsg(null)
     const trial = opts?.keenablePublicTrial ?? keenableTrial
-    const res = await window.neonforge.config.setWebAccess?.({
-      enabled,
-      searchUrl: webUrl.trim() || null,
-      searchKey: webKey.trim() || null,
-      keenableApiKey: keenableKey.trim() || null,
-      keenablePublicTrial: trial,
-      probe: enabled,
-    })
-    setWebBusy(false)
-    if (!res) {
-      setWebMsg('当前环境不支持外网设置')
-      return
+    try {
+      const res = await window.neonforge.config.setWebAccess?.({
+        enabled,
+        searchUrl: webUrl.trim() || null,
+        searchKey: webKey.trim() || null,
+        keenableApiKey: keenableKey.trim() || null,
+        keenablePublicTrial: trial,
+        probe: enabled,
+      })
+      if (!res) {
+        setWebMsg('当前环境不支持外网设置')
+        return
+      }
+      if (!res.ok) {
+        setWebEnabled(false)
+        setWebProbeOk(false)
+        setWebMsg(res.error ?? '外网探测失败')
+        return
+      }
+      setWebEnabled(res.config.enabled)
+      setWebProbeOk(res.config.probeOk)
+      setWebMsg(
+        res.config.enabled
+          ? res.config.searchUrl
+            ? '已开启（使用自有搜索端点）'
+            : res.config.builtinProvider === 'keenable'
+              ? res.config.hasKeenableKey
+                ? '已开启（内置：Keenable，已配置 Key）'
+                : res.config.keenablePublicTrial
+                  ? '已开启（内置：Keenable 公共试用）'
+                  : '已开启（Keenable 可达；搜索前请配置 Key 或开启试用）'
+              : res.config.builtinProvider === 'ddg'
+                ? '已开启（内置：DuckDuckGo）'
+                : '已开启（外网探测通过）'
+          : '已关闭外网检索',
+      )
+    } catch (e) {
+      // P1-09：安全存储不可用且未显式 opt-in 时拒绝落盘明文（不留下半更新配置）
+      setWebMsg(e instanceof Error ? e.message : String(e))
+    } finally {
+      setWebBusy(false)
     }
-    if (!res.ok) {
-      setWebEnabled(false)
-      setWebProbeOk(false)
-      setWebMsg(res.error ?? '外网探测失败')
-      return
-    }
-    setWebEnabled(res.config.enabled)
-    setWebProbeOk(res.config.probeOk)
-    setWebMsg(
-      res.config.enabled
-        ? res.config.searchUrl
-          ? '已开启（使用自有搜索端点）'
-          : res.config.builtinProvider === 'keenable'
-            ? res.config.hasKeenableKey
-              ? '已开启（内置：Keenable，已配置 Key）'
-              : res.config.keenablePublicTrial
-                ? '已开启（内置：Keenable 公共试用）'
-                : '已开启（Keenable 可达；搜索前请配置 Key 或开启试用）'
-            : res.config.builtinProvider === 'ddg'
-              ? '已开启（内置：DuckDuckGo）'
-              : '已开启（外网探测通过）'
-        : '已关闭外网检索',
-    )
   }
 
   return (

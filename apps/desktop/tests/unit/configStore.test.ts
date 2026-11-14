@@ -37,11 +37,19 @@ describe('ConfigStore 密钥存储（P1-09）', () => {
     state.encryptionAvailable = false
     delete process.env.NEONFORGE_API_KEY
     delete process.env.NEONFORGE_API_KEY_FILE
+    delete process.env.NEONFORGE_SEARCH_KEY
+    delete process.env.NEONFORGE_SEARCH_KEY_FILE
+    delete process.env.NEONFORGE_KEENABLE_API_KEY
+    delete process.env.NEONFORGE_KEENABLE_API_KEY_FILE
     delete process.env.NEONFORGE_ALLOW_PLAINTEXT_KEY
   })
   afterEach(() => {
     delete process.env.NEONFORGE_API_KEY
     delete process.env.NEONFORGE_API_KEY_FILE
+    delete process.env.NEONFORGE_SEARCH_KEY
+    delete process.env.NEONFORGE_SEARCH_KEY_FILE
+    delete process.env.NEONFORGE_KEENABLE_API_KEY
+    delete process.env.NEONFORGE_KEENABLE_API_KEY_FILE
     delete process.env.NEONFORGE_ALLOW_PLAINTEXT_KEY
     rmSync(TMP, { recursive: true, force: true })
   })
@@ -100,5 +108,37 @@ describe('ConfigStore 密钥存储（P1-09）', () => {
     const store = new ConfigStore()
     expect(store.getApiKey()).toBeNull()
     expect(store.hasValidKey()).toBe(false)
+  })
+
+  it('Web Key 加密存储；回填时解密给设置页', () => {
+    state.encryptionAvailable = true
+    const store = new ConfigStore()
+    const cfg = store.setWebAccess({ searchKey: 'search-secret', keenableApiKey: 'keen-secret' })
+    expect(String(readConfig().webSearchKey)).toMatch(/^enc1:/)
+    expect(String(readConfig().webKeenableApiKey)).toMatch(/^enc1:/)
+    expect(cfg.searchKey).toBe('search-secret')
+    expect(cfg.keenableApiKey).toBe('keen-secret')
+    expect(cfg.hasSearchKey).toBe(true)
+    expect(cfg.hasKeenableKey).toBe(true)
+  })
+
+  it('Web Key 加密不可用且未 opt-in：拒绝落盘', () => {
+    const store = new ConfigStore()
+    expect(() => store.setWebAccess({ searchKey: 'search-secret' })).toThrow(
+      /系统安全存储不可用/,
+    )
+    expect(existsSync(configFile())).toBe(false)
+  })
+
+  it('Web Key 环境变量优先，旧明文配置仍可读取', () => {
+    mkdirSync(path.join(TMP, 'config'), { recursive: true })
+    writeFileSync(configFile(), JSON.stringify({ webSearchKey: 'legacy-search' }), {
+      mode: 0o600,
+    })
+    process.env.NEONFORGE_SEARCH_KEY = 'env-search'
+    const store = new ConfigStore()
+    expect(store.getWebAccess().searchKey).toBe('env-search')
+    delete process.env.NEONFORGE_SEARCH_KEY
+    expect(store.getWebAccess().searchKey).toBe('legacy-search')
   })
 })

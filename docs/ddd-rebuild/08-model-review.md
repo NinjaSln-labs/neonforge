@@ -42,7 +42,7 @@
 | P1-06 | P1 | 演示/占位能力与生产能力混排 | 用户可能以为 DoD/数字交付/任务队列已可用；产品预期失真 | `ConversationPanel.tsx`（demo 面板仅经测试 bridge 注入）、`DoDAlignPanel.tsx`（演示）、`DigitalDeliveryPanel.tsx`（demo） | 明确标记/隐藏；或将 DoD/验收接入真实方案验证计划 | 已修复（结构性）：生产运行无 `demo` 字段，演示仅在测试注入时可达；任务队列/验收已真实化 |
 | P1-07 | P1 | 交付包验收项在生产路径为空 | `DeliveryPackage` 有验收字段，但无 DoD 来源；用户看不到“按什么验收” | `MainWorkspace.tsx`（历史 `acceptance: []`） | 方案确认时捕获 `verificationPlan` 作为验收项；或引入 DoD 决策点 | 已修复（BC-14）：`acceptance:derive` 取 `verificationPlan`；门禁阻断关闭 |
 | P1-08 | P1 | 路径相对/绝对双形态与末段匹配启发式 | 可能把同名不同目录文件误判为已产出；完成核验误通过/误拒绝 | `conversationState.ts` 的 `inPlannedFiles/deriveDiffs/matchesPlannedPath` | 统一绝对路径规范；保存文件标识（inode/realpath）；补测试 | 已修复（2026-11-14）：`normalizeComparePath` 规范化 + 裸文件名多候选 fail-closed；单测覆盖 |
-| P1-09 | P1 | API Key/Web Key 明文 fallback 0600 | 本机其他进程可读；macOS 未签名场景的安全折衷 | `configStore.ts`（密钥读取/写入） | 优先 OS keychain；明文 fallback 加显式设置/到期提醒 | 部分关闭（2026-11-14）：`NEONFORGE_API_KEY`/`NEONFORGE_API_KEY_FILE` 优先且不落盘；加密可用时清除明文副本；明文 fallback 改为 `NEONFORGE_ALLOW_PLAINTEXT_KEY=1` 显式 opt-in（默认拒绝保存）。遗留：Web 搜索 Key 仍为明文、到期提醒未做 |
+| P1-09 | P1 | API Key/Web Key 明文 fallback 0600 | 本机其他进程可读；macOS 未签名场景的安全折衷 | `configStore.ts`（密钥读取/写入） | 优先 OS keychain；明文 fallback 加显式设置/到期提醒 | 部分关闭（2026-11-14）：`NEONFORGE_API_KEY`/`NEONFORGE_API_KEY_FILE` 优先且不落盘；加密可用时清除明文副本；明文 fallback 改为 `NEONFORGE_ALLOW_PLAINTEXT_KEY=1` 显式 opt-in（默认拒绝保存）；Web 搜索 Key 同样加密（`enc1:` 前缀，旧明文兼容，支持 `NEONFORGE_SEARCH_KEY`/`NEONFORGE_KEENABLE_API_KEY` 及 `_FILE`）。遗留：到期提醒未做 |
 | P1-10 | P1 | 沙箱仅字符串前缀，未解析符号链接 | 根内 symlink 指向根外可绕过 trust/open 检查 | `tools.ts` 的 `isInSandbox`/`read`/`write`/`edit` | realpath 解析；拒绝 symlink 逃逸；测试 | 已修复（2026-11-14）：`isInSandboxRealpath` + 异步 `read preApproval` + write/edit 硬拦截（含 `security.symlink_escape_blocked`）；单测覆盖 |
 | P1-11 | P1 | `read` 的 ENOENT 分支列出父目录内容 | 泄露目录结构/文件名；与 read 边界叠加 | `tools.ts:221-233` | 限制在项目根内；根外不列目录 | 随 P0-01 修复 |
 | P2-01 | P2 | 旧事件名 `task.execution_*`/`task.achievement_*` | 术语不一致，审计与文档映射成本 | `timeline.ts` 事件目录 | 新增 `task.plan_*`/`task.resolution_*` 并保留旧名一个窗口 | 已修复（2026-11-14）：规范名已启用；旧名保留读取窗口 |
@@ -135,7 +135,7 @@
 
 - 已关闭（2026-11-14）：P1-03 镜像竞态、P1-06 演示通道隔离（结构性）、P1-08 路径规范化、P1-10 symlink、P2-01 事件命名、P2-03 progressMode、P2-04 原子写、P2-05 事件重复、P2-06 dedupe、P2-07 事件版本；P1-02 已有 DLQ/事件版本/重放，跨上下文 Outbox 后续；P1-04 已有校验基础与关键入口。
 - 二次代码评审修复（2026-11-14）：悬空 symlink/写边界硬阻断、变更集自有基线（快照缺失不误删原文件）、会话 ID 提升工作区（Tab 重挂载不失联）、价格表可配置 + 月度预算、`system_clarify` 按底层决策点执行副作用、异步预检异常收敛、授权拒绝不自动恢复队列、交付面板异步响应竞态、MCP UTF-8 分片与进程退出清理。
-- 待后续：P1-05 ConversationPanel 拆分、P1-09 收尾（Web 搜索 Key 明文/到期提醒）、P2-08 文案规范。
+- 待后续：P1-05 ConversationPanel 拆分、P1-09 收尾（密钥到期提醒）、P2-08 文案规范。
 - 交互回归稳定性（2026-11-14）：`playwright --project=interaction` 实跑 71 项，68 通过；3 项为既有 flaky（`.nf-start` 启动竞态、计划确认后自动续跑双发），在修复前 base 提交复现，不计为本轮回归。修复测试竞态需另立测试稳定性任务。
 
 ### 5.4 通过标准（建议）
