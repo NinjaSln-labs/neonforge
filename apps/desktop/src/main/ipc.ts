@@ -81,12 +81,18 @@ export function registerIpc(): void {
   ipcMain.handle('config:get-model', () => configStore.getModelId())
   ipcMain.handle(
     'config:set-key',
-    (_e, key: string, providerId?: string, modelId?: string | null) =>
-      configStore.setApiKey(
+    (_e, key: string, providerId?: string, modelId?: string | null) => {
+      const valid = validateIpc(
+        { key, providerId, modelId },
+        IPC_SCHEMAS.apiKeySet,
+      )
+      if (!valid.ok) throw new Error(`参数校验失败（config:set-key）：${valid.error}`)
+      return configStore.setApiKey(
         key,
         isProviderId(providerId) ? providerId : configStore.getProviderId(),
         modelId,
-      ),
+      )
+    },
   )
   ipcMain.handle('config:clear-key', () => configStore.clearApiKey())
   ipcMain.handle('config:list-providers', () => listProviders())
@@ -105,6 +111,15 @@ export function registerIpc(): void {
         probe?: boolean
       },
     ) => {
+      // P1-04：web 探测 URL/密钥载荷入口校验（非法结构不进入 probe/落盘）
+      const valid = validateIpc(patch, IPC_SCHEMAS.webAccessPatch)
+      if (!valid.ok) {
+        return {
+          ok: false,
+          error: `参数校验失败（config:set-web-access）：${valid.error}`,
+          config: webAccessView(configStore.getWebAccess()),
+        }
+      }
       const cur = configStore.getWebAccess()
       const nextEnabled = patch.enabled ?? cur.enabled
       const nextUrl =
@@ -297,7 +312,13 @@ export function registerIpc(): void {
   )
 
   // BC-12 用量与成本：查询汇总 / 脱敏导出 / 预算
-  ipcMain.handle('usage:summary', (_e, sessionId?: string) => getUsageStore().summary(sessionId))
+  ipcMain.handle('usage:summary', (_e, sessionId?: string) => {
+    if (sessionId !== undefined) {
+      const valid = validateIpc(sessionId, IPC_SCHEMAS.sessionId)
+      if (!valid.ok) throw new Error(`参数校验失败（usage:summary）：${valid.error}`)
+    }
+    return getUsageStore().summary(sessionId)
+  })
   ipcMain.handle('usage:export', () => getUsageStore().exportCsv())
   const budgetSnapshot = () => {
     const settings = getBudgetStore().load()
@@ -327,7 +348,8 @@ export function registerIpc(): void {
   ipcMain.handle(
     'acceptance:derive',
     (_e, opts: { sessionId: string; verificationPlan?: string[]; source?: AcceptanceSource }) => {
-      if (!opts?.sessionId) return null
+      const valid = validateIpc(opts, IPC_SCHEMAS.acceptanceDerive)
+      if (!valid.ok) return null
       return getAcceptanceStore().derive(
         opts.sessionId,
         opts.verificationPlan ?? [],
@@ -335,9 +357,10 @@ export function registerIpc(): void {
       )
     },
   )
-  ipcMain.handle('acceptance:list', (_e, sessionId: string) =>
-    sessionId ? getAcceptanceStore().get(sessionId) : null,
-  )
+  ipcMain.handle('acceptance:list', (_e, sessionId: string) => {
+    const valid = validateIpc(sessionId, IPC_SCHEMAS.sessionId)
+    return valid.ok ? getAcceptanceStore().get(sessionId) : null
+  })
   ipcMain.handle(
     'acceptance:mark',
     (
@@ -351,7 +374,8 @@ export function registerIpc(): void {
         reason?: string
       },
     ) => {
-      if (!opts?.sessionId || !opts.itemId) return null
+      const valid = validateIpc(opts, IPC_SCHEMAS.acceptanceMark)
+      if (!valid.ok) return null
       return getAcceptanceStore().mark(opts.sessionId, opts.itemId, opts.status, {
         evidenceRef: opts.evidenceRef,
         manualReason: opts.manualReason,
@@ -362,7 +386,8 @@ export function registerIpc(): void {
   ipcMain.handle(
     'acceptance:waive',
     (_e, opts: { sessionId: string; itemId: string; reason: string }) => {
-      if (!opts?.sessionId || !opts.itemId) return null
+      const valid = validateIpc(opts, IPC_SCHEMAS.acceptanceWaive)
+      if (!valid.ok) return null
       return getAcceptanceStore().mark(opts.sessionId, opts.itemId, 'waived', {
         reason: opts.reason,
       })
@@ -371,18 +396,22 @@ export function registerIpc(): void {
   ipcMain.handle(
     'acceptance:apply-evidence',
     (_e, opts: { sessionId: string; evidenceRefs: string[] }) => {
-      if (!opts?.sessionId) return null
+      const valid = validateIpc(opts, IPC_SCHEMAS.acceptanceEvidence)
+      if (!valid.ok) return null
       return getAcceptanceStore().applyEvidence(opts.sessionId, opts.evidenceRefs ?? [])
     },
   )
-  ipcMain.handle('acceptance:evaluate', (_e, sessionId: string) =>
-    sessionId ? getAcceptanceStore().evaluate(sessionId) : null,
-  )
-  ipcMain.handle('acceptance:accept-empty', (_e, sessionId: string) =>
-    sessionId ? getAcceptanceStore().acceptEmpty(sessionId) : null,
-  )
+  ipcMain.handle('acceptance:evaluate', (_e, sessionId: string) => {
+    const valid = validateIpc(sessionId, IPC_SCHEMAS.sessionId)
+    return valid.ok ? getAcceptanceStore().evaluate(sessionId) : null
+  })
+  ipcMain.handle('acceptance:accept-empty', (_e, sessionId: string) => {
+    const valid = validateIpc(sessionId, IPC_SCHEMAS.sessionId)
+    return valid.ok ? getAcceptanceStore().acceptEmpty(sessionId) : null
+  })
   ipcMain.handle('acceptance:clear', (_e, sessionId: string) => {
-    if (sessionId) getAcceptanceStore().clear(sessionId)
+    const valid = validateIpc(sessionId, IPC_SCHEMAS.sessionId)
+    if (valid.ok) getAcceptanceStore().clear(sessionId)
   })
 
   // BC-11 任务编排：队列命令（每命令返回 {ok, queue|error}）
@@ -393,82 +422,107 @@ export function registerIpc(): void {
       return { ok: false, error: e instanceof Error ? e.message : String(e) }
     }
   }
-  ipcMain.handle('queue:list', (_e, sessionId: string) =>
-    sessionId ? getTaskQueueStore().list(sessionId) : { entries: [] },
-  )
-  ipcMain.handle('queue:enqueue', (_e, opts: { sessionId: string; title: string }) =>
-    opts?.sessionId
+  // P1-04：队列命令入口校验（sessionId/entryId/position 结构——非法载荷不进入队列存储）
+  const queueInvalid = (error: string) => ({
+    ok: false as const,
+    error: `参数校验失败：${error}`,
+  })
+  ipcMain.handle('queue:list', (_e, sessionId: string) => {
+    const valid = validateIpc(sessionId, IPC_SCHEMAS.sessionId)
+    return valid.ok ? getTaskQueueStore().list(sessionId) : { entries: [] }
+  })
+  ipcMain.handle('queue:enqueue', (_e, opts: { sessionId: string; title: string }) => {
+    const valid = validateIpc(opts, IPC_SCHEMAS.queueSession)
+    return valid.ok
       ? queueSafe(() => getTaskQueueStore().enqueue(opts.sessionId, opts.title))
-      : { ok: false, error: '缺少 sessionId' },
-  )
+      : queueInvalid(valid.error)
+  })
   ipcMain.handle(
     'queue:start',
-    (_e, opts: { sessionId: string; entryId: string }) =>
-      opts?.sessionId
+    (_e, opts: { sessionId: string; entryId: string }) => {
+      const valid = validateIpc(opts, IPC_SCHEMAS.queueEntry)
+      return valid.ok
         ? queueSafe(() => getTaskQueueStore().start(opts.sessionId, opts.entryId))
-        : { ok: false, error: '缺少 sessionId' },
+        : queueInvalid(valid.error)
+    },
   )
   ipcMain.handle(
     'queue:block',
-    (_e, opts: { sessionId: string; entryId: string; reason: string }) =>
-      opts?.sessionId
-        ? queueSafe(() =>
-            getTaskQueueStore().block(opts.sessionId, opts.entryId, opts.reason),
-          )
-        : { ok: false, error: '缺少 sessionId' },
+    (_e, opts: { sessionId: string; entryId: string; reason: string }) => {
+      const valid = validateIpc(opts, IPC_SCHEMAS.queueEntryReason)
+      return valid.ok
+        ? queueSafe(() => getTaskQueueStore().block(opts.sessionId, opts.entryId, opts.reason))
+        : queueInvalid(valid.error)
+    },
   )
   ipcMain.handle(
     'queue:resume',
-    (_e, opts: { sessionId: string; entryId: string }) =>
-      opts?.sessionId
+    (_e, opts: { sessionId: string; entryId: string }) => {
+      const valid = validateIpc(opts, IPC_SCHEMAS.queueEntry)
+      return valid.ok
         ? queueSafe(() => getTaskQueueStore().resume(opts.sessionId, opts.entryId))
-        : { ok: false, error: '缺少 sessionId' },
+        : queueInvalid(valid.error)
+    },
   )
   ipcMain.handle(
     'queue:pause',
-    (_e, opts: { sessionId: string; entryId: string }) =>
-      opts?.sessionId
+    (_e, opts: { sessionId: string; entryId: string }) => {
+      const valid = validateIpc(opts, IPC_SCHEMAS.queueEntry)
+      return valid.ok
         ? queueSafe(() => getTaskQueueStore().pause(opts.sessionId, opts.entryId))
-        : { ok: false, error: '缺少 sessionId' },
+        : queueInvalid(valid.error)
+    },
   )
   ipcMain.handle(
     'queue:complete',
-    (_e, opts: { sessionId: string; entryId: string }) =>
-      opts?.sessionId
+    (_e, opts: { sessionId: string; entryId: string }) => {
+      const valid = validateIpc(opts, IPC_SCHEMAS.queueEntry)
+      return valid.ok
         ? queueSafe(() => getTaskQueueStore().complete(opts.sessionId, opts.entryId))
-        : { ok: false, error: '缺少 sessionId' },
+        : queueInvalid(valid.error)
+    },
   )
   ipcMain.handle(
     'queue:fail',
-    (_e, opts: { sessionId: string; entryId: string; reason: string }) =>
-      opts?.sessionId
+    (_e, opts: { sessionId: string; entryId: string; reason: string }) => {
+      const valid = validateIpc(opts, IPC_SCHEMAS.queueEntryReason)
+      return valid.ok
         ? queueSafe(() => getTaskQueueStore().fail(opts.sessionId, opts.entryId, opts.reason))
-        : { ok: false, error: '缺少 sessionId' },
+        : queueInvalid(valid.error)
+    },
   )
   ipcMain.handle(
     'queue:cancel',
-    (_e, opts: { sessionId: string; entryId: string }) =>
-      opts?.sessionId
+    (_e, opts: { sessionId: string; entryId: string }) => {
+      const valid = validateIpc(opts, IPC_SCHEMAS.queueEntry)
+      return valid.ok
         ? queueSafe(() => getTaskQueueStore().cancel(opts.sessionId, opts.entryId))
-        : { ok: false, error: '缺少 sessionId' },
+        : queueInvalid(valid.error)
+    },
   )
   ipcMain.handle(
     'queue:reorder',
-    (_e, opts: { sessionId: string; entryId: string; position: number }) =>
-      opts?.sessionId
+    (_e, opts: { sessionId: string; entryId: string; position: number }) => {
+      const valid = validateIpc(opts, IPC_SCHEMAS.queueReorder)
+      return valid.ok
         ? queueSafe(() =>
             getTaskQueueStore().reorder(opts.sessionId, opts.entryId, opts.position),
           )
-        : { ok: false, error: '缺少 sessionId' },
+        : queueInvalid(valid.error)
+    },
   )
   ipcMain.handle('queue:clear', (_e, sessionId: string) => {
-    if (sessionId) getTaskQueueStore().clear(sessionId)
+    const valid = validateIpc(sessionId, IPC_SCHEMAS.sessionId)
+    if (valid.ok) getTaskQueueStore().clear(sessionId)
   })
 
   // 05 交付包执行层：diff 应用（L3 授权）/ 快照回滚
   ipcMain.handle(
     'delivery:apply-diff',
     (_e, opts: { path: string; diff: string; approved?: boolean; sessionId?: string }) => {
+      // P1-04：diff 应用是写路径——先校验结构，再判授权
+      const valid = validateIpc(opts, IPC_SCHEMAS.deliveryApplyDiff)
+      if (!valid.ok) return { ok: false, error: `参数校验失败：${valid.error}` }
       if (!opts.approved)
         return { ok: false, error: '「applyDiff」需要授权（L3）——approved=true 后执行' }
       const changes = parseUnifiedDiff(opts.diff ?? '')
@@ -495,6 +549,8 @@ export function registerIpc(): void {
   ipcMain.handle(
     'delivery:revert-diff',
     (_e, opts: { path: string; sessionId?: string }) => {
+      const valid = validateIpc(opts, IPC_SCHEMAS.deliveryRevertDiff)
+      if (!valid.ok) return { ok: false, error: `参数校验失败：${valid.error}` }
       const r = revert(opts.path)
       if (r.ok) {
         try {
@@ -508,16 +564,19 @@ export function registerIpc(): void {
   )
 
   // BC-10 变更与版本：查询/整集回滚/清理
-  ipcMain.handle('changeset:list', (_e, sessionId: string) =>
-    sessionId ? getChangeSetService().list(sessionId) : null,
-  )
-  ipcMain.handle('changeset:revert', (_e, sessionId: string) =>
-    sessionId
+  ipcMain.handle('changeset:list', (_e, sessionId: string) => {
+    const valid = validateIpc(sessionId, IPC_SCHEMAS.sessionId)
+    return valid.ok ? getChangeSetService().list(sessionId) : null
+  })
+  ipcMain.handle('changeset:revert', (_e, sessionId: string) => {
+    const valid = validateIpc(sessionId, IPC_SCHEMAS.sessionId)
+    return valid.ok
       ? getChangeSetService().revert(sessionId)
-      : { ok: false, reverted: [], conflicted: [], error: '缺少 sessionId' },
-  )
+      : { ok: false, reverted: [], conflicted: [], error: '缺少 sessionId' }
+  })
   ipcMain.handle('changeset:clear', (_e, sessionId: string) => {
-    if (sessionId) getChangeSetService().clear(sessionId)
+    const valid = validateIpc(sessionId, IPC_SCHEMAS.sessionId)
+    if (valid.ok) getChangeSetService().clear(sessionId)
   })
 
   // ticket 03：打开项目 / 文件树 / 读文件（打开成功后自动连接 LSP——ticket 12 真实语言服务器）
@@ -609,7 +668,9 @@ ipcMain.handle('tools:list', () => toolRegistry.list())
 // 三件套契约取代 tools:files-approved/-reset（renderer 写走这里；main write 门控布尔镜像随之同步）
 ipcMain.handle('planned-files:load', () => getPlannedFilesStore().load())
 ipcMain.handle('planned-files:add', (_e, files: string[]) => {
-  const data = getPlannedFilesStore().add(Array.isArray(files) ? files : [])
+  const valid = validateIpc(files, IPC_SCHEMAS.fileList)
+  if (!valid.ok) return getPlannedFilesStore().load()
+  const data = getPlannedFilesStore().add(files)
   syncPlanApprovedFromStore()
   return data
 })
@@ -617,7 +678,9 @@ ipcMain.handle('planned-files:add', (_e, files: string[]) => {
 // （原只重置 renderer 侧 → main write 规划门控跨任务恒放行——第二道防线失效）
 // #6 真机 2026-08-31（复验轮）：方案确认镜像——renderer confirm('plan') 同步（approve-files 硬序门）
 ipcMain.handle('session:plan-confirmed', (_e, v: boolean) => {
-  syncPlanConfirmed(Boolean(v))
+  const valid = validateIpc(v, { type: 'boolean' })
+  if (!valid.ok) return
+  syncPlanConfirmed(v)
 })
 ipcMain.handle('planned-files:reset', () => {
   const data = getPlannedFilesStore().reset()
@@ -666,6 +729,8 @@ ipcMain.handle(
 ipcMain.handle(
   'tools:revert',
   (_e, opts: { path: string; sessionId?: string }) => {
+    const valid = validateIpc(opts, IPC_SCHEMAS.toolsRevert)
+    if (!valid.ok) return { ok: false, error: `参数校验失败：${valid.error}` }
     const r = revertToolFile(opts.path)
     if (r.ok && opts.sessionId) getChangeSetService().recordRevert(opts.sessionId, opts.path)
     return r
@@ -674,18 +739,23 @@ ipcMain.handle(
 // ticket 14 可撤销：任何时刻停止当前操作（bash 高危——cancelActiveCommand kill；无活动命令返回错误）
 ipcMain.handle('tools:cancel', () => cancelActiveCommand())
 // ticket 12 ContextEngine：@引用文件 → 精准上下文片段（注入对话）
-ipcMain.handle('context:resolve', (_e, opts: { files: string[] }) =>
-  context.resolve(workspace.getCurrentRoot(), opts.files ?? []),
-)
+ipcMain.handle('context:resolve', (_e, opts: { files: string[] }) => {
+  const valid = validateIpc(opts, IPC_SCHEMAS.contextResolve)
+  if (!valid.ok) return { fragments: [] }
+  return context.resolve(workspace.getCurrentRoot(), opts.files)
+})
 // ticket 12 Layer2：CodeRAG 关键词检索兜底（V1 降级——不建向量索引）
-ipcMain.handle('rag:search', (_e, opts: { query: string }) =>
-  codeRag.search(workspace.getCurrentRoot(), opts.query),
-)
+ipcMain.handle('rag:search', (_e, opts: { query: string }) => {
+  const valid = validateIpc(opts, IPC_SCHEMAS.ragSearch)
+  if (!valid.ok) return []
+  return codeRag.search(workspace.getCurrentRoot(), opts.query)
+})
 // ticket 08：内置插件注册表（list/toggle——生命周期钩子）
 ipcMain.handle('plugins:list', () => pluginRegistry.list())
-ipcMain.handle('plugins:toggle', (_e, opts: { name: string; active: boolean }) =>
-  pluginRegistry.setActive(opts.name, opts.active),
-)
+ipcMain.handle('plugins:toggle', (_e, opts: { name: string; active: boolean }) => {
+  const valid = validateIpc(opts, IPC_SCHEMAS.pluginToggle)
+  return valid.ok ? pluginRegistry.setActive(opts.name, opts.active) : false
+})
 // BC-13 扩展与集成：扩展视图（kind/trust/capabilities）+ 第三方授权 + MCP 配置/刷新 + Git 只读
 ipcMain.handle('extensions:list', () => pluginRegistry.listExtensions())
 ipcMain.handle(
@@ -744,6 +814,8 @@ ipcMain.handle(
   },
 )
 // S4 完成对账 V1a：系统代跑只读验证命令（fail-closed——非只读不执行；超时/截断护栏见 verification.ts）
-ipcMain.handle('completion:verify', (_e, opts: { commands: string[]; rootPath?: string | null }) =>
-  runVerificationCommands(opts.commands ?? [], { cwd: opts.rootPath ?? undefined }),
-)
+ipcMain.handle('completion:verify', (_e, opts: { commands: string[]; rootPath?: string | null }) => {
+  const valid = validateIpc(opts, IPC_SCHEMAS.completionVerify)
+  if (!valid.ok) return {}
+  return runVerificationCommands(opts.commands, { cwd: opts.rootPath ?? undefined })
+})

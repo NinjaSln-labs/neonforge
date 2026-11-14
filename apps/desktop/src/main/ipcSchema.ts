@@ -1,7 +1,14 @@
 // IPC 运行时契约校验（P1-04 基础设施）：preload/types/main 三方漂移时 fail-fast。
 // 轻量 schema 子集（不引入 zod）——字符串/数字/布尔/对象/数组/枚举/可选字段；未知字段忽略。
 export type IpcSchema =
-  | { type: 'string'; enum?: readonly string[]; minLength?: number; maxLength?: number }
+  | {
+      type: 'string'
+      enum?: readonly string[]
+      minLength?: number
+      maxLength?: number
+      /** 允许 null（用于可清空的可选字段：URL/密钥/模型 id） */
+      nullable?: boolean
+    }
   | { type: 'number'; min?: number; max?: number; integer?: boolean }
   | { type: 'boolean' }
   | { type: 'object'; properties?: Record<string, IpcSchema>; required?: readonly string[]; allowUnknown?: boolean }
@@ -22,6 +29,11 @@ function validateAt(value: unknown, schema: IpcSchema, path: string): IpcValidat
     case 'null':
       return value === null ? { ok: true } : { ok: false, error: `${path} 必须为 null` }
     case 'string': {
+      if (value === null) {
+        return schema.nullable
+          ? { ok: true }
+          : { ok: false, error: `${path} 必须为字符串（不可为 null）` }
+      }
       if (typeof value !== 'string') return { ok: false, error: `${path} 必须为字符串` }
       if (schema.minLength !== undefined && value.length < schema.minLength) {
         return { ok: false, error: `${path} 长度不足 ${schema.minLength}` }
@@ -67,7 +79,8 @@ function validateAt(value: unknown, schema: IpcSchema, path: string): IpcValidat
     case 'object': {
       if (!isPlainObject(value)) return { ok: false, error: `${path} 必须为对象` }
       for (const key of schema.required ?? []) {
-        if (!(key in value)) return { ok: false, error: `${path}.${key} 为必填` }
+        // undefined 同样视为缺失（仅 key in value 会让 {name: undefined} 通过必填）
+        if (value[key] === undefined) return { ok: false, error: `${path}.${key} 为必填` }
       }
       for (const [key, sub] of Object.entries(schema.properties ?? {})) {
         if (value[key] === undefined) continue
@@ -137,5 +150,160 @@ export const IPC_SCHEMAS = {
       position: { type: 'number', integer: true, min: 0, max: 10000 },
     },
     required: ['sessionId'],
+  },
+  // P1-04 第二批：队列命令/验收/变更集/配置入口的载荷校验
+  webAccessPatch: {
+    type: 'object',
+    properties: {
+      enabled: { type: 'boolean' },
+      searchUrl: { type: 'string', maxLength: 4000, nullable: true },
+      searchKey: { type: 'string', maxLength: 8192, nullable: true },
+      keenableApiKey: { type: 'string', maxLength: 8192, nullable: true },
+      keenablePublicTrial: { type: 'boolean' },
+      probe: { type: 'boolean' },
+    },
+  },
+  apiKey: { type: 'string', minLength: 1, maxLength: 8192 },
+  apiKeySet: {
+    type: 'object',
+    properties: {
+      key: { type: 'string', minLength: 1, maxLength: 8192 },
+      providerId: { type: 'string', maxLength: 100 },
+      modelId: { type: 'string', maxLength: 500, nullable: true },
+    },
+    required: ['key'],
+  },
+  completionVerify: {
+    type: 'object',
+    properties: {
+      commands: {
+        type: 'array',
+        maxItems: 100,
+        items: { type: 'string', minLength: 1, maxLength: 4000 },
+      },
+      rootPath: { type: 'string', maxLength: 4000, nullable: true },
+    },
+    required: ['commands'],
+  },
+  fileList: {
+    type: 'array',
+    maxItems: 1000,
+    items: { type: 'string', minLength: 1, maxLength: 4000 },
+  },
+  contextResolve: {
+    type: 'object',
+    properties: { files: { type: 'array', maxItems: 100, items: { type: 'string', minLength: 1, maxLength: 4000 } } },
+    required: ['files'],
+  },
+  ragSearch: {
+    type: 'object',
+    properties: { query: { type: 'string', minLength: 1, maxLength: 2000 } },
+    required: ['query'],
+  },
+  pluginToggle: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', minLength: 1, maxLength: 500 },
+      active: { type: 'boolean' },
+    },
+    required: ['name', 'active'],
+  },
+  queueEntry: {
+    type: 'object',
+    properties: {
+      sessionId: { type: 'string', minLength: 1, maxLength: 200 },
+      entryId: { type: 'string', minLength: 1, maxLength: 200 },
+    },
+    required: ['sessionId', 'entryId'],
+  },
+  queueEntryReason: {
+    type: 'object',
+    properties: {
+      sessionId: { type: 'string', minLength: 1, maxLength: 200 },
+      entryId: { type: 'string', minLength: 1, maxLength: 200 },
+      reason: { type: 'string', maxLength: 2000 },
+    },
+    required: ['sessionId', 'entryId'],
+  },
+  queueReorder: {
+    type: 'object',
+    properties: {
+      sessionId: { type: 'string', minLength: 1, maxLength: 200 },
+      entryId: { type: 'string', minLength: 1, maxLength: 200 },
+      position: { type: 'number', integer: true, min: 0, max: 10000 },
+    },
+    required: ['sessionId', 'entryId', 'position'],
+  },
+  acceptanceDerive: {
+    type: 'object',
+    properties: {
+      sessionId: { type: 'string', minLength: 1, maxLength: 200 },
+      verificationPlan: {
+        type: 'array',
+        maxItems: 100,
+        items: { type: 'string', minLength: 1, maxLength: 2000 },
+      },
+      source: { type: 'string', enum: ['plan-verification', 'user-dod', 'manual'] as const },
+    },
+    required: ['sessionId'],
+  },
+  acceptanceMark: {
+    type: 'object',
+    properties: {
+      sessionId: { type: 'string', minLength: 1, maxLength: 200 },
+      itemId: { type: 'string', minLength: 1, maxLength: 200 },
+      status: { type: 'string', enum: ['passed', 'failed', 'waived'] as const },
+      evidenceRef: { type: 'string', maxLength: 2000 },
+      manualReason: { type: 'string', maxLength: 4000 },
+      reason: { type: 'string', maxLength: 4000 },
+    },
+    required: ['sessionId', 'itemId', 'status'],
+  },
+  acceptanceWaive: {
+    type: 'object',
+    properties: {
+      sessionId: { type: 'string', minLength: 1, maxLength: 200 },
+      itemId: { type: 'string', minLength: 1, maxLength: 200 },
+      reason: { type: 'string', minLength: 1, maxLength: 4000 },
+    },
+    required: ['sessionId', 'itemId', 'reason'],
+  },
+  acceptanceEvidence: {
+    type: 'object',
+    properties: {
+      sessionId: { type: 'string', minLength: 1, maxLength: 200 },
+      evidenceRefs: {
+        type: 'array',
+        maxItems: 500,
+        items: { type: 'string', minLength: 1, maxLength: 4000 },
+      },
+    },
+    required: ['sessionId', 'evidenceRefs'],
+  },
+  toolsRevert: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', minLength: 1, maxLength: 4000 },
+      sessionId: { type: 'string', minLength: 1, maxLength: 200 },
+    },
+    required: ['path'],
+  },
+  deliveryApplyDiff: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', minLength: 1, maxLength: 4000 },
+      diff: { type: 'string', minLength: 1, maxLength: 2_000_000 },
+      approved: { type: 'boolean' },
+      sessionId: { type: 'string', minLength: 1, maxLength: 200 },
+    },
+    required: ['path', 'diff'],
+  },
+  deliveryRevertDiff: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', minLength: 1, maxLength: 4000 },
+      sessionId: { type: 'string', minLength: 1, maxLength: 200 },
+    },
+    required: ['path'],
   },
 } satisfies Record<string, IpcSchema>
