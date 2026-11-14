@@ -126,6 +126,34 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
     })
   }
 
+  // BC-12 价格表：未配置时成本诚实为 unknown（预算无法累计）
+  const [priceDraft, setPriceDraft] = useState(
+    '{\n  "version": "configured-v1",\n  "models": {}\n}',
+  )
+  const [priceMsg, setPriceMsg] = useState<string | null>(null)
+  useEffect(() => {
+    void window.neonforge.pricing?.get?.().then((table) => {
+      setPriceDraft(JSON.stringify(table, null, 2))
+    })
+  }, [])
+  const savePricing = () => {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(priceDraft)
+    } catch {
+      setPriceMsg('JSON 格式错误——请检查逗号/引号')
+      return
+    }
+    void window.neonforge.pricing?.set?.(parsed as never).then((r) => {
+      if (r?.ok) {
+        setPriceMsg('已保存；后续请求按新价格计算')
+        if (r.table) setPriceDraft(JSON.stringify(r.table, null, 2))
+      } else {
+        setPriceMsg(r?.error ?? '保存失败')
+      }
+    })
+  }
+
   const [delegate, setDelegate] = useState(readDelegate)
   const handleDelegate = (v: boolean) => {
     setDelegate(v)
@@ -419,6 +447,26 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
           </button>
         </div>
         {budgetMsg ? <p className="nf-settings__export-msg">{budgetMsg}</p> : null}
+      </div>
+
+      <div className="nf-settings__plugins">
+        <span className="nf-settings__plugins-title">
+          价格表（provider:model → 每百万 token 单价，USD；未配置 = 成本 unknown，预算不累计）
+        </span>
+        <textarea
+          className="nf-settings__mcp-editor"
+          rows={7}
+          spellCheck={false}
+          value={priceDraft}
+          onChange={(e) => setPriceDraft(e.target.value)}
+          aria-label="价格表配置（JSON）"
+        />
+        <div className="nf-settings__mcp-actions">
+          <button type="button" onClick={savePricing}>
+            保存价格表
+          </button>
+        </div>
+        {priceMsg ? <p className="nf-settings__export-msg">{priceMsg}</p> : null}
       </div>
 
       <div className="nf-settings__row">

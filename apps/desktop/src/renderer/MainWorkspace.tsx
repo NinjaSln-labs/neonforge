@@ -11,6 +11,12 @@ import { IconSettings } from './icons'
 // 2026-08-15 Q10：demo 注入通道类型化单例
 import { getDemoBridge } from './demoBridge'
 
+function createSessionId(): string {
+  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
 // 任务工作台（对话面板「任务」Tab）——BC-12 真实用量 + BC-11 队列（用户排队的任务，non-auto-run）
 const QUEUE_APPROVAL_BLOCK = '等待用户授权'
 const QUEUE_STATUS_LABEL: Record<QueueEntry['status'], string> = {
@@ -386,6 +392,8 @@ export default function MainWorkspace({
   initialPrompt?: string // 2026-08-04 启动页方案 A：进入工作区预填对话输入框（不自动发送）
 }) {
   const [chatTab, setChatTab] = useState<'chat' | 'tasks'>('chat')
+  // P1 修复：会话 ID 由工作区持有（Tab 切换会卸载对话面板——不得每次重挂载生成新会话导致台账/验收/变更集失联）
+  const [sessionId, setSessionId] = useState<string>(() => createSessionId())
   const [activePath, setActivePath] = useState<string | null>(null)
   const [content, setContent] = useState<string>('')
   const [working, setWorking] = useState(false)
@@ -409,6 +417,9 @@ export default function MainWorkspace({
   }, [refreshModelLabel, showSettings])
   // 08 快捷键（D0 §6）：⌘, 打开/关闭设置 + ⌘N 新任务（全局）
   const handleNew = () => {
+    const nextSession = createSessionId()
+    setSessionId(nextSession)
+    sessionIdRef.current = nextSession
     setActiveProblem(null)
     clearSession()
     setChatKey((k) => k + 1)
@@ -484,32 +495,24 @@ export default function MainWorkspace({
   const [goalSeq, setGoalSeq] = useState(0) // 2026-08-07 无阶段重构 S4：目标确认次数——每次确认 = 任务边界（信任清除驱动；goalConfirmed 恒 true 后靠它感知新目标）
   // 2026-08-08 会话日志（用户「每次应该是单独的会话日志」）：当前会话 ID——ConversationPanel 挂载（进入对话）生成后上报
   // （MainWorkspace 侧 timeline 事件 goal-confirmed/exec-confirmed 归属同一会话）
-  const sessionIdRef = useRef('')
+  const sessionIdRef = useRef(sessionId)
+  // 会话 ID 变化 → 引用同步（timeline/tlog 等主线程侧记录用）
+  useEffect(() => {
+    sessionIdRef.current = sessionId
+  }, [sessionId])
   const handleSessionStart = (id: string) => {
     sessionIdRef.current = id
   }
-  // BC-11：授权状态与队列同步——等待授权时把运行中任务标为阻塞，授权解除后恢复（不得自动确认）
+  // BC-11：授权状态与队列同步——等待授权时把运行中任务标为阻塞；恢复只在「授权通过」回调执行
   useEffect(() => {
     const sid = sessionIdRef.current
-    if (!sid) return
+    if (!sid || !pendingApproval) return
     void window.neonforge.queue?.list(sid).then((q) => {
       const running = q.entries.find((e) => e.status === 'running')
-      if (pendingApproval && running) {
-        void window.neonforge.queue
-          .block(sid, running.id, QUEUE_APPROVAL_BLOCK)
-          .then((r) => r?.ok && setQueueRefreshKey((k) => k + 1))
-        return
-      }
-      if (!pendingApproval) {
-        const blocked = q.entries.find(
-          (e) => e.status === 'blocked' && e.blockReason === QUEUE_APPROVAL_BLOCK,
-        )
-        if (blocked) {
-          void window.neonforge.queue
-            .resume(sid, blocked.id)
-            .then((r) => r?.ok && setQueueRefreshKey((k) => k + 1))
-        }
-      }
+      if (!running) return
+      void window.neonforge.queue
+        .block(sid, running.id, QUEUE_APPROVAL_BLOCK)
+        .then((r) => r?.ok && setQueueRefreshKey((k) => k + 1))
     })
   }, [pendingApproval])
   // 2026-08-15 补齐：问题台账事件（06 §1.7 problem.*——M3 建模后接线）
@@ -615,6 +618,24 @@ export default function MainWorkspace({
   const handleStartQueuedTask = (title: string) => {
     setChatTab('chat')
     setRerunRequest(title)
+  }
+  // BC-11：授权结果 → 仅批准时恢复队列；拒绝保持 blocked（用户可取消/修改后恢复）
+  const handleApprovalResolved = (result: 'approved' | 'rejected') => {
+    if (result !== 'approved') {
+      setQueueRefreshKey((k) => k + 1)
+      return
+    }
+    const sid = sessionIdRef.current
+    if (!sid) return
+    void window.neonforge.queue?.list(sid).then((q) => {
+      const blocked = q.entries.find(
+        (e) => e.status === 'blocked' && e.blockReason === QUEUE_APPROVAL_BLOCK,
+      )
+      if (!blocked) return
+      void window.neonforge.queue
+        .resume(sid, blocked.id)
+        .then((r) => r?.ok && setQueueRefreshKey((k) => k + 1))
+    })
   }
   // 2026-08-03 A5 审计修复：交付包「确认问题关闭」→ 同步问题台账（SessionPanel 状态 closed——跨组件状态一致）
   const handleConfirmClosed = () => {
@@ -741,6 +762,7 @@ export default function MainWorkspace({
               onKeyExpired={onKeyExpired}
               onWorkingChange={setWorking}
               onApprovalChange={setPendingApproval}
+              onApprovalResolved={handleApprovalResolved}
               onActionPromiseHint={setActionHint}
               externalRequest={rerunRequest}
               onExternalConsumed={() => setRerunRequest(null)}
@@ -756,13 +778,14 @@ export default function MainWorkspace({
               recentFilesExternal={projectFiles}
               initialPrompt={initialPrompt}
               onSessionStart={handleSessionStart}
+              sessionId={sessionId}
               activeAuthorizedLogs={
                 problems.find((p) => p.id === activeProblem)?.snapshot?.authorized
               }
             />
           ) : (
             <TaskPanel
-              sessionId={sessionIdRef.current}
+              sessionId={sessionId}
               refreshKey={queueRefreshKey}
               onStartTask={handleStartQueuedTask}
               rootPath={rootPath}
@@ -774,7 +797,7 @@ export default function MainWorkspace({
       {/* 右：产物区（工程 / 产物） */}
       <OutputPanel
         rootPath={rootPath ?? ''}
-        sessionId={sessionIdRef.current}
+        sessionId={sessionId}
         activePath={activePath}
         content={content}
         deliveryPkg={deliveryPkg}

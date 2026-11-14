@@ -104,6 +104,25 @@ contextBridge.exposeInMainWorld('neonforge', {
         state?: { limit: number | null; spent: number; reached: boolean }
       }>,
   },
+  pricing: {
+    get: () =>
+      ipcRenderer.invoke('pricing:get') as Promise<{
+        version: string
+        models: Record<
+          string,
+          { promptPerMillion: number; completionPerMillion: number; cacheHitPerMillion?: number }
+        >
+      }>,
+    set: (table: unknown) =>
+      ipcRenderer.invoke('pricing:set', table) as Promise<{
+        ok: boolean
+        error?: string
+        table?: {
+          version: string
+          models: Record<string, { promptPerMillion: number; completionPerMillion: number }>
+        }
+      }>,
+  },
   acceptance: {
     derive: (
       sessionId: string,
@@ -272,8 +291,8 @@ contextBridge.exposeInMainWorld('neonforge', {
         needApproval?: boolean
         policy?: boolean
       }>,
-    revert: (filePath: string) =>
-      ipcRenderer.invoke('tools:revert', { path: filePath }) as Promise<{
+    revert: (filePath: string, sessionId?: string) =>
+      ipcRenderer.invoke('tools:revert', { path: filePath, sessionId }) as Promise<{
         ok: boolean
         error?: string
       }>,

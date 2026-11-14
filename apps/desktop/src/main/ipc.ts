@@ -1,5 +1,6 @@
 // IPC handlers：renderer 经 preload → 主进程 gateway/configStore/workspace
 import { app, BrowserWindow, ipcMain } from 'electron'
+import { readFileSync } from 'node:fs'
 import {
   parseUnifiedDiff,
   applyDiffToFile,
@@ -31,6 +32,7 @@ import { logTimeline, timelineLogger } from './timelineLogger.js'
 import { runVerificationCommands } from './verification.js'
 import { createUsageEntry, evaluateBudget, summarizeUsage } from '../domain/usageLedger.js'
 import { getBudgetStore } from './budgetStore.instance.js'
+import { getPriceStore } from './priceStore.instance.js'
 import { getUsageStore } from './usageStore.instance.js'
 import { getAcceptanceStore } from './acceptanceStore.instance.js'
 import type { AcceptanceSource } from '../domain/acceptance.js'
@@ -235,18 +237,21 @@ export function registerIpc(): void {
           // BC-12：Provider 真实 usage → 本机用量台账（不含内容；sessionId 由 renderer 传入）
           onUsage: (u) => {
             const at = new Date().toISOString()
-            const entry = createUsageEntry({
-              id: `usage-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-              at,
-              provider: u.providerId,
-              model: u.model,
-              promptTokens: u.promptTokens,
-              completionTokens: u.completionTokens,
-              reasoningTokens: u.reasoningTokens,
-              cacheHitTokens: u.cacheHitTokens,
-              cacheMissTokens: u.cacheMissTokens,
-              sessionId: opts.sessionId,
-            })
+            const entry = createUsageEntry(
+              {
+                id: `usage-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                at,
+                provider: u.providerId,
+                model: u.model,
+                promptTokens: u.promptTokens,
+                completionTokens: u.completionTokens,
+                reasoningTokens: u.reasoningTokens,
+                cacheHitTokens: u.cacheHitTokens,
+                cacheMissTokens: u.cacheMissTokens,
+                sessionId: opts.sessionId,
+              },
+              getPriceStore().load(),
+            )
             getUsageStore().record(entry)
             logTimeline({
               session: opts.sessionId,
@@ -298,6 +303,14 @@ export function registerIpc(): void {
     return { settings, summary, state: evaluateBudget(summary, settings.limitUsd) }
   }
   ipcMain.handle('budget:get', () => budgetSnapshot())
+  ipcMain.handle('pricing:get', () => getPriceStore().load())
+  ipcMain.handle('pricing:set', (_e, input: unknown) => {
+    try {
+      return { ok: true, table: getPriceStore().save(input), ...budgetSnapshot() }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+  })
   ipcMain.handle('budget:set', (_e, input: unknown) => {
     try {
       const settings = getBudgetStore().save(input)
@@ -458,11 +471,18 @@ export function registerIpc(): void {
         return { ok: false, error: '「applyDiff」需要授权（L3）——approved=true 后执行' }
       const changes = parseUnifiedDiff(opts.diff ?? '')
       if (changes.length === 0) return { ok: false, error: 'diff 解析为空——不支持该格式' }
+      // 写前捕获原内容（快照失败也不能把已存在文件误判为新建——回滚删文件的破坏性错误）
+      let preWrite: { content: string | null } | undefined
+      try {
+        preWrite = { content: readFileSync(opts.path, 'utf-8') }
+      } catch {
+        preWrite = undefined
+      }
       snapshot(opts.path)
       const r = applyDiffToFile(opts.path, changes)
       if (r.ok) {
         try {
-          getChangeSetService().recordMutation(opts.sessionId ?? 'default', opts.path)
+          getChangeSetService().recordMutation(opts.sessionId ?? 'default', opts.path, preWrite)
         } catch {
           /* 变更集记录失败不影响应用结果 */
         }
@@ -641,7 +661,14 @@ ipcMain.handle(
   },
 )
 // 工具写文件回滚（write/edit 写前已快照 .nf-bak——回滚恢复原样）
-ipcMain.handle('tools:revert', (_e, opts: { path: string }) => revertToolFile(opts.path))
+ipcMain.handle(
+  'tools:revert',
+  (_e, opts: { path: string; sessionId?: string }) => {
+    const r = revertToolFile(opts.path)
+    if (r.ok && opts.sessionId) getChangeSetService().recordRevert(opts.sessionId, opts.path)
+    return r
+  },
+)
 // ticket 14 可撤销：任何时刻停止当前操作（bash 高危——cancelActiveCommand kill；无活动命令返回错误）
 ipcMain.handle('tools:cancel', () => cancelActiveCommand())
 // ticket 12 ContextEngine：@引用文件 → 精准上下文片段（注入对话）

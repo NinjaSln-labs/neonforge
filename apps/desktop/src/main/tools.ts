@@ -76,8 +76,10 @@ export function isInSandbox(p: unknown, rootPath?: string): boolean {
   return target === rp || target.startsWith(rp + path.sep)
 }
 
-/** realpath 解析（目标/目录可能尚不存在——取最近存在的祖先再拼回后缀） */
-async function realpathNearest(target: string): Promise<string> {
+/** realpath 解析（目标/目录可能尚不存在——取最近存在的祖先再拼回后缀）
+ * P0 修复：悬空符号链接（目标尚不存在）也必须解析链接目标，不能退化为词法路径。 */
+async function realpathNearest(target: string, depth = 0): Promise<string> {
+  if (depth > 40) throw new Error('symbolic link loop')
   let current = path.resolve(target)
   const suffix: string[] = []
   for (;;) {
@@ -85,6 +87,18 @@ async function realpathNearest(target: string): Promise<string> {
       return path.resolve(await fs.realpath(current), ...suffix.reverse())
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e
+      // ENOENT：可能是路径不存在，也可能是悬空 symlink——lstat 区分
+      try {
+        const stat = await fs.lstat(current)
+        if (stat.isSymbolicLink()) {
+          const linkTarget = await fs.readlink(current)
+          const resolvedLink = path.resolve(path.dirname(current), linkTarget)
+          const realTarget = await realpathNearest(resolvedLink, depth + 1)
+          return path.resolve(realTarget, ...suffix.reverse())
+        }
+      } catch (lstatError) {
+        if ((lstatError as NodeJS.ErrnoException).code !== 'ENOENT') throw lstatError
+      }
       const parent = path.dirname(current)
       if (parent === current) return path.resolve(target)
       suffix.push(path.basename(current))
@@ -221,7 +235,16 @@ class ToolRegistry {
     const ruleAllows = rule?.action === 'allow'
     if (!ruleAllows && tool.requiresApproval && !opts.approved) {
       // 2026-08-04 授权架构重构：preApproval 裁决（如 bash 只读命令自动执行）——原一律 need-approval（授权疲劳根因：ls/cat 也弹卡）
-      const pre = await tool.preApproval?.(args, opts)
+      let pre: { auto: boolean; reason?: string } | undefined
+      try {
+        pre = await tool.preApproval?.(args, opts)
+      } catch (e) {
+        // P1 修复：realpath 异常（ENOTDIR/EACCES/ELOOP）不能穿透 IPC（否则工具卡永久 pending）
+        return {
+          ok: false,
+          error: `预检失败：${e instanceof Error ? e.message : String(e)}`,
+        }
+      }
       if (!pre?.auto) {
         // 2026-08-07 T2（regex-todo）：needApproval 结构化标记——renderer 读字段判定授权卡（不再 includes('授权') 文本匹配）
         return {
@@ -299,9 +322,17 @@ function readExecutor(args: Record<string, unknown>, ctx: { rootPath?: string })
 }
 
 // BC-10：记录真实文件变更（失败不阻断工具执行）
-function recordChange(ctx: { rootPath?: string; sessionId?: string }, filePath: string): void {
+function recordChange(
+  ctx: { rootPath?: string; sessionId?: string },
+  filePath: string,
+  preWrite?: { content: string | null },
+): void {
   try {
-    getChangeSetService().recordMutation(ctx.sessionId ?? ctx.rootPath ?? 'default', filePath)
+    getChangeSetService().recordMutation(
+      ctx.sessionId ?? ctx.rootPath ?? 'default',
+      filePath,
+      preWrite,
+    )
   } catch {
     /* 变更集记录失败不影响写入本身 */
   }
@@ -314,10 +345,18 @@ async function writeExecutor(
   const filePath = resolvePath(args.path, ctx)
   await assertNoSymlinkEscape(filePath, ctx.rootPath, ctx.sessionId)
   await fs.mkdir(path.dirname(filePath), { recursive: true })
+  // 写前捕获原内容（快照失败也不能把已存在文件误判为新建）；非 ENOENT 读取失败直接中止
+  let preWrite: { content: string | null }
+  try {
+    preWrite = { content: await fs.readFile(filePath, 'utf-8') }
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e
+    preWrite = { content: null }
+  }
   // 先备份后写（基线 §11）：已存在文件写前快照 .nf-bak（新文件无旧内容——回滚语义为无快照）
   takeSnapshot(filePath)
   await fs.writeFile(filePath, String(args.content ?? ''), 'utf-8')
-  recordChange(ctx, filePath)
+  recordChange(ctx, filePath, preWrite)
   return { file: filePath, bytes: String(args.content ?? '').length, snapshot: true }
 }
 
@@ -334,7 +373,7 @@ async function editExecutor(
   // 先备份后写：替换前快照（回滚恢复原样）
   takeSnapshot(filePath)
   await fs.writeFile(filePath, content.replace(oldText, newText), 'utf-8')
-  recordChange(ctx, filePath)
+  recordChange(ctx, filePath, { content })
   return { file: filePath, snapshot: true }
 }
 

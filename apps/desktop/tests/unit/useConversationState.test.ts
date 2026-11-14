@@ -7,6 +7,7 @@ import {
   type ConversationState,
 } from '../../src/domain/conversationState'
 import { deriveStateEvents } from '../../src/domain/timeline'
+import { resolveEffectiveDecisionPoint } from '../../src/renderer/useConversationState'
 
 // S3 spec TDD 网格：useConversationState 的转换语义（A-006——reject reason 必传——不变量 8）
 // hook 是 useRef + transition 薄封装（纯函数转换 + diff 事件派生）——L1 直接测底层转换与事件，
@@ -19,6 +20,21 @@ const planPending = (s: ConversationState, summary = 'p'): ConversationState =>
   })
 
 describe('useConversationState 转换语义（A-006：reject reason 必传——不变量 8）', () => {
+  it('system_clarify 副作用按 underlying 决策类型解析', () => {
+    const planState = setPending(initialState(), 'system_clarify', {
+      proposal: { underlying: 'plan', statement: '方案被循环阻塞' },
+      since: 't',
+    })
+    expect(resolveEffectiveDecisionPoint('system_clarify', planState)).toBe('plan')
+    const goalState = setPending(initialState(), 'system_clarify', {
+      proposal: { underlying: 'goal', statement: '目标被循环阻塞' },
+      since: 't',
+    })
+    expect(resolveEffectiveDecisionPoint('system_clarify', goalState)).toBe('goal')
+    expect(resolveEffectiveDecisionPoint('plan', planState)).toBe('plan')
+    // 快照损坏：保守返回原 point（领域层会报缺少 underlying）
+    expect(resolveEffectiveDecisionPoint('system_clarify', initialState())).toBe('system_clarify')
+  })
   it('reject 带 reason → 状态回退 + rejectStreak 递增 + decision.resolved 事件', () => {
     let s = userConfirmed(initialState(), 'goal')
     s = planPending(s)

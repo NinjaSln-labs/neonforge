@@ -8,6 +8,7 @@ import {
   mkdirSync,
   readFileSync,
   renameSync,
+  rmSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs'
@@ -19,7 +20,6 @@ import {
   type ChangeItem,
   type ChangeSet,
 } from '../domain/changeSet.js'
-import { revert as revertFile } from './applyDiff.js'
 
 interface ChangeSetFile {
   sets: Record<string, ChangeSet>
@@ -39,6 +39,18 @@ function readText(filePath: string): string | null {
   } catch {
     return null
   }
+}
+
+/** 变更集自有基线文件（不再复用会被后续快照覆盖的 .nf-bak） */
+function baselineFile(baseFilePath: string, sessionId: string, itemId: string): string {
+  const safeSession = sessionId.replace(/[^A-Za-z0-9._-]/g, '_')
+  return path.join(path.dirname(baseFilePath), 'changeset-baselines', safeSession, `${itemId}.base`)
+}
+
+function writeBaseline(target: string, content: string): void {
+  const dir = path.dirname(target)
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  writeFileSync(target, content, { mode: 0o600 })
 }
 
 export interface RevertResult {
@@ -91,22 +103,62 @@ export class ChangeSetService {
     return this.get(sessionId)
   }
 
-  /** 记录一次真实文件变更（write/edit/diff apply 后调用）。状态直接 applied（执行前已经过授权）。 */
-  recordMutation(sessionId: string, filePath: string): ChangeSet {
+  /** 记录一次真实文件变更（write/edit/diff apply 后调用）。状态直接 applied（执行前已经过授权）。
+   * 首次写入时把写前内容复制为变更集自有基线；后续写入保留首次基线，避免 .nf-bak 被覆盖后回滚错版本。
+   * preWrite：调用方在写入前捕获的原始内容（content=null=新建文件）。缺省时才回退读 .nf-bak——
+   * 快照失败/被任务边界清理时，不能把已存在文件误判为新建（回滚会删文件而不是恢复）。 */
+  recordMutation(
+    sessionId: string,
+    filePath: string,
+    preWrite?: { content: string | null },
+  ): ChangeSet {
     const data = this.loadAll()
     const existing = data.sets[sessionId]
     const at = new Date().toISOString()
+    const itemId = itemIdFor(filePath)
     const afterContent = readText(filePath)
     const afterHash = afterContent === null ? null : hashContent(afterContent)
     const bakPath = `${filePath}.nf-bak`
-    const baseContent = existsSync(bakPath) ? readText(bakPath) : null
-    const baseHash = baseContent === null ? null : hashContent(baseContent)
+    const existingItem = existing?.items.find((i) => i.id === itemId)
+    const baselinePath = baselineFile(this.filePath, sessionId, itemId)
+
+    let baseHash: string | null = existingItem?.baseHash ?? null
+    let snapshotRef: string | null = null
+
+    if (existingItem) {
+      // 已有条目：保留首次基线；旧格式 snapshotRef 若仍与 baseHash 一致，可迁移到自有基线文件
+      if (baseHash !== null) {
+        if (existsSync(baselinePath)) {
+          snapshotRef = baselinePath
+        } else if (existingItem.snapshotRef && existsSync(existingItem.snapshotRef)) {
+          const oldSnapshot = readText(existingItem.snapshotRef)
+          if (oldSnapshot !== null && hashContent(oldSnapshot) === baseHash) {
+            writeBaseline(baselinePath, oldSnapshot)
+            snapshotRef = baselinePath
+          }
+        }
+      }
+    } else {
+      // 新条目：优先用调用方写入前捕获的内容；缺省回退 .nf-bak（本次写入前的内容）
+      let baseContent: string | null
+      if (preWrite) {
+        baseContent = preWrite.content
+      } else {
+        baseContent = existsSync(bakPath) ? readText(bakPath) : null
+      }
+      if (baseContent !== null) {
+        baseHash = hashContent(baseContent)
+        writeBaseline(baselinePath, baseContent)
+        snapshotRef = baselinePath
+      }
+    }
+
     const item: ChangeItem = {
-      id: itemIdFor(filePath),
+      id: itemId,
       path: filePath,
       baseHash,
       afterHash,
-      snapshotRef: existsSync(bakPath) ? bakPath : null,
+      snapshotRef,
       status: 'applied',
     }
     if (!existing) {
@@ -131,19 +183,19 @@ export class ChangeSetService {
       })
       return applied
     }
-    let items = existing.items
-    const found = items.some((i) => i.id === item.id)
-    items = found
-      ? items.map((i) =>
+    const found = Boolean(existingItem)
+    const items = found
+      ? existing.items.map((i) =>
           i.id === item.id
             ? { ...i, afterHash, snapshotRef: item.snapshotRef, status: 'applied' as const }
             : i,
         )
-      : [...items, item]
+      : [...existing.items, item]
     const next: ChangeSet = {
       ...existing,
       items,
-      status: 'applied',
+      // 其他变更项仍有冲突时不得把整集状态洗成 applied（否则回滚会静默跳过冲突）
+      status: items.some((i) => i.status === 'conflicted') ? 'conflicted' : 'applied',
       updatedAt: at,
     }
     data.sets[sessionId] = next
@@ -187,7 +239,10 @@ export class ChangeSetService {
     if (!set) return { ok: false, reverted: [], conflicted: [], error: '无变更集' }
     let current = set
     const reverted: string[] = []
-    const conflicted: string[] = []
+    // 已处于 conflicted 的项也必须在结果中暴露（不能因状态被洗掉而静默跳过）
+    const conflicted: string[] = set.items
+      .filter((i) => i.status === 'conflicted')
+      .map((i) => i.path)
     const outcomes: Record<string, boolean> = {}
     for (const item of set.items) {
       if (item.status !== 'applied') continue
@@ -210,10 +265,26 @@ export class ChangeSetService {
         }
         continue
       }
-      const r = revertFile(item.path)
-      outcomes[item.id] = r.ok
-      if (r.ok) reverted.push(item.path)
-      else conflicted.push(item.path)
+      // 只使用变更集自有基线（或旧格式快照且内容哈希仍等于 baseHash）
+      const baseline = item.snapshotRef ? readText(item.snapshotRef) : null
+      if (baseline === null || hashContent(baseline) !== item.baseHash) {
+        current = markConflict(current, item.id, item.baseHash, nowHash)
+        outcomes[item.id] = false
+        conflicted.push(item.path)
+        continue
+      }
+      try {
+        const tmp = `${item.path}.nf-restore`
+        const dir = path.dirname(item.path)
+        if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+        writeFileSync(tmp, baseline, { mode: 0o600 })
+        renameSync(tmp, item.path)
+        outcomes[item.id] = true
+        reverted.push(item.path)
+      } catch {
+        outcomes[item.id] = false
+        conflicted.push(item.path)
+      }
     }
     // 冲突项已是 conflicted（revertChangeSet 跳过非 applied 项）
     const next = revertChangeSet(current, outcomes)
@@ -246,5 +317,17 @@ export class ChangeSetService {
     const data = this.loadAll()
     delete data.sets[sessionId]
     this.saveAll(data)
+    try {
+      rmSync(
+        path.join(
+          path.dirname(this.filePath),
+          'changeset-baselines',
+          sessionId.replace(/[^A-Za-z0-9._-]/g, '_'),
+        ),
+        { recursive: true, force: true },
+      )
+    } catch {
+      /* 清理失败不阻断 */
+    }
   }
 }

@@ -134,10 +134,10 @@
 
 | 目标领域 | 证据 | 说明 |
 | :--- | :--- | :--- |
-| BC-10 变更与版本 | 历史证据：`M/applyDiff.ts`（snapshot/revert）、`M/ipc.ts`（`delivery:apply-diff/revert-diff`）、`R/DeliveryPanel.tsx`（审核 UI）；实现：`domain/changeSet.ts`、`main/changeSetService.ts`、`main/gitBridge.ts`、`ipc.ts` `changeset:*`/`git:read` | 已落地（2026-11-14）：变更集状态机 + 基线哈希 + 冲突回滚 |
-| BC-11 任务编排 | 历史证据：`R/MainWorkspace.tsx` TaskPanel 占位；实现：`domain/taskQueue.ts`、`main/taskQueueStore.ts`、`ipc.ts` `queue:*`、TaskPanel 队列 UI | 已落地（2026-11-14）：单活跃队列 + 暂停/恢复/重排 + 授权阻塞同步 |
-| BC-12 用量与成本 | 历史证据：TaskPanel“本轮用量”仅前缀缓存、`M/gateway.ts` 未解析 usage；实现：`domain/usageLedger.ts`、`main/usageStore.ts`、`main/budgetStore.ts`、`gateway.ts` usage 解析、`ipc.ts` `usage:*`/`budget:*` | 已落地（2026-11-14）：token/成本/缓存口径 + append-only 台账 + 预算提醒/暂停 |
-| BC-13 扩展与集成 | 历史证据：`M/pluginSystem.ts:19-25`（`mcp-bridge`/`git`/`stats` 占位）、`M/ipc.ts` `plugins:*`；实现：`domain/extension.ts`、`main/pluginSystem.ts`、`main/mcpClient.ts`、`main/mcpConfig.ts`、`main/mcpManager.ts`、`main/gitBridge.ts`、`ipc.ts` `extensions:*`/`mcp:*`/`git:read` | 已落地（2026-11-14）：注册/信任/生命周期 + MCP stdio + Git 只读桥 |
+| BC-10 变更与版本 | 历史证据：`M/applyDiff.ts`（snapshot/revert）、`M/ipc.ts`（`delivery:apply-diff/revert-diff`）、`R/DeliveryPanel.tsx`（审核 UI）；实现：`domain/changeSet.ts`、`main/changeSetService.ts`、`main/gitBridge.ts`、`ipc.ts` `changeset:*`/`git:read` | 已落地（2026-11-14）：变更集状态机 + 自有基线（多次写入回滚到首次基线，快照缺失时不误删原文件）+ 冲突回滚 |
+| BC-11 任务编排 | 历史证据：`R/MainWorkspace.tsx` TaskPanel 占位；实现：`domain/taskQueue.ts`、`main/taskQueueStore.ts`、`ipc.ts` `queue:*`、TaskPanel 队列 UI | 已落地（2026-11-14）：单活跃队列 + 暂停/恢复/重排 + 授权阻塞同步；授权拒绝不自动恢复 |
+| BC-12 用量与成本 | 历史证据：TaskPanel“本轮用量”仅前缀缓存、`M/gateway.ts` 未解析 usage；实现：`domain/usageLedger.ts`、`main/usageStore.ts`、`main/budgetStore.ts`、`main/priceStore.ts`、`gateway.ts` usage 解析、`ipc.ts` `usage:*`/`budget:*`/`pricing:*` | 已落地（2026-11-14）：token/成本/缓存口径 + append-only 台账 + 月度预算 + 本机价格表（未配置时成本为 unknown） |
+| BC-13 扩展与集成 | 历史证据：`M/pluginSystem.ts:19-25`（`mcp-bridge`/`git`/`stats` 占位）、`M/ipc.ts` `plugins:*`；实现：`domain/extension.ts`、`main/pluginSystem.ts`、`main/mcpClient.ts`、`main/mcpConfig.ts`、`main/mcpManager.ts`、`main/gitBridge.ts`、`ipc.ts` `extensions:*`/`mcp:*`/`git:read` | 已落地（2026-11-14）：注册/信任/生命周期 + MCP stdio（UTF-8 分片安全）+ 应用退出清理 MCP 进程 + Git 只读桥 |
 | BC-14 验收与质量门禁 | 历史证据：`R/DeliveryPanel.tsx`（验收勾选）、`R/DoDAlignPanel.tsx:9-13`（演示）、`D/conversationState.ts` 的 `PlanProposal.verificationPlan`；实现：`domain/acceptance.ts`、`main/acceptanceStore.ts`、`ipc.ts` `acceptance:*`、`DeliveryPanel.tsx` 门禁 | 已落地（2026-11-14）：来源派生 + 证据/豁免 + 门禁判定 |
 | 演示面板（非目标域） | `R/DigitalDeliveryPanel.tsx:14-67`、`R/DoDAlignPanel.tsx`、`R/TrustLadderPanel.tsx` | 仅 demo bridge 可达；生产路径不得注入 |
 | 场景卡（产品内容） | `R/scenes.tsx:1`、`R/StartPage.tsx:4`、`R/ConversationPanel.tsx:82` | 不构成业务领域 |

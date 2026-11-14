@@ -1,6 +1,7 @@
 // BC-13 MCP 客户端：stdio JSON-RPC 2.0（initialize → tools/list → tools/call）。
 // 安全边界：进程 spawn 只来自本机用户配置（不含凭据值）；调用必须经 BC-02 授权卡。
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { StringDecoder } from 'node:string_decoder'
 
 export interface McpToolDescriptor {
   name: string
@@ -134,9 +135,22 @@ export function createStdioTransport(config: McpServerConfig): McpTransport {
   }
 
   let buffer = ''
+  const decoder = new StringDecoder('utf8')
+  const MAX_BUFFER = 16_000_000
   const onStdout = (chunk: Buffer) => {
-    buffer += chunk.toString('utf-8')
-    if (buffer.length > 1_000_000) buffer = buffer.slice(-500_000) // 防异常服务器撑爆内存
+    if (closed) return
+    buffer += decoder.write(chunk)
+    // 超长单行不再从头部截断（会破坏 JSON 前缀/id）——直接断开并报错
+    if (buffer.length > MAX_BUFFER) {
+      buffer = ''
+      emitClose('MCP 响应超过 16MB，连接已断开')
+      try {
+        child.kill()
+      } catch {
+        /* ignore */
+      }
+      return
+    }
     let newline = buffer.indexOf('\n')
     while (newline >= 0) {
       const line = buffer.slice(0, newline).trim()
@@ -174,10 +188,10 @@ export function createStdioTransport(config: McpServerConfig): McpTransport {
     onMessage: (handler) => messageHandlers.push(handler),
     onClose: (handler) => closeHandlers.push(handler),
     close: () => {
-      if (closed) return
+      // 即使已被 stdin-error/exit 标记 closed，也要确保子进程被 kill（防残留）
       emitClose('客户端关闭')
       try {
-        child.kill()
+        if (!child.killed) child.kill()
       } catch {
         /* ignore */
       }

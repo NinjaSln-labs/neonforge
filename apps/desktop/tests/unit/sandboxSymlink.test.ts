@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync, readFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import {
@@ -21,6 +21,8 @@ beforeEach(() => {
   writeFileSync(path.join(outside, 'secret.txt'), 'SECRET')
   symlinkSync(path.join(outside, 'secret.txt'), path.join(root, 'link.txt'))
   symlinkSync(outside, path.join(root, 'escape'))
+  // 悬空链接：目标尚不存在（write 不能借此在项目外创建文件）
+  symlinkSync(path.join(outside, 'not-yet.txt'), path.join(root, 'dangling.txt'))
   initTools()
 })
 
@@ -32,6 +34,7 @@ describe('沙箱符号链接（P1-10）', () => {
     expect(await isInSandboxRealpath('normal.txt', root)).toBe(true)
     expect(await isInSandboxRealpath('link.txt', root)).toBe(false)
     expect(await isInSandboxRealpath('escape/new.txt', root)).toBe(false)
+    expect(await isInSandboxRealpath('dangling.txt', root)).toBe(false)
   })
 
   it('read：symlink 逃逸需授权（不再自动放行）', async () => {
@@ -59,5 +62,14 @@ describe('沙箱符号链接（P1-10）', () => {
     )
     expect(writeDir.ok).toBe(false)
     expect(writeDir.error).toMatch(/符号链接/)
+
+    const dangling = await toolRegistry.execute(
+      'write',
+      { path: 'dangling.txt', content: 'PWNED' },
+      { rootPath: root, approved: true },
+    )
+    expect(dangling.ok).toBe(false)
+    expect(dangling.error).toMatch(/符号链接/)
+    expect(existsSync(path.join(outside, 'not-yet.txt'))).toBe(false)
   })
 })

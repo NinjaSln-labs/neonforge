@@ -3,6 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync, appendFileSync } from 'node:fs'
 import { registerIpc } from './ipc.js'
+import { getMcpManager } from './mcpManager.instance.js'
 import { killAllSubprocesses } from './tools.js'
 // 2026-08-06 设计层升级（服务生命周期独立）：服务进程退出清理（与 bash 子进程同路径）
 import { stopAllServices } from './serviceManager.js'
@@ -119,6 +120,7 @@ if (!gotTheLock) {
     // 2026-08-05 用户反馈 1：关窗也清理子进程（单窗口应用——关窗即退出语义；macOS 不 quit 但清理残留）
     killAllSubprocesses()
     stopAllServices() // 2026-08-06 服务生命周期独立：关窗清理服务进程
+    getMcpManager().closeAll() // BC-13：MCP 外部进程随应用关闭清理
     if (process.platform !== 'darwin') app.quit()
   })
 
@@ -127,12 +129,14 @@ if (!gotTheLock) {
   app.on('before-quit', () => {
     killAllSubprocesses()
     stopAllServices() // 2026-08-06 服务生命周期独立
+    getMcpManager().closeAll() // BC-13：MCP 外部进程随应用关闭清理
   })
 
   // 2026-08-05：外部终止（SIGTERM——playwright close/系统关闭）不走 before-quit——兜底清理
   process.on('SIGTERM', () => {
     killAllSubprocesses()
     stopAllServices() // 2026-08-06 服务生命周期独立
+    getMcpManager().closeAll()
     process.exit(0)
   })
 }

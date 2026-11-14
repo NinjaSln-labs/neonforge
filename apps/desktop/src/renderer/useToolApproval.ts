@@ -21,6 +21,8 @@ export interface UseToolApprovalDeps {
   rootPath?: string | null
   sessionId: string
   onToolResult?: (r: { name: string; file?: string; ok: boolean }) => void
+  // P1 修复：授权结果（approved/rejected）——队列恢复不能只看 pendingApproval 变 false
+  onApprovalResolved?: (result: 'approved' | 'rejected') => void
   // 状态机转换（useConversationState）
   applyTool: (r: {
     name: string
@@ -57,6 +59,7 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
     rootPath,
     sessionId,
     onToolResult,
+    onApprovalResolved,
     applyTool,
     grantPlan,
     rejectApproval,
@@ -115,6 +118,7 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
   const approveToolCall = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg): void => {
     tlog('tool.approved', { name: tc.name }, 'system')
     tlog('card.resolved', { card: 'approval', action: 'approve', name: tc.name }, 'system')
+    onApprovalResolved?.('approved')
     // #6 真机 2026-08-30（P1-5——用户点名设计违背）：write/edit 批准即文件级绑定（任务边界内同文件免重复授权）——
     // 原实现仅「允许并记住」按钮绑文件，普通批准只绑单次调用 → 同文件每次修改都弹卡（真机连弹 3 张）。
     // 沙箱内有界（addTrust 内建检查）+ 任务边界清空（clearTrust）——安全底线不变。
@@ -187,6 +191,7 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
     // 2026-08-15 DDD 重建：授权拒绝事件（G2 缺口——原无打点，卡生命周期不可回放）
     tlog('tool.rejected', { name: tc?.name, args: tc?.args }, 'system')
     tlog('card.rejected', { card: 'approval', action: 'reject', name: tc?.name }, 'system')
+    onApprovalResolved?.('rejected')
     setMessages((prev) => {
       const last = prev[prev.length - 1]
       if (!last || last.role !== 'assistant') return prev
@@ -249,7 +254,7 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
   // 快照回滚（write/edit 写前已快照——按 file 匹配更新）
   const revertToolCall = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg): void => {
     if (!tc.file) return
-    void window.neonforge.tools?.revert?.(tc.file).then((r) => {
+    void window.neonforge.tools?.revert?.(tc.file, sessionId).then((r) => {
       setMessages((prev) =>
         prev.map((m) => {
           if (m.role !== 'assistant' || !m.toolCalls) return m

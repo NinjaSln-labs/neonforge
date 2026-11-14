@@ -22,10 +22,25 @@ import {
   type RejectReason,
   type ApprovalRequest,
   type PlanProposal,
+  type SystemClarifyProposal,
 } from '../domain/conversationState'
 import { deriveStateEvents } from '../domain/timeline'
 
 export type ConfirmPoint = 'goal' | 'plan' | 'resolution' | 'system_clarify'
+
+/** P1 修复：system_clarify 是包装决策点——副作用按 underlying 的真实决策类型执行 */
+export function resolveEffectiveDecisionPoint(
+  point: ConfirmPoint,
+  before: ConversationState,
+): ConfirmPoint {
+  if (point !== 'system_clarify') return point
+  const dc = before.decisionContent
+  if (dc?.kind === 'system_clarify') {
+    const underlying = (dc.proposal as SystemClarifyProposal | undefined)?.underlying
+    if (underlying) return underlying
+  }
+  return point
+}
 
 export interface UseConversationStateOpts {
   // 领域事件发出（应用层接 IPC——落盘时间线）
@@ -53,6 +68,9 @@ export function useConversationState(opts?: UseConversationStateOpts) {
     }
     setVersion((v) => v + 1)
   }
+  // P1 修复：system_clarify 是包装决策点——副作用按 underlying 的真实决策类型执行
+  const effectivePoint = (point: ConfirmPoint, before: ConversationState): ConfirmPoint =>
+    resolveEffectiveDecisionPoint(point, before)
   // P1-03：plan 确认镜像带重试（1 次）；失败不阻断已完成的领域转换，但记录错误
   const syncPlanMirror = async (value: boolean): Promise<boolean> => {
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -79,24 +97,28 @@ export function useConversationState(opts?: UseConversationStateOpts) {
     // P1-03：镜像失败重试，避免 renderer 已确认而 main 门控仍关闭（极端时序）；state 转换仍同步完成
     confirm: async (point: ConfirmPoint) => {
       const before = stateRef.current
+      const target = effectivePoint(point, before)
       const r = transition((s) => userConfirmed(s, point))
-      if (point === 'plan') {
+      if (target === 'plan') {
         await syncPlanMirror(true)
         // BC-14：确认前的 decisionContent 是方案快照；确认时派生验收记录（无来源则记录为空）
+        // （system_clarify 包装时内容快照可能是 clarify 摘要——不会伪造 plan proposal）
         const dc = before.decisionContent
         if (dc?.kind === 'plan' && dc.proposal) {
           opts?.onPlanConfirmed?.(dc.proposal as PlanProposal)
         }
-      } else if (point === 'goal') {
+      } else if (target === 'goal') {
         await syncPlanMirror(false)
         opts?.onTaskBoundary?.()
       }
       return r
     },
     reject: async (point: ConfirmPoint, reason: RejectReason) => {
+      const before = stateRef.current
+      const target = effectivePoint(point, before)
       const r = transition((s) => userRejected(s, point, reason))
       // 审计修正（stage-review-2026-08-31 Spec-3）：plan 拒绝 → main 镜像复位（否则硬序门仍开）
-      if (point === 'plan') await syncPlanMirror(false)
+      if (target === 'plan') await syncPlanMirror(false)
       return r
     },
     // approve-files 批准（追加语义——A0 §5；files 已 trustPath 规范化）

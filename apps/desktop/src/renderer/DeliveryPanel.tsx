@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { AcceptanceRecord, DeliveryPackage, GateResult } from './types'
 import { parseDiffLines, type DiffLine } from './diffRender'
 import { IconCheck, IconClock, IconFile, IconRotateCcw, IconX } from './icons'
@@ -37,35 +37,68 @@ export default function DeliveryPanel({
   const [error, setError] = useState<string | null>(null)
   const refreshChangeSet = async (sid?: string) => {
     if (!sid) return
-    const c = await window.neonforge.changeset?.list(sid)
-    setChangeSet(c ? { status: c.status, items: c.items } : null)
+    try {
+      const c = await window.neonforge.changeset?.list(sid)
+      if (sessionIdRef.current !== sid) return
+      setChangeSet(c ? { status: c.status, items: c.items } : null)
+    } catch (e) {
+      if (sessionIdRef.current === sid) setError(e instanceof Error ? e.message : String(e))
+    }
   }
   const revertChangeSetAll = async () => {
     if (!sessionId) return
     setError(null)
-    const r = await window.neonforge.changeset?.revert(sessionId)
-    if (!r) return
-    if (!r.ok) setError(r.error ?? '回滚失败')
-    setApplied(new Set())
-    setReverted(new Set(r.reverted))
-    await refreshChangeSet(sessionId)
+    try {
+      const r = await window.neonforge.changeset?.revert(sessionId)
+      if (!r) return
+      if (!r.ok) setError(r.error ?? '回滚失败')
+      // P1 修复：只移除成功回滚的文件；失败/冲突文件仍保持 applied，避免重新作为待审核 diff 被二次应用
+      setApplied((prev) => {
+        const next = new Set(prev)
+        for (const p of r.reverted) next.delete(p)
+        return next
+      })
+      setReverted(new Set(r.reverted))
+      await refreshChangeSet(sessionId)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
   }
+  // P1 修复：异步响应必须属于当前会话（旧会话迟到响应不得覆盖新会话状态）
+  const sessionIdRef = useRef(sessionId)
+  useEffect(() => {
+    sessionIdRef.current = sessionId
+  }, [sessionId])
   const refreshAcceptance = async (sid?: string) => {
     if (!sid) return
-    const r = await window.neonforge.acceptance?.list(sid)
-    setRecord(r ?? null)
-    const g = await window.neonforge.acceptance?.evaluate(sid)
-    setGate(g ?? null)
+    try {
+      const r = await window.neonforge.acceptance?.list(sid)
+      if (sessionIdRef.current !== sid) return
+      setRecord(r ?? null)
+      const g = await window.neonforge.acceptance?.evaluate(sid)
+      if (sessionIdRef.current !== sid) return
+      setGate(g ?? null)
+    } catch (e) {
+      if (sessionIdRef.current === sid) setError(e instanceof Error ? e.message : String(e))
+    }
   }
   const markAcceptance = async (itemId: string) => {
     if (!sessionId) return
-    const r = await window.neonforge.acceptance?.mark(sessionId, itemId, 'passed', {
-      manualReason: '用户在交付面板手工确认',
-    })
-    if (r) {
-      setRecord(r)
-      const g = await window.neonforge.acceptance?.evaluate(sessionId)
-      setGate(g ?? null)
+    try {
+      const r = await window.neonforge.acceptance?.mark(sessionId, itemId, 'passed', {
+        manualReason: '用户在交付面板手工确认',
+      })
+      if (sessionIdRef.current !== sessionId) return
+      if (r) {
+        setRecord(r)
+        const g = await window.neonforge.acceptance?.evaluate(sessionId)
+        if (sessionIdRef.current !== sessionId) return
+        setGate(g ?? null)
+      }
+    } catch (e) {
+      if (sessionIdRef.current === sessionId) {
+        setError(e instanceof Error ? e.message : String(e))
+      }
     }
   }
   const acceptNoAcceptance = async () => {

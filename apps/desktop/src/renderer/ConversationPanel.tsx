@@ -242,6 +242,7 @@ export default function ConversationPanel({
   onReasoning,
   onWorkingChange,
   onApprovalChange,
+  onApprovalResolved,
   onActionPromiseHint,
   externalRequest,
   onExternalConsumed,
@@ -258,13 +259,16 @@ export default function ConversationPanel({
   activeAuthorizedLogs,
   initialPrompt,
   onSessionStart,
+  sessionId: sessionIdProp,
 }: {
   rootPath?: string | null
+  sessionId?: string // P1 修复：会话 ID 由 MainWorkspace 持有——Tab 切换/重挂载不得生成新会话
   currentFile?: string | null // 08 快捷键 Cmd+E：当前选中文件（@引用——D0 §6）
   onKeyExpired: () => void
   onReasoning?: (text: string) => void
   onWorkingChange?: (working: boolean) => void
   onApprovalChange?: (pending: boolean) => void // 2026-08-04 审计修复（D2）：有待批准工具操作时上报（状态栏提示——键盘用户感知）
+  onApprovalResolved?: (result: 'approved' | 'rejected') => void // P1：授权结果（队列恢复依据）
   onActionPromiseHint?: (hint: string | null) => void // 2026-08-05 用户反馈 2：isActionPromise 提示不插入对话流（污染阅读）——状态栏非侵入提示
   externalRequest?: string | null
   onExternalConsumed?: () => void
@@ -289,12 +293,13 @@ export default function ConversationPanel({
   onSessionStart?: (sessionId: string) => void
 }) {
   // 2026-08-08 会话 ID：进入实际对话（本组件挂载）时生成——决定日志文件归属（timeline-<id>.jsonl / chat-<id>.jsonl）
-  // crypto.randomUUID（Electron renderer secure context 可用）失败降级时间戳+随机
-  const [sessionId] = useState<string>(() =>
+  // P1 修复：优先使用 MainWorkspace 传入的稳定会话 ID；仅独立测试/旧调用方回退到自生成
+  const [generatedSessionId] = useState<string>(() =>
     typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID()
       : `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
   )
+  const sessionId = sessionIdProp ?? generatedSessionId
   const [messages, setMessages] = useState<Msg[]>([])
   const messagesRef = useRef<Msg[]>([])
   useEffect(() => {
@@ -685,8 +690,12 @@ export default function ConversationPanel({
   }, [externalRequest])
   // 2026-08-04 授权架构 v4：任务边界 = 目标确认（新目标任务开始）——清除任务级信任（授权自动收回）
   // 2026-08-07 无阶段重构 S4：原 stageAdvance?.seq（阶段推进）→ goalSeq（目标确认次数——每次确认 = 任务边界，覆盖首确认与后续新任务）
+  const lastGoalSeqRef = useRef(goalSeq ?? 0)
   useEffect(() => {
-    if ((goalSeq ?? 0) > 0) clearTrust()
+    const seq = goalSeq ?? 0
+    // P1 修复：仅「goalseq 增加」才是新任务边界；组件重挂载（Tab 切换/会话恢复）不得清空任务信任与计划快照
+    if (seq > lastGoalSeqRef.current) clearTrust()
+    lastGoalSeqRef.current = seq
   }, [goalSeq])
   // 2026-08-07 无阶段重构修复（执行确认卡删除——dock 顶部全清，用户「最上面的那块都不需要了」）：
   // execConfirmedHandledRef 自动 silent 触发删除——执行确认现在靠用户打字确认词（「可以/确认」）作为普通用户消息
@@ -764,14 +773,15 @@ export default function ConversationPanel({
     const v = verifyCompletion(claim, systemState)
     if (v.ok) {
       evidenceGuideCountRef.current = 0 // 证据通过 → 计数重置
-      // BC-14：把系统复核通过的命令证据绑定到验收项（未覆盖项保留 pending，由用户手工确认）
+      // BC-14：只把「系统复核 ok:true」的命令证据绑定到验收项；自报通过但系统未核验的命令
+      // 不得自动通过验收（未覆盖项保留 pending，由用户手工确认/豁免）
       const verifiedCommands = claim.evidence.verification
         .filter((item) => item.passed !== false)
         .map((item) => item.command)
-        .filter(
-          (cmd) => !systemState || systemState.verificationResults[cmd]?.ok !== false,
-        )
-      void window.neonforge.acceptance?.applyEvidence(sessionId, verifiedCommands)
+        .filter((cmd) => systemState?.verificationResults[cmd]?.ok === true)
+      if (verifiedCommands.length > 0) {
+        void window.neonforge.acceptance?.applyEvidence(sessionId, verifiedCommands)
+      }
       // 核验期间可能已有其它决策点置位（竞态防护——pending 非 none 不覆盖）。
       // A-022（S5 真机 2026-09-06）：直接丢弃 = resolution 不可达死锁（真机实证：核验通过瞬间
       // 残留授权卡 pending 占用 → return → 之后再无重试，forceTool 循环不止）。修正：等 pending
@@ -2481,6 +2491,7 @@ export default function ConversationPanel({
     rootPath,
     sessionId,
     onToolResult,
+    onApprovalResolved,
     applyTool,
     grantPlan,
     rejectApproval,

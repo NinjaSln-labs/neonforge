@@ -135,6 +135,14 @@ export interface NeonForgeBridge {
       state?: { limit: number | null; spent: number; reached: boolean }
     }>
   }
+  pricing: {
+    get: () => Promise<PriceTableView>
+    set: (table: PriceTableView) => Promise<{
+      ok: boolean
+      error?: string
+      table?: PriceTableView
+    }>
+  }
   acceptance: {
     derive: (
       sessionId: string,
@@ -397,6 +405,14 @@ export interface BudgetSettings {
   limitUsd: number | null
   pauseOnReach: boolean
 }
+/** BC-12 价格表（provider:model → 每百万 token 单价） */
+export interface PriceTableView {
+  version: string
+  models: Record<
+    string,
+    { promptPerMillion: number; completionPerMillion: number; cacheHitPerMillion?: number }
+  >
+}
 export interface DeliveryPackage {
   status: 'draft' | 'delivered' | 'closed'
   summary: string // 做了什么（人话摘要）
@@ -465,7 +481,7 @@ export interface NeonForgeTools {
     needApproval?: boolean
     policy?: boolean
   }>
-  revert: (filePath: string) => Promise<{ ok: boolean; error?: string }>
+  revert: (filePath: string, sessionId?: string) => Promise<{ ok: boolean; error?: string }>
   // ticket 14 可撤销：停止当前活动命令（bash 高危——任何时刻可停，不卡死）
   cancel: () => Promise<{ ok: boolean; error?: string }>
 }

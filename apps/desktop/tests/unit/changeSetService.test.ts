@@ -24,9 +24,50 @@ describe('ChangeSetService（BC-10 持久化 + 基线校验）', () => {
     writeFileSync(file, 'new', 'utf-8')
     const set = svc.recordMutation('s1', file)
     expect(set.items).toHaveLength(1)
-    expect(set.items[0]).toMatchObject({ path: file, snapshotRef: `${file}.nf-bak`, status: 'applied' })
+    expect(set.items[0].status).toBe('applied')
+    expect(set.items[0].snapshotRef).toBeTruthy()
+    expect(set.items[0].snapshotRef).not.toBe(`${file}.nf-bak`)
+    expect(existsSync(set.items[0].snapshotRef as string)).toBe(true)
     expect(set.items[0].baseHash).toBeTruthy()
     expect(set.items[0].afterHash).not.toBe(set.items[0].baseHash)
+  })
+
+  it('多次写入：回滚仍恢复首次基线（不被后续 .nf-bak 覆盖）', () => {
+    const file = path.join(proj, 'multi.txt')
+    writeFileSync(file, 'v1', 'utf-8')
+    writeFileSync(`${file}.nf-bak`, 'v1', 'utf-8')
+    writeFileSync(file, 'v2', 'utf-8')
+    svc.recordMutation('s1', file)
+    // 第二次写：takeSnapshot 会把 .nf-bak 覆盖为 v2
+    writeFileSync(`${file}.nf-bak`, 'v2', 'utf-8')
+    writeFileSync(file, 'v3', 'utf-8')
+    svc.recordMutation('s1', file)
+    const r = svc.revert('s1')
+    expect(r.ok).toBe(true)
+    expect(readFileSync(file, 'utf-8')).toBe('v1')
+  })
+
+  it('冲突状态不被后续写入洗掉；重复回滚仍报告冲突', () => {
+    const a = path.join(proj, 'ca.txt')
+    const b = path.join(proj, 'cb.txt')
+    writeFileSync(a, 'a1')
+    writeFileSync(`${a}.nf-bak`, 'a1')
+    writeFileSync(a, 'a2')
+    svc.recordMutation('s1', a)
+    writeFileSync(a, 'external')
+    const first = svc.revert('s1')
+    expect(first.ok).toBe(false)
+    expect(first.conflicted).toContain(a)
+    expect(svc.get('s1')?.status).toBe('conflicted')
+    // 另一个文件写入后，冲突项仍必须保留
+    writeFileSync(b, 'b1')
+    writeFileSync(`${b}.nf-bak`, 'b1')
+    writeFileSync(b, 'b2')
+    svc.recordMutation('s1', b)
+    expect(svc.get('s1')?.status).toBe('conflicted')
+    const second = svc.revert('s1')
+    expect(second.conflicted).toContain(a)
+    expect(second.ok).toBe(false)
   })
 
   it('revert：恢复快照内容；状态 reverted', () => {
@@ -52,6 +93,28 @@ describe('ChangeSetService（BC-10 持久化 + 基线校验）', () => {
     expect(r.ok).toBe(false)
     expect(readFileSync(file, 'utf-8')).toBe('external')
     expect(svc.get('s1')?.status).toBe('conflicted')
+  })
+
+  it('preWrite 提供时即使 .nf-bak 缺失，回滚恢复原文件而非删除', () => {
+    const file = path.join(proj, 'snapshot-missing.txt')
+    writeFileSync(file, 'original', 'utf-8')
+    // 模拟快照失败/已被任务边界清理：写后无 .nf-bak
+    writeFileSync(file, 'changed', 'utf-8')
+    svc.recordMutation('s1', file, { content: 'original' })
+    expect(svc.get('s1')?.items[0].baseHash).toBeTruthy()
+    const r = svc.revert('s1')
+    expect(r.ok).toBe(true)
+    expect(readFileSync(file, 'utf-8')).toBe('original')
+  })
+
+  it('preWrite content=null 表示新建文件：回滚删除', () => {
+    const file = path.join(proj, 'created.txt')
+    writeFileSync(file, 'new content', 'utf-8')
+    svc.recordMutation('s1', file, { content: null })
+    expect(svc.get('s1')?.items[0].baseHash).toBeNull()
+    const r = svc.revert('s1')
+    expect(r.ok).toBe(true)
+    expect(existsSync(file)).toBe(false)
   })
 
   it('clear / 空会话：返回 null 且不阻断', () => {
