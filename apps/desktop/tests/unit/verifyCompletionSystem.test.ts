@@ -162,4 +162,35 @@ describe('verifyCompletion（V1a 系统复核 + V1b diff 派生——S2 扩展�
     const r = verifyCompletion(c)
     expect(r.ok).toBe(true) // 纯逻辑：只读 + passed → 通过（无系统复核也过——S4 接线后必传）
   })
+
+  // P0-05：系统只代跑本机/本地网络的只读证据；外网只读证据标 unverifiable 且不自动执行
+  it('外网只读证据不可系统代跑（unverifiable）；localhost 只读可代跑', () => {
+    const external = claim({
+      evidence: {
+        verification: [{ command: 'curl -s https://example.com', passed: true }],
+        diffs: [],
+        pendingQuestions: [],
+      },
+    })
+    const r1 = verifyCompletion(
+      external,
+      mockSystemState({ 'curl -s https://example.com': { ok: true } }),
+    )
+    expect(r1.ok).toBe(false)
+    expect(r1.unverifiable).toContain('curl -s https://example.com')
+
+    const local = claim({
+      evidence: {
+        verification: [{ command: 'curl -s http://localhost:3000', passed: true }],
+        diffs: [],
+        pendingQuestions: [],
+      },
+    })
+    const r2 = verifyCompletion(
+      local,
+      mockSystemState({ 'curl -s http://localhost:3000': { ok: true } }),
+    )
+    expect(r2.ok).toBe(true)
+    expect(r2.unverifiable).toEqual([])
+  })
 })

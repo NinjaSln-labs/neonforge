@@ -18,7 +18,6 @@ import {
   isCommunicationLike,
   isConfirmIntent,
   isDoneLike,
-  parseExecutionPlan,
   summarizeCapability,
   // V1.5-S4 退役——goalFallbackTrigger 仅剩兜底探测（text_fallback 路径），见 ADR-009
   goalFallbackTrigger,
@@ -478,7 +477,6 @@ export default function ConversationPanel({
     setPending: setPendingState,
     clearPending,
     resetRejectStreak,
-    addPlannedFiles,
     setFilesApproved,
     restorePlanned,
   } = useConversationState({
@@ -877,9 +875,8 @@ export default function ConversationPanel({
               { ok: true, summary: p.summary, files: p.files.map((f) => f.path) },
               'assistant',
             )
-            // V1.5 S3：工具路径方案清单并入 plannedFiles（与文本路径 parseExecutionPlan 等价——
-            // 任务完成度/清单内 write 放行的依赖源；trustPath 规范化与文本路径统一比较基准）
-            addPlannedFiles(p.files.map((f) => trustPath(f.path)))
+            // P0-03（不变量 6）：提议阶段不写 plannedFiles——方案只有用户确认后才形成写入边界。
+            // 派生唯一入口：userDecided(plan, confirm) → derivePlannedFiles；拒绝不落清单。
             setPendingState('plan', { proposal: content.proposal, since: content.since })
             protocolResult = '执行方案提议已提交——等待用户确认执行'
           } else {
@@ -1142,15 +1139,9 @@ export default function ConversationPanel({
         )
         void verifyThenResolve(claim)
       }
-      // 2026-08-07 无阶段重构 S5：执行方案清单解析——模型输出【执行方案】块 → 并入 plannedFiles（任务完成度——deepcode unimplemented_files 借鉴）
-      // 2026-08-08 根因 3 修复③：trustPath 规范化（模型写相对路径如 game.js）——与 approvePlan 的绝对路径清单（1036 行）统一比较基准
-      // V1.5 S3（S3-St-3 修正）：fallbackDetected（文本方案标记降级）时不并入 plannedFiles——
-      // 降级不产卡（无确认执行），清单并入会让 write 绕过确认自动放行（语义漏洞）；
-      // 工具路径 propose_plan 的 plannedFiles 并入在事件层（propose_plan 分支）——正常通道不受影响
-      const planFiles = !fallbackDetected ? parseExecutionPlan(content) : []
-      if (planFiles.length > 0) {
-        addPlannedFiles(planFiles.map((f) => trustPath(f)))
-      }
+      // P0-03（不变量 6）：文本【执行方案】只用于展示/决策内容，不并入 plannedFiles——
+      // 文本降级不产生确认卡，提前并入会让 write 绕过用户确认自动放行。
+      // 清单唯一派生点仍是用户确认方案（userDecided(plan, confirm) → derivePlannedFiles）。
       // 2026-08-05 体验反馈（用户「最后一条像卡住」）：模型承诺行动（「我先…再…」）但没调工具 → 提示用户可回复「继续」
       // （非卡死——working 已释放；判定收紧：问句/征求同意/「确认/思考」类对话行为不触发；不限于开发阶段——任何阶段说了要看/读/写就该做）
       // 2026-08-05 自动化实测发现（需求阶段偶发误判）：需求阶段（flowStage=0）模型「我先…再确认/再问」是问答引导（STAGE_HINT 需求阶段禁止工具），

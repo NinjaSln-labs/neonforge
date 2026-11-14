@@ -885,7 +885,7 @@ describe('继承锁定——classifyReadonly/classifyAction（缝隙 4 单一权
     expect(classifyReadonly('bash', 'curl -s http://localhost:6696')).toBe('network-read')
     expect(classifyReadonly('bash', 'curl -s -X HEAD https://example.com')).toBe('network-read')
     expect(classifyReadonly('bash', 'curl -X POST -d x http://localhost')).toBe('hazardous')
-    expect(classifyReadonly('bash', 'wget -q https://example.com')).toBe('network-read')
+    expect(classifyReadonly('bash', 'wget --spider https://example.com')).toBe('network-read')
   })
 
   it('空命令/重定向 → hazardous（fail-closed）', () => {
@@ -1388,5 +1388,60 @@ describe('system_clarify 决策点（ADR-010）', () => {
     s = userDecided(s, 'goal', { confirm: false, reason: { kind: 'direction' } }) // streak 2
     s = setPending(s, 'goal')
     expect(detectUnproductiveDialogue(s)).toBe('forced-clarify')
+  })
+})
+
+// ============================================================================
+// 安全修正（P0-02——只读判定的危险参数形态，fail-closed）
+// ============================================================================
+describe('安全修正——危险参数形态判为 hazardous', () => {
+  it('sed 原地写 → hazardous；只读脚本仍 readonly', () => {
+    expect(classifyReadonly('bash', 'sed -i s/a/b/ a.txt')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'sed --in-place s/a/b/ a.txt')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'sed -i.bak s/a/b/ a.txt')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'sed -n 1,5p a.txt')).toBe('readonly')
+  })
+
+  it('find 执行/删除/输出 → hazardous；纯查找仍 readonly', () => {
+    expect(classifyReadonly('bash', 'find . -name "*.tmp" -delete')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'find . -name "*.md" -exec rm {} \\;')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'find . -name "*.md" -fprint out.txt')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'find . -name "*.md"')).toBe('readonly')
+  })
+
+  it('awk system/print 重定向 → hazardous；纯打印仍 readonly', () => {
+    expect(classifyReadonly('bash', 'awk \'BEGIN{system("rm -rf /")}\'')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'awk \'{print > "out"}\' a.txt')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'awk \'{print $1}\' a.txt')).toBe('readonly')
+  })
+
+  it('sort -o / rg --pre → hazardous', () => {
+    expect(classifyReadonly('bash', 'sort -o out.txt a.txt')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'sort --output=out.txt a.txt')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'rg --pre "sh -c" pattern')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'sort a.txt')).toBe('readonly')
+  })
+
+  it('git branch/remote 写形态 → hazardous；只读形态仍放行', () => {
+    expect(classifyReadonly('bash', 'git branch -D feature')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'git branch -m old new')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'git remote add origin https://x')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'git remote set-url origin https://x')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'git branch')).toBe('readonly')
+    expect(classifyReadonly('bash', 'git branch --list')).toBe('readonly')
+    expect(classifyReadonly('bash', 'git remote -v')).toBe('readonly')
+  })
+
+  it('wget 默认下载 → hazardous；spider/stdout → network-read', () => {
+    expect(classifyReadonly('bash', 'wget https://example.com/a.zip')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'wget -q https://example.com')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'wget --spider https://example.com')).toBe('network-read')
+    expect(classifyReadonly('bash', 'wget -qO- https://example.com')).toBe('network-read')
+  })
+
+  it('链中任一段危险参数形态 → 整条 hazardous', () => {
+    expect(classifyReadonly('bash', 'ls && sed -i s/a/b/ a.txt')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'cat a.txt | sort -o out.txt')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'ls && cat a.txt')).toBe('readonly')
   })
 })

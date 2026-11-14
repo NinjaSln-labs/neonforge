@@ -405,6 +405,64 @@ const GIT_READONLY_SUBCOMMANDS: ReadonlySet<string> = new Set([
   'remote',
 ])
 
+// P0-02：危险参数形态（参数级判定——只读命令头不等于只读）。
+// 背景：sed/find/awk/sort/rg/git 的写能力在参数里，仅看命令头会把 `sed -i`、`find -delete`
+// 判成只读而免授权（fail-open）。以下命中任一即 hazardous。
+function segmentTokens(seg: string): { head: string; args: string[] } {
+  const tokens = seg.trim().split(/\s+/).filter(Boolean)
+  if (tokens[0] === 'sudo') tokens.shift()
+  return { head: tokens[0] ?? '', args: tokens.slice(1) }
+}
+
+function hasDangerousArgumentShape(seg: string): boolean {
+  const { head, args } = segmentTokens(seg)
+  const joined = args.join(' ')
+  switch (head) {
+    case 'sed': {
+      // -i / --in-place / 组合短标志（-ni）/ BSD 备份后缀（-i.bak）；脚本内 w 写文件命令
+      const inPlace = args.some(
+        (t) => /^--in-place(?:=.*)?$/.test(t) || /^-([a-zA-Z.]*)i([a-zA-Z.]*)$/.test(t),
+      )
+      const writesFile = /(?:^|;)\s*w\s+\S+/.test(joined)
+      return inPlace || writesFile
+    }
+    case 'find':
+      // -exec/-execdir 执行命令；-delete 删除；-fprint/-fprintf/-fls 写文件；-ok/-okdir 执行
+      return args.some((t) =>
+        /^(-exec|-execdir|-delete|-fprint|-fprintf|-fls|-ok|-okdir)$/.test(t),
+      )
+    case 'awk':
+      // system() 执行命令；print/printf 重定向到文件或管道到命令
+      return /system\s*\(|\bprint(?:f)?\s*(?:>|\|)/.test(joined)
+    case 'sort':
+      return args.some((t) => t === '-o' || /^--output(?:=.*)?$/.test(t))
+    case 'rg':
+      return args.some((t) => /^--pre(?:=.*)?$/.test(t)) // --pre 执行外部命令
+    case 'git': {
+      const sub = args[0] ?? ''
+      if (sub === 'branch') {
+        // 创建/删除/重命名/复制/强制移动引用
+        return args
+          .slice(1)
+          .some((t) =>
+            /^(-d|-D|-m|-M|-c|-C|-f|--delete|--move|--copy|--force|--set-upstream-to)(?:=.*)?$/.test(
+              t,
+            ),
+          )
+      }
+      if (sub === 'remote') {
+        // 仅列出/查询只读；add/remove/rename/set-url/prune/set-head 均为写
+        const rest = args.slice(1).filter((t) => t !== '-v' && t !== '--verbose')
+        if (rest.length === 0) return false
+        return !(rest[0] === 'show' || rest[0] === 'get-url' || rest[0] === '-h' || rest[0] === '--help')
+      }
+      return false
+    }
+    default:
+      return false
+  }
+}
+
 /** 动作只读判定（升级版——设计 §3.3）：readonly / network-read / hazardous（fail-closed） */
 export function classifyReadonly(name: string, command?: string): ActionKind {
   if (name === 'write' || name === 'edit') return 'hazardous'
@@ -414,14 +472,21 @@ export function classifyReadonly(name: string, command?: string): ActionKind {
   // 网络只读（curl/wget GET/HEAD 无写副作用 → network-read；拍板 3：localhost 自动放行，外网 ask——S6 策略落地在 actionGate）
   const netMatch = c.match(/^(curl|wget)\s+/)
   if (netMatch) {
+    const tool = netMatch[1]
+    if (tool === 'wget') {
+      // P0-02：wget 默认下载落盘 → hazardous；只有 --spider / 输出到 stdout 才是网络只读
+      if (/(?:^|\s)(?:--help|-h|--version|-V)(?:\s|$)/.test(c)) return 'readonly'
+      const stdoutOnly = /(?:^|\s)(?:--spider|-O-|-qO-|--output-document=-)(?:\s|$)/.test(c)
+      return stdoutOnly ? 'network-read' : 'hazardous'
+    }
     const method = c.match(/-X\s+(GET|HEAD)\b|--request\s+(GET|HEAD)\b/)
     // 写副作用标志（S6 复审补全——curl -o/-O/-T/-a/-C/-J 与 wget -O 大小写敏感漏网→localhost 自动放行下成洞）：
     // -o/--output 输出文件；-O/--remote-name/-J 落盘 CWD；-T/--upload-file 上传（写远端）；-a/--append 追加；-C/--continue-at 续传
     // #6 真机 2026-08-30（P2-5）：`-o /dev/null` 例外——健康检查惯用法（不落盘），不计写副作用
     const hasBodyFlag =
-      /-d\b|--data\b|--data-raw\b|-F\b|--form\b|-X\s+(POST|PUT|PATCH|DELETE)\b|-o(?!\s*\/dev\/null\b)|--output(?!\s*\/dev\/null\b)|--remote-name\b|-J\b|-T\b|--upload-file\b|-a\b|--append\b|-C\b|--continue-at\b|-O\b/.test(
+      /-d\b|--data\b|--data-raw\b|-F\b|--form\b|-X\s+(POST|PUT|PATCH|DELETE)\b|-o(?!\s*\/dev\/null\b)|--output(?!\s*\/dev\/null\b)|--output-document\b|--remote-name\b|-J\b|-T\b|--upload-file\b|-a\b|--append\b|-C\b|--continue-at\b|-O\b|-K\b|--config\b|--cookie-jar\b|--trace(?:-ascii)?\b|--hsts\b/.test(
         c,
-      ) // -O 大写（wget -O file——大小写敏感补全）
+      ) // -O 大写（wget -O file——大小写敏感补全）；-K/--config/--cookie-jar/--trace/--hsts 均为写副作用
     if (!hasBodyFlag && (!method || method[1] === 'GET' || method[1] === 'HEAD'))
       return 'network-read'
     return 'hazardous'
@@ -437,6 +502,10 @@ export function classifyReadonly(name: string, command?: string): ActionKind {
   // 链分隔：`2>&1` 中的 `&` 是 stderr 重定向不是链分隔——先保护再分割（原 `[;&|]` 把 2>&1 误拆成 2> 和 1）
   const protectedCmd = c.replace(/2>&1|2>>1|2>>?\/dev\/null/g, '§§§') // 保护 stderr 重定向（§ 非链分隔符）
   const segments = protectedCmd.split(/[;&|]/).map((seg) => seg.trim().replace(/§§§/g, '2>&1'))
+  // P0-02：参数级危险形态——链中任一段命中即 hazardous（如 `ls && sed -i ...`）。
+  // awk 引号内的 `print | "cmd"` 会被链分割误拆，先对整条命令做一次保守判定。
+  if (/\bawk\b.*(?:system\s*\(|\bprint(?:f)?\s*\|)/.test(c)) return 'hazardous'
+  if (segments.some((seg) => hasDangerousArgumentShape(seg))) return 'hazardous'
   if (
     segments.length > 1 &&
     segments.some(
@@ -678,10 +747,12 @@ export function deriveDecisionPoint(
 
 // —— 完成对账（不变量 4：无证据不进入对账——verifyCompletion 纯逻辑部分 + V1a/V1b 系统核验 S2 扩展） ——
 
-/** 验证命令是否系统可代跑（只读——V1a 核验范围；network-read 同为可代跑核验） */
-function isSystemVerifiable(command: string): boolean {
+/** 验证命令是否系统可代跑：只读命令；网络只读仅限 localhost（P0-05——外网证据不自动代跑）。
+ * 单源导出，main 侧 verification.ts 直接复用（避免两份判定漂移）。 */
+export function isSystemVerifiable(command: string): boolean {
   const kind = classifyReadonly('bash', command)
-  return kind === 'readonly' || kind === 'network-read'
+  if (kind === 'readonly') return true
+  return kind === 'network-read' && isLocalhostCommand(command)
 }
 
 /** 证据可核验性（不变量 4 单源——completionEvidenceComplete 与 verifyCompletion.ok 共用）：

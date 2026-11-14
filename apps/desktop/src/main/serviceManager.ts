@@ -15,6 +15,7 @@ import {
   ensureEnvironment,
   getEnvironment,
 } from './envManager.js'
+import { isKillablePid } from './processGuard.js'
 
 export interface ServiceEntry {
   rootPath: string
@@ -250,29 +251,33 @@ export async function checkServer(
   }
 }
 
-// 停止服务（只停自己起的）
+// 停止服务（只停自己起的；P0-04：无效 pid 跳过 kill——kill(-0) 会打当前进程组）
 export function stopServer(rootPath: string): { ok: true; data: { stopped: boolean } } {
   const s = services.get(rootPath)
   if (!s) return { ok: true, data: { stopped: false } }
-  try {
-    process.kill(-s.pid, 'SIGKILL')
-  } catch {
+  const killable = isKillablePid(s.pid)
+  if (killable) {
     try {
-      process.kill(s.pid, 'SIGKILL')
+      process.kill(-s.pid, 'SIGKILL')
     } catch {
-      /* 已退出 */
+      try {
+        process.kill(s.pid, 'SIGKILL')
+      } catch {
+        /* 已退出 */
+      }
     }
   }
   services.delete(rootPath)
   releasePort(rootPath)
-  return { ok: true, data: { stopped: true } }
+  return { ok: true, data: { stopped: killable } }
 }
 
 // 退出清理（main.ts before-quit/window-all-closed/SIGTERM 调用）
 export function stopAllServices(): void {
   for (const p of serviceProcs) {
+    if (!isKillablePid(p.pid)) continue // P0-04：不向 -0/0 发信号
     try {
-      process.kill(-(p.pid ?? 0), 'SIGKILL')
+      process.kill(-p.pid, 'SIGKILL')
     } catch {
       try {
         p.kill('SIGKILL')

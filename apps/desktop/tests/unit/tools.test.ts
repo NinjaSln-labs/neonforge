@@ -12,6 +12,7 @@ import {
   isValidOpenUrl,
   isReadOnlyBash,
 } from '../../src/main/tools'
+import { isKillablePid } from '../../src/main/processGuard'
 import { getPlannedFilesStore } from '../../src/main/plannedFilesStore.instance'
 
 // 2026-08-06 open 工具（用户「帮我打开」）：mock electron shell——vitest node 环境无 electron
@@ -154,7 +155,11 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     const outside = '/tmp/nf-unit-tools-outside.json'
     writeFileSync(outside, '{"k":"outside"}\n', 'utf-8')
     try {
-      const r3 = await toolRegistry.execute('read', { path: outside }, { rootPath: TMP })
+      const r3 = await toolRegistry.execute(
+        'read',
+        { path: outside },
+        { rootPath: TMP, approved: true },
+      )
       expect(r3.ok).toBe(true)
       expect(String(r3.data)).toContain('outside')
     } finally {
@@ -165,11 +170,49 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     const r4 = await toolRegistry.execute(
       'read',
       { path: '/Users/nobody/NeonForge/package.json' },
-      { rootPath: TMP },
+      { rootPath: TMP, approved: true },
     )
     expect(r4.ok).toBe(true)
     expect(String(r4.data)).not.toContain(`${TMP}/Users`)
     expect(String(r4.data)).toContain('找不到文件')
+  })
+
+  // P0-01：读取边界——项目根内自动；根外必须授权；无 rootPath 也必须授权
+  it('read：项目外路径需授权（根内自动/根外授权）', async () => {
+    const outside = '/tmp/nf-unit-tools-outside-auth.txt'
+    writeFileSync(outside, 'secret-outside', 'utf-8')
+    try {
+      const denied = await toolRegistry.execute('read', { path: outside }, { rootPath: TMP })
+      expect(denied.ok).toBe(false)
+      expect(denied.needApproval).toBe(true)
+      expect(denied.data).toBeUndefined()
+
+      const granted = await toolRegistry.execute(
+        'read',
+        { path: outside },
+        { rootPath: TMP, approved: true },
+      )
+      expect(granted.ok).toBe(true)
+      expect(granted.data).toBe('secret-outside')
+
+      const noRoot = await toolRegistry.execute('read', { path: outside }, {})
+      expect(noRoot.ok).toBe(false)
+      expect(noRoot.needApproval).toBe(true)
+    } finally {
+      rmSync(outside, { force: true })
+    }
+  })
+
+  // P0-04：进程清理守卫——无效 pid 不得进入 kill(-pid)（-0 会向当前进程组发信号）
+  it('isKillablePid：只接受正整数', () => {
+    expect(isKillablePid(1234)).toBe(true)
+    expect(isKillablePid(0)).toBe(false)
+    expect(isKillablePid(-1)).toBe(false)
+    expect(isKillablePid(-1234)).toBe(false)
+    expect(isKillablePid(1.5)).toBe(false)
+    expect(isKillablePid(Number.NaN)).toBe(false)
+    expect(isKillablePid(undefined)).toBe(false)
+    expect(isKillablePid(null)).toBe(false)
   })
 
   it('search：关键词检索（Layer2 CodeRAG——agentic grep 模式）返回命中+行号+片段', async () => {

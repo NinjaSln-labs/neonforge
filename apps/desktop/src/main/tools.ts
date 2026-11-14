@@ -23,6 +23,7 @@ import { logTimeline } from './timelineLogger.js'
 import { classifyReadonly, isLocalhostCommand } from '../domain/conversationState.js'
 import { configStore } from './configStore.js'
 import { webSearch, webFetch } from './webTools.js'
+import { isKillablePid } from './processGuard.js'
 
 // ToolRegistry（ticket 10 / A0 §2）：工具注册与执行分发
 // 边界判定：ToolRegistry=目录与分发；ShellAgent=bash 执行；Gateway=工具调用修复（02 已实现）
@@ -222,6 +223,10 @@ function readExecutor(args: Record<string, unknown>, ctx: { rootPath?: string })
       // 2026-08-06 用户反馈「读取工具先读不存在（盲读）——任何时候都应该先确认有没有文件」：文件不存在时列出父目录内容——
       // 模型知道目录里有什么（不再盲读试探浪费轮次）；0-1 空目录 read package.json（未创建）→ 提示目录内容 + 引导
       if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
+        // P0-01：目录提示只在项目根内——根外不列目录内容（读取边界与信息泄漏面同源）
+        if (!isInSandbox(filePath, ctx.rootPath)) {
+          return `找不到文件：${filePath}——项目外路径不列出目录内容`
+        }
         try {
           const entries = await fs.readdir(path.dirname(filePath))
           return `找不到文件：${filePath}——这个目录里有：${entries.slice(0, 20).join('、') || '（空目录——项目还没创建文件，先确认要读什么再读，或用 bash ls 看完整列表）'}`
@@ -277,6 +282,7 @@ function subprocFile(): string {
   return `${process.env.HOME ?? ''}/Library/Application Support/neonforge-desktop/neonforge-subprocs.jsonl`
 }
 function recordPid(pid: number): void {
+  if (!isKillablePid(pid)) return // P0-04：无效 pid 不记录（清理时同样跳过）
   try {
     appendFileSync(subprocFile(), `${pid}\n`)
   } catch {
@@ -286,6 +292,7 @@ function recordPid(pid: number): void {
 
 // 递归杀进程树（进程组 + 后代）——nohup 后台进程 setsid 脱离进程组，仅杀组不够
 function killTree(pid: number): void {
+  if (!isKillablePid(pid)) return // P0-04：pid<=0 会变成 kill(0)/kill(-0)——向当前进程组发信号
   try {
     const kids = execSync(`pgrep -P ${pid}`)
       .toString()
@@ -309,13 +316,13 @@ function killTree(pid: number): void {
 }
 // 清 NeonForge 自己起的全部子进程（含异常退出残留——读 PID 文件；只杀自己记录的，不碰用户进程）
 export function killAllSubprocesses(): void {
-  for (const p of subprocs) killTree(p.pid ?? 0)
+  for (const p of subprocs) if (isKillablePid(p.pid)) killTree(p.pid)
   subprocs.clear()
   activeProc = null
   try {
     const file = subprocFile()
     const pids = readFileSync(file, 'utf8').split('\n').filter(Boolean).map(Number)
-    for (const pid of pids) killTree(pid)
+    for (const pid of pids) if (isKillablePid(pid)) killTree(pid)
     writeFileSync(file, '')
   } catch {
     /* 无记录文件 */
@@ -560,13 +567,15 @@ export function syncPlanApprovedFromStore(): void {
 // 注册 4 核心工具 + search（Layer2 CodeRAG——2026-08-02 接入模型；6 LSP 随 12 ContextEngine 注册）
 export function initTools(): void {
   // risk（ticket 14）：none=L1 观察无需授权；low=L3 文件操作（写前快照可回滚）；high=L3 命令执行（高危单独确认）
-  // 2026-08-04 v4：read 一律自动（读是低风险——Cursor/Codex 共识「读文件默认不需批准」）；沙箱内外区分核心在 write/edit（沙箱外永不信任）
+  // P0-01：读取边界——项目根内自动（preApproval），根外/无 rootPath 必须用户逐次授权。
+  // risk 仍为 none（读取本身是观察动作；授权边界是上下文相关的，由 preApproval 判定）。
   toolRegistry.register({
     name: 'read',
     source: 'core',
-    requiresApproval: false,
+    requiresApproval: true,
     risk: 'none',
     execute: readExecutor,
+    preApproval: (args, opts) => ({ auto: isInSandbox(args.path, opts?.rootPath) }),
   })
   toolRegistry.register({
     name: 'write',

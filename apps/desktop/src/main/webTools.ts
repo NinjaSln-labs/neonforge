@@ -257,6 +257,62 @@ function stripNoise(html: string): string {
     .trim()
 }
 
+// P1-01：SSRF 边界——web_fetch 只访问公网 http(s)，拒绝本机/私网/链路本地/云元数据地址。
+// hostname 来自 URL 解析（IPv6 带方括号）；重定向逐跳复用同一判定。
+export function isPrivateHost(hostname: string): boolean {
+  const h = hostname.toLowerCase()
+  if (h === 'localhost' || h === 'localhost.localdomain') return true
+  const bare = h.startsWith('[') && h.endsWith(']') ? h.slice(1, -1) : h
+  if (bare === '::1' || bare === '::' || bare === '0:0:0:0:0:0:0:1') return true
+  // IPv6 唯一本地地址（fc00::/7）与链路本地（fe80::/10）
+  if (/^(?:fc|fd|fe)[0-9a-f]{2}:/.test(bare)) return true
+  const m = bare.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
+  if (m) {
+    const a = Number(m[1])
+    const b = Number(m[2])
+    if (a === 0 || a === 10 || a === 127) return true // 本机/私网 A 类
+    if (a === 169 && b === 254) return true // 链路本地（含 169.254.169.254 云元数据）
+    if (a === 172 && b >= 16 && b <= 31) return true // 私网 B 类
+    if (a === 192 && b === 168) return true // 私网 C 类
+    if (a === 100 && b >= 64 && b <= 126) return true // CGNAT
+  }
+  return false
+}
+
+const MAX_REDIRECTS = 5
+
+async function fetchWithRedirectGuard(initial: URL): Promise<Response> {
+  let current = initial
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    if (current.protocol !== 'http:' && current.protocol !== 'https:') {
+      throw new Error('web_fetch: 重定向只支持 http/https')
+    }
+    if (isPrivateHost(current.hostname)) {
+      throw new Error('web_fetch: 拒绝访问本机/私网地址')
+    }
+    const res = await fetch(current.toString(), {
+      redirect: 'manual', // 逐跳校验目标 host（follow 会让私网/元数据地址绕过入口检查）
+      signal: AbortSignal.timeout(20000),
+      headers: { Accept: 'text/html,text/plain,application/json,*/*' },
+    })
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get('location')
+      if (!location) return res
+      if (hop === MAX_REDIRECTS) throw new Error('web_fetch: 重定向次数过多')
+      let next: URL
+      try {
+        next = new URL(location, current)
+      } catch {
+        throw new Error('web_fetch: 重定向地址无效')
+      }
+      current = next
+      continue
+    }
+    return res
+  }
+  throw new Error('web_fetch: 重定向次数过多')
+}
+
 export async function webFetch(url: string, cfg: WebAccessConfig): Promise<WebToolResult> {
   const blocked = gateAccess(cfg, false)
   if (blocked) return blocked
@@ -270,11 +326,7 @@ export async function webFetch(url: string, cfg: WebAccessConfig): Promise<WebTo
     return { ok: false, error: 'web_fetch: 只支持 http/https' }
   }
   try {
-    const res = await fetch(parsed.toString(), {
-      redirect: 'follow',
-      signal: AbortSignal.timeout(20000),
-      headers: { Accept: 'text/html,text/plain,application/json,*/*' },
-    })
+    const res = await fetchWithRedirectGuard(parsed)
     const raw = await res.text()
     const truncated = raw.length > FETCH_MAX
     const body = raw.slice(0, FETCH_MAX)
@@ -283,7 +335,7 @@ export async function webFetch(url: string, cfg: WebAccessConfig): Promise<WebTo
     return {
       ok: true,
       data: {
-        url: parsed.toString(),
+        url: res.url || parsed.toString(),
         status: res.status,
         contentType: ct,
         truncated,
