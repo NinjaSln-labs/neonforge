@@ -96,6 +96,36 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
     })
   }
 
+  // BC-12 预算：阈值提醒 + 可选达阈值暂停（不打断进行中的工具调用）
+  const [budgetLimit, setBudgetLimit] = useState('')
+  const [budgetPause, setBudgetPause] = useState(false)
+  const [budgetMsg, setBudgetMsg] = useState<string | null>(null)
+  useEffect(() => {
+    void window.neonforge.budget?.get?.().then((b) => {
+      setBudgetLimit(b.state.limit === null ? '' : String(b.state.limit))
+      setBudgetPause(b.settings.pauseOnReach)
+    })
+  }, [])
+  const saveBudget = () => {
+    const trimmed = budgetLimit.trim()
+    const limitUsd = trimmed === '' ? null : Number(trimmed)
+    if (limitUsd !== null && (!Number.isFinite(limitUsd) || limitUsd < 0)) {
+      setBudgetMsg('预算必须是非负数字（留空 = 不设置）')
+      return
+    }
+    void window.neonforge.budget?.set?.({ limitUsd, pauseOnReach: budgetPause }).then((r) => {
+      if (r?.ok) {
+        setBudgetMsg('已保存')
+        if (r.settings) {
+          setBudgetLimit(r.settings.limitUsd === null ? '' : String(r.settings.limitUsd))
+          setBudgetPause(r.settings.pauseOnReach)
+        }
+      } else {
+        setBudgetMsg(r?.error ?? '保存失败')
+      }
+    })
+  }
+
   const [delegate, setDelegate] = useState(readDelegate)
   const handleDelegate = (v: boolean) => {
     setDelegate(v)
@@ -360,6 +390,35 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
             {s.ok ? `：${s.tools.map((t) => t.name).join('、') || '（无工具）'}` : `：${s.error}`}
           </p>
         ))}
+      </div>
+
+      <div className="nf-settings__plugins">
+        <span className="nf-settings__plugins-title">
+          预算（USD；未知价格条目不参与计算——留空 = 不设置）
+        </span>
+        <div className="nf-settings__mcp-actions">
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={budgetLimit}
+            placeholder="周期预算，如 5"
+            onChange={(e) => setBudgetLimit(e.target.value)}
+            aria-label="周期预算（USD）"
+          />
+          <label className="nf-settings__row--switch">
+            <input
+              type="checkbox"
+              checked={budgetPause}
+              onChange={(e) => setBudgetPause(e.target.checked)}
+            />
+            达阈值后下一轮暂停
+          </label>
+          <button type="button" onClick={saveBudget}>
+            保存预算
+          </button>
+        </div>
+        {budgetMsg ? <p className="nf-settings__export-msg">{budgetMsg}</p> : null}
       </div>
 
       <div className="nf-settings__row">

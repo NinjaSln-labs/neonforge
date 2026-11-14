@@ -689,6 +689,8 @@ export class DeepSeekGateway {
       tools?: boolean
       // tool_choice 恒 auto（DeepSeek Profile）；forceTool 仅 timeline 取证，不进 API
       forceTool?: boolean
+      // P2-03：推进语义规范名（forceTool 为兼容字段；timeline 消费）
+      progressMode?: 'auto' | 'require-action' | 'require-advance'
       onDelta: (chunk: {
         type: 'reasoning' | 'content' | 'tool-call' | 'done' | 'stream-reset'
         text?: string

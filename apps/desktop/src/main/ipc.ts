@@ -29,7 +29,8 @@ import { compaction } from './compact.js'
 import { appendChatLog, exportChatLog } from './chatLog.js'
 import { logTimeline, timelineLogger } from './timelineLogger.js'
 import { runVerificationCommands } from './verification.js'
-import { createUsageEntry } from '../domain/usageLedger.js'
+import { createUsageEntry, evaluateBudget } from '../domain/usageLedger.js'
+import { getBudgetStore } from './budgetStore.instance.js'
 import { getUsageStore } from './usageStore.instance.js'
 import { getAcceptanceStore } from './acceptanceStore.instance.js'
 import type { AcceptanceSource } from '../domain/acceptance.js'
@@ -37,11 +38,14 @@ import { getChangeSetService } from './changeSetService.instance.js'
 import { getTaskQueueStore } from './taskQueueStore.instance.js'
 import { getMcpManager } from './mcpManager.instance.js'
 import { gitRead } from './gitBridge.js'
+import { IPC_SCHEMAS, validateIpc } from './ipcSchema.js'
 
 export function registerIpc(): void {
   initTools()
   initPlugins() // 08：注册 5 内置插件（生命周期钩子）
   registerLspTools(toolRegistry)
+  // BC-12：预算阈值提醒去重（每进程周期；budget:set 重置）
+  const budgetNotified = new Set<string>()
   // D3（ADR-005）：启动恢复——write 门控布尔镜像从 store 同步（批准事实跨重启；renderer 挂载时另经 planned-files:load 恢复清单）
   syncPlanApprovedFromStore()
   ipcMain.handle('config:has-key', () => configStore.hasValidKey())
@@ -172,6 +176,7 @@ export function registerIpc(): void {
         level?: 'none' | 'basic' | 'medium' | 'high'
         tools?: boolean
         forceTool?: boolean
+        progressMode?: 'auto' | 'require-action' | 'require-advance'
         messages: Array<{
           role: string
           content: string | null
@@ -182,6 +187,11 @@ export function registerIpc(): void {
         sessionId?: string
       },
     ) => {
+      // P1-04：入口契约校验（renderer/preload/main 漂移或非法载荷 → 明确失败，不进入下游）
+      const valid = validateIpc(opts, IPC_SCHEMAS.streamChat)
+      if (!valid.ok) {
+        return { ok: false, error: `参数校验失败：${valid.error}`, errorType: 'unknown' as const }
+      }
       const send = (
         type: 'reasoning' | 'content' | 'tool-call' | 'done' | 'stream-reset',
         text?: string,
@@ -208,26 +218,53 @@ export function registerIpc(): void {
           level: opts.level ?? 'basic',
           tools: opts.tools ?? false,
           forceTool: opts.forceTool ?? false,
+          progressMode:
+            opts.progressMode ?? (opts.forceTool ? 'require-action' : 'auto'),
           messages: opts.messages,
           onDelta: (chunk) =>
             send(chunk.type, chunk.text, 'toolCall' in chunk ? chunk.toolCall : undefined),
           // BC-12：Provider 真实 usage → 本机用量台账（不含内容；sessionId 由 renderer 传入）
           onUsage: (u) => {
             const at = new Date().toISOString()
-            getUsageStore().record(
-              createUsageEntry({
-                id: `usage-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                at,
-                provider: u.providerId,
-                model: u.model,
-                promptTokens: u.promptTokens,
-                completionTokens: u.completionTokens,
-                reasoningTokens: u.reasoningTokens,
-                cacheHitTokens: u.cacheHitTokens,
-                cacheMissTokens: u.cacheMissTokens,
-                sessionId: opts.sessionId,
-              }),
-            )
+            const entry = createUsageEntry({
+              id: `usage-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              at,
+              provider: u.providerId,
+              model: u.model,
+              promptTokens: u.promptTokens,
+              completionTokens: u.completionTokens,
+              reasoningTokens: u.reasoningTokens,
+              cacheHitTokens: u.cacheHitTokens,
+              cacheMissTokens: u.cacheMissTokens,
+              sessionId: opts.sessionId,
+            })
+            getUsageStore().record(entry)
+            logTimeline({
+              session: opts.sessionId,
+              type: 'usage.recorded',
+              role: 'system',
+              detail: {
+                provider: entry.provider,
+                model: entry.model,
+                tokens: entry.promptTokens + entry.completionTokens + entry.reasoningTokens,
+                cost: entry.cost,
+              },
+            })
+            // 预算提醒：达到阈值 → 事件一次；默认不硬中断（pauseOnReach 由 renderer 在安全点检查）
+            const settings = getBudgetStore().load()
+            if (settings.limitUsd !== null) {
+              const state = evaluateBudget(getUsageStore().summary(), settings.limitUsd)
+              const key = `global:${settings.limitUsd}`
+              if (state.reached && !budgetNotified.has(key)) {
+                budgetNotified.add(key)
+                logTimeline({
+                  session: opts.sessionId,
+                  type: 'usage.budget_threshold_reached',
+                  role: 'system',
+                  detail: { limit: settings.limitUsd, spent: state.spent },
+                })
+              }
+            }
           },
         })
         return { ok: true }
@@ -243,9 +280,24 @@ export function registerIpc(): void {
     },
   )
 
-  // BC-12 用量与成本：查询汇总 / 脱敏导出
+  // BC-12 用量与成本：查询汇总 / 脱敏导出 / 预算
   ipcMain.handle('usage:summary', (_e, sessionId?: string) => getUsageStore().summary(sessionId))
   ipcMain.handle('usage:export', () => getUsageStore().exportCsv())
+  const budgetSnapshot = () => {
+    const settings = getBudgetStore().load()
+    const summary = getUsageStore().summary()
+    return { settings, summary, state: evaluateBudget(summary, settings.limitUsd) }
+  }
+  ipcMain.handle('budget:get', () => budgetSnapshot())
+  ipcMain.handle('budget:set', (_e, input: unknown) => {
+    try {
+      const settings = getBudgetStore().save(input)
+      budgetNotified.clear()
+      return { ok: true, ...budgetSnapshot(), settings }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    }
+  })
 
   // BC-14 验收与质量门禁
   ipcMain.handle(
@@ -559,6 +611,8 @@ ipcMain.handle(
       sessionId?: string
     },
   ) => {
+    const valid = validateIpc(opts, IPC_SCHEMAS.toolsExecute)
+    if (!valid.ok) return { ok: false, error: `参数校验失败：${valid.error}` }
     const res = await toolRegistry.execute(opts.name, opts.args ?? {}, {
       approved: opts.approved ?? false,
       rootPath: opts.rootPath ?? workspace.getCurrentRoot() ?? undefined,

@@ -47,6 +47,10 @@ function TaskPanel({
     unknownCostEntries: number
     cacheHitRate: number | null
   } | null>(null)
+  const [budget, setBudget] = useState<{
+    settings: { limitUsd: number | null; pauseOnReach: boolean }
+    state: { limit: number | null; spent: number; reached: boolean }
+  } | null>(null)
   const [queue, setQueue] = useState<QueueState>({ entries: [] })
   const [draft, setDraft] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
@@ -96,6 +100,7 @@ function TaskPanel({
   }, [])
   useEffect(() => {
     void window.neonforge.usage?.summary(sessionId).then(setUsage)
+    void window.neonforge.budget?.get?.().then(setBudget)
   }, [sessionId])
   useEffect(() => {
     if (!sessionId) {
@@ -341,6 +346,16 @@ function TaskPanel({
                 ? ` · 缓存命中率 ${Math.round(usage.cacheHitRate * 100)}%`
                 : ' · 缓存口径未知'}
             </p>
+            {budget ? (
+              <p className="nf-meta">
+                预算：
+                {budget.state.limit === null
+                  ? '未设置'
+                  : `${budget.state.spent.toFixed(4)} / ${budget.state.limit}`}
+                {budget.state.reached ? ' · 已达阈值' : ''}
+                {budget.settings.pauseOnReach ? '（达阈值后下一轮暂停）' : ''}
+              </p>
+            ) : null}
           </>
         ) : (
           <p className="nf-meta">—</p>

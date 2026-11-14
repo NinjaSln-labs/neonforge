@@ -8,7 +8,7 @@ import { killAllSubprocesses } from './tools.js'
 import { stopAllServices } from './serviceManager.js'
 import { TEST_HOOKS } from './testHooks.js'
 import { configStore } from './configStore.js'
-import { setTimelineUserData } from './timelineLogger.js'
+import { setTimelineUserData, drainTimelineDlq } from './timelineLogger.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -34,6 +34,12 @@ if (TEST_HOOKS.testUserData) {
   configStore.reload()
 }
 setTimelineUserData(app.getPath('userData'))
+// P1-02：上次运行写入失败的事件（DLQ）在启动时重放
+try {
+  drainTimelineDlq()
+} catch (e) {
+  console.error('[timeline] DLQ 启动重放失败', e)
+}
 const gotTheLock = app.requestSingleInstanceLock()
 
 if (!gotTheLock) {

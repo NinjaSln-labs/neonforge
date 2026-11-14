@@ -78,6 +78,7 @@ export interface NeonForgeBridge {
       level?: string
       tools?: boolean
       forceTool?: boolean
+      progressMode?: 'auto' | 'require-action' | 'require-advance'
       sessionId?: string
       messages: Array<{
         role: string
@@ -111,6 +112,28 @@ export interface NeonForgeBridge {
       cacheHitRate: number | null
     }>
     export: () => Promise<{ ok: boolean; path?: string; error?: string }>
+  }
+  budget: {
+    get: () => Promise<{
+      settings: BudgetSettings
+      summary: {
+        entries: number
+        promptTokens: number
+        completionTokens: number
+        reasoningTokens: number
+        totalTokens: number
+        cost: number
+        unknownCostEntries: number
+        cacheHitRate: number | null
+      }
+      state: { limit: number | null; spent: number; reached: boolean }
+    }>
+    set: (settings: BudgetSettings) => Promise<{
+      ok: boolean
+      error?: string
+      settings?: BudgetSettings
+      state?: { limit: number | null; spent: number; reached: boolean }
+    }>
   }
   acceptance: {
     derive: (
@@ -368,6 +391,11 @@ export interface McpServerStatus {
   ok: boolean
   tools: Array<{ name: string; description?: string }>
   error?: string
+}
+/** BC-12 预算设置 */
+export interface BudgetSettings {
+  limitUsd: number | null
+  pauseOnReach: boolean
 }
 export interface DeliveryPackage {
   status: 'draft' | 'delivered' | 'closed'

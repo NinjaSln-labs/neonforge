@@ -53,6 +53,22 @@ export function useConversationState(opts?: UseConversationStateOpts) {
     }
     setVersion((v) => v + 1)
   }
+  // P1-03：plan 确认镜像带重试（1 次）；失败不阻断已完成的领域转换，但记录错误
+  const syncPlanMirror = async (value: boolean): Promise<boolean> => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        await window.neonforge?.session?.setPlanConfirmed?.(value)
+        return true
+      } catch (e) {
+        if (attempt === 1) {
+          console.error('[session] plan 确认镜像失败', e)
+          return false
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+    }
+    return false
+  }
   return {
     stateRef,
     // A-005：转换计数（响应式——读 stateRef 的渲染点消费 version 以触发重渲染；ref 本身非响应式）
@@ -60,26 +76,27 @@ export function useConversationState(opts?: UseConversationStateOpts) {
     // 用户确认/拒绝（确认卡按钮——pending 清除 + 状态推进/回退）
     // S3：拒绝带原因（不变量 8——userDecided 签名强制；A-006：reason 必传——缺省会静默掩盖调用方漏传）
     // #6 真机 2026-08-31（复验轮）：plan 确认镜像到 main（approve-files 硬序门）；goal 确认=任务边界 → 复位
-    confirm: (point: ConfirmPoint) => {
+    // P1-03：镜像失败重试，避免 renderer 已确认而 main 门控仍关闭（极端时序）；state 转换仍同步完成
+    confirm: async (point: ConfirmPoint) => {
       const before = stateRef.current
       const r = transition((s) => userConfirmed(s, point))
       if (point === 'plan') {
-        void window.neonforge?.session?.setPlanConfirmed?.(true)
+        await syncPlanMirror(true)
         // BC-14：确认前的 decisionContent 是方案快照；确认时派生验收记录（无来源则记录为空）
         const dc = before.decisionContent
         if (dc?.kind === 'plan' && dc.proposal) {
           opts?.onPlanConfirmed?.(dc.proposal as PlanProposal)
         }
       } else if (point === 'goal') {
-        void window.neonforge?.session?.setPlanConfirmed?.(false)
+        await syncPlanMirror(false)
         opts?.onTaskBoundary?.()
       }
       return r
     },
-    reject: (point: ConfirmPoint, reason: RejectReason) => {
+    reject: async (point: ConfirmPoint, reason: RejectReason) => {
       const r = transition((s) => userRejected(s, point, reason))
       // 审计修正（stage-review-2026-08-31 Spec-3）：plan 拒绝 → main 镜像复位（否则硬序门仍开）
-      if (point === 'plan') void window.neonforge?.session?.setPlanConfirmed?.(false)
+      if (point === 'plan') await syncPlanMirror(false)
       return r
     },
     // approve-files 批准（追加语义——A0 §5；files 已 trustPath 规范化）

@@ -4,7 +4,7 @@
 // - 追加幂等（04 §1.3 不变式——分批 approve-files 合并）；approved 联动（add → true；reset → false）
 // - 路径原样保留（绝对化由调用方 trustPath 负责——store 不加工）
 // 构造注入存储路径（可测——不依赖 electron app.getPath）
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync } from 'node:fs'
 import path from 'node:path'
 
 export interface PlannedFilesData {
@@ -51,7 +51,10 @@ export class PlannedFilesStore {
     try {
       const dir = path.dirname(this.filePath)
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-      writeFileSync(this.filePath, JSON.stringify(out, null, 2), { mode: 0o600 })
+      // P2-04：临时文件 + rename 原子写（防崩溃/断电留下半截 JSON）
+      const tmp = `${this.filePath}.tmp`
+      writeFileSync(tmp, JSON.stringify(out, null, 2), { mode: 0o600 })
+      renameSync(tmp, this.filePath)
     } catch {
       /* 落盘失败忽略——内存态仍工作（与 localStorage 断点续做同策略） */
     }

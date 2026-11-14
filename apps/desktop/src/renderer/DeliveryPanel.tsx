@@ -90,7 +90,7 @@ export default function DeliveryPanel({
   useEffect(() => {
     void refreshAcceptance(sessionId) // BC-14：会话切换/交付包变化时重取验收记录与门禁
     void refreshChangeSet(sessionId) // BC-10：重取变更集
-  }, [sessionId, pkg]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sessionId, pkg])
   // 05 执行层 A：diff 审核状态（applied: Set<路径>——已应用；reverted: Set<路径>）
   const [applied, setApplied] = useState<Set<string>>(new Set())
   const [reverted, setReverted] = useState<Set<string>>(new Set())

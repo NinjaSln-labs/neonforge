@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mkdirSync, rmSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
-import { timelineFile, logTimeline, timelineLogger } from '../../src/main/timelineLogger'
+import {
+  timelineFile,
+  logTimeline,
+  timelineLogger,
+  resetTimelineDedupe,
+  drainTimelineDlq,
+} from '../../src/main/timelineLogger'
 
 // timelineFile/logTimeline 用 os.homedir() 定位 logs 目录——重定向到 /tmp（不污染真实 userData）
 vi.mock('node:os', () => ({ default: { homedir: () => '/tmp/nf-timeline-test' } }))
@@ -64,6 +70,39 @@ describe('timelineLogger（会话时间线——2026-08-08 会话级文件）', 
     logTimeline({ type: 'tool-exec', role: 'tool', detail: { name: 'read' } })
     const f = timelineFile()
     expect(existsSync(f)).toBe(true)
+  })
+
+  it('P2-06：dedupe 事件（card.shown）同会话同 detail 只记一次', () => {
+    resetTimelineDedupe()
+    const sid = 'dedupe-0000-4000-8000-000000000001'
+    logTimeline({ session: sid, type: 'card.shown', role: 'system', detail: { card: 'approval' } })
+    logTimeline({ session: sid, type: 'card.shown', role: 'system', detail: { card: 'approval' } })
+    logTimeline({ session: sid, type: 'card.shown', role: 'system', detail: { card: 'goal' } })
+    const lines = readFileSync(timelineFile(sid), 'utf-8').trim().split('\n')
+    expect(lines).toHaveLength(2)
+  })
+
+  it('P2-07：事件携带 eventId/version', () => {
+    const sid = 'eventid-0000-4000-8000-00000000001'
+    logTimeline({ session: sid, type: 'conversation.message_sent', role: 'user', detail: { content: 'hi' } })
+    const event = JSON.parse(readFileSync(timelineFile(sid), 'utf-8').trim())
+    expect(event.eventId).toBe(`${sid}:1`)
+    expect(event.version).toBe(1)
+  })
+
+  it('P1-02：主文件写入失败 → DLQ 保留；恢复后可重放', () => {
+    const sid = 'dlq-0000-4000-8000-000000000001'
+    const f = timelineFile(sid)
+    mkdirSync(f) // 同名目录让 appendFileSync 失败（EISDIR）
+    logTimeline({ session: sid, type: 'conversation.message_sent', role: 'user', detail: { content: 'dlq' } })
+    const dlq = f.replace('timeline-' + sid + '.jsonl', 'timeline-dlq.jsonl')
+    expect(existsSync(dlq)).toBe(true)
+    expect(readFileSync(dlq, 'utf-8')).toContain('conversation.message_sent')
+    rmSync(f, { recursive: true, force: true })
+    const result = drainTimelineDlq()
+    expect(result.replayed).toBe(1)
+    expect(existsSync(f)).toBe(true)
+    expect(readFileSync(f, 'utf-8')).toContain('conversation.message_sent')
   })
 })
 

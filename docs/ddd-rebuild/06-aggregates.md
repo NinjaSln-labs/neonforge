@@ -128,8 +128,8 @@
 
 | 场景 | 触发事件 | 补偿方式 | 幂等保障 | 重试策略 |
 | :--- | :--- | :--- | :--- | :--- |
-| Task 确认方案 → PlannedFiles 落盘 | `task.execution_confirmed`（语义 plan） | 落盘失败不阻断；下次 `planned-files:add` 追加 | `add` 去重；空数组 no-op | 用户下次批准/重启恢复 |
-| Task 解决确认 → DeliveryPackage | `task.achievement_confirmed`（语义 resolution） | 交付包由真实 `realChanges` 重建；无变更不生成 | 以文件去重；同一任务重复确认覆盖 | 重新执行/复跑 |
+| Task 确认方案 → PlannedFiles 落盘 | `task.plan_confirmed`（语义 plan；旧名 `task.execution_confirmed`） | 落盘失败不阻断；下次 `planned-files:add` 追加 | `add` 去重；空数组 no-op | 用户下次批准/重启恢复 |
+| Task 解决确认 → DeliveryPackage | `task.resolution_confirmed`（语义 resolution；旧名 `task.achievement_confirmed`） | 交付包由真实 `realChanges` 重建；无变更不生成 | 以文件去重；同一任务重复确认覆盖 | 重新执行/复跑 |
 | Task 解决确认 → ProblemInstance | 用户确认关闭 | 如果不关闭，问题保持 delivered/executing | 同标题复跑更新原实例 | 手动重试 |
 | ToolInvocation → Task producedFiles | `tool.executed` | 工具成功才入 produced；失败置 `lastToolFailed`；policy 不置 | 文件集合去重 | 模型重试/换方案 |
 | ToolInvocation → Workspace 文件 | write/edit 成功 | `.nf-bak` 快照回滚 | 快照覆盖同文件 | 用户点回滚 |

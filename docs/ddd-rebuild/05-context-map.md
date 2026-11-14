@@ -94,7 +94,7 @@ flowchart LR
 | T02 | OpenAI `tool_call.function.arguments`（JSON 字符串） | `ToolCallView.args`（对象） | `toolCallRepair` 4 轮：直接 parse → 双重序列化剥层 → 尾逗号补全 → 首个 JSON 值提取 | 模型可能混入说明文本 | `gateway.ts:103-128` |
 | T03 | 旧文本标记 `【目标确认】/【执行方案】/【已达成】` | `proposal.goal/plan/completion` | 仅在工具不可用时降级；不构造决策点，注入引导让模型改用协议工具 | 文本是降级通道，不是主通道 | `ConversationPanel.tsx:971-1144`、`sysPrompt.ts` |
 | T04 | 模型路径 `index.html` / `任务目录/index.html` / 绝对路径 | 统一 `trustPath` 基准 | `resolveSandboxPath` 剥误带前缀；`matchesPlannedPath` 末段匹配 | 相对/绝对双形态 | `sandboxPath.ts:13-25`、`conversationState.ts:783-798` |
-| T05 | 事件 `task.execution_confirmed` / `task.achievement_confirmed` | 领域语义 `planConfirmed` / `resolutionConfirmed` | 事件名保留旧名；文档与 UI 使用新语义；后续版本重命名 | 历史命名债 | `timeline.ts:134-142`、`conversationState.ts:112-115` |
+| T05 | 事件 `task.plan_confirmed` / `task.resolution_confirmed` | 领域语义 `planConfirmed` / `resolutionConfirmed` | 已采用规范名（P2-01）；旧名 `task.execution_confirmed` / `task.achievement_confirmed` 保留读取窗口 | 历史命名债收敛中 | `timeline.ts`、`conversationState.ts:112-115` |
 | T06 | `ProblemStatus` 7 态 | UI 中文标签 | `understanding/awaiting-plan/executing/awaiting-input/delivered/closed/failed-recoverable` → 理解中/方案待确认/执行中/待你操作/已交付/已关闭/失败可恢复 | UI 标签不是领域枚举 | `SessionPanel.tsx:6-14` |
 | T07 | `DeliveryPackage` | 产物区视图 | status/summary/artifacts/acceptance/nextSteps/diffs 直接映射；演示注入与真实变更分离 | 演示数据不得进入生产 | `types.d.ts:202-216`、`MainWorkspace.tsx:282-299` |
 | T08 | `chatLog` 条目 | 时间线/导出视图 | 聊天日志是时间线子集；错误与工具名摘要额外记录 | 两者不是同一存储 | `chatLog.ts:8-15`、`timelineLogger.ts:1-7` |

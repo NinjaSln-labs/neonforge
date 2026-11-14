@@ -59,17 +59,69 @@ export function matchesRule(
 }
 
 // 沙箱判定：项目根内（0-1 创建的项目根 / 打开的项目根）——沙箱内外区分（Codex workspace-write 概念，软沙箱）
+function lexicalSandboxTarget(p: string, rootPath: string): string {
+  const rp = path.resolve(rootPath)
+  // 与 readExecutor resolvePath 语义一致：真绝对路径（多段）直接用；相对/类绝对（单段 /package.json = 项目根下）join rootPath
+  const segments = p.split('/').filter(Boolean)
+  return path.isAbsolute(p) && segments.length > 1
+    ? path.resolve(p)
+    : path.resolve(rp, p.replace(/^\/+/, ''))
+}
+
 export function isInSandbox(p: unknown, rootPath?: string): boolean {
   const pStr = String(p ?? '')
   if (!rootPath || !pStr) return false
   const rp = path.resolve(rootPath)
-  // 与 readExecutor resolvePath 语义一致：真绝对路径（多段）直接用；相对/类绝对（单段 /package.json = 项目根下）join rootPath
-  const segments = pStr.split('/').filter(Boolean)
-  const target =
-    path.isAbsolute(pStr) && segments.length > 1
-      ? path.resolve(pStr)
-      : path.resolve(rp, pStr.replace(/^\/+/, ''))
+  const target = lexicalSandboxTarget(pStr, rootPath)
   return target === rp || target.startsWith(rp + path.sep)
+}
+
+/** realpath 解析（目标/目录可能尚不存在——取最近存在的祖先再拼回后缀） */
+async function realpathNearest(target: string): Promise<string> {
+  let current = path.resolve(target)
+  const suffix: string[] = []
+  for (;;) {
+    try {
+      return path.resolve(await fs.realpath(current), ...suffix.reverse())
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e
+      const parent = path.dirname(current)
+      if (parent === current) return path.resolve(target)
+      suffix.push(path.basename(current))
+      current = parent
+    }
+  }
+}
+
+/** P1-10：沙箱判定必须解析符号链接——根内 symlink 指向根外视为根外 */
+export async function isInSandboxRealpath(p: unknown, rootPath?: string): Promise<boolean> {
+  const pStr = String(p ?? '')
+  if (!rootPath || !pStr) return false
+  const rp = path.resolve(rootPath)
+  const target = lexicalSandboxTarget(pStr, rootPath)
+  const realRoot = await fs.realpath(rp).catch(() => rp)
+  const realTarget = await realpathNearest(target)
+  return realTarget === realRoot || realTarget.startsWith(realRoot + path.sep)
+}
+
+/**
+ * 写边界硬校验：路径字符串在根内、但 realpath 逃逸到根外 → 拒绝（不依赖用户是否已批准）。
+ * 字符串本身就在根外的显式外部路径由逐次授权承担。
+ */
+async function assertNoSymlinkEscape(
+  target: string,
+  rootPath?: string,
+  sessionId?: string,
+): Promise<void> {
+  if (!rootPath || !isInSandbox(target, rootPath)) return
+  if (await isInSandboxRealpath(target, rootPath)) return
+  logTimeline({
+    session: sessionId ?? rootPath,
+    type: 'security.symlink_escape_blocked',
+    role: 'system',
+    detail: { path: target, rootPath },
+  })
+  throw new Error('路径经符号链接指向项目外——已阻止。请改用项目内真实路径')
 }
 
 export interface Tool {
@@ -83,10 +135,11 @@ export interface Tool {
   ) => Promise<unknown>
   // 2026-08-04 授权架构重构（用户授权疲劳）：执行前裁决——requiresApproval 工具若 preApproval 判定 auto=true → 免授权直接执行
   // （main 进程裁决——bash 只读命令自动；renderer 不判断，防绕过）
+  // P1-10：支持异步（read 需 realpath 解析符号链接后再裁决）
   preApproval?: (
     args: Record<string, unknown>,
     ctx?: { rootPath?: string; sessionId?: string },
-  ) => { auto: boolean; reason?: string }
+  ) => { auto: boolean; reason?: string } | Promise<{ auto: boolean; reason?: string }>
 }
 
 export interface ToolResult {
@@ -168,7 +221,7 @@ class ToolRegistry {
     const ruleAllows = rule?.action === 'allow'
     if (!ruleAllows && tool.requiresApproval && !opts.approved) {
       // 2026-08-04 授权架构重构：preApproval 裁决（如 bash 只读命令自动执行）——原一律 need-approval（授权疲劳根因：ls/cat 也弹卡）
-      const pre = tool.preApproval?.(args, opts)
+      const pre = await tool.preApproval?.(args, opts)
       if (!pre?.auto) {
         // 2026-08-07 T2（regex-todo）：needApproval 结构化标记——renderer 读字段判定授权卡（不再 includes('授权') 文本匹配）
         return {
@@ -259,6 +312,7 @@ async function writeExecutor(
   ctx: { rootPath?: string; sessionId?: string },
 ): Promise<unknown> {
   const filePath = resolvePath(args.path, ctx)
+  await assertNoSymlinkEscape(filePath, ctx.rootPath, ctx.sessionId)
   await fs.mkdir(path.dirname(filePath), { recursive: true })
   // 先备份后写（基线 §11）：已存在文件写前快照 .nf-bak（新文件无旧内容——回滚语义为无快照）
   takeSnapshot(filePath)
@@ -272,6 +326,7 @@ async function editExecutor(
   ctx: { rootPath?: string; sessionId?: string },
 ): Promise<unknown> {
   const filePath = resolvePath(args.path, ctx)
+  await assertNoSymlinkEscape(filePath, ctx.rootPath, ctx.sessionId)
   const oldText = String(args.old ?? '')
   const newText = String(args.new ?? '')
   const content = await fs.readFile(filePath, 'utf-8')
@@ -593,7 +648,9 @@ export function initTools(): void {
     requiresApproval: true,
     risk: 'none',
     execute: readExecutor,
-    preApproval: (args, opts) => ({ auto: isInSandbox(args.path, opts?.rootPath) }),
+    preApproval: async (args, opts) => ({
+      auto: await isInSandboxRealpath(args.path, opts?.rootPath),
+    }),
   })
   toolRegistry.register({
     name: 'write',

@@ -23,12 +23,12 @@
 | `task.goal_proposed` | — | Task | 模型输出【目标确认】标记 | goalText | Domain | 时间线、审计 |
 | `task.goal_confirmed` | — | Task | 用户确认目标 | point | Domain | 任务边界重置、UI |
 | `task.goal_rejected` | — | Task | 用户拒绝目标 | point | Domain | 重提议、loop guard |
-| `task.execution_proposed` | — | Task | 模型输出【执行方案】 | plan, files | Domain（**旧名**） | 时间线、审计 |
-| `task.execution_confirmed` | — | Task | 用户确认方案 | point | Domain（**旧名**） | 计划清单派生、交付 |
-| `task.execution_rejected` | — | Task | 用户拒绝方案 | point | Domain（**旧名**） | 重提议、loop guard |
-| `task.achievement_proposed` | — | Task | 模型输出【已达成】 | summary | Domain（**旧名**） | 证据门 |
-| `task.achievement_confirmed` | — | Task | 用户确认解决 | point | Domain（**旧名**） | 交付包、问题台账 |
-| `task.achievement_rejected` | — | Task | 用户拒绝解决 | point | Domain（**旧名**） | 重提议/继续 |
+| `task.plan_proposed` | — | Task | 模型输出【执行方案】 | plan, files | Domain（旧名 `task.execution_proposed` 保留读取窗口） | 时间线、审计 |
+| `task.plan_confirmed` | — | Task | 用户确认方案 | point | Domain（旧名 `task.execution_confirmed` 保留读取窗口） | 计划清单派生、交付 |
+| `task.plan_rejected` | — | Task | 用户拒绝方案 | point | Domain（旧名 `task.execution_rejected` 保留读取窗口） | 重提议、loop guard |
+| `task.resolution_proposed` | — | Task | 模型输出【已达成】 | summary | Domain（旧名 `task.achievement_proposed` 保留读取窗口） | 证据门 |
+| `task.resolution_confirmed` | — | Task | 用户确认解决 | point | Domain（旧名 `task.achievement_confirmed` 保留读取窗口） | 交付包、问题台账 |
+| `task.resolution_rejected` | — | Task | 用户拒绝解决 | point | Domain（旧名 `task.achievement_rejected` 保留读取窗口） | 重提议/继续 |
 | `session.pending_set` | — | Task | 决策点置位 | kind | Domain | 时间线、UI 冻结 |
 | `session.pending_cleared` | — | Task | 用户决策 | kind | Domain | 时间线、UI 解冻 |
 | `dialogue.loop_guard` | — | Task | 重复/文本回复达阈值（一级） | rounds | Domain | 注入 loop-guard 文本 |
@@ -234,8 +234,8 @@ flowchart TD
 
 | 事件 | 订阅者 | 触发动作 | 补偿策略 | 监控指标 |
 | :--- | :--- | :--- | :--- | :--- |
-| `task.execution_confirmed`（语义 PlanConfirmed） | ConversationPanel / main gate / PlannedFiles | 派生 plannedFiles；`session:plan-confirmed(true)`；`planned-files:add` | 失败重试；任务边界 reset | 计划清单数量、落盘失败率 |
-| `task.achievement_confirmed`（语义 ResolutionConfirmed） | MainWorkspace / Delivery | 生成交付包；问题快照；planConfirmed 重置 | 由真实 `realChanges` 重建；无变更不生成 | 交付包生成率、空验收率 |
+| `task.plan_confirmed`（语义 PlanConfirmed；旧名 `task.execution_confirmed`） | ConversationPanel / main gate / PlannedFiles | 派生 plannedFiles；`session:plan-confirmed(true)`；`planned-files:add` | 失败重试；任务边界 reset | 计划清单数量、落盘失败率 |
+| `task.resolution_confirmed`（语义 ResolutionConfirmed；旧名 `task.achievement_confirmed`） | MainWorkspace / Delivery | 生成交付包；问题快照；planConfirmed 重置 | 由真实 `realChanges` 重建；无变更不生成 | 交付包生成率、空验收率 |
 | `task.goal_confirmed` | MainWorkspace / ConversationPanel | 任务边界重置、README 标题回写、goalSeq | 失败不阻断；下次确认重试 | 边界重置成功率 |
 | `tool.executed` | ConversationPanel / MainWorkspace | producedFiles、文件树刷新、realChanges、交付包 | 快照回滚 | 工具成功率、产出文件数 |
 | `tool.failed` | Task / StuckDetector / UI | `lastToolFailed`、诊断、模型修正 | 重试/换方案 | 失败率、重复失败率 |
@@ -310,16 +310,16 @@ sequenceDiagram
 
 ## 9. 当前交互层的缺口
 
-1. **没有 Outbox/DLQ**：跨聚合/跨进程一致性靠 UI 层顺序调用与 fire-and-forget 日志；没有事件表、投递保证、重试队列、死信。
-2. **没有事件版本字段**：`TimelineEvent` 没有 `version`/`eventId`；重命名或载荷变更只能靠代码兼容。
-3. **时间线写失败静默**：`timelineLogger.logTimeline` 捕获异常后不报错；审计可能缺失。
-4. **`dedupeKey` 函数存在但全局去重存储未落地**：`card.shown` 的 dedupe 标记依赖调用方。
+1. **没有完整 Outbox**：跨聚合/跨进程一致性仍靠 UI 层顺序调用；时间线已有 DLQ 重放（P1-02），但跨上下文事务性投递仍待建设。
+2. **没有事件版本字段**：已修复（P2-07）——`TimelineEvent` 增加 `eventId`/`version`（当前 1）。
+3. **时间线写失败静默**：已修复（P1-02）——失败计数可见 + DLQ 落盘 + 启动重放。
+4. **`dedupeKey` 函数存在但全局去重存储未落地**：已修复（P2-06）——`timelineLogger` 按会话 + 类型 + detail 签名去重。
 5. **IPC 不是事件总线**：`invoke` 是命令/查询语义；main→renderer 的 stream 是事件；两者混用，未区分 Command/Query/Event。
 6. **领域事件与 UI 事件并存**：`card.*` 与 `decision.*` 语义重叠（前者 UI 生命周期，后者领域决策），需要文档明确边界（已写）。
-7. **旧事件名**：`task.execution_*` / `task.achievement_*` 与新语义 `plan/resolution` 不一致。
-8. **事件重复**：`tool.executed` 既由 `applyToolResult` diff 派生，也在授权执行路径直接 `tlog`；可能产生重复事件（需按 event id/去重策略治理）。
+7. **旧事件名**：已修复（P2-01）——规范名 `task.plan_*` / `task.resolution_*` 已启用，旧名保留读取窗口。
+8. **事件重复**：已修复（P2-05）——产出增量改为 `task.files_produced`，`tool.executed` 只表示工具执行事实。
 9. **没有契约 schema 校验**：IPC 参数只靠 TypeScript 类型 + 运行时零散校验；preload 没有生成式 schema。
-10. **目标态领域尚未接线**：BC-10 变更集、BC-11 任务队列、BC-12 用量台账、BC-13 扩展/MCP、BC-14 验收门禁均只有字段/占位/演示，没有领域事件与 IPC 契约；本文以“目标态”标注，避免与已落地契约混淆。
-11. **验收与完成证据语义重叠**：完成证据回答“是否做到”，验收回答“按什么标准算做到”；当前只有前者，后者缺失。
+10. **目标态领域尚未接线**：已修复——BC-10～BC-14 已落地领域事件与 IPC 契约（见 00 §3、09 design §10）。
+11. **验收与完成证据语义重叠**：已修复（BC-14）——完成证据回答“是否做到”，验收回答“按什么标准算做到”，两者分属 A17 与完成证据核验。
 
 这些缺口在 08 中作为问题清单与回溯触发项，在 09 的 design.md 中给出改进建议。

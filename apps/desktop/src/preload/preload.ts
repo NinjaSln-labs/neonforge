@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld('neonforge', {
       level?: string
       tools?: boolean
       forceTool?: boolean
+      progressMode?: 'auto' | 'require-action' | 'require-advance'
       sessionId?: string
       messages: Array<{
         role: string
@@ -78,6 +79,30 @@ contextBridge.exposeInMainWorld('neonforge', {
       path?: string
       error?: string
     }>,
+  },
+  budget: {
+    get: () =>
+      ipcRenderer.invoke('budget:get') as Promise<{
+        settings: { limitUsd: number | null; pauseOnReach: boolean }
+        summary: {
+          entries: number
+          promptTokens: number
+          completionTokens: number
+          reasoningTokens: number
+          totalTokens: number
+          cost: number
+          unknownCostEntries: number
+          cacheHitRate: number | null
+        }
+        state: { limit: number | null; spent: number; reached: boolean }
+      }>,
+    set: (settings: unknown) =>
+      ipcRenderer.invoke('budget:set', settings) as Promise<{
+        ok: boolean
+        error?: string
+        settings?: { limitUsd: number | null; pauseOnReach: boolean }
+        state?: { limit: number | null; spent: number; reached: boolean }
+      }>,
   },
   acceptance: {
     derive: (

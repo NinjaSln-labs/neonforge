@@ -92,8 +92,8 @@
 | `conversation.assistant_done` | content, error | Domain | 否 |
 | `conversation.interrupted` | source | Domain | 否 |
 | `task.goal_proposed` / `task.goal_confirmed` / `task.goal_rejected` | goalText / point | Domain | 否 |
-| `task.execution_proposed` / `task.execution_confirmed` / `task.execution_rejected` | plan/files / point | Domain（**遗留命名**，语义应为 plan） | 否 |
-| `task.achievement_proposed` / `task.achievement_confirmed` / `task.achievement_rejected` | summary / point | Domain（**遗留命名**，语义应为 resolution） | 否 |
+| `task.plan_proposed` / `task.plan_confirmed` / `task.plan_rejected` | plan/files / point | Domain（规范名；旧名 `task.execution_*` 保留读取窗口） | 否 |
+| `task.resolution_proposed` / `task.resolution_confirmed` / `task.resolution_rejected` | summary / point | Domain（规范名；旧名 `task.achievement_*` 保留读取窗口） | 否 |
 | `session.pending_set` / `session.pending_cleared` | kind | Domain | 否 |
 | `dialogue.loop_guard` / `dialogue.forced_clarify` / `dialogue.needs_human` | rounds / underlying / reason | Domain | 否 |
 | `plan.approved` / `plan.rejected` | files / file+approvedList | Domain | 否 |

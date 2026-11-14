@@ -35,24 +35,24 @@
 | P0-04 | P0 | 进程清理/停止服务在 `pid=0` 时调用 `kill(-0)`/`kill(0)` | 可能向当前进程组/应用自身发 SIGKILL，导致应用退出或误杀 | `tools.ts:288-323`（`killTree`/`killAllSubprocesses` 使用 `pid ?? 0`）、`serviceManager.ts:254-286`（`process.kill(-s.pid)`/`-p.pid`） | 所有 kill 前守卫 `pid > 0`；新增纯函数/单测 | 已修复（2026-11-14）：`processGuard.isKillablePid` + tools/serviceManager 全部 kill 前守卫；新增单测 |
 | P0-05 | P1 | 系统代跑验证包含外网 `network-read` 命令 | 证据命令可被模型用于外网 GET 携带敏感数据；自动代跑绕过用户确认 | `conversationState.ts:681-685`（`isSystemVerifiable` 接受 `network-read`）、`verification.ts:9-13` | 系统只代跑 `readonly` 与 localhost `network-read`；外部网络命令标 unverifiable | 已修复（2026-11-14）：`isSystemVerifiable` 单源导出，外网 network-read 不可代跑；`verifyCompletionSystem.test.ts` 覆盖外网/localhost |
 | P1-01 | P1 | `web_fetch` 允许任意 http/https，跟随重定向，无 localhost/私网拦截 | SSRF：可访问内网服务、云元数据地址；可被用于绕过网络边界 | `webTools.ts:260-296` | 拒绝 localhost/私网/元数据地址；手动跟随重定向并逐跳校验；新增测试 | 已修复（2026-11-14）：`isPrivateHost` + `redirect:'manual'` 逐跳校验（最多 5 跳）；`webTools.test.ts` 覆盖 |
-| P1-02 | P1 | 无 Outbox/DLQ/事件版本；时间线写失败静默 | 审计不可靠；跨聚合一致性无投递保证；事件 schema 演进困难 | `timelineLogger.ts:55-77`、`timeline.ts:10-18`、`07 §9` | 引入事件 `eventId/version`；失败可见化；跨上下文写库后发事件（Outbox） | 待修复（文档/后续） |
-| P1-03 | P1 | renderer 与 main 的计划确认镜像异步 | 极端时序下 main 门控仍关闭/仍开启，导致卡不渲染或越权 | `useConversationState.ts:58-68`（`void setPlanConfirmed`）、`ipc.ts:329-331` | 确认转换 await 镜像结果；失败回滚/提示；增加竞态测试 | 待修复（后续） |
-| P1-04 | P1 | IPC 契约无 schema 校验/生成 | preload、types.d.ts、main handler 三者可能漂移；调用方传入非法结构 | `preload.ts:10-250`、`renderer/types.d.ts:8-192`、`ipc.ts:33-409` | 生成式契约或 zod/JSON Schema 校验；契约测试 | 待修复（后续） |
-| P1-05 | P1 | `ConversationPanel.tsx` 3437 行，应用编排与 UI 渲染混在一起 | 可维护性差、DDD 应用层边界侵蚀、测试困难 | `ConversationPanel.tsx` 全文 | 拆分为应用服务 hooks（send/stream/toolLoop/decision）与展示组件 | 待修复（重构） |
+| P1-02 | P1 | 无 Outbox/DLQ/事件版本；时间线写失败静默 | 审计不可靠；跨聚合一致性无投递保证；事件 schema 演进困难 | `timelineLogger.ts`、`timeline.ts` | 引入事件 `eventId/version`；失败可见化；跨上下文写库后发事件（Outbox） | 部分修复（2026-11-14）：`eventId/version` + 写失败计数 + DLQ 落盘 + 启动重放 + dedupe；跨上下文事务性 Outbox 仍后置 |
+| P1-03 | P1 | renderer 与 main 的计划确认镜像异步 | 极端时序下 main 门控仍关闭/仍开启，导致卡不渲染或越权 | `useConversationState.ts`（`confirm/reject`）、`ipc.ts` `session:plan-confirmed` | 确认转换 await 镜像结果；失败回滚/提示；增加竞态测试 | 已修复（2026-11-14）：`confirm/reject` await 镜像并重试 1 次；领域转换仍同步完成 |
+| P1-04 | P1 | IPC 契约无 schema 校验/生成 | preload、types.d.ts、main handler 三者可能漂移；调用方传入非法结构 | `preload.ts`、`renderer/types.d.ts`、`ipc.ts` | 生成式契约或 zod/JSON Schema 校验；契约测试 | 部分修复（2026-11-14）：`ipcSchema.ts` 轻量校验器 + `tools:execute`/`gateway:stream-chat` 入口校验 + 单测；其余 handler 迁移后续 |
+| P1-05 | P1 | `ConversationPanel.tsx` 3437 行，应用编排与 UI 渲染混在一起 | 可维护性差、DDD 应用层边界侵蚀、测试困难 | `ConversationPanel.tsx` 全文 | 拆分为应用服务 hooks（send/stream/toolLoop/decision）与展示组件 | 待修复（重构——大范围，后置） |
 | P1-06 | P1 | 演示/占位能力与生产能力混排 | 用户可能以为 DoD/数字交付/任务队列已可用；产品预期失真 | `MainWorkspace.tsx`（任务队列已真实）、`ConversationPanel.tsx:2568-2576`（demo 面板）、`DoDAlignPanel.tsx:9-13`（硬编码）、`DigitalDeliveryPanel.tsx:14-67`（demo） | 明确标记/隐藏；或将 DoD/验收接入真实方案验证计划 | 部分修复（2026-11-14）：任务队列/验收已真实；演示面板仍在，隔离机制化列入后续 |
 | P1-07 | P1 | 交付包验收项在生产路径为空 | `DeliveryPackage` 有验收字段，但无 DoD 来源；用户看不到“按什么验收” | `MainWorkspace.tsx`（历史 `acceptance: []`） | 方案确认时捕获 `verificationPlan` 作为验收项；或引入 DoD 决策点 | 已修复（BC-14）：`acceptance:derive` 取 `verificationPlan`；门禁阻断关闭 |
-| P1-08 | P1 | 路径相对/绝对双形态与末段匹配启发式 | 可能把同名不同目录文件误判为已产出；完成核验误通过/误拒绝 | `conversationState.ts:783-798`、`791-798` | 统一绝对路径规范；保存文件标识（inode/realpath）；补测试 | 待修复（后续） |
-| P1-09 | P1 | API Key/Web Key 明文 fallback 0600 | 本机其他进程可读；macOS 未签名场景的安全折衷 | `configStore.ts:1-3`、`24-28`、`92-106` | 优先 OS keychain；明文 fallback 加显式设置/到期提醒 | 待修复（安全决策） |
-| P1-10 | P1 | 沙箱仅字符串前缀，未解析符号链接 | 根内 symlink 指向根外可绕过 trust/open 检查 | `tools.ts:57-69`；`ConversationPanel.tsx:2170-2180`（trust 前缀） | realpath 解析；拒绝 symlink 逃逸；测试 | 待修复 |
+| P1-08 | P1 | 路径相对/绝对双形态与末段匹配启发式 | 可能把同名不同目录文件误判为已产出；完成核验误通过/误拒绝 | `conversationState.ts` 的 `inPlannedFiles/deriveDiffs/matchesPlannedPath` | 统一绝对路径规范；保存文件标识（inode/realpath）；补测试 | 已修复（2026-11-14）：`normalizeComparePath` 规范化 + 裸文件名多候选 fail-closed；单测覆盖 |
+| P1-09 | P1 | API Key/Web Key 明文 fallback 0600 | 本机其他进程可读；macOS 未签名场景的安全折衷 | `configStore.ts:1-3`、`24-28`、`92-106` | 优先 OS keychain；明文 fallback 加显式设置/到期提醒 | 保留（安全决策）：未签名 macOS 的 safeStorage 重启失效是已知约束；本轮不改存储协议，后续做显式同意/到期提醒 |
+| P1-10 | P1 | 沙箱仅字符串前缀，未解析符号链接 | 根内 symlink 指向根外可绕过 trust/open 检查 | `tools.ts` 的 `isInSandbox`/`read`/`write`/`edit` | realpath 解析；拒绝 symlink 逃逸；测试 | 已修复（2026-11-14）：`isInSandboxRealpath` + 异步 `read preApproval` + write/edit 硬拦截（含 `security.symlink_escape_blocked`）；单测覆盖 |
 | P1-11 | P1 | `read` 的 ENOENT 分支列出父目录内容 | 泄露目录结构/文件名；与 read 边界叠加 | `tools.ts:221-233` | 限制在项目根内；根外不列目录 | 随 P0-01 修复 |
-| P2-01 | P2 | 旧事件名 `task.execution_*`/`task.achievement_*` | 术语不一致，审计与文档映射成本 | `timeline.ts:30-36`、`134-142` | 新增 `task.plan_*`/`task.resolution_*` 并保留旧名一个窗口 | 待修复（后续） |
-| P2-02 | P2 | 聚合根命名：文件 `conversationState.ts`，聚合是 Task | 新人误以为聚合是 Conversation | `conversationState.ts:1-11` | 重命名/导出 `TaskState` 别名；文档已用 Task | 待修复（命名） |
-| P2-03 | P2 | `forceTool` 旧概念仍出现在时间线与 gateway 参数 | 与 `decideProgressGuarantee` 新语义混淆 | `gateway.ts:611-612`、`timeline.ts:63-64`、`125-127` | 统一为 `progressMode`；保留兼容字段 | 待修复（命名） |
-| P2-04 | P2 | 计划清单落盘非原子（writeFileSync 覆盖） | 崩溃/并发可能写坏 JSON；损坏后回退空清单 | `plannedFilesStore.ts:49-58` | 临时文件 + rename 原子写；校验 | 待修复（后续） |
-| P2-05 | P2 | `tool.executed` 可能重复（diff 派生 + 手工 tlog） | 时间线统计失真 | `timeline.ts:331-333`；`ConversationPanel.tsx:1602-1606`、`useToolApproval.ts:136-140` | 统一事件出口；按 eventId/去重 | 待修复（后续） |
-| P2-06 | P2 | `dedupeKey` 未与全局去重存储接线 | `card.shown` 等可能重复 | `timeline.ts:351-353`、`116-233` | 在 append 层实现 dedupe set | 待修复（后续） |
-| P2-07 | P2 | 事件目录未版本化 | 事件载荷变更破坏旧日志解析 | `TimelineEvent` 仅 ts/seq/session/type/role/detail | 增加 `v` 字段；查询兼容 | 待修复（后续） |
-| P2-08 | P2 | 部分 UI 文案与技术细节混用 | 非技术用户看到“L3/快照 .nf-bak”等 | `authModel.ts` 已部分人类化；仍有权衡 | 统一文案规范 | 待修复（文案） |
+| P2-01 | P2 | 旧事件名 `task.execution_*`/`task.achievement_*` | 术语不一致，审计与文档映射成本 | `timeline.ts` 事件目录 | 新增 `task.plan_*`/`task.resolution_*` 并保留旧名一个窗口 | 已修复（2026-11-14）：规范名已启用；旧名保留读取窗口 |
+| P2-02 | P2 | 聚合根命名：文件 `conversationState.ts`，聚合是 Task | 新人误以为聚合是 Conversation | `conversationState.ts` | 重命名/导出 `TaskState` 别名；文档已用 Task | 已修复（2026-11-14）：导出 `TaskState` 别名（文件改名暂缓避免大范围 churn） |
+| P2-03 | P2 | `forceTool` 旧概念仍出现在时间线与 gateway 参数 | 与 `decideProgressGuarantee` 新语义混淆 | `gateway.ts`、`timeline.ts`、`ConversationPanel.tsx` | 统一为 `progressMode`；保留兼容字段 | 已修复（2026-11-14）：`progressMode` 进入 gateway/IPC/preload/timeline；`forceTool` 保留兼容 |
+| P2-04 | P2 | 计划清单落盘非原子（writeFileSync 覆盖） | 崩溃/并发可能写坏 JSON；损坏后回退空清单 | `plannedFilesStore.ts` | 临时文件 + rename 原子写；校验 | 已修复（2026-11-14）：tmp + rename 原子写 |
+| P2-05 | P2 | `tool.executed` 可能重复（diff 派生 + 手工 tlog） | 时间线统计失真 | `timeline.ts`、`ConversationPanel.tsx`、`useToolApproval.ts` | 统一事件出口；按 eventId/去重 | 已修复（2026-11-14）：产出增量改 `task.files_produced`；`tool.executed` 只表示工具执行事实 |
+| P2-06 | P2 | `dedupeKey` 未与全局去重存储接线 | `card.shown` 等可能重复 | `timeline.ts`、`timelineLogger.ts` | 在 append 层实现 dedupe set | 已修复（2026-11-14）：`timelineLogger` 按会话+类型+detail 去重 |
+| P2-07 | P2 | 事件目录未版本化 | 事件载荷变更破坏旧日志解析 | `TimelineEvent` 仅 ts/seq/session/type/role/detail | 增加 `v` 字段；查询兼容 | 已修复（2026-11-14）：事件写 `eventId` + `version: 1` |
+| P2-08 | P2 | 部分 UI 文案与技术细节混用 | 非技术用户看到“L3/快照 .nf-bak”等 | `authModel.ts` 已部分人类化；仍有权衡 | 统一文案规范 | 部分修复（2026-11-14）：新增队列/扩展文案为人类可读；剩余文案后置 |
 
 ### 2A. 目标领域完整性问题（to-be）
 
@@ -133,8 +133,8 @@
 
 ### 5.3 非阻塞但建议尽快处理
 
-- P1-03 状态镜像竞态、P1-04 契约 schema、P1-08 路径规范化、P1-09 密钥存储、P1-10 symlink、P2-01 事件命名、P2-04 原子写。
-- 目标态领域缺口 G01-G05（见 §2A）已于 2026-11-14 实现；实现记录见 `00-domain-blueprint.md §6`。
+- 已关闭（2026-11-14）：P1-03 镜像竞态、P1-08 路径规范化、P1-10 symlink、P2-01 事件命名、P2-04 原子写、P2-05 事件重复、P2-06 dedupe、P2-07 事件版本；P1-02 已有 DLQ/事件版本，跨上下文 Outbox 后续；P1-04 已有校验基础与关键入口。
+- 待后续：P1-05 ConversationPanel 拆分、P1-09 密钥存储安全决策、P2-08 文案规范；P1-06 演示隔离机制化。
 
 ### 5.4 通过标准（建议）
 

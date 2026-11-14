@@ -25,7 +25,7 @@
 | C13 | 计划清单持久化 | 追加式清单、approved 标记、权威落 main、任务边界重置 | `plan.approved`、`planned-files:*` | 上游：方案确认/批准；下游：write 门控、完成核验 |
 | C14 | 环境与能力 | runtime/包管理器/工具链检测，能力 ready/missing/failed，端口分配 | `capability.checked/ledger_updated`、`environment.injected` | 上游：工作区；下游：工具执行、服务、发送前环境注入 |
 | C15 | 服务生命周期 | 开发服务器 start/check/stop、端口白名单、保留端口保护 | `capability.*`（间接） | 上游：环境/工具；下游：`open`、交付验证 |
-| C16 | 交付包 | 真实变更汇总、产物清单、验收对照、下一步、复跑 | `task.achievement_confirmed`、交付包状态 | 上游：工具执行/解决确认；下游：问题台账关闭/复跑 |
+| C16 | 交付包 | 真实变更汇总、产物清单、验收对照、下一步、复跑 | `task.resolution_confirmed`、交付包状态 | 上游：工具执行/解决确认；下游：问题台账关闭/复跑 |
 | C17 | Diff 应用与回滚 | 统一 diff 解析、L3 授权应用、快照回滚 | `delivery:apply-diff/revert-diff` | 上游：交付包/用户；下游：工作区文件 |
 | C18 | 问题台账 | 7 态问题状态机、快照（目标/决策/授权/待办）、复跑/关闭 | `problem.created/rerun/snapshot_updated/closed` | 上游：用户消息/目标确认/工具结果；下游：会话恢复、交付包 |
 | C19 | 接入方与模型路由 | 接入方描述、模型列表/手填/回退、flash/pro 档位 | `conversation.assistant_start`（间接） | 上游：配置；下游：流式请求、预热、压缩 |

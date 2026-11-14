@@ -30,17 +30,17 @@ describe('deriveStateEvents（转换 diff → 领域事件）', () => {
     )
   })
 
-  it('执行/达成确认/拒绝 → task.execution_*/task.achievement_*', () => {
+  it('方案/解决确认/拒绝 → task.plan_*/task.resolution_*（规范名）', () => {
     let s = userConfirmed(initialState(), 'goal')
     const exec = userConfirmed(s, 'plan')
     const t1 = deriveStateEvents(s, exec).map((e) => e.type)
-    expect(t1).toContain('task.execution_confirmed')
+    expect(t1).toContain('task.plan_confirmed')
     s = exec
     const ach = userConfirmed(s, 'resolution')
-    expect(deriveStateEvents(s, ach).map((e) => e.type)).toContain('task.achievement_confirmed')
+    expect(deriveStateEvents(s, ach).map((e) => e.type)).toContain('task.resolution_confirmed')
     expect(
       deriveStateEvents(ach, userRejected(ach, 'resolution', { kind: 'scope' })).map((e) => e.type),
-    ).toContain('task.achievement_rejected')
+    ).toContain('task.resolution_rejected')
   })
 
   it('pending 置位/清除 → session.pending_set/cleared（含 kind）', () => {
@@ -74,13 +74,14 @@ describe('deriveStateEvents（转换 diff → 领域事件）', () => {
     expect(approved2?.detail.files).toEqual(['/test/c.js'])
   })
 
-  it('产出新增 → tool.executed（files 载荷）', () => {
+  it('产出新增 → task.files_produced（files 载荷；不与 tool.executed 重复）', () => {
     const s = userConfirmed(userConfirmed(initialState(), 'goal'), 'plan')
     const next = applyToolResult(s, { name: 'write', ok: true, file: '/test/a.js' })
     const evts = deriveStateEvents(s, next)
     expect(evts).toContainEqual(
-      expect.objectContaining({ type: 'tool.executed', detail: { files: ['/test/a.js'] } }),
+      expect.objectContaining({ type: 'task.files_produced', detail: { files: ['/test/a.js'] } }),
     )
+    expect(evts.some((e) => e.type === 'tool.executed')).toBe(false)
   })
 
   it('无状态变化 → 无事件（幂等）', () => {
@@ -121,11 +122,11 @@ describe('dedupeKey / detectProposed（2026-08-15 补齐）', () => {
       detail: { goalText: '做一个游戏' },
     })
     expect(detectProposed('【执行方案】\n- a.js')).toContainEqual({
-      type: 'task.execution_proposed',
+      type: 'task.plan_proposed',
       detail: expect.objectContaining({}),
     })
     expect(detectProposed('完成【已达成】')).toContainEqual({
-      type: 'task.achievement_proposed',
+      type: 'task.resolution_proposed',
       detail: expect.objectContaining({}),
     })
   })

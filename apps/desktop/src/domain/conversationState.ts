@@ -125,6 +125,9 @@ export interface ConversationState {
   unresolvedTextReplies: number // ADR-010 T2：pending 存在期间用户连续文本回复数（决策清零）
 }
 
+/** P2-02：聚合根语义名 Task 的别名（历史文件名为 conversationState——避免新人误读聚合是 Conversation） */
+export type TaskState = ConversationState
+
 export const initialState = (): ConversationState => ({
   goalConfirmed: false,
   planConfirmed: false,
@@ -602,10 +605,32 @@ export function sessionGate(
   return { ok: true, reason: '' }
 }
 
+// P1-08：路径规范化（比较用）——统一分隔符、去 ./ 与前导尾斜杠、折叠重复分隔符
+export function normalizeComparePath(p: unknown): string {
+  const raw = String(p ?? '').trim().replace(/\\/g, '/')
+  if (!raw) return ''
+  const absolute = raw.startsWith('/')
+  const segments: string[] = []
+  for (const part of raw.split('/')) {
+    if (!part || part === '.') continue
+    if (part === '..') {
+      if (segments.length > 0 && segments[segments.length - 1] !== '..') segments.pop()
+      else if (!absolute) segments.push('..')
+      continue
+    }
+    segments.push(part)
+  }
+  return (absolute ? '/' : '') + segments.join('/')
+}
+
 // 清单匹配判定（Q5 单源——S3 统一：renderer 引用本函数，消除双实现；相对/绝对/目录尾斜杠兼容）
 export function inPlannedFiles(s: ConversationState, action: ExecAction): boolean {
-  const p = String(action.path ?? '')
-  return [...s.plannedFiles].some((f) => f === p || f.endsWith('/' + p) || p.endsWith('/' + f))
+  const p = normalizeComparePath(action.path)
+  if (!p) return false
+  return [...s.plannedFiles].some((raw) => {
+    const f = normalizeComparePath(raw)
+    return f === p || f.endsWith('/' + p) || p.endsWith('/' + f)
+  })
 }
 
 export interface ActionGatePolicy {
@@ -853,19 +878,29 @@ export function verifyCompletion(
  * 修正：精确匹配外加路径末段边界匹配（'/…/index.html' 以 '/index.html' 结尾 = 同一文件）。 */
 export function deriveDiffs(planned: Set<string>, produced: Set<string>): Array<{ path: string }> {
   return [...produced]
-    .filter((p) => [...planned].some((q) => q === p || p.endsWith('/' + q)))
+    .filter((raw) => {
+      const p = normalizeComparePath(raw)
+      return [...planned].some((qRaw) => {
+        const q = normalizeComparePath(qRaw)
+        return q !== '' && (q === p || p.endsWith('/' + q))
+      })
+    })
     .map((path) => ({ path }))
 }
 
 /** A-021：planned 清单项 q 是否已被 produced 产出覆盖——精确相等或 produced 末段边界匹配
- *（q 相对 'index.html'，produced '/…/index.html' → 同一文件；q 需非空——trustPath 空 fallback 不算已产出） */
+ *（q 相对 'index.html'，produced '/…/index.html' → 同一文件；q 需非空——trustPath 空 fallback 不算已产出）
+ * P1-08：比较前规范化路径（./、反斜杠、尾斜杠）；裸文件名（无目录）在多个候选时视为歧义 → 不通过（fail-closed） */
 export function matchesPlannedPath(q: string, produced: ReadonlySet<string>): boolean {
-  if (!q) return false
-  if (produced.has(q)) return true
-  for (const p of produced) {
-    if (p.endsWith('/' + q)) return true
-  }
-  return false
+  const nq = normalizeComparePath(q)
+  if (!nq) return false
+  const matches = [...produced].filter((pRaw) => {
+    const p = normalizeComparePath(pRaw)
+    return p === nq || p.endsWith('/' + nq)
+  })
+  if (matches.length === 0) return false
+  if (!nq.includes('/') && matches.length > 1) return false
+  return true
 }
 
 // —— 证据不足回填引导（S4——§6 S4 + §3.3：完成声明被拒 → 引导文本注入模型重新输出带证据声明） ——

@@ -74,7 +74,7 @@
 - 关键命令：`ProposeChangeSet`、`ReviewChangeItem`、`ApplyChangeSet`、`RevertChangeSet`、`SupersedeChangeSet`
 - 关键事件：`changeset.proposed`、`changeset.reviewed`、`changeset.applied`、`changeset.reverted`、`changeset.conflict_detected`
 - 代码落点：`applyDiff.ts`（snapshot/revert）、`ipc.ts:219-227`（`delivery:apply-diff/revert-diff`）、`DeliveryPanel.tsx`（审核 UI）、`pluginSystem.ts:22`（git 占位，目标态读能力）
-- 现状：diff 解析/应用/回滚存在；变更集对象、基线校验、Git 只读桥缺失。
+- 现状：已落地。变更集状态机 + 内容哈希基线 + 冲突检测；Git 只读桥（status/log/diff/branches）固定 argv。
 
 ### 3.2 BC-11 任务编排（Task Orchestration）
 
@@ -91,7 +91,7 @@
 - 关键命令：`EnqueueTask`、`StartTask`、`PauseTask`、`ResumeTask`、`CancelTask`、`ReorderTask`
 - 关键事件：`queue.entry_enqueued`、`queue.entry_started`、`queue.entry_blocked`、`queue.entry_completed`、`queue.entry_cancelled`
 - 代码落点：`MainWorkspace.tsx:15-40`（占位）、`chatTab tasks`（入口）
-- 现状：占位，无聚合/无调度。
+- 现状：已落地。单活跃队列、暂停/恢复/阻塞/取消/重排、按会话原子持久化；授权等待自动阻塞并在解除后恢复。
 
 ### 3.3 BC-12 用量与成本（Usage & Cost）
 
@@ -108,8 +108,8 @@
   - 预算阈值只产生提醒事件，默认不硬中断任务（硬限制需用户显式开启）。
 - 关键命令：`RecordUsage`、`EvaluateBudget`、`ClosePeriod`、`ExportUsage`
 - 关键事件：`usage.recorded`、`usage.budget_threshold_reached`、`usage.period_closed`
-- 代码落点：`gateway.ts`（需解析 usage，当前无）、`MainWorkspace.tsx:33-36`（占位展示）、`pluginSystem.ts:23`（stats 占位）
-- 现状：缺失。
+- 代码落点：`main/gateway.ts`（usage 解析）、`domain/usageLedger.ts`、`main/usageStore.ts`、`main/budgetStore.ts`、`ipc.ts` `usage:*`/`budget:*`、`MainWorkspace.tsx` TaskPanel
+- 现状：已落地。真实 usage 入账（未知价格 cost=null）、append-only 台账、汇总/CSV 导出、预算阈值提醒 + 可选安全点暂停。
 
 ### 3.4 BC-13 扩展与集成（Extensions & Integrations）
 
@@ -143,7 +143,7 @@
 - 关键命令：`DeriveAcceptanceCriteria`、`AttachEvidence`、`MarkPassed`、`WaiveItem`、`EvaluateGate`
 - 关键事件：`acceptance.criteria_derived`、`acceptance.item_passed`、`acceptance.item_failed`、`acceptance.item_waived`、`quality_gate.evaluated`
 - 代码落点：`DeliveryPanel.tsx:332-350`、`MainWorkspace.tsx:282-299`、`DoDAlignPanel.tsx:9-13`（演示）、`PlanProposal.verificationPlan`
-- 现状：字段/UI 有，来源与判定缺失；演示冒充风险。
+- 现状：已落地。验收来源取已确认方案的 `verificationPlan`；证据/手工理由/豁免规则由领域强制；门禁阻断关闭。
 
 ---
 

@@ -2001,6 +2001,7 @@ export default function ConversationPanel({
         'conversation.assistant_start',
         {
           forceTool,
+          progressMode: decision.mode,
           goalConfirmed: stateRef.current.goalConfirmed,
           planConfirmed: stateRef.current.planConfirmed,
         },
@@ -2051,6 +2052,7 @@ export default function ConversationPanel({
         level: 'basic',
         tools: true,
         forceTool,
+        progressMode: decision.mode,
         sessionId,
         messages: [
           ...(loopGuardSuffix
@@ -2256,6 +2258,18 @@ export default function ConversationPanel({
     const text = (fromBox ? inputRef.current : opts.text!).trim()
     if (!text) return
     const silent = Boolean(opts?.silent) || isSystemNudgeText(text)
+    // BC-12 硬限制（仅用户显式开启）：达阈值后在新一轮开始前暂停——不打断已开始的流式/工具调用
+    if (!silent) {
+      try {
+        const b = await window.neonforge.budget?.get?.()
+        if (b?.state.reached && b.settings.pauseOnReach) {
+          onActionPromiseHint?.('预算已达阈值——已在安全点暂停；请调整预算后继续')
+          return
+        }
+      } catch {
+        /* 预算查询失败不阻断发送 */
+      }
+    }
     // 来自输入框：立刻清框（silent 若先 await stop，文案会长时间停在框里——UAT typeAndSend / 用户可见）
     // opts.text 直送：不动输入框，保留用户草稿
     if (fromBox) {
