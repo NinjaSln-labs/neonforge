@@ -262,7 +262,7 @@ export default function ConversationPanel({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   // 2026-08-04 体验修复（用户实测：启动页输入句预填多余）：initialPrompt 进入工作区自动发送——说了就直接开始
   // （区别于 externalRequest「预填+自动发送」复跑语义；initialPrompt 只用于启动页首句）
-  const sendRef = useRef<(opts?: { silent?: boolean; text?: string }) => Promise<void>>(
+  const sendRef = useRef<(opts?: { silent?: boolean; text?: string; queued?: boolean }) => Promise<void>>(
     async () => {},
   )
   // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层状态）：连续无进展计数 + 升级次数（不可变 StuckState）+ 已读文件集合

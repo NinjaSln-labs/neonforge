@@ -46,7 +46,7 @@ export interface ChatEngineDeps {
   reject: Reject
   rootPath?: string | null
   /** externalRequest / verifyThenResolve / applyChunk 共享的发送入口引用 */
-  sendRef: RefObject<(opts?: { silent?: boolean; text?: string }) => Promise<void>>
+  sendRef: RefObject<(opts?: { silent?: boolean; text?: string; queued?: boolean }) => Promise<void>>
   sessionId: string
   sessionRef: RefObject<number>
   setInput: (v: string) => void
@@ -69,12 +69,12 @@ export interface ChatEngineDeps {
 
 export interface ChatEngine {
   acquireChain: () => Promise<() => void>
-  finishError: (err: string, errorTypeHint?: ChatErrorType) => void
+  finishError: (err: string, errorTypeHint?: ChatErrorType, sid?: number) => void
   flushPendingSend: () => void
   maybeContinue: (depth: number, sid: number) => Promise<void>
   retryFailedTurn: () => Promise<void>
   runChat: (msgs: HistoryMessage[], depth: number, sid: number) => Promise<void>
-  send: (opts?: { silent?: boolean; text?: string }) => Promise<void>
+  send: (opts?: { silent?: boolean; text?: string; queued?: boolean }) => Promise<void>
   stopGeneration: (source?: 'button' | 'silent') => Promise<void>
 }
 
@@ -134,6 +134,12 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
   // 自动续跑引用（finishError 瞬态失败一次自动重试——等同点「重试」；每会话一次）
   const autoRetriedServiceRef = useRef(false)
   const retryFailedTurnRef = useRef<(() => Promise<void>) | null>(null)
+  // 消息写入必须同步维护 messagesRef：finishError/maybeContinue/retry 在 React effect 之前读取 ref，
+  // 仅 setMessages 会让 ref 慢一拍 → 失败路径用陈旧列表覆盖刚追加的用户/streaming 消息（计数丢失根因）
+  const commitMessages = (next: Msg[]) => {
+    messagesRef.current = next
+    setMessages(next)
+  }
 
   // 工具完成后触发续聊：轮询等工具执行（自动/授权）完成，全 done → 回填模型继续
   // 2026-08-04 重构（用户：「定多少才不会卡」）：死上限（2/8）→ 自然停止 + 兜底——只要模型还在调工具就继续（开发正常 10-20+ 轮）；
@@ -143,10 +149,13 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
     if (!ctx || depth >= 40 || sessionRef.current !== sid) return
     // 2026-08-05 用户反馈 3（处理中可发送）：工具执行期间保持 working=true（状态栏「搭档处理中」）——send 守卫/停止按钮可感知模型仍在干活；
     // 原工具执行间隙 working=false → 用户发送放行 → 新旧对话并发（未知问题）
+    workingRef.current = true
     setWorking(true)
     onWorkingChange?.(true)
     setWorkingStage('工具执行中…')
     const releaseWorking = () => {
+      if (sessionRef.current !== sid) return // 旧回合不得清掉新回合的 working（并发回合根因）
+      workingRef.current = false
       setWorking(false)
       onWorkingChange?.(false)
     }
@@ -157,8 +166,7 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
       await new Promise((r) => setTimeout(r, 500))
       // 2026-08-05 防护：长窗口（150s）期间用户可能打断（处理中发送=stopGeneration→sessionRef++）——检测到立即停止等待，防旧会话续聊
       if (sessionRef.current !== sid) {
-        releaseWorking()
-        return
+        return // 新回合已接管 working——旧回合静默退出
       }
       const latest = messagesRef.current
       const lastMsg = latest[latest.length - 1]
@@ -271,8 +279,8 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
       })),
     ]
     chatRef.current = { msgs: toolMsgs, depth: depth + 1 }
-    setMessages((p) => [
-      ...p,
+    commitMessages([
+      ...messagesRef.current,
       { role: 'assistant', content: '', reasoning: '', status: 'streaming', id: nextMsgId() },
     ])
     await new Promise((r) => setTimeout(r, 50))
@@ -289,14 +297,17 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
     // 2026-08-04 重构（用户：「定多少才不卡」根因——原 `depth > 4` 硬上限，开发工具链 5+ 轮必断）：40 轮总兜底（防死循环由 maybeContinue 重复检测承担）
     if (depth > 40) {
       // 2026-08-05：提前 return 释放 working（不经过 maybeContinue/finishError——防卡「搭档处理中」）
-      setWorking(false)
-      onWorkingChange?.(false)
-      setWorkingStage('就绪')
+      if (sessionRef.current === sid) {
+        workingRef.current = false
+        setWorking(false)
+        onWorkingChange?.(false)
+        setWorkingStage('就绪')
+      }
       return
     }
     const key = await window.neonforge.config.getKey()
     if (!key) {
-      finishError('key-invalid')
+      finishError('key-invalid', undefined, sid)
       return
     }
     // 系统提示：引导直接 read（项目根相对路径）——避免 bash 全局搜索/工具循环（提速）
@@ -487,11 +498,11 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
         ],
       })
       if (!res.ok) {
-        finishError(res.error ?? 'gateway-error', res.errorType)
+        finishError(res.error ?? 'gateway-error', res.errorType, sid)
         return
       }
     } catch {
-      finishError('network')
+      finishError('network', undefined, sid)
       return
     }
 
@@ -525,6 +536,7 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
     } catch {
       /* 无活动命令 */
     }
+    workingRef.current = false
     setWorking(false)
     onWorkingChange?.(false)
     setWorkingStage('已停止')
@@ -537,13 +549,14 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
     if (!pending) return
     pendingSendRef.current = ''
     // 直送——不经输入框（避免 pending 文案闪进 textarea）
-    setTimeout(() => void sendRef.current({ text: pending }), 50)
+    setTimeout(() => void sendRef.current({ text: pending, queued: true }), 50)
   }
 
   // 2026-08-06 只说不做第 5 次升级：send 支持 silent（自动续聊——不显示用户气泡）
   // 2026-09-28：系统提示/对账前缀强制 silent；opts.text 直送——不经输入框（防系统文案停在 textarea）
-  const send = async (opts?: { silent?: boolean; text?: string }) => {
+  const send = async (opts?: { silent?: boolean; text?: string; queued?: boolean }) => {
     const fromBox = opts?.text === undefined
+    const fromQueue = Boolean(opts?.queued)
     const text = (fromBox ? inputRef.current : opts.text!).trim()
     if (!text) return
     const silent = Boolean(opts?.silent) || isSystemNudgeText(text)
@@ -621,19 +634,27 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
         content: text,
         session: sessionId,
       })
-      setMessages((p) => [...p, { role: 'user', content: text, status: 'done', id: nextMsgId() }])
+      // 排队用户消息继任失败回合：移除尾部错误气泡（等同手动重试替换语义——用户已给出下一步）
+      const lastMsg = messagesRef.current[messagesRef.current.length - 1]
+      const dropError = fromQueue && lastMsg?.role === 'assistant' && lastMsg.status === 'error'
+      const base = dropError ? messagesRef.current.slice(0, -1) : messagesRef.current
+      commitMessages([
+        ...base,
+        { role: 'user', content: text, status: 'done', id: nextMsgId() },
+      ])
     } else {
       // 系统引导/提示：不经用户通道（气泡/输入框/message_sent/chatLog）；时间线记一条便于事后查
       tlog('conversation.system_nudge', { content: text, kind: systemNudgeKind(text) }, 'system')
     }
     // 2026-08-04：新轮次——重置流式累积（防上轮异常残留）
     streamingRef.current = { content: '', reasoning: '', toolCalls: [] }
+    workingRef.current = true // 同步置位：state effect 有一拍滞后，期间其它 send 会误判空闲（并发回合根因）
     setWorking(true)
     onWorkingChange?.(true)
     const sid = ++sessionRef.current // 新会话——旧会话事件/续聊失效
     const history = buildHistory(messages)
-    setMessages((p) => [
-      ...p,
+    commitMessages([
+      ...messagesRef.current,
       { role: 'assistant', content: '', reasoning: '', status: 'streaming', id: nextMsgId() },
     ])
     setWorkingStage(silent ? '系统引导中…' : '已发送，等待搭档…')
@@ -733,12 +754,16 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
         release()
       }
     } catch {
-      finishError('network')
+      finishError('network', undefined, sid)
     } finally {
-      setWorking(false)
-      onWorkingChange?.(false)
-      // 2026-08-07 无阶段修复（输入≠打断）：当前轮（流式+工具链）完成 → 排队消息自动衔接发送
-      flushPendingSend()
+      // 只有本回合仍是最新回合才释放 working / 衔接排队（旧回合不得清掉新回合状态）
+      if (sessionRef.current === sid) {
+        workingRef.current = false
+        setWorking(false)
+        onWorkingChange?.(false)
+        // 2026-08-07 无阶段修复（输入≠打断）：当前轮（流式+工具链）完成 → 排队消息自动衔接发送
+        flushPendingSend()
+      }
     }
   }
   // 05 B：sendRef 同步最新 send（externalRequest 触发用）
@@ -746,7 +771,9 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
     sendRef.current = send
   }, [send, sendRef])
 
-  const finishError = (err: string, errorTypeHint?: ChatErrorType) => {
+  const finishError = (err: string, errorTypeHint?: ChatErrorType, sid?: number) => {
+    // 旧回合的错误不得覆盖新回合（并发回合根因：stale finishError 会改当前消息/清 working）
+    if (sid !== undefined && sid !== sessionRef.current) return
     // 2026-08-04 体验修复：错误分类 + 日志记录在 updater 外（坑 32——StrictMode updater 双调；原仅 done 记录错误无法追溯）
     // 2026-08-05 用户反馈（第二轮候选点选后卡住）：runChat 提前 return（gateway 错误/网络错误/key 失效）走 finishError 不经过 maybeContinue——
     // working 释放点已移到 maybeContinue（0e12ea6）→ finishError 不释放 → working 卡 true → 状态栏「搭档处理中」→ 卡住；此处统一释放
@@ -786,6 +813,9 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
       !autoRetriedServiceRef.current
     ) {
       autoRetriedServiceRef.current = true
+      // 失败轮期间已有排队用户消息（当前轮 finally 会 flush）：由用户消息继任，不再自动续跑
+      // （两者同 tick 并发启动 = 双回合 + chunk 混写；实测「自动续跑成功」重复）
+      if (pendingSendRef.current) return
       setTimeout(() => {
         void retryFailedTurnRef.current?.()
       }, 0)
@@ -804,7 +834,7 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
       reasoning: '',
       toolCalls: last.toolCalls ?? [],
     }
-    setMessages([
+    commitMessages([
       ...prev,
       {
         role: 'assistant',
@@ -815,6 +845,7 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
         toolCalls: last.toolCalls,
       },
     ])
+    workingRef.current = true // 同步置位（同 send：防 effect 滞后放行并发回合）
     setWorking(true)
     onWorkingChange?.(true)
     setWorkingStage('重试中…')

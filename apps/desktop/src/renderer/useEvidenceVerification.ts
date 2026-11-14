@@ -20,7 +20,7 @@ export interface EvidenceVerificationDeps {
   onActionPromiseHint?: (hint: string | null) => void
   pendingSendRef: RefObject<string>
   rootPath?: string | null
-  sendRef: RefObject<(opts?: { silent?: boolean; text?: string }) => Promise<void>>
+  sendRef: RefObject<(opts?: { silent?: boolean; text?: string; queued?: boolean }) => Promise<void>>
   sessionId: string
   setPendingState: SetPending
   stateRef: RefObject<ConversationState>
