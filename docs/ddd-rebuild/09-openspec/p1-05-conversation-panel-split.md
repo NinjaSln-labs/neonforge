@@ -1,22 +1,22 @@
 # P1-05 · ConversationPanel 拆分计划
 
-> 状态：进行中（阶段 1 已完成）。目标：应用层编排与领域状态分离，组件只保留组合与布局。
+> 状态：阶段 1–4c 已完成（`ConversationPanel.tsx` 3372 → 1521 行）。目标：应用层编排与领域状态分离，组件只保留组合与布局。
 
 ## 现状
 
-- `ConversationPanel.tsx`：约 3372 行；同时承担 UI 渲染、流式事件处理、工具链续聊、确认卡逻辑、输入区交互。
-- 已独立：`useConversationState`（领域状态写路径）、`useToolApproval`（授权动作）、`CandidateButtons`、`conversationFormat`（纯格式化辅助）。
-- 约束：`applyChunk` / `runChat` / `maybeContinue` 依赖大量 ref 与组件状态，不能一次性搬移；按阶段迁移、每阶段独立验证。
+- `ConversationPanel.tsx`：约 1521 行；保留渲染、确认卡派生、会话持久化与时间线打点。
+- 已独立：`useConversationState`（领域状态写路径）、`useToolApproval`（授权动作）、`CandidateButtons`、`conversationFormat`（纯格式化辅助）、`DecisionCards`、`ConversationComposer`、`conversationHistory`、`useChatStream`、`useChatEngine`。
+- 约束：`applyChunk` / `runChat` 依赖大量 ref 与组件状态，不能一次性搬移；按阶段迁移、每阶段独立验证。
 
 ## 阶段
 
 1. [x] **纯格式化/展示辅助**（2026-11-14）：`fmtToolResult`、`fmtToolArgs`、`AssumptionList`、`hasProtoCall`、`isActionPromise` → `conversationFormat.tsx`（102 行；无行为变更）。
 2. [x] **决策卡组件**（2026-11-14）：目标/计划/达成确认卡 → `DecisionCards.tsx`；只接收快照与回调，组件内不读写 `stateRef`。卡片相关 interaction 40 项：39 通过 / 1 既有 `.nf-start` flaky。
 3. [x] **输入区**（2026-11-15）：输入框、@引用浮层、发送/停止/合并授权按钮 → `ConversationComposer.tsx`；输入区本地状态内聚，发送/停止由面板回传。core interaction 28 项：27 通过 / 1 既有 `.nf-start` flaky。
-4. [ ] **流式/工具链编排**（分步迁移）：
+4. [x] **流式/工具链编排**（分步迁移）：
    - [x] **4a 历史构建**（2026-11-15）：`buildHistory` → `conversationHistory.ts`（纯函数 + 单测；工具轮 rawResult/reasoning_content 语义不变）。
    - [x] **4b 流式事件**（2026-11-15）：`applyChunk` → `useChatStream.ts` 的 `createApplyChunk(deps)` 工厂（35 项显式依赖）；状态所有权仍归面板，闭包时序与 `applyChunkRef` 更新方式不变。interaction 71 项：69 通过 / 2 既有 flaky（`.nf-start`、自动续跑双发）；单测 760 通过。
-   - [ ] **4c 轮次编排**：`runChat` / `maybeContinue` / `send` / `finishError` / `retryFailedTurn` → `useChatEngine.ts`。
+   - [x] **4c 轮次编排**（2026-11-15）：`runChat` / `maybeContinue` / `send` / `finishError` / `retryFailedTurn` / `stopGeneration` / `flushPendingSend` → `useChatEngine.ts`（838 行 hook：链锁与跨轮重复检测内聚）。与 `useToolApproval` 的循环依赖用迟绑定 getter（`getApproveAllToolCalls`）解耦；`sendRef`/`doneNotifierRef`/`pendingSendRef` 仍由面板持有以保持 4b 时序。interaction 71 项：70 通过 / 1 既有 `.nf-start` flaky；单测 760 通过。
 5. [ ] **面板收敛**：`ConversationPanel` 仅组合布局、订阅 hook 返回值与渲染子组件。
 
 ## 每阶段验收
