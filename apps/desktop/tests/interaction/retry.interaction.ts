@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { gotoStart } from './scenarios'
 
 /** 服务失败 → 点「重试」→ 同回合重放（不追加用户消息） */
 async function mockRetryBridge(page: Page): Promise<void> {
@@ -140,7 +141,9 @@ async function mockAutoRetryAfterPlan(page: Page): Promise<void> {
             return { ok: false, error: 'service-error', errorType: 'service' as const }
           }
           // 自动续跑及 StrictMode 多余序号：一律成功（与首版 interaction 一致）
-          emit([{ type: 'content', text: '自动续跑成功' }, { type: 'done' }])
+          // 2026-11-15：StuckDetector 在成功轮无产出时会 silent 续聊（系统推进 nudge，属预期行为）；
+          // 后续轮使用不同文案，避免与「自动续跑成功」断言计数混淆（此前 flaky 即 nudge 轮同文案）
+          emit([{ type: 'content', text: chat.n === 4 ? '自动续跑成功' : '静默推进' }, { type: 'done' }])
           return { ok: true }
         },
         onStreamChunk: (cb: (c: unknown) => void) => {
@@ -164,7 +167,7 @@ async function mockAutoRetryAfterPlan(page: Page): Promise<void> {
 }
 
 async function enter(page: Page): Promise<void> {
-  await page.goto('/')
+  await gotoStart(page)
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.waitForSelector('.nf-chat__input textarea')
@@ -186,7 +189,7 @@ test('服务失败气泡显示「重试」→ 点击后不追加用户消息且�
 
 test('计划确认后 service 自动续跑一次；第二次 service 须点重试', async ({ page }) => {
   await mockAutoRetryAfterPlan(page)
-  await page.goto('/')
+  await gotoStart(page)
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByLabel('想解决的问题').fill('做个待办')
   await page.getByRole('button', { name: '从零开始' }).click()

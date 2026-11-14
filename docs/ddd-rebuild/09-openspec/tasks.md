@@ -66,9 +66,9 @@
 - [x] 4.1 `npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit`
 - [x] 4.2 `npx vitest run`（67 文件 / 760 用例通过，2026-11-15）
 - [x] 4.3 `npx eslint .`（0 error，6 条既有 hook 依赖 warning）
-- [ ] 4.4 `npx playwright test --project=interaction`（环境可用时；2026-11-15 最新全量 69–71/71 波动。两个既有 flaky 根因已定位：
-  ① `.nf-start` 启动竞态 = WSL/Chromium 偶发 `net::ERR_NETWORK_CHANGED`，网络栈变更取消模块请求，页面只剩空 `<div id="root">`（非应用启动逻辑 bug）——测试 helper 已加一次重载重试；
-  ② 计划确认后重试双回合 = `finishError` 自动续跑与 `flushPendingSend` 排队发送并发启动，旧回合 `maybeContinue` 仍 `releaseWorking` 清掉新回合 working，且 chunk 不带 sid 导致多流混写（未修，属行为改动，需单独排期）。两者在 base 均可复现、非本分支回归。另已修正 `use.expect` 配置被 Playwright 忽略的问题（断言超时 30s / 单测 90s））
+- [x] 4.4 `npx playwright test --project=interaction`（2026-11-15 全量 71/71 通过。两个既有 flaky 已定位并处置：
+  ① `.nf-start` 启动竞态 = WSL/Chromium 偶发 `net::ERR_NETWORK_CHANGED`，网络栈变更取消模块请求，页面只剩空 `<div id="root">`（非应用启动逻辑 bug）——所有 interaction 入口统一走 `gotoStart`（启动超时一次重载重试 + DOM/bridge/hasKey/console 诊断），环境问题在测试层消除；
+  ② 计划确认后重试双回合 = `finishError` 自动续跑与队列发送并发、旧回合清掉新回合 working、`messagesRef` 滞后导致失败路径覆盖消息——应用层改为 sid 归属校验 / 同步 working / 排队消息继任与自动续跑择一 / 引擎消息写入同步 ref；重试场景 10/10、全量 71/71。另修正 `use.expect` 配置被 Playwright 忽略的问题（断言超时 30s / 单测 90s））
 - [x] 4.5 回归：现有 P0 用例与既有 `conversationState` / `tools` / `verifyCompletionSystem` 测试全部仍通过
 
 ---

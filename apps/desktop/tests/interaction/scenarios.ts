@@ -205,10 +205,15 @@ async function expectStartPage(page: Page): Promise<void> {
   throw new Error('启动页未出现（重载后仍失败）', { cause: lastErr })
 }
 
-/** 打开已有项目（配合 project: 'open'） */
-export async function enterWorkspace(page: Page): Promise<void> {
+/** 导航到启动页（含 ERR_NETWORK_CHANGED 重载重试——所有 interaction 入口统一走这里） */
+export async function gotoStart(page: Page): Promise<void> {
   await page.goto('http://localhost:5175/')
   await expectStartPage(page)
+}
+
+/** 打开已有项目（配合 project: 'open'） */
+export async function enterWorkspace(page: Page): Promise<void> {
+  await gotoStart(page)
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.waitForSelector('.nf-chat__input textarea', { timeout: 8000 })
 }
@@ -217,8 +222,7 @@ export async function enterWorkspace(page: Page): Promise<void> {
  * 注意：用按钮而非 Enter——Enter 与应用内 50ms 自动发送存在竞态（目标卡可能先于首轮流式出现，
  * 导致点击确认目标时首轮尚未完成——forceTool 断言错位；按钮路径与旧测试（根因3）一致，确定性稳定） */
 export async function startFromScratch(page: Page, text?: string): Promise<void> {
-  await page.goto('http://localhost:5175/')
-  await expectStartPage(page)
+  await gotoStart(page)
   if (text !== undefined) {
     await page.locator('.nf-start__input').fill(text)
     await page.getByRole('button', { name: '从零开始' }).click()

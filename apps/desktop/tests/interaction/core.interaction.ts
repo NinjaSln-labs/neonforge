@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { gotoStart } from './scenarios'
 
 // L3 组件交互测试（ddd-qa-chain 缺层——2026-08-02 补）：纯 DOM 断言无截图——跨平台稳定，CI 可跑
 // 覆盖核心交互流：进入工作区 → 发送 → 工具卡（授权/回滚）→ 交付包 → 批量接受 → 快捷键
@@ -70,7 +71,7 @@ async function mockBridge(page: Page): Promise<void> {
 }
 
 async function enterWorkspace(page: Page): Promise<void> {
-  await page.goto('http://localhost:5175/')
+  await gotoStart(page)
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.waitForSelector('.nf-chat__input textarea', { timeout: 8000 })
@@ -218,7 +219,7 @@ test('信任阶梯：授权记录接真实数据（06 问题快照 authorized—
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = bridge
   })
-  await page.goto('http://localhost:5175/')
+  await gotoStart(page)
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.waitForSelector('.nf-chat__input textarea', { timeout: 8000 })
   // 选中问题（activeProblem 生效 → 快照 authorized 传给 TrustLadder）
@@ -298,7 +299,7 @@ test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 1
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = bridge
   })
-  await page.goto('http://localhost:5175/')
+  await gotoStart(page)
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.locator('.nf-chat__input textarea').fill('批量整理文件')
@@ -395,7 +396,7 @@ test('0-1 从零开始：GoalCard 已删除（目标确认走对话澄清——d
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
   })
-  await page.goto('http://localhost:5175/')
+  await gotoStart(page)
   await expect(page.locator('.nf-start')).toBeVisible()
   // 启动页输入需求（对话澄清路径——GoalCard 已删除，dock 不再出现快速确认卡）
   await page.locator('.nf-start__input').fill('做一个设计类小游戏')
@@ -460,7 +461,7 @@ test('0-1 从零开始：目标确认卡确认 → 目标确认 + 执行确认�
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
   })
-  await page.goto('http://localhost:5175/')
+  await gotoStart(page)
   await expect(page.locator('.nf-start')).toBeVisible()
   // 启动页输入需求（GoalCard 已删除——目标确认走对话澄清：模型澄清 + 候选选项卡引导 + 自由输入）
   await page.locator('.nf-start__input').fill('帮我做个网页游戏')
@@ -534,7 +535,7 @@ test('0-1 从零开始：模型需求确认 → 回写台账标题 + updateProje
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
   })
-  await page.goto('http://localhost:5175/')
+  await gotoStart(page)
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
   // 2026-08-07 无阶段重构 S4：模型选择按钮（快速迭代）随 DeliveryFlowPanel 删除——直接对话输入需求
@@ -559,7 +560,7 @@ test('0-1 从零开始：模型需求确认 → 回写台账标题 + updateProje
 // 2026-08-04 体验修复（用户实测：启动页输入句预填多余）：启动页输入 → 从零开始 → 自动发送（说了就直接开始，输入框不预填）
 test('启动页方案 A：输入问题 → 从零开始 → 自动发送（输入框不预填）', async ({ page }) => {
   await mockBridge(page)
-  await page.goto('http://localhost:5175/')
+  await gotoStart(page)
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.locator('.nf-start__input').fill('我要做一个3D射击小游戏')
   await page.getByRole('button', { name: '从零开始' }).click()
@@ -572,7 +573,7 @@ test('启动页方案 A：输入问题 → 从零开始 → 自动发送（输�
 // 2026-08-04 体验修复：启动页输入后按 Enter = 从零开始并自动发送
 test('启动页方案 A：输入后按 Enter → 从零开始并自动发送', async ({ page }) => {
   await mockBridge(page)
-  await page.goto('http://localhost:5175/')
+  await gotoStart(page)
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.locator('.nf-start__input').fill('帮我做个记账工具')
   await page.locator('.nf-start__input').press('Enter')
@@ -652,7 +653,7 @@ test('执行确认门控：目标+执行确认后无产出 → 强制工具产�
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = bridge
   })
-  await page.goto('http://localhost:5175/')
+  await gotoStart(page)
   await expect(page.locator('.nf-start')).toBeVisible()
   // 启动页输入需求（GoalCard 已删除——目标确认走对话澄清）
   await page.locator('.nf-start__input').fill('做个射击游戏')
@@ -790,7 +791,7 @@ test('根因 3：点「确认执行」按钮 → 同事件 send 读到已确认�
     ;(window as unknown as { __nfForceToolCalls?: boolean[] }).__nfForceToolCalls = forceToolCalls
     ;(window as unknown as { __nfApprovedFlags?: boolean[] }).__nfApprovedFlags = approvedFlags
   })
-  await page.goto('http://localhost:5175/')
+  await gotoStart(page)
   await expect(page.locator('.nf-start')).toBeVisible()
   // 启动页输入需求（0-1 流程）
   await page.locator('.nf-start__input').fill('做个射击游戏')
@@ -875,7 +876,7 @@ test('0-1 对话确认需求：用户发「确认推进」→ 自动确认 + 推
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
   })
-  await page.goto('http://localhost:5175/')
+  await gotoStart(page)
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
   // 2026-08-07 无阶段重构 S4：模型选择按钮删除——直接对话输入需求
@@ -965,7 +966,7 @@ test('0-1 工具链自主推进：连续 3 轮 read → 自动续聊 → 最终�
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
   })
-  await page.goto('http://localhost:5175/')
+  await gotoStart(page)
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
   // 2026-08-07 无阶段重构 S4：模型选择按钮删除——启动页无输入 → 目标卡不显示——直接对话发需求
@@ -1065,7 +1066,7 @@ test('O2：check-capability 能力齐备 → 工具卡隐藏；能力缺失 → 
     }
     Object.defineProperty(window, '__capCalls', { get: () => capCalls })
   })
-  await page.goto('http://localhost:5175/')
+  await gotoStart(page)
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   // 场景 A：能力齐备 → check-capability 执行（capCalls=1）但工具卡隐藏（UI 静默——结果仍回填模型上下文）
@@ -1201,7 +1202,7 @@ test('0-1 授权 v4 完整路径：允许并记住 → 同文件自动 → 新�
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
   })
-  await page.goto('http://localhost:5175/')
+  await gotoStart(page)
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
   // 对话发需求 + 确认推进（目标确认）→ 执行确认卡出现
@@ -1275,7 +1276,7 @@ test('结构化候选：<candidates> 渲染为按钮 + 点选发送选项文本'
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
   })
-  await page.goto('http://localhost:5175/')
+  await gotoStart(page)
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.waitForSelector('.nf-chat__input textarea', { timeout: 8000 })
@@ -1357,7 +1358,7 @@ test('目标无【目标确认】标记：用户打字「确认推进」→ 确�
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
   })
-  await page.goto('http://localhost:5175/')
+  await gotoStart(page)
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
   // 对话输入需求（不走目标卡——initialPrompt 空则不显示）
@@ -1450,7 +1451,7 @@ test('需求分流 B 类：改文件内容 → edit 直接执行（不弹 plan �
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
   })
-  await page.goto('http://localhost:5175/')
+  await gotoStart(page)
   await page.getByRole('button', { name: '从零开始' }).click()
   // 2026-08-07 无阶段重构 S4：模型选择按钮删除
   await page.locator('.nf-chat__input textarea').fill('把待办事项.txt 里的买牛奶改成买面包')
@@ -1539,7 +1540,7 @@ test('失败重试检测：bash 连续 3 次失败重试同一命令 → 自动�
     ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
     Object.defineProperty(window, '__chatCount', { get: () => chatCount })
   })
-  await page.goto('http://localhost:5175/')
+  await gotoStart(page)
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
   await page.locator('.nf-chat__input textarea').fill('帮我初始化项目装依赖')
@@ -1663,7 +1664,7 @@ test('approve-files 多卡并存：连续 2 次批量授权 → 各自批准都�
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
   })
-  await page.goto('http://localhost:5175/')
+  await gotoStart(page)
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
   await page.locator('.nf-chat__input textarea').fill('帮我做一个网页游戏')
@@ -1776,7 +1777,7 @@ test('执行确认卡不漂移：write 被拦后模型连发消息 → 卡固定
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
   })
-  await page.goto('http://localhost:5175/')
+  await gotoStart(page)
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
   await page.locator('.nf-chat__input textarea').fill('帮我做一个网页游戏')
@@ -1896,7 +1897,7 @@ test('问题 A：approve-files 卡悬挂 → 模型续轮被拦后停续聊（�
     ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
     Object.defineProperty(window, '__chatCount', { get: () => chatCount })
   })
-  await page.goto('http://localhost:5175/')
+  await gotoStart(page)
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
   await page.locator('.nf-chat__input textarea').fill('帮我做一个网页游戏')
@@ -2032,7 +2033,7 @@ test('P2：同 args bash 双卡并存 → 点第一张卡按 id 精确定位（�
     }
     ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
   })
-  await page.goto('http://localhost:5175/')
+  await gotoStart(page)
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
   await page.locator('.nf-chat__input textarea').fill('帮我做一个网页游戏')
@@ -2202,7 +2203,7 @@ test('A-016 硬序门时序：方案未确认早调 approve-files 被拒（不�
     ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
     Object.defineProperty(window, '__nfPlanCalls', { get: () => planCalls })
   })
-  await page.goto('http://localhost:5175/')
+  await gotoStart(page)
   await expect(page.locator('.nf-start')).toBeVisible()
   await page.getByRole('button', { name: '从零开始' }).click()
   await page.locator('.nf-chat__input textarea').fill('帮我做一个网页游戏')
