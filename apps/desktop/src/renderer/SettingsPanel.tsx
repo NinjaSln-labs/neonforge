@@ -95,7 +95,7 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
     })
   }
   const refreshMcp = () => {
-    setMcpMsg('正在连接 MCP 服务器…')
+    setMcpMsg('正在连接外部工具…')
     void window.neonforge.mcp?.refresh?.().then((r) => {
       setMcpStatus(r?.servers ?? [])
       setMcpMsg(r?.configError ?? null)
@@ -501,7 +501,7 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
 
       <div className="nf-settings__plugins">
         <span className="nf-settings__plugins-title">
-          MCP 服务器（外部工具；配置只存命令/参数，不存凭据——凭据请用环境变量）
+          外部工具服务器（MCP）——配置只存命令/参数，不存凭据；凭据请用环境变量
         </span>
         {mcpPath ? <p className="nf-settings__export-msg">配置：{mcpPath}</p> : null}
         <textarea
@@ -531,7 +531,7 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
 
       <div className="nf-settings__plugins">
         <span className="nf-settings__plugins-title">
-          预算（USD/自然月；未知价格条目不参与计算——留空 = 不设置）
+          预算（美元/自然月；未配置价格的用量不参与计算——留空 = 不设置）
         </span>
         <div className="nf-settings__mcp-actions">
           <input
@@ -560,7 +560,7 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
 
       <div className="nf-settings__plugins">
         <span className="nf-settings__plugins-title">
-          价格表（provider:model → 每百万 token 单价，USD；未配置 = 成本 unknown，预算不累计）
+          计费表（按“接入方:模型”填写每百万 token 单价，美元；未配置时成本显示为“未设置”，预算不累计）
         </span>
         <textarea
           className="nf-settings__mcp-editor"
