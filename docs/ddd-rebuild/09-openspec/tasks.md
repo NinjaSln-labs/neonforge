@@ -66,7 +66,7 @@
 - [x] 4.1 `npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit`
 - [x] 4.2 `npx vitest run`（67 文件 / 760 用例通过，2026-11-15）
 - [x] 4.3 `npx eslint .`（0 error，6 条既有 hook 依赖 warning）
-- [ ] 4.4 `npx playwright test --project=interaction`（环境可用时；2026-11-15 实跑 71 项：70 通过 / 1 既有 `.nf-start` 启动竞态 flaky——base 可复现，非本分支回归；超时已提高至 15s，未以 flaky 结果关闭本项）
+- [ ] 4.4 `npx playwright test --project=interaction`（环境可用时；2026-11-15 最新全量 71 项：70 通过 / 1 既有重试双回合竞态 flaky；`.nf-start` 启动竞态可隔离复现 1/4，30s 超时下仍偶发；两者在 base 提交均可复现，非本分支回归。本轮已修正 `use.expect` 配置被 Playwright 忽略的问题（断言超时提升 30s / 单测 90s），flaky 未以结果关闭本项）
 - [x] 4.5 回归：现有 P0 用例与既有 `conversationState` / `tools` / `verifyCompletionSystem` 测试全部仍通过
 
 ---
@@ -92,7 +92,7 @@
 ## 6. 后续（本次不做，已设计预留）
 
 - [x] 6.1 事件 `eventId/version` + dedupe + DLQ/启动重放（跨上下文事务性 Outbox 仍预留）
-- [ ] 6.2 `ConversationPanel.tsx` 拆分（应用层与领域编排分离）：阶段 1（纯格式化/展示辅助 → `conversationFormat.tsx`）、阶段 2（确认卡 → `DecisionCards.tsx`）、阶段 3（输入区 → `ConversationComposer.tsx`）、阶段 4a（历史构建 → `conversationHistory.ts`）、阶段 4b（流式事件 → `useChatStream.ts`）与阶段 4c（轮次编排 → `useChatEngine.ts`）已完成（2026-11-15，面板 3372 → 1521 行；interaction 70/71，1 项既有 `.nf-start` flaky）；剩余阶段 5 收敛，见 `09-openspec/p1-05-conversation-panel-split.md`
+- [x] 6.2 `ConversationPanel.tsx` 拆分（应用层与领域编排分离）：阶段 1（纯格式化/展示辅助 → `conversationFormat.tsx`）、阶段 2（确认卡 → `DecisionCards.tsx`）、阶段 3（输入区 → `ConversationComposer.tsx`）、阶段 4a（历史构建 → `conversationHistory.ts`）、阶段 4b（流式事件 → `useChatStream.ts`）、阶段 4c（轮次编排 → `useChatEngine.ts`）、阶段 5（时间线/消息持久化/遥测/证据对账 → `useTimelineLog`/`useMessageStore`/`useConversationTelemetry`/`useEvidenceVerification`）已完成（2026-11-15，面板 3372 → 1320 行；interaction 69/71，2 项既有 flaky），见 `09-openspec/p1-05-conversation-panel-split.md`
 - [x] 6.3 演示面板与生产 UI 隔离（结构性）：生产运行无 `demo` 字段，仅测试桥注入
 - [x] 6.4 交付包验收来源（DoD 对齐）接入真实来源，消除空验收（与 5.7 协同）
 

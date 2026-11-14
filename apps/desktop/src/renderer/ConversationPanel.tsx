@@ -3,7 +3,11 @@ import DigitalDeliveryPanel from './DigitalDeliveryPanel'
 import TrustLadderPanel from './TrustLadderPanel'
 import DoDAlignPanel from './DoDAlignPanel'
 import type { DeliveryPackage } from './types'
-import { loadSession, saveSession, serializeMessages } from './sessionStore'
+// P1-05 阶段 5：会话时间线/消息持久化/遥测/证据对账（应用层逻辑从组件移出）
+import { useTimelineLog } from './useTimelineLog'
+import { useMessageStore } from './useMessageStore'
+import { useConversationTelemetry } from './useConversationTelemetry'
+import { useEvidenceVerification } from './useEvidenceVerification'
 // ticket 14 信任阶梯：授权执行模型（等级/影响/合并判定——L4 委托 + 疲劳防护）
 import { buildAuthHint, canMergeApprove } from './authModel'
 // 2026-08-03 v33：思考过程内容清洗（reasoning 含 Markdown 标记 → 展示为可读纯文字）
@@ -30,14 +34,9 @@ import {
 import {
   isSideEffectAction,
   pendingCardToShow,
-  verifyCompletion,
-  buildEvidenceBackfill,
-  evidenceGuideMaxAttempts,
-  deriveDiffs,
-  type SystemVerifier,
+  type CompletionClaim,
   type GoalProposal,
   type PlanProposal,
-  type CompletionClaim,
 } from '../domain/conversationState'
 // S2 提议解析/历史构建已随 P1-05 阶段 4b 迁入 useChatStream.ts / conversationHistory.ts
 import { resolveSandboxPath } from '../domain/sandboxPath'
@@ -68,12 +67,7 @@ import {
 import { SCENES } from './scenes'
 // 2026-08-15 Q10：demo 注入通道类型化单例
 import { getDemoBridge } from './demoBridge'
-// 2026-08-15 DDD 重建：事件注册表 dev 校验
-import {
-  validateTimelineEvent,
-  TIMELINE_EVENT_SPECS,
-  dedupeKey,
-} from '../domain/timeline'
+// 2026-08-15 DDD 重建：事件注册表 dev 校验——P1-05 阶段 5 后校验内聚于 useTimelineLog
 // V1.5 S1 Task 1.3：协议工具接线（ADR-009 拦截点——模型主动产出决策内容的通道；
 // 判定器纯函数 domain 单源——renderer 只做信号翻译 + setPendingState 承载）
 import { PROTOCOL_TOOL_NAMES } from '../domain/protocolTools'
@@ -173,64 +167,7 @@ export default function ConversationPanel({
       : `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`,
   )
   const sessionId = sessionIdProp ?? generatedSessionId
-  const [messages, setMessages] = useState<Msg[]>([])
-  const messagesRef = useRef<Msg[]>([])
-  useEffect(() => {
-    messagesRef.current = messages
-  }, [messages])
-  // 2026-08-15 Q5：消息稳定 id 生成（会话内递增——key 稳定性）
-  const msgSeqRef = useRef(0)
-  const nextMsgId = () => `m${Date.now().toString(36)}-${(msgSeqRef.current++).toString(36)}`
-  // 2026-08-04 审计修复（D2）：有待批准工具操作 → 上报状态栏提示（need-approval 出现/消失）
-  // 2026-08-07 无阶段修复（输入≠打断）：send 排队判定用（待授权时模型停住等批准，
-  // 用户输入直接处理不排队——排队会卡在授权等待；模型产出中才排队衔接）
-  // 2026-08-14 S2b：授权等待接入状态机单一 PENDING（pending='approval'——A0 §3.2 授权卡同属会话级 pending）
-  // 2026-08-15 D5：互斥——确认卡 pending（goal/execution/achievement——done 分支 setPending 置位）优先，
-  // 授权卡 pending 只在当前无确认卡 pending 时置位（A0：pending 只有一个——决策点互斥，用户先处理先弹的卡）
-  useEffect(() => {
-    const hasApproval =
-      messages.some((m) =>
-        m.toolCalls?.some((c) => c.status === 'need-approval' || c.status === 'file-approval'),
-      ) ?? false
-    if (hasApproval && stateRef.current.pending === 'none') {
-      setPendingState('approval')
-    } else if (!hasApproval && stateRef.current.pending === 'approval') {
-      clearPending()
-    }
-    onApprovalChange?.(hasApproval)
-  }, [messages, onApprovalChange])
-  // 断点续做（ticket 06/基线 §21）：挂载恢复上次会话（onNew 已 clearSession → 空）
-  // S3（§8.2 E C5）：恢复后 pending 冻结立即生效——决策点内容快照（decisionContent）随消息恢复，
-  // 卡重显旧内容（用户确认/修改后才更新——模型首轮只能响应用户对已有决策点的决策）
-  useEffect(() => {
-    const stored = loadSession()
-    if (stored && stored.length > 0) {
-      setMessages(
-        stored.map((s) => ({
-          id: s.id ?? nextMsgId(),
-          role: s.role,
-          content: s.content,
-          reasoning: s.reasoning,
-          status: 'done' as const,
-          toolCalls: s.toolCalls,
-        })),
-      )
-      // 恢复决策点冻结：最新消息携带 decisionContent → 恢复 pending（goal/plan/resolution——卡重显）
-      for (let i = stored.length - 1; i >= 0; i--) {
-        const dc = stored[i].decisionContent
-        if (dc) {
-          setPendingState(dc.kind, {
-            since: dc.since,
-            ...(dc.proposal ? { proposal: dc.proposal } : {}),
-          })
-          break
-        }
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-  // 断点续做：完整消息变化 → 持久化（过滤半截 streaming——streaming 时 serialize 为空不覆盖存档）
-  // S3（§8.2 E）：决策点内容快照随最近 assistant 消息持久化（恢复后卡内容不丢——pending 冻结语义）
+  const tlog = useTimelineLog(sessionId)
   const chatRef = useRef<{
     msgs: Array<{
       role: string
@@ -372,6 +309,40 @@ export default function ConversationPanel({
       void window.neonforge.changeset?.clear(sessionId)
     },
   })
+  // P1-05 阶段 5：消息状态/持久化（历史恢复与决策点快照）
+  const { messages, messagesRef, nextMsgId, setMessages } = useMessageStore({
+    setPendingState,
+    stateRef,
+    stateVersion,
+  })
+  // 2026-08-04 审计修复（D2）：有待批准工具操作 → 上报状态栏提示（need-approval 出现/消失）
+  // 2026-08-07 无阶段修复（输入≠打断）：send 排队判定用（待授权时模型停住等批准，
+  // 用户输入直接处理不排队——排队会卡在授权等待；模型产出中才排队衔接）
+  // 2026-08-14 S2b：授权等待接入状态机单一 PENDING（pending='approval'——A0 §3.2 授权卡同属会话级 pending）
+  // 2026-08-15 D5：互斥——确认卡 pending（goal/execution/achievement——done 分支 setPending 置位）优先，
+  // 授权卡 pending 只在当前无确认卡 pending 时置位（A0：pending 只有一个——决策点互斥，用户先处理先弹的卡）
+  useEffect(() => {
+    const hasApproval =
+      messages.some((m) =>
+        m.toolCalls?.some((c) => c.status === 'need-approval' || c.status === 'file-approval'),
+      ) ?? false
+    if (hasApproval && stateRef.current.pending === 'none') {
+      setPendingState('approval')
+    } else if (!hasApproval && stateRef.current.pending === 'approval') {
+      clearPending()
+    }
+    onApprovalChange?.(hasApproval)
+  }, [messages, onApprovalChange])
+  // P1-05 阶段 5：卡弹出/状态变化遥测
+  useConversationTelemetry({
+    goalConfirmed,
+    messages,
+    planConfirmed,
+    stateRef,
+    stateVersion,
+    tlog,
+    working,
+  })
   // D3（ADR-005）：启动恢复——main plannedFilesStore 权威（批准事实跨重启）→ 本地镜像
   // 恢复后模型继续写清单内文件不需重新批量授权（与问题台账 authorized 恢复同构）
   useEffect(() => {
@@ -389,22 +360,6 @@ export default function ConversationPanel({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  // 断点续做：完整消息变化 → 持久化（过滤半截 streaming——streaming 时 serialize 为空不覆盖存档）
-  // S3（§8.2 E）：决策点内容快照随最近 assistant 消息持久化（恢复后卡内容不丢——pending 冻结语义）
-  useEffect(() => {
-    const dc = stateRef.current.decisionContent
-    const withSnapshot = dc
-      ? messages.map((m, i) =>
-          i === messages.length - 1 && m.role === 'assistant' && m.status === 'done'
-            ? { ...m, decisionContent: dc }
-            : m,
-        )
-      : // A-009：决策点已清除（确认/拒绝后）→ 剥离历史消息上的过期快照（防恢复时命中旧卡）
-        messages.map((m) => ({ ...m, decisionContent: undefined }))
-    const serialized = serializeMessages(withSnapshot)
-    if (serialized.length > 0) saveSession(serialized)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, stateRef.current.decisionContent, stateVersion])
   // 2026-08-14 用户实测卡死修复（timeline 0219a516）：确认卡唯一性——模型连发消息时卡固定在
   // 「最后一条信号消息」上不漂移。**O(n) 倒序单次扫描**预计算三个信号索引（useMemo 缓存——
   // 消息列表不可控（compaction 阈值 100+ 条），每渲染 O(n²) 不可接受；此方案 O(n) 一次 + 渲染 O(1) 查表）
@@ -441,104 +396,6 @@ export default function ConversationPanel({
   // 2026-08-14 审计发现：原 useEffect 只同步 true 方向——拒绝（userRejected 只改 stateRef）后 prop 仍 true
   // → effect 立即把回退反转回 true（「重新描述需点两次」根因）。现状态机唯一权威 = stateRef；
   // MainWorkspace 的 goalConfirmed/planConfirmed 仅作渲染镜像（由确认/拒绝回调显式设置，双向对称）。
-  // 2026-08-07 会话时间线（Session Timeline BC——单会话所有步骤统一日志：用户/搭档/工具/授权/状态——分析一步到位）
-  // 2026-08-15 A6：dedupe 事件去重集合（会话级——同 detail 签名只记一次）
-  const timelineDedupeRef = useRef<Set<string>>(new Set())
-  const tlog = (
-    type: string,
-    detail: Record<string, unknown>,
-    role?: 'user' | 'assistant' | 'system' | 'tool',
-  ) => {
-    // 2026-08-15 DDD 重建：事件注册表 dev 校验（A2——未登记 type / 缺载荷字段 → warn 防散落）
-    try {
-      for (const w of validateTimelineEvent(type, detail)) console.warn('[timeline]', w)
-    } catch {
-      /* 校验失败不影响发送 */
-    }
-    // 2026-08-15 A6：dedupe 事件去重（注册表 dedupe:true——同会话同 detail 签名只记一次；替代组件 cardShownRef 手动的通用机制）
-    try {
-      if (TIMELINE_EVENT_SPECS[type as keyof typeof TIMELINE_EVENT_SPECS]?.dedupe) {
-        const k = dedupeKey(type, detail)
-        if (timelineDedupeRef.current.has(k)) return
-        timelineDedupeRef.current.add(k)
-      }
-    } catch {
-      /* 去重失败不影响发送 */
-    }
-    // 2026-08-08 会话归属：session 用会话 ID（UUID——本组件挂载生成）——写入对应会话 timeline 文件
-    try {
-      void window.neonforge.timeline?.log?.({ session: sessionId, type, role, detail })
-    } catch {
-      /* 日志失败不影响 */
-    }
-  }
-  // 2026-08-08 卡弹出打点（用户「加一个确认/授权等卡弹出的点」）：确认卡（目标/执行/达成）+ 授权卡/approve-files 卡——卡从无到有打一次
-  const cardShownRef = useRef<Set<string>>(new Set())
-  useEffect(() => {
-    const last = messages[messages.length - 1]
-    const isLastAssistant = last?.role === 'assistant' && last.status === 'done'
-    const show = (card: string, extra?: Record<string, unknown>) => {
-      if (cardShownRef.current.has(card)) return
-      cardShownRef.current.add(card)
-      tlog('card.shown', { card, ...extra }, 'system')
-    }
-    if (isLastAssistant) {
-      // #6 真机 2026-08-30（P1-3 修正）：原条件 `|| !goalConfirmed` 使目标未确认时**任何** assistant
-      // 回合都打 card.shown goal-confirm（goalText=随手截断的正文）——遥测假象三例（空文本/旁白/恢复快照）
-      // 全部源于此，排查时严重误导（真实弹卡唯一依据 = pending + decisionContent——2203 行）。
-      // 修正：只在目标决策点真实存在时打点，goalText 取提议 statement
-      const dc = stateRef.current.decisionContent
-      const goalStatement =
-        dc?.kind === 'goal' ? ((dc.proposal as { statement?: string })?.statement ?? '') : ''
-      if (stateRef.current.pending === 'goal' && goalStatement)
-        show('goal-confirm', { goalText: goalStatement.slice(0, 120) })
-      // A-020 附带（P2-2 对齐）：原条件 `goalConfirmed && !planConfirmed` 使目标确认后**任何**
-      // assistant 回合都打 card.shown exec-confirm（真机 seq54 实证——无卡也打点，排查误导）。
-      // 对齐真实决策点（与 goal-confirm/resolution 同款）：只在 plan pending 真实存在时打点
-      if (stateRef.current.pending === 'plan') show('exec-confirm')
-      // #6 真机 2026-08-30（P2-2）：对齐真实决策点——原条件【已达成】+产物即打点，
-      // S4 门控（verifyCompletion 不通过不弹卡）下产生假「已弹卡」遥测（真机排查误导）
-      if (stateRef.current.pending === 'resolution') show('achieve-confirm')
-    }
-    // 授权卡 / approve-files 卡（工具卡 need-approval/plan-approval 状态）——每次弹卡独立记录（同工具不同 args 是新的授权决策）
-    // #6 真机 2026-08-30（坑 107 双卡同弹复现）：goal/plan/resolution 决策点 pending 时延迟显示授权卡
-    //（本 effect 依赖含 pending——决策点清掉后下一 tick 补显）；同一时刻只呈现一个决策——A0 §3.5b 门控顺序的 UI 面
-    const decisionPending =
-      stateRef.current.pending === 'goal' ||
-      stateRef.current.pending === 'plan' ||
-      stateRef.current.pending === 'resolution'
-    for (const m of messages) {
-      for (const c of m.toolCalls ?? []) {
-        if (c.status === 'need-approval' || c.status === 'file-approval') {
-          if (decisionPending) continue
-          const key = `approval:${c.name}:${JSON.stringify(c.args ?? {}).slice(0, 60)}`
-          show(key, {
-            card: c.status === 'file-approval' ? 'file-approval' : 'approval',
-            name: c.name,
-            args: c.args,
-          })
-        }
-      }
-    }
-  }, [
-    messages,
-    goalConfirmed,
-    planConfirmed,
-    stateVersion, // 审计修正 2026-08-31：stateRef 字段变化不触发 effect——决策点异步置位（verifyThenResolve）后靠 version 重渲染补打（原写 ref 字段进依赖形同虚设）
-  ])
-  // 2026-08-08 状态变化打点（working / approval-pending / ready——统一状态机；变化才记录）
-  const lastStatusRef = useRef('')
-  useEffect(() => {
-    const status = working
-      ? 'working'
-      : stateRef.current.pending === 'approval'
-        ? 'approval-pending'
-        : 'ready'
-    if (status !== lastStatusRef.current) {
-      lastStatusRef.current = status
-      tlog('conversation.status_change', { status })
-    }
-  }, [working, messages])
   // 2026-08-05：renderer 侧「已规划」标记 + 确认门控 ref 已并入状态机（stateRef——见上方 S2 迁移）；保留注释链：
   // filesApproved → stateRef.filesApproved；goal/execConfirmed → stateRef.goalConfirmed/planConfirmed；
   // lastToolFailed → stateRef.lastToolFailed（applyToolResult 唯一写入口）
@@ -596,75 +453,6 @@ export default function ConversationPanel({
   const evidenceReportNudgedRef = useRef(false)
   // 排队衔接（输入≠打断）——提前声明：verifyThenResolve 对账引导在 working 时写入此 ref
   const pendingSendRef = useRef('')
-  const verifyThenResolve = async (claim: CompletionClaim): Promise<void> => {
-    const bridge = window.neonforge?.completion
-    let systemState: SystemVerifier | undefined
-    if (bridge?.verify) {
-      try {
-        const commands = claim.evidence.verification
-          .filter((v) => v.passed !== false)
-          .map((v) => v.command)
-        const results = await bridge.verify(commands, rootPath ?? null)
-        if (results) {
-          systemState = {
-            verificationResults: results,
-            deriveDiffs,
-            plannedFiles: stateRef.current.plannedFiles,
-            producedFiles: stateRef.current.producedFiles,
-          }
-        }
-      } catch {
-        // 核验服务异常 → 降级纯逻辑判定（不阻断弹卡路径）
-      }
-    }
-    const v = verifyCompletion(claim, systemState)
-    if (v.ok) {
-      evidenceGuideCountRef.current = 0 // 证据通过 → 计数重置
-      // BC-14：只把「系统复核 ok:true」的命令证据绑定到验收项；自报通过但系统未核验的命令
-      // 不得自动通过验收（未覆盖项保留 pending，由用户手工确认/豁免）
-      const verifiedCommands = claim.evidence.verification
-        .filter((item) => item.passed !== false)
-        .map((item) => item.command)
-        .filter((cmd) => systemState?.verificationResults[cmd]?.ok === true)
-      if (verifiedCommands.length > 0) {
-        void window.neonforge.acceptance?.applyEvidence(sessionId, verifiedCommands)
-      }
-      // 核验期间可能已有其它决策点置位（竞态防护——pending 非 none 不覆盖）。
-      // A-022（S5 真机 2026-09-06）：直接丢弃 = resolution 不可达死锁（真机实证：核验通过瞬间
-      // 残留授权卡 pending 占用 → return → 之后再无重试，forceTool 循环不止）。修正：等 pending
-      // 清空后置位（上限 20s——超时放弃走 A-015 用户侧提示路径），不覆盖其它决策点语义不变
-      for (let i = 0; i < 40 && stateRef.current.pending !== 'none'; i++) {
-        await new Promise((r) => setTimeout(r, 500))
-      }
-      if (stateRef.current.pending !== 'none') return
-      setPendingState('resolution', { proposal: claim, since: new Date().toISOString() })
-    } else {
-      // 证据不足 → 不弹卡（不产生决策点）+ evidence_missing 打点 + 回填引导（模型重新输出带证据声明）
-      tlog(
-        'completion.evidence_missing',
-        { ok: false, missing: v.missing, unverifiable: v.unverifiable },
-        'system',
-      )
-      const guide = buildEvidenceBackfill(v)
-      evidenceGuideCountRef.current++
-      const maxGuides = evidenceGuideMaxAttempts(v)
-      if (guide && evidenceGuideCountRef.current <= maxGuides) {
-        // 对账引导：不经用户通道（isSystemNudgeText → silent），但不得 silent-interrupt 打断
-        // 当前核验轮（void verifyThenResolve 与 runChat 并行——中途 stopGeneration 会打乱
-        // mock/续聊轮次，S4-3 实证「已解决」卡不出）。working 中写入 pending，等本轮 finally flush。
-        const nudge = `【系统对账·非用户发言】${guide}`
-        if (workingRef.current) pendingSendRef.current = nudge
-        else void sendRef.current({ silent: true, text: nudge })
-      } else {
-        // A-015（V1.5-S4）：对账失败用户侧可见提示——无回填引导（或达防死循环上限停止自动 send）时，
-        // 注入消息不存在 → 状态栏非侵入提示（对齐 needs-human 模式），否则用户不知道对账未通过
-        onActionPromiseHint?.(
-          '证据对账未通过——已停止自动补充证据，可手动继续对话（或核对证据后重新提交完成声明）',
-        )
-      }
-      // 达 maxGuides：停止自动引导（防死循环）
-    }
-  }
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
@@ -677,6 +465,19 @@ export default function ConversationPanel({
   useEffect(() => {
     workingRef.current = working
   }, [working])
+  // P1-05 阶段 5：完成声明系统对账（V1a 代跑 + V1b diff → resolution 决策点/回填引导）
+  const verifyThenResolve = useEvidenceVerification({
+    evidenceGuideCountRef,
+    onActionPromiseHint,
+    pendingSendRef,
+    rootPath,
+    sendRef,
+    sessionId,
+    setPendingState,
+    stateRef,
+    tlog,
+    workingRef,
+  })
   // 2026-08-04 体验修复：流式 done 通知——runChat 尾部等 done（working 及时释放，用户快速「确认推进」不被拦）
   const doneNotifierRef = useRef<(() => void) | null>(null)
   // 2026-08-07 无阶段重构 S4：pendingAdvanceRef（阶段推进排队）删除——advanceChat 随阶段体系移除
