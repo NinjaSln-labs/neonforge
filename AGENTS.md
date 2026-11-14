@@ -18,7 +18,7 @@ npx vitest run                                                          # L1 单
 npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit  # 双 tsconfig 类型检查
 npx playwright test --project=interaction                               # L3 interaction
 npx eslint .                                                            # lint
-npm run e2e   # 依赖 /tmp/nf-e2e-test（入口会建）；改 main/preload 后会重 build
+npx vitest run tests/unit/e2eSim.test.ts   # e2e-sim 领域回归；旧 Electron e2e 脚本已归档，不再提供 npm run e2e
 ```
 
 ## 内容落位
