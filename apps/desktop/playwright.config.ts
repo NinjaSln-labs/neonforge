@@ -14,6 +14,17 @@ export default defineConfig({
   fullyParallel: true,
   workers: 1, // 截图确定性
   retries: 0, // 视觉回归不重试（重试会覆盖 diff 产物）
+  // 断言超时必须放顶层（use.expect 不是 Playwright 有效选项——放 use 里会被静默忽略 → 直接 expect 仍用 5s 默认，
+  // Vite 冷模块编译下 .nf-start 等直接断言偶发超时）。
+  expect: {
+    timeout: 15_000,
+    toHaveScreenshot: {
+      maxDiffPixels: 100,
+      maxDiffPixelRatio: 0.01,
+      threshold: 0.2,
+      animations: 'disabled',
+    },
+  },
   webServer: {
     command: 'npx vite --config vite.config.ts --port 5175 --strictPort',
     url: 'http://localhost:5175',
@@ -23,16 +34,6 @@ export default defineConfig({
     baseURL: 'http://localhost:5175',
     browserName: 'chromium',
     viewport: { width: 1280, height: 800 },
-    expect: {
-      // Vite dev server 按需编译源码模块；WSL 冷模块 + 全量并行时会超过 5s 默认值。
-      timeout: 15_000,
-      toHaveScreenshot: {
-        maxDiffPixels: 100,
-        maxDiffPixelRatio: 0.01,
-        threshold: 0.2,
-        animations: 'disabled',
-      },
-    },
   },
   projects: [
     {
@@ -44,7 +45,6 @@ export default defineConfig({
       name: 'interaction', // L3 组件交互（无截图——CI 可跑）
       testDir: './tests/interaction',
       testMatch: '**/*.interaction.ts',
-      use: { expect: { timeout: 15_000, toHaveScreenshot: undefined } }, // 禁用截图断言（L3 无像素基线）；显式保留 expect 超时
     },
   ],
 })
