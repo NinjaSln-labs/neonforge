@@ -14,7 +14,7 @@
 | 证据类型 | 含义 | 例子 |
 | :--- | :--- | :--- |
 | **运行时实现** | 代码真实执行、有测试或明确入口 | Task 状态机、工具授权、SSE 流、问题台账 |
-| **占位 / 演示** | 代码明确标注“即将支持 / V1 占位 / demo”，入口存在但无真实能力 | DoD/数字交付/信任阶梯演示面板（仅 demo bridge 可达）；第三方插件加载尚未实现（仅内置注册） |
+| **占位 / 演示** | 代码明确标注“即将支持 / V1 占位 / demo”，入口存在但无真实能力 | DoD/数字交付/信任阶梯演示面板（仅 demo bridge 可达）；插件市场/公开分发非目标 |
 | **产品语义暗示** | 类型、字段、注释、UI 文案、契约共同指向一个应有领域，但实现缺失或不完整 | `DeliveryPackage.acceptance` 字段、`verificationPlan`、`plan.files`、`preview`/`diff` 审核 UI |
 
 领域判定四问：
@@ -43,7 +43,7 @@
 | BC-06 | 会话时间线 | Generic | 已落地（跨上下文 Outbox 预留） | `timeline.ts`、`timelineLogger.ts` | 04/06/07 + `session-timeline` spec |
 | BC-07 | 配置与凭据 | Generic | 已落地 | `configStore.ts` | 04/06/07 + `configuration-secrets` spec |
 | BC-08 | 上下文与检索 | Supporting | 已落地 | `context.ts`、`codeRag.ts`、`lsp.ts`、`compact.ts` | 04/06/07 + `context-retrieval` spec |
-| BC-09 | 平台运行 | Generic | 已落地（插件仅注册） | `main.ts`、`pluginSystem.ts`、`preload.ts` | 04/06/07 + `platform-runtime` spec |
+| BC-09 | 平台运行 | Generic | 已落地（扩展注册 + MCP；插件市场非目标） | `main.ts`、`pluginSystem.ts`、`preload.ts` | 04/06/07 + `platform-runtime` spec |
 | **BC-10** | **变更与版本** | Supporting | **已落地** | `domain/changeSet.ts`、`main/changeSetService.ts`、`main/gitBridge.ts`、`ipc.ts` `changeset:*`/`git:read` | 本节 + `change-version` spec |
 | **BC-11** | **任务编排** | Supporting | **已落地** | `domain/taskQueue.ts`、`main/taskQueueStore.ts`、`ipc.ts` `queue:*`、`MainWorkspace.tsx` TaskPanel | 本节 + `task-orchestration` spec |
 | **BC-12** | **用量与成本** | Generic | **已落地** | `domain/usageLedger.ts`、`main/usageStore.ts`、`gateway.ts` usage 解析、`ipc.ts` `usage:*` | 本节 + `usage-cost` spec |
@@ -162,7 +162,7 @@
 | BC-06 | 事件版本/DLQ/重放/去重已落地（P1-02、P2-06、P2-07）；跨上下文事务性 Outbox 仍预留 | `timeline.ts`、`timelineLogger.ts` | 仅 Outbox 保留为后续硬化项（设计见 `09-openspec/design.md §6`） |
 | BC-07 | 明文 fallback 的风险决策未产品化 | `configStore.ts` | 保留为安全决策项 |
 | BC-08 | 无长期记忆/项目知识库；RAG 是关键词级 | `codeRag.ts`、`context.ts` | 明确为非目标（无代码证据），避免虚构 |
-| BC-09 | 无自动更新/签名/崩溃上报；插件仅注册 | `main.ts`、`pluginSystem.ts` | 平台通用能力，列入非目标 |
+| BC-09 | 无自动更新/签名/崩溃上报；插件市场/公开分发非目标 | `main.ts`、`pluginSystem.ts` | 内置扩展 + MCP 已落地（BC-13）；平台发布与插件市场列为非目标 |
 
 ---
 
