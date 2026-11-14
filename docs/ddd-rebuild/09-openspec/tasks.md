@@ -57,14 +57,14 @@
 
 - [x] 3.1 **P1-01 Web 访问边界**：`webTools.ts` 的 `web_fetch` 拒绝 localhost/私网/链路本地/云元数据地址；`redirect:'manual'` 逐跳校验，最多 5 跳，非 http/https 拒绝；新增测试。
 - [x] 3.2 **P1-10 符号链接**：`isInSandbox`/`resolvePath` 对已存在路径使用 `realpath` 校验，根外链接不因“路径字符串在根内”被放行；悬空链接同样解析，write/edit 根内逃逸硬阻断（`sandboxSymlink.test.ts`）。
-- [x] 3.3 **P1-04 IPC 契约校验**：高风险通道运行时 schema（`ipcSchema.ts`：tools/stream）+ 全通道静态契约测试（`ipcContractParity.test.ts`：main handler ↔ preload invoke ↔ 推送通道），防 preload/main 漂移。
+- [x] 3.3 **P1-04 IPC 契约校验**：高风险通道运行时 schema（`ipcSchema.ts`：tools/stream）+ 全通道静态契约测试（`ipcContractParity.test.ts`：main handler ↔ preload invoke ↔ 推送通道），防 preload/main 漂移。**2026-11-15 第二批**：新增 `config:set-key`/`config:set-web-access`、队列命令（enqueue/entry/reason/reorder）、验收（derive/mark/waive/evidence）、变更集、`delivery:apply-diff`/`revert-diff`、`tools:revert`、`completion:verify`、`context:resolve`/`rag:search`、`plugins:toggle`、`planned-files:add`、`session:plan-confirmed` 入口校验；校验器修正「required 值为 undefined 仍通过」与新增 `nullable`；schema 单测扩充。
 
 ---
 
 ## 4. 验证
 
 - [x] 4.1 `npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit`
-- [x] 4.2 `npx vitest run`（67 文件 / 765 用例通过，2026-11-15；审查修复后新增 5 个回归）
+- [x] 4.2 `npx vitest run`（67 文件 / 773 用例通过，2026-11-15；含审查修复与 P1-04 第二批新增回归）
 - [x] 4.3 `npx eslint .`（0 error，6 条既有 hook 依赖 warning）
 - [x] 4.4 `npx playwright test --project=interaction`（2026-11-15 全量 71/71 通过。两个既有 flaky 已定位并处置：
   ① `.nf-start` 启动竞态 = WSL/Chromium 偶发 `net::ERR_NETWORK_CHANGED`，网络栈变更取消模块请求，页面只剩空 `<div id="root">`（非应用启动逻辑 bug）——所有 interaction 入口统一走 `gotoStart`（启动超时一次重载重试 + DOM/bridge/hasKey/console 诊断），环境问题在测试层消除；
@@ -103,7 +103,7 @@
 
 ## 7. 代码审查修复（2026-11-15，`a524c4c..HEAD`）
 
-> 来源：`/code-review`（medium；15 findings）。批次验收（ADR-012 测完再修）：双 tsconfig、单测 **765**、ESLint 0 error / 6 既有 warning、构建、interaction **72/72**。
+> 来源：`/code-review`（medium；15 findings）。批次验收（ADR-012 测完再修）：双 tsconfig、单测 **765**（P1-04 第二批后 773）、ESLint 0 error / 6 既有 warning、构建、interaction **72/72**。
 
 - [x] 7.1 **批准文本判定收紧**：新增领域函数 `isApprovalIntent`（仅精确批准词）；原正则裸子串 `|批准|同意` 会让「我不同意执行这个命令」自动批准全部待授权工具调用。新增单测（否定/条件/完整句不批准）。
 - [x] 7.2 **停止流归属**：`stopGeneration` 不再把 `streamingSidRef` 指向新 sid——旧流 chunk 继续被 `streamingSidRef !== sessionRef` 守卫丢弃（停止后不再落地 done/tool-call）。

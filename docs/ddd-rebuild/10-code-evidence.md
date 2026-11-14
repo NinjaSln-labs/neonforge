@@ -95,13 +95,14 @@
 | 文档断言 | 证据 |
 | :--- | :--- |
 | IPC 通道全集 | `M/ipc.ts:...`（`config:*`、`gateway:*`、`delivery:*`、`workspace:*`、`chat:*`、`timeline:*`、`tools:*`、`planned-files:*`、`session:plan-confirmed`、`context:resolve`、`rag:search`、`plugins:*`、`preheat:status`、`compaction:compact`、`completion:verify`） |
+| IPC 运行时契约校验（P1-04） | `M/ipcSchema.ts:87-...`（`IPC_SCHEMAS`/`validateIpc`）、`M/ipc.ts`（tools/stream/config/queue/acceptance/changeset/delivery/context 等入口）、`tests/unit/ipcSchema.test.ts` |
 | 预加载桥接 API | `P/preload.ts`（`NeonForgeBridge`） |
 | 计划清单持久化（0600） | `M/plannedFilesStore.ts` |
 | 项目初始化（不覆盖已有目录） | `M/projectInit.ts` |
 | 环境检测 | `M/envManager.ts` |
 | 服务与端口 | `M/serviceManager.ts` |
 | 完成核验代跑 | `M/verification.ts:9-13`（`isSystemVerifiable`） |
-| Web 访问（当前无私网拦截） | `M/webTools.ts:260-296`（`web_fetch`） |
+| Web 访问（私网/云元数据拦截 + 手动逐跳重定向校验） | `M/webTools.ts`（`web_fetch`） |
 | 配置存储（env/凭据文件优先 + safeStorage；明文 fallback 显式 opt-in） | `M/configStore.ts` |
 | 插件注册表 | `M/pluginSystem.ts` |
 | 网关（SSE/重试/工具修复） | `M/gateway.ts:35-84`（错误分类）、`103-128`（`toolCallRepair`）、`559-747`（`streamChatOnce`） |
