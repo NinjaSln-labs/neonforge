@@ -25,7 +25,7 @@
 | A17 | **验收记录（AcceptanceRecord）**（目标态） | `AcceptanceRecord` | BC-14 验收与质量门禁 | `AcceptanceItem`（source、status、evidenceRef、waiver） | `AcceptanceSource`、`AcceptanceStatus`、`EvidenceRef`、`WaiverReason`、`GateVerdict` | I21 | `DeriveAcceptanceCriteria`、`AttachEvidence`、`MarkPassed`、`WaiveItem`、`EvaluateGate` |
 
 > **非聚合的支持对象**：`ProviderDescriptor`（值对象/配置）、`ResolvedModelMap`（网关内存派生）、`ChatLogEntry`（时间线子集）、`PrefixCacheState`（缓存）、`RagHit`/`ContextFragment`（瞬时值对象）、`SceneCard`（产品内容）。它们有生命周期，但不承担聚合根的一致性职责。
-> A13-A17 是**目标态聚合**：代码中已有字段/占位/文案证据，当前尚未形成独立聚合；实现顺序见 `00-domain-blueprint.md §6`。
+> A13-A17 是**目标态聚合**，其推导来源为占位/字段/文案证据；五个聚合已于 2026-11-14 全部落地（见 I17-I21 的代码锚点）。
 
 ---
 
@@ -33,27 +33,27 @@
 
 | 编号 | 不变量 | 触发命令 | 校验位置 | 违反时行为 |
 | :--- | :--- | :--- | :--- | :--- |
-| I01 | **状态推进只能由用户决策发生**；模型只能提议 | `ConfirmGoal/Plan/Resolution`、`Reject*`、`ApproveTool/RejectTool` | `userDecided` / `approvalDecided`（`conversationState.ts:149-223`、`262-283`）；`useConversationState.transition` 是唯一写入口 | 其他函数不得直接改确认位；测试 `Inv 1` 锁定 |
-| I02 | **决策点唯一**：按 `goal > plan > approval > resolution` 优先级返回单一 `PendingKind` | `DeriveDecisionPoint` | `deriveDecisionPoint`（`conversationState.ts:649-677`） | 多提议并存时高优先级胜出；测试 `Inv 2/Inv 7` |
-| I03 | **门控顺序**：`SessionGate` 先于 `ActionGate`；`pending` 非 none 冻结一切工具（含只读） | 任意工具请求 | `sessionGate` / `actionGate` / `canExecute`（`conversationState.ts:494-635`）；main `ToolRegistry.execute`（`tools.ts:127-196`） | 拒绝并返回可执行引导；测试 `Inv 3` |
-| I04 | **无证据不对账**：完成声明必须有非空 verification，且至少一条系统可代跑只读命令；planned 必须全部产出 | `ReportCompletion` | `evidenceVerifiable` / `verifyCompletion`（`conversationState.ts:681-775`）；`verification.ts:9-13`、`68-78` | 不进入 resolution；返回 `missing/unverifiable`；回填引导；测试 `Inv 4` |
-| I05 | **推进保障**：pending/未确认/失败诊断/有推进 → auto；确认后无推进且工具可用 → require-action；工具不可用 → require-advance | 每轮发送 | `decideProgressGuarantee`（`conversationState.ts:860-885`） | 只改变强制模式，不直接改任务确认位；测试 `Inv 5` |
-| I06 | **方案清单单一来源**：`plannedFiles` 只由已确认的 `PlanProposal.files` 或 `approve-files` 派生；追加去重；拒绝不落清单 | `ConfirmPlan`、`ApproveFiles`、`RejectPlan` | `derivePlannedFiles`（`conversationState.ts:831-840`）；`PlannedFilesStore.add`（`plannedFilesStore.ts:36-42`） | 拒绝方案不得把提案文件写入清单；任务边界重置清空；测试 `Inv 6` + 本次修复 |
-| I07 | **单一 PENDING**：同一时刻只有一个决策点；`setPending` 覆盖而非叠加 | `SetPending` | `setPending`（`conversationState.ts:303-316`） | 旧决策点被覆盖；`decisionContent` 只保留最新；测试 `Inv 7` |
+| I01 | **状态推进只能由用户决策发生**；模型只能提议 | `ConfirmGoal/Plan/Resolution`、`Reject*`、`ApproveTool/RejectTool` | `userDecided` / `approvalDecided`（`conversationState.ts`）；`useConversationState.transition` 是唯一写入口 | 其他函数不得直接改确认位；测试 `Inv 1` 锁定 |
+| I02 | **决策点唯一**：按 `goal > plan > approval > resolution` 优先级返回单一 `PendingKind` | `DeriveDecisionPoint` | `deriveDecisionPoint`（`conversationState.ts`） | 多提议并存时高优先级胜出；测试 `Inv 2/Inv 7` |
+| I03 | **门控顺序**：`SessionGate` 先于 `ActionGate`；`pending` 非 none 冻结一切工具（含只读） | 任意工具请求 | `sessionGate` / `actionGate` / `canExecute`（`conversationState.ts`）；main `ToolRegistry.execute`（`tools.ts`） | 拒绝并返回可执行引导；测试 `Inv 3` |
+| I04 | **无证据不对账**：完成声明必须有非空 verification，且至少一条系统可代跑只读命令；planned 必须全部产出 | `ReportCompletion` | `evidenceVerifiable` / `verifyCompletion`（`conversationState.ts`）；`verification.ts`（`runOne`） | 不进入 resolution；返回 `missing/unverifiable`；回填引导；测试 `Inv 4` |
+| I05 | **推进保障**：pending/未确认/失败诊断/有推进 → auto；确认后无推进且工具可用 → require-action；工具不可用 → require-advance | 每轮发送 | `decideProgressGuarantee`（`conversationState.ts`） | 只改变强制模式，不直接改任务确认位；测试 `Inv 5` |
+| I06 | **方案清单单一来源**：`plannedFiles` 只由已确认的 `PlanProposal.files` 或 `approve-files` 派生；追加去重；拒绝不落清单 | `ConfirmPlan`、`ApproveFiles`、`RejectPlan` | `derivePlannedFiles`（`conversationState.ts`）；`PlannedFilesStore.add`（`plannedFilesStore.ts`） | 拒绝方案不得把提案文件写入清单；任务边界重置清空；测试 `Inv 6` + 本次修复 |
+| I07 | **单一 PENDING**：同一时刻只有一个决策点；`setPending` 覆盖而非叠加 | `SetPending` | `setPending`（`conversationState.ts`） | 旧决策点被覆盖；`decisionContent` 只保留最新；测试 `Inv 7` |
 | I08 | **拒绝必须带原因**：拒绝决策必须携带 `RejectReason`；`modify` 视为拒绝 + 修正内容 | `Reject*`、`ApprovalRejected` | `userDecided` / `approvalDecided` 运行时 throw | 无原因拒绝抛 `TypeError`；测试 `Inv 8` |
-| I09 | **任务边界重置**：goal 确认清空 planned/produced/filesApproved/denied/lastToolFailed；resolution 确认重置 planConfirmed | `ConfirmGoal`、`ConfirmResolution` | `userDecided`（`conversationState.ts:178-208`）；`clearTrust`（`ConversationPanel.tsx:2181-2201`） | 新任务的计划/产出/拒绝记忆不得继承；测试 `Inv 1/Inv 6` |
-| I10 | **计划清单追加幂等**：重复文件不重复；空数组 no-op；`approved` 随 add 置 true，reset 置 false | `AddPlannedFiles`、`ResetPlannedFiles` | `PlannedFilesStore`（`plannedFilesStore.ts:36-58`） | 损坏 JSON → 空清单；落盘失败 → 内存态仍工作；测试 `plannedFilesStore.test.ts` |
-| I11 | **工具调用安全边界**：write/edit 写前快照；requiresApproval 工具必须 approved；bash 只读才可自动；沙箱外写入逐次授权；拒绝记忆同类短封 | `ExecuteTool` | `ToolRegistry.execute`（`tools.ts:127-196`）；`classifyReadonly` / `isSideEffectAction`；`useToolApproval` | 未授权 → `needApproval`；策略引导 → `policy`；沙箱外 → 逐次卡；回滚恢复原样；测试 `tools.test.ts` |
-| I12 | **服务实例唯一**：每个 rootPath 最多一个服务；端口避开宿主保留端口 5173/5175；只停 NeonForge 自己起的进程 | `StartService`、`StopService` | `serviceManager.ts:126-219`、`254-286`；`envManager.ts:144-161` | 已有服务 → 返回既有；保留端口 → 杀进程 + 拒绝；pid=0 → 不得 kill（本次修复） |
-| I13 | **问题状态机 7 态**：问题 = 一等公民；关闭只能在交付确认后；同标题复跑更新原实例；台账最多 20 条 | `CreateProblem`、`RerunProblem`、`CloseProblem` | `problemStore.ts`；`SessionPanel.tsx:6-14`；`MainWorkspace.tsx:226-268` | 非法状态转换不得写入；旧 `authorized` 字符串迁移为结构化 |
-| I14 | **交付包真实性**：交付包只能由真实 write/edit 变更和用户确认解决驱动；验收项全勾选才能关闭；demo 注入不得进产品路径 | `BuildDeliveryPackage`、`ConfirmClose` | `MainWorkspace.tsx:282-299`、`260-268`；`DeliveryPanel.tsx:332-350` | 无真实变更 → 不生成交付包；演示仅在 demo bridge 存在时渲染 |
-| I15 | **时间线追加有序**：事件按会话独立 `seq` 单调递增；事件 type 必须在注册表；`card.shown` 等按 dedupe key 只记一次；append-only JSONL | `AppendEvent` | `timeline.ts:94-250`、`351-353`；`timelineLogger.ts:55-112` | 未注册事件 warn；坏行读取时跳过；写失败静默（缺口，见 08） |
-| I16 | **环境事实单源**：环境签名变化才重新检测；端口分配避开保留端口与已用端口；能力从环境派生不重复 exec | `EnsureEnvironment`、`AllocatePort`、`CheckCapability` | `envManager.ts:130-198`、`261-378` | 签名相同复用；端口保留；能力状态 ready/missing/failed |
-| I17 | **变更集可追溯**：每个变更项必须有应用前基线（快照/哈希）；应用必须用户审核授权；应用前校验基线，不一致 → `conflicted`；回滚恢复基线 | `ProposeChangeSet`、`ApplyChangeSet`、`RevertChangeSet` | 目标态：BC-10 的 `ChangeSet` | 无基线不得应用；冲突不得静默覆盖；回滚失败显式报告 |
-| I18 | **队列单活跃**：每个工作区同时最多一个 `running`；阻塞任务不得自动跳过或自动确认；取消不破坏 Task 状态 | `StartTask`、`PauseTask`、`CancelTask` | 目标态：BC-11 的 `TaskQueueEntry` | 重复启动拒绝；阻塞保持 `blocked`；取消走 BC-01/BC-02 取消路径 |
-| I19 | **用量真实且不可变**：只记录 Provider 返回的 usage；缺失记 `unknown`；条目不可修改；不含内容/密钥；未知价格不得按 0 | `RecordUsage`、`EvaluateBudget` | 目标态：BC-12 的 `UsageLedger` | 无 usage → `unknown`；重算产生新条目；导出脱敏 |
-| I20 | **扩受控**：只有已注册且 active 的扩展能力可调用；生命周期幂等；第三方首次调用需授权；不得绕过 BC-02 沙箱/授权 | `RegisterExtension`、`InvokeCapability` | 目标态：BC-13 的 `Extension` | 未知扩展拒绝；失败隔离；能力描述与风险等级校验 |
-| I21 | **验收有据**：验收项必须有来源；passed 必须有证据引用； waived 必须有理由；门禁 = 所有非豁免项 passed；无来源显式为空 | `DeriveAcceptanceCriteria`、`MarkPassed`、`WaiveItem`、`EvaluateGate` | 目标态：BC-14 的 `AcceptanceRecord` | 无来源不得伪造“全部通过”；failed/pending 不放行关闭；演示 DoD 不进生产 |
+| I09 | **任务边界重置**：goal 确认清空 planned/produced/filesApproved/denied/lastToolFailed；resolution 确认重置 planConfirmed | `ConfirmGoal`、`ConfirmResolution` | `userDecided`（`conversationState.ts`）；`clearTrust`（`ConversationPanel.tsx`） | 新任务的计划/产出/拒绝记忆不得继承；测试 `Inv 1/Inv 6` |
+| I10 | **计划清单追加幂等**：重复文件不重复；空数组 no-op；`approved` 随 add 置 true，reset 置 false | `AddPlannedFiles`、`ResetPlannedFiles` | `PlannedFilesStore`（`plannedFilesStore.ts`） | 损坏 JSON → 空清单；落盘失败 → 内存态仍工作；测试 `plannedFilesStore.test.ts` |
+| I11 | **工具调用安全边界**：write/edit 写前快照；requiresApproval 工具必须 approved；bash 只读才可自动；沙箱外写入逐次授权；拒绝记忆同类短封 | `ExecuteTool` | `ToolRegistry.execute`（`tools.ts`）；`classifyReadonly` / `isSideEffectAction`；`useToolApproval` | 未授权 → `needApproval`；策略引导 → `policy`；沙箱外 → 逐次卡；回滚恢复原样；测试 `tools.test.ts` |
+| I12 | **服务实例唯一**：每个 rootPath 最多一个服务；端口避开宿主保留端口 5173/5175；只停 NeonForge 自己起的进程 | `StartService`、`StopService` | `serviceManager.ts`（`stopServer`/`stopAllServices`）；`envManager.ts` | 已有服务 → 返回既有；保留端口 → 杀进程 + 拒绝；pid=0 → 不得 kill（本次修复） |
+| I13 | **问题状态机 7 态**：问题 = 一等公民；关闭只能在交付确认后；同标题复跑更新原实例；台账最多 20 条 | `CreateProblem`、`RerunProblem`、`CloseProblem` | `problemStore.ts`；`SessionPanel.tsx`；`MainWorkspace.tsx` | 非法状态转换不得写入；旧 `authorized` 字符串迁移为结构化 |
+| I14 | **交付包真实性**：交付包只能由真实 write/edit 变更和用户确认解决驱动；验收项全勾选才能关闭；demo 注入不得进产品路径 | `BuildDeliveryPackage`、`ConfirmClose` | `MainWorkspace.tsx`、`DeliveryPanel.tsx`（门禁） | 无真实变更 → 不生成交付包；演示仅在 demo bridge 存在时渲染 |
+| I15 | **时间线追加有序**：事件按会话独立 `seq` 单调递增；事件 type 必须在注册表；`card.shown` 等按 dedupe key 只记一次；append-only JSONL | `AppendEvent` | `timeline.ts`、`timelineLogger.ts`（`logTimeline`） | 未注册事件 warn；坏行读取时跳过；写失败计数可见 + DLQ 重放（P1-02） |
+| I16 | **环境事实单源**：环境签名变化才重新检测；端口分配避开保留端口与已用端口；能力从环境派生不重复 exec | `EnsureEnvironment`、`AllocatePort`、`CheckCapability` | `envManager.ts` | 签名相同复用；端口保留；能力状态 ready/missing/failed |
+| I17 | **变更集可追溯**：每个变更项必须有应用前基线（快照/哈希）；应用必须用户审核授权；应用前校验基线，不一致 → `conflicted`；回滚恢复基线 | `ProposeChangeSet`、`ApplyChangeSet`、`RevertChangeSet` | `domain/changeSet.ts`（`ChangeSet`）、`main/changeSetService.ts` | 无基线不得应用；冲突不得静默覆盖；回滚失败显式报告 |
+| I18 | **队列单活跃**：每个工作区同时最多一个 `running`；阻塞任务不得自动跳过或自动确认；取消不破坏 Task 状态 | `StartTask`、`PauseTask`、`CancelTask` | `domain/taskQueue.ts`（`TaskQueueEntry`）、`main/taskQueueStore.ts` | 重复启动拒绝；阻塞保持 `blocked`；取消走 BC-01/BC-02 取消路径 |
+| I19 | **用量真实且不可变**：只记录 Provider 返回的 usage；缺失记 `unknown`；条目不可修改；不含内容/密钥；未知价格不得按 0 | `RecordUsage`、`EvaluateBudget` | `domain/usageLedger.ts`（`UsageLedger`）、`main/usageStore.ts` | 无 usage → `unknown`；重算产生新条目；导出脱敏 |
+| I20 | **扩受控**：只有已注册且 active 的扩展能力可调用；生命周期幂等；第三方首次调用需授权；不得绕过 BC-02 沙箱/授权 | `RegisterExtension`、`InvokeCapability` | `domain/extension.ts`（`Extension`）、`main/pluginSystem.ts`、`main/mcpManager.ts` | 未知扩展拒绝；失败隔离；能力描述与风险等级校验 |
+| I21 | **验收有据**：验收项必须有来源；passed 必须有证据引用； waived 必须有理由；门禁 = 所有非豁免项 passed；无来源显式为空 | `DeriveAcceptanceCriteria`、`MarkPassed`、`WaiveItem`、`EvaluateGate` | `domain/acceptance.ts`（`AcceptanceRecord`）、`main/acceptanceStore.ts` | 无来源不得伪造“全部通过”；failed/pending 不放行关闭；演示 DoD 不进生产 |
 
 ---
 
@@ -115,7 +115,7 @@
 
 ### 4.3 并发 / 锁策略
 
-- **流式链互斥**：`acquireChain()` 串行化 send / 授权续聊，防止 chunk 交错（`ConversationPanel.tsx:2203-2214`）。
+- **流式链互斥**：`acquireChain()` 串行化 send / 授权续聊，防止 chunk 交错（`useChatEngine.ts` 的 `acquireChain`）。
 - **会话隔离**：`sessionRef` 递增，旧会话事件/续流失效。
 - **工具卡定位**：按稳定 `id` 更新，避免同 args 多卡错位。
 - **服务注册表**：按 `rootPath` 唯一，启动前查已有。
@@ -163,14 +163,14 @@
 
 | 工厂 / 方法 | 创建目标 | 创建条件 | 验证规则 | 初始状态 |
 | :--- | :--- | :--- | :--- | :--- |
-| `initialState()` | Task 聚合 | 会话开始/恢复失败 | 所有确认位 false，planned/produced 空，pending none | 见 `conversationState.ts:128-141` |
+| `initialState()` | Task 聚合 | 会话开始/恢复失败 | 所有确认位 false，planned/produced 空，pending none | 见 `conversationState.ts`（`initialState`） |
 | `pendingProposal(kind, proposal, since)` | `DecisionContent` | 协议工具成功 | kind 与 proposal 类型匹配；since 由调用方提供 | `pending` 置位，内容快照 |
 | `parsePlanProposal(text)` | `PlanProposal` | 文本降级通道 | `【执行方案】` 块 + 合法路径行；否则 `ok:false` | 无决策点（降级） |
 | `parseCompletionClaim(text)` | `CompletionClaim` | 文本降级通道 | `【已达成】` 块；命令行/结果解析 | 无决策点（需证据门） |
 | `detectEnvironment(rootPath)` | `ProjectEnvironment` | 项目打开/环境检查 | runtime/包管理器/工具链/签名 | `servicePort=0` |
 | `detectCapabilities(rootPath, platform, env)` | `Capability[]` | `check-capability` | 平台原生 + 外部扩展；ready/missing/failed | 状态由环境派生 |
 | `buildStandardPrefix(rootPath, files)` | `StandardPrefix` | 打开项目 | hash 由内容计算；tokens 估算 | 缓存未命中 |
-| `createProblem(text)` | `ProblemInstance` | 用户发送首条问题 | 标题截断 20 字；status executing；snapshot 初始化 | 见 `problemStore.ts:8-18` |
+| `createProblem(text)` | `ProblemInstance` | 用户发送首条问题 | 标题截断 20 字；status executing；snapshot 初始化 | 见 `problemStore.ts`（`createProblem`） |
 | `buildDeliveryPackage(changes, acceptance)` | `DeliveryPackage` | 真实 write/edit 成功 / 用户确认解决 | 只从真实变更生成；acceptance 可空 | status delivered |
 | `resolveSandboxPath(rootPath, p)` | 规范化路径值对象 | 任意模型路径 | 绝对路径原样；剥误带前缀；相对拼 rootPath | 空 rootPath 原样 |
 | `classifyReadonly(name, command)` | `ActionKind` | 工具请求/门控 | 只读白名单 + 危险链 + git 子命令 + 网络形态 | fail-closed（空命令 hazardous） |
@@ -199,12 +199,12 @@
 | 外部引用对象 | 我方是否管理其生命周期（创建/修改/终结）？ | 结论 | 依据 |
 | :--- | :--- | :--- | :--- |
 | 项目文件（用户项目根下的文件） | 是（write/edit 创建/修改，快照回滚） | 作为 Workspace/PlannedFiles 管理的对象，不是仅 ID 引用 | `tools.ts` 执行器；`plannedFilesStore` |
-| 项目根目录 | 是（打开/初始化/切换） | Workspace 聚合管理 | `workspace.ts:29-138` |
+| 项目根目录 | 是（打开/初始化/切换） | Workspace 聚合管理 | `workspace.ts` |
 | 开发服务器进程 | 是（start/check/stop/退出清理） | ServiceInstance 聚合管理 | `serviceManager.ts` |
-| 端口号 | 是（分配/释放/保留） | ProjectEnvironment 端口分配器管理 | `envManager.ts:144-174` |
-| Provider 上游模型 id | 否（外部供应商管理） | 仅作为解析结果/值对象，不提升为聚合 | `gateway.ts:436-483` |
+| 端口号 | 是（分配/释放/保留） | ProjectEnvironment 端口分配器管理 | `envManager.ts` |
+| Provider 上游模型 id | 否（外部供应商管理） | 仅作为解析结果/值对象，不提升为聚合 | `gateway.ts`（`refreshModels`） |
 | Web 搜索端点/Key | 是（配置/探测/覆盖） | ConfigStore 管理，不提升为聚合 | `configStore.ts`、`webTools.ts` |
-| LSP 进程 | 是（connect/stop） | LspService 管理，生命周期短，非聚合 | `lsp.ts:25-90` |
+| LSP 进程 | 是（connect/stop） | LspService 管理，生命周期短，非聚合 | `lsp.ts` |
 | 聊天日志/时间线文件 | 是（append/query/export） | Timeline/ChatLog 管理 | `timelineLogger.ts`、`chatLog.ts` |
 | API Key | 是（加密/解密/明文 fallback） | ConfigRepository 管理 | `configStore.ts` |
 

@@ -8,7 +8,7 @@
 
 ## 1. 领域事件目录
 
-> 事件名与载荷的代码权威：`apps/desktop/src/domain/timeline.ts:20-233`。下表按事件族组织；同一族内变体共享源聚合与消费者。
+> 事件名与载荷的代码权威：`apps/desktop/src/domain/timeline.ts`（`TimelineEventType`、`TIMELINE_EVENT_SPECS`）。下表按事件族组织；同一族内变体共享源聚合与消费者。
 
 | 事件族 | 变体 | 源聚合 | 触发条件 | 关键字段 | 范围 | 消费者 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |

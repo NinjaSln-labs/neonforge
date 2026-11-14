@@ -151,7 +151,7 @@ flowchart LR
 - **权衡**：模型不能在一次回合里同时请求多个决策；需要 `suspendRound` 机制丢弃同轮兄弟工具。
 - **风险**：优先级派生可能掩盖低优先级决策；当前通过 `decisionContent` 快照和事件审计缓解。
 - **备选方案**：多个独立布尔标志（已拒绝）；按 UI 卡栈管理（无法保证状态一致）。
-- **代码**：`conversationState.ts:97-126`、`649-677`、`303-316`；测试 `Inv 2/Inv 7`。
+- **代码**：`conversationState.ts`（`deriveDecisionPoint`、`setPending`）；测试 `Inv 2/Inv 7`。
 
 ### ADR-D02：方案清单是写边界，且只由已确认方案派生
 
@@ -160,7 +160,7 @@ flowchart LR
 - **权衡**：模型首次定位文件可能不在清单内；需要 `approve-files` 补充或改写清单内文件。
 - **风险**：相对/绝对路径双形态导致完成核验死锁；已用 `matchesPlannedPath` 末段匹配缓解。
 - **备选方案**：每次写入逐次授权（已拒绝，授权疲劳）；完全信任模型（不安全）。
-- **代码**：`conversationState.ts:189-201`、`497-540`、`831-840`；`tools.ts:143-154`、`605-629`。
+- **代码**：`conversationState.ts`（`derivePlannedFiles`、`inPlannedFiles`）；`tools.ts`（`ToolRegistry.execute`）。
 
 ### ADR-D03：完成证据门——至少一条系统可代跑只读命令
 
@@ -169,7 +169,7 @@ flowchart LR
 - **权衡**：某些真实工作无法用只读命令证明（如 UI 视觉）；这类证据只能标 unverifiable，可能导致证据不足。
 - **风险**：只读命令本身可能泄漏数据（外网 GET）；命令判定启发式可能误判。
 - **备选方案**：只信任模型自报（已拒绝）；引入截图/浏览器自动化验证（未来）。
-- **代码**：`conversationState.ts:681-775`、`804-828`；`verification.ts:9-13`、`68-78`；测试 `Inv 4`、`verifyCompletionSystem.test.ts`。
+- **代码**：`conversationState.ts`（`verifyCompletion`、`buildEvidenceBackfill`）；`verification.ts`（`runOne`）；测试 `Inv 4`、`verifyCompletionSystem.test.ts`。
 
 ### ADR-D04：双层门控——SessionGate 优先于 ActionGate
 
@@ -178,7 +178,7 @@ flowchart LR
 - **权衡**：只读工具在 pending 时也被冻结，可能让模型无法继续分析；这是有意的“无害≠有用”。
 - **风险**：renderer 与 main 镜像不同步会导致门失效；已有 `session:plan-confirmed`、`planned-files` 同步。
 - **备选方案**：只在执行层做一次门控（renderer 可被绕过）；只做 renderer 门控（main 无防线）。
-- **代码**：`conversationState.ts:494-635`；`tools.ts:127-196`；测试 `Inv 3`。
+- **代码**：`conversationState.ts`（`sessionGate`/`actionGate`/`canExecute`）；`tools.ts`（`ToolRegistry.execute`）；测试 `Inv 3`。
 
 ### ADR-D05：项目根是软沙箱与信任边界，不是 OS 隔离
 
@@ -187,7 +187,7 @@ flowchart LR
 - **权衡**：软边界依赖用户判断；read 无边界带来隐私风险。
 - **风险**：符号链接逃逸、`read` 读取敏感文件、模型将文件内容发给 provider。
 - **备选方案**：硬沙箱（chroot/容器，桌面端成本高）；read 也强制沙箱（会破坏文件整理场景）。
-- **代码**：`tools.ts:57-69`、`199-210`；`conversationState.ts:537-540`；`sandboxPath.ts:13-25`。
+- **代码**：`tools.ts`（`resolvePath`/`isInSandbox`）；`conversationState.ts`（`classifyReadonly`）；`sandboxPath.ts`（`resolveSandboxPath`）。
 
 ### ADR-D06：接入方描述符 + OpenAI 兼容传输
 
@@ -196,7 +196,7 @@ flowchart LR
 - **权衡**：各 provider 的行为差异（thinking、tool_choice、region gate）需要 profile/补丁；当前 DeepSeek profile 特化。
 - **风险**：上游模型命名变化、区域限制、tool_call 格式漂移。
 - **备选方案**：每 provider 独立 SDK（维护成本高）；只支持一家（锁定风险）。
-- **代码**：`providers/types.ts:21-33`、`registry.ts:8-31`、`transport/openaiCompat.ts`、`gateway.ts:436-554`。
+- **代码**：`providers/types.ts`、`providers/registry.ts`、`transport/openaiCompat.ts`、`gateway.ts`（`refreshModels`）。
 
 ### ADR-D07：时间线是状态 diff 派生的事件日志（Event Sourcing-lite）
 
@@ -205,7 +205,7 @@ flowchart LR
 - **权衡**：事件是派生事实，不是持久化事件源；日志写失败有计数与 DLQ（P1-02），但不能保证强一致审计。
 - **风险**：未注册事件只 warn；跨进程事件顺序依赖调用时序；事件已有 `eventId`/`version`（P2-07）与去重（P2-06），但跨上下文事务投递仍无保证（Outbox 设计预留）。
 - **备选方案**：每个组件手写打点（已拒绝）；完整 Event Sourcing + 事件存储（当前过重）。
-- **代码**：`timeline.ts:94-250`、`260-335`；`timelineLogger.ts:55-112`；`useConversationState.ts:40-50`。
+- **代码**：`timeline.ts`（`deriveStateEvents`/`TIMELINE_EVENT_SPECS`）；`timelineLogger.ts`（`logTimeline`）；`useConversationState.ts`。
 
 ### ADR-D08：三类持久化分工
 
@@ -214,52 +214,52 @@ flowchart LR
 - **权衡**：三套存储各自容错，可能出现局部恢复不一致；localStorage 有配额/清理风险。
 - **风险**：store 损坏回退空清单；localStorage 不可用；日志写失败静默。
 - **备选方案**：统一 SQLite（未来）；全部放 main（renderer 断点恢复复杂）。
-- **代码**：`plannedFilesStore.ts:18-60`、`sessionStore.ts:54-84`、`problemStore.ts:60-67`、`timelineLogger.ts:42-77`。
+- **代码**：`plannedFilesStore.ts`、`sessionStore.ts`、`problemStore.ts`、`timelineLogger.ts`。
 
-### ADR-D09：变更集以基线 + 快照为一致性边界（目标态）
+### ADR-D09：变更集以基线 + 快照为一致性边界（已落地 2026-11-14）
 
 - **决策**：文件变更组织为 `ChangeSet`；每个变更项记录应用前基线（哈希 + 快照引用）；应用必须用户审核授权，回滚恢复基线。
 - **理由**：没有基线与变更集，diff 应用/回滚只是 UI 动作，无法证明“改了什么、基于什么、能否安全恢复”。
 - **权衡**：需要额外存储基线/哈希，文件变更成本上升；大文件需限制快照策略。
 - **风险**：外部修改导致冲突；快照存储增长；Git 集成只是只读桥，不等于版本控制所有权。
-- **备选方案**：只保留 `.nf-bak`（当前现状，无法表达变更集）；直接交给 Git（非 Git 项目不适用）。
-- **代码**：`applyDiff.ts`（snapshot/revert）、`ipc.ts:219-227`、`pluginSystem.ts:22`（git 占位）。
+- **备选方案**：只保留 `.nf-bak`（V1 曾为现状，无法表达变更集）；直接交给 Git（非 Git 项目不适用）。
+- **代码**：`applyDiff.ts`（snapshot/revert）、`domain/changeSet.ts`、`main/changeSetService.ts`、`main/gitBridge.ts`、`ipc.ts` `changeset:*`/`git:read`。
 
-### ADR-D10：任务队列独立于 Task 聚合（目标态）
+### ADR-D10：任务队列独立于 Task 聚合（已落地 2026-11-14）
 
 - **决策**：多任务编排放在 BC-11；Task 聚合只负责单个任务的状态机；队列通过 Task 状态事件驱动。
 - **理由**：把队列塞进 `ConversationState` 会破坏“单一 PENDING/单一任务边界”不变量；队列是调度关注点，不是任务一致性关注点。
 - **权衡**：需要新的持久化与调度器；跨进程协调复杂度增加。
 - **风险**：队列状态与 Task 状态漂移；阻塞任务饿死；取消竞态。
-- **备选方案**：单任务（当前 V1 现状）；队列放 renderer 内存（重启丢失）。
-- **代码**：`MainWorkspace.tsx:15-40`（任务队列占位）。
+- **备选方案**：单任务（V1 曾为现状；BC-11 已落地）；队列放 renderer 内存（重启丢失）。
+- **代码**：`domain/taskQueue.ts`、`main/taskQueueStore.ts`、`ipc.ts` `queue:*`、`MainWorkspace.tsx` TaskPanel。
 
-### ADR-D11：用量只记录 Provider 真实 usage（目标态）
+### ADR-D11：用量只记录 Provider 真实 usage（已落地 2026-11-14）
 
 - **决策**：`UsageLedger` 只接受 Provider 返回的 usage 字段；缺失时记 `unknown`；成本用版本化价格表；台账不含内容/密钥。
 - **理由**：字符估算不是计费事实；未知成本不能当 0；隐私要求台账不可反推 prompt。
 - **权衡**：部分 Provider 不返回 usage → 用量不完整；价格表需要维护。
 - **风险**：模型改名/价格变化；跨币种；缓存命中口径不一致。
 - **备选方案**：字符估算（当前 `compact.ts` 的近似，仅用于压缩触发）；按订阅固定价（不适用于多 Provider）。
-- **代码**：`gateway.ts`（当前无 usage 解析）、`MainWorkspace.tsx:33-36`、`pluginSystem.ts:23`（stats 占位）。
+- **代码**：`domain/usageLedger.ts`、`main/usageStore.ts`、`gateway.ts` usage 解析、`ipc.ts` `usage:*`/`budget:*`/`pricing:*`。
 
-### ADR-D12：扩展能力必须经过 BC-02 的授权/沙箱（目标态）
+### ADR-D12：扩展能力必须经过 BC-02 的授权/沙箱（已落地 2026-11-14）
 
 - **决策**：扩展只提供能力描述与受控调用入口；实际文件/进程/网络操作仍走 BC-02 工具目录与门控；第三方扩展首次调用需用户授权。
 - **理由**：避免插件成为绕过授权与沙箱的后门；保持安全边界单源。
 - **权衡**：扩展接入成本增加；部分 MCP 工具语义需要映射到风险等级。
 - **风险**：MCP 服务器被恶意替换；能力描述与实际行为不符；扩展生命周期失败。
 - **备选方案**：扩展直接执行任意代码（拒绝）；只允许内置扩展（能力受限）。
-- **代码**：`pluginSystem.ts`、`ipc.ts` `plugins:*`；目标态扩展 `mcp-bridge`。
+- **代码**：`domain/extension.ts`、`main/pluginSystem.ts`、`main/mcpManager.ts`、`ipc.ts` `extensions:*`/`mcp:*`/`git:read`。
 
-### ADR-D13：验收来源优先方案验证计划，门禁判定单源（目标态）
+### ADR-D13：验收来源优先方案验证计划，门禁判定单源（已落地 2026-11-14）
 
 - **决策**：验收项优先从已确认方案的 `verificationPlan` 派生，其次用户 DoD/手工；无来源时显式为空；门禁判定由 `AcceptanceRecord` 单源计算。
 - **理由**：验收必须有出处；避免 UI 勾选绕过证据；演示 DoD 不得进入生产路径。
 - **权衡**：方案未提供验证计划时验收为空，需要用户补充；手工验收需要理由。
 - **风险**：验收项与完成证据语义重叠（需明确：证据回答“做到没有”，验收回答“按什么标准算做到”）；豁免滥用。
-- **备选方案**：只靠完成证据门（当前现状，交付包验收为空）；UI 勾选即通过（不可信）。
-- **代码**：`DeliveryPanel.tsx:332-350`、`MainWorkspace.tsx:282-299`、`DoDAlignPanel.tsx:9-13`（演示）、`PlanProposal.verificationPlan`。
+- **备选方案**：只靠完成证据门（V1 曾为现状，交付包验收为空）；UI 勾选即通过（不可信）。
+- **代码**：`domain/acceptance.ts`、`main/acceptanceStore.ts`、`ipc.ts` `acceptance:*`、`DeliveryPanel.tsx` 门禁、`PlanProposal.verificationPlan`。
 
 ---
 

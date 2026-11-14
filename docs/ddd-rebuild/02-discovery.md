@@ -3,6 +3,7 @@
 > 阶段：发现 / Discover
 > 方法：以代码为事实来源做 **brownfield 事件风暴**——从用户命令、模型工具调用、状态转换、测试不变量中还原“已经发生的事实”
 > 关键输入：`domain/conversationState.ts`、`domain/timeline.ts`、`domain/protocolTools.ts`、`main/tools.ts`、`main/gateway.ts`、`renderer/ConversationPanel.tsx`、`tests/unit/conversationState.test.ts`
+> 行号说明：本文 `文件:行` 为初始分析时点引用；当前权威行号索引见 `10-code-evidence.md`。
 
 ---
 

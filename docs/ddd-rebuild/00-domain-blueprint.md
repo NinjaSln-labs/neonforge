@@ -73,7 +73,7 @@
   - 一个任务边界内至少有一个可追溯的变更集；交付包引用变更集，而不是重新猜测。
 - 关键命令：`ProposeChangeSet`、`ReviewChangeItem`、`ApplyChangeSet`、`RevertChangeSet`、`SupersedeChangeSet`
 - 关键事件：`changeset.proposed`、`changeset.reviewed`、`changeset.applied`、`changeset.reverted`、`changeset.conflict_detected`
-- 代码落点：`applyDiff.ts`（snapshot/revert）、`ipc.ts:219-227`（`delivery:apply-diff/revert-diff`）、`DeliveryPanel.tsx`（审核 UI）、`pluginSystem.ts:22`（git 占位，目标态读能力）
+- 代码落点：`applyDiff.ts`（snapshot/revert）、`domain/changeSet.ts`、`main/changeSetService.ts`、`main/gitBridge.ts`、`ipc.ts` `changeset:*`/`git:read`、`DeliveryPanel.tsx`（审核 UI）
 - 现状：已落地。变更集状态机 + 内容哈希基线 + 冲突检测；Git 只读桥（status/log/diff/branches）固定 argv。
 
 ### 3.2 BC-11 任务编排（Task Orchestration）
@@ -90,7 +90,7 @@
   - 队列状态来自 Task 的真实状态事件，不由 UI 猜测。
 - 关键命令：`EnqueueTask`、`StartTask`、`PauseTask`、`ResumeTask`、`CancelTask`、`ReorderTask`
 - 关键事件：`queue.entry_enqueued`、`queue.entry_started`、`queue.entry_blocked`、`queue.entry_completed`、`queue.entry_cancelled`
-- 代码落点：`MainWorkspace.tsx:15-40`（占位）、`chatTab tasks`（入口）
+- 代码落点：`domain/taskQueue.ts`、`main/taskQueueStore.ts`、`ipc.ts` `queue:*`、`MainWorkspace.tsx` TaskPanel
 - 现状：已落地。单活跃队列、暂停/恢复/阻塞/取消/重排、按会话原子持久化；授权等待自动阻塞并在解除后恢复。
 
 ### 3.3 BC-12 用量与成本（Usage & Cost）
@@ -142,7 +142,7 @@
   - 验收来源优先取已确认方案的 `verificationPlan`，其次是用户 DoD；演示 DoD 不得进入生产路径。
 - 关键命令：`DeriveAcceptanceCriteria`、`AttachEvidence`、`MarkPassed`、`WaiveItem`、`EvaluateGate`
 - 关键事件：`acceptance.criteria_derived`、`acceptance.item_passed`、`acceptance.item_failed`、`acceptance.item_waived`、`quality_gate.evaluated`
-- 代码落点：`DeliveryPanel.tsx:332-350`、`MainWorkspace.tsx:282-299`、`DoDAlignPanel.tsx:9-13`（演示）、`PlanProposal.verificationPlan`
+- 代码落点：`domain/acceptance.ts`、`main/acceptanceStore.ts`、`ipc.ts` `acceptance:*`、`DeliveryPanel.tsx` 门禁、`PlanProposal.verificationPlan`
 - 现状：已落地。验收来源取已确认方案的 `verificationPlan`；证据/手工理由/豁免规则由领域强制；门禁阻断关闭。
 
 ---
@@ -157,7 +157,7 @@
 | BC-01 | 会话恢复只恢复消息，不恢复完整 Task 确认位 | `sessionStore.ts`、`useConversationState.ts` 重建 | 在 spec 中明确“以消息重建”的恢复语义 |
 | BC-02 | 权限规则只在内存，跨重启丢失；L4 低危委托与信任阶梯可视化是演示 | `tools.ts` rules、`TrustLadderPanel.tsx` | 记录为部分落地；规则持久化列入后续 |
 | BC-03 | 项目初始化只创建最小骨架，没有模板/场景工程初始化 | `projectInit.ts`、`scenes.tsx` | 模板化列为候选，不建新上下文 |
-| BC-04 | 交付包验收项为空；diff 审核与变更集未统一 | `MainWorkspace.tsx:282-293`、`DeliveryPanel.tsx` | 由 BC-10/BC-14 补齐 |
+| BC-04 | 交付包验收项为空；diff 审核与变更集未统一 | `MainWorkspace.tsx`、`DeliveryPanel.tsx` | 由 BC-10/BC-14 补齐 |
 | BC-05 | 无 usage 解析、无价格表、无模型健康/降级策略 | `gateway.ts` | 由 BC-12 补齐；健康策略列入后续 |
 | BC-06 | 事件版本/DLQ/重放/去重已落地（P1-02、P2-06、P2-07）；跨上下文事务性 Outbox 仍预留 | `timeline.ts`、`timelineLogger.ts` | 仅 Outbox 保留为后续硬化项（设计见 `09-openspec/design.md §6`） |
 | BC-07 | 明文 fallback 的风险决策未产品化 | `configStore.ts` | 保留为安全决策项 |

@@ -45,7 +45,7 @@
 
 > 每个任务：先补回归测试（失败）→ 再改实现 → 全部测试通过后再继续下一项（ADR-012 批次内允许一次集中修复，但不得边跑边改）。
 
-- [x] 2.1 **P0-03 计划清单边界**：删除 `ConversationPanel.applyChunk` 中 `propose_plan` 分支的 `addPlannedFiles`（`ConversationPanel.tsx:880-883`）；删除 done 分支文本方案降级的 `addPlannedFiles`（`1145-1153`）；保留 `userDecided(plan, confirm)` 的唯一派生。领域不变量测试覆盖“拒绝不落清单/确认才派生”；renderer 交互测试未新增（`4.4` 依赖环境）。
+- [x] 2.1 **P0-03 计划清单边界**：删除 `ConversationPanel.applyChunk`（拆分后位于 `useChatStream.ts`）中 `propose_plan` 分支的 `addPlannedFiles`；删除 done 分支文本方案降级的 `addPlannedFiles`；保留 `userDecided(plan, confirm)` 的唯一派生。领域不变量测试覆盖“拒绝不落清单/确认才派生”；renderer 交互测试未新增（`4.4` 依赖环境）。
 - [x] 2.2 **P0-01 读取边界**：`read` 改为 `requiresApproval:true` + `preApproval`（根内自动、根外授权）；ENOENT 目录提示只在根内。新增 `tools` 测试：根内 auto、根外 needApproval、根外拒绝不读取。
 - [x] 2.3 **P0-02 只读判定收紧**：`classifyReadonly` 增加危险参数形态（`sed -i`、`find -exec/-delete/-fprint`、`awk system()/print >`、`sort -o`、`git branch -d/-D/-m/-M/-c/-C`、`git remote add/remove/rename/set-url`、`rg --pre`、`wget` 非 stdout 下载、`curl` 写副作用标志）。新增安全回归测试。
 - [x] 2.4 **P0-04 进程守卫**：`killTree`/`killAllSubprocesses`/`recordPid` 与 `serviceManager.stopServer/stopAllServices` 增加 `pid > 0` 守卫；新增 `isKillablePid` 纯函数与单测（含 `pid=0`、`pid<0`、`pid` 缺失）。
