@@ -29,7 +29,7 @@ import { compaction } from './compact.js'
 import { appendChatLog, exportChatLog } from './chatLog.js'
 import { logTimeline, timelineLogger } from './timelineLogger.js'
 import { runVerificationCommands } from './verification.js'
-import { createUsageEntry, evaluateBudget } from '../domain/usageLedger.js'
+import { createUsageEntry, evaluateBudget, summarizeUsage } from '../domain/usageLedger.js'
 import { getBudgetStore } from './budgetStore.instance.js'
 import { getUsageStore } from './usageStore.instance.js'
 import { getAcceptanceStore } from './acceptanceStore.instance.js'
@@ -48,6 +48,11 @@ export function registerIpc(): void {
   )
   initPlugins() // 08：注册 5 内置插件（生命周期钩子）
   registerLspTools(toolRegistry)
+  // BC-12：预算按自然月累计（周期预算语义；usage 台账本身保留全部历史）
+  const currentPeriodSummary = () => {
+    const prefix = new Date().toISOString().slice(0, 7) // YYYY-MM
+    return summarizeUsage(getUsageStore().load().filter((e) => e.at.startsWith(prefix)))
+  }
   // BC-12：预算阈值提醒去重（每进程周期；budget:set 重置）
   const budgetNotified = new Set<string>()
   // D3（ADR-005）：启动恢复——write 门控布尔镜像从 store 同步（批准事实跨重启；renderer 挂载时另经 planned-files:load 恢复清单）
@@ -257,7 +262,7 @@ export function registerIpc(): void {
             // 预算提醒：达到阈值 → 事件一次；默认不硬中断（pauseOnReach 由 renderer 在安全点检查）
             const settings = getBudgetStore().load()
             if (settings.limitUsd !== null) {
-              const state = evaluateBudget(getUsageStore().summary(), settings.limitUsd)
+              const state = evaluateBudget(currentPeriodSummary(), settings.limitUsd)
               const key = `global:${settings.limitUsd}`
               if (state.reached && !budgetNotified.has(key)) {
                 budgetNotified.add(key)
@@ -289,7 +294,7 @@ export function registerIpc(): void {
   ipcMain.handle('usage:export', () => getUsageStore().exportCsv())
   const budgetSnapshot = () => {
     const settings = getBudgetStore().load()
-    const summary = getUsageStore().summary()
+    const summary = currentPeriodSummary()
     return { settings, summary, state: evaluateBudget(summary, settings.limitUsd) }
   }
   ipcMain.handle('budget:get', () => budgetSnapshot())

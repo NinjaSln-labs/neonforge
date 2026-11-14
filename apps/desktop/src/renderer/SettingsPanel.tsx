@@ -394,7 +394,7 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
 
       <div className="nf-settings__plugins">
         <span className="nf-settings__plugins-title">
-          预算（USD；未知价格条目不参与计算——留空 = 不设置）
+          预算（USD/自然月；未知价格条目不参与计算——留空 = 不设置）
         </span>
         <div className="nf-settings__mcp-actions">
           <input

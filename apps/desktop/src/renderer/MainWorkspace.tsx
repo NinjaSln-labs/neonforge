@@ -348,7 +348,7 @@ function TaskPanel({
             </p>
             {budget ? (
               <p className="nf-meta">
-                预算：
+                预算（本月）：
                 {budget.state.limit === null
                   ? '未设置'
                   : `${budget.state.spent.toFixed(4)} / ${budget.state.limit}`}
