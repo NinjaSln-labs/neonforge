@@ -278,23 +278,23 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
         <span className="nf-settings__plugins-title">API Key 存储</span>
         {keyStatus ? (
           <>
-            <p className="nf-settings__export-msg">
+            <p className="nf-settings__key-status">
               来源：{KEY_SOURCE_LABEL[keyStatus.source]}
               {keyStatus.storedAt
                 ? `；最近保存：${new Date(keyStatus.storedAt).toLocaleDateString()}`
                 : ''}
             </p>
             {keyStatus.plaintextCopy && (
-              <p className="nf-settings__export-msg">
+              <p className="nf-settings__key-status">
                 配置中仍存在明文副本——建议重新保存以清除，或改用环境变量/凭据文件
               </p>
             )}
             {keyStatus.rotateRecommended && (
-              <p className="nf-settings__export-msg">密钥已保存超过 90 天，建议轮换</p>
+              <p className="nf-settings__key-status">密钥已保存超过 90 天，建议轮换</p>
             )}
           </>
         ) : (
-          <p className="nf-settings__export-msg">未获取到密钥状态</p>
+          <p className="nf-settings__key-status">未获取到密钥状态</p>
         )}
       </div>
 

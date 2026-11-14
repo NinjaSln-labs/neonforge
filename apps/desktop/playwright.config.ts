@@ -24,6 +24,8 @@ export default defineConfig({
     browserName: 'chromium',
     viewport: { width: 1280, height: 800 },
     expect: {
+      // Vite dev server 按需编译源码模块；WSL 冷模块 + 全量并行时会超过 5s 默认值。
+      timeout: 15_000,
       toHaveScreenshot: {
         maxDiffPixels: 100,
         maxDiffPixelRatio: 0.01,
@@ -42,7 +44,7 @@ export default defineConfig({
       name: 'interaction', // L3 组件交互（无截图——CI 可跑）
       testDir: './tests/interaction',
       testMatch: '**/*.interaction.ts',
-      use: { expect: { toHaveScreenshot: undefined } }, // 禁用截图断言（L3 无像素基线）
+      use: { expect: { timeout: 15_000, toHaveScreenshot: undefined } }, // 禁用截图断言（L3 无像素基线）；显式保留 expect 超时
     },
   ],
 })

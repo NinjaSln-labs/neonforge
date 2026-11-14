@@ -839,6 +839,7 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-settings__export { background: none; border: 1px solid var(--nf-border); color: var(--nf-accent); border-radius: var(--nf-radius-sm); padding: 2px var(--nf-space-3); font-size: 12px; cursor: pointer; flex-shrink: 0; }
 .nf-settings__export:hover { border-color: var(--nf-accent); }
 .nf-settings__export-msg { margin: var(--nf-space-1) 0 0; font-size: 12px; color: var(--nf-text-dim); word-break: break-all; }
+.nf-settings__key-status { margin: var(--nf-space-1) 0 0; font-size: 12px; color: var(--nf-text-dim); word-break: break-all; }
 .nf-settings__seg { display: flex; gap: 4px; }
 .nf-settings__seg-btn { background: none; border: 1px solid var(--nf-border); color: var(--nf-text-dim); border-radius: var(--nf-radius-sm); padding: 2px var(--nf-space-3); font-size: 12px; cursor: pointer; }
 .nf-settings__seg-btn--on { background: var(--nf-accent-soft); border-color: var(--nf-accent); color: var(--nf-accent); }
