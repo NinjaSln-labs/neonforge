@@ -5,11 +5,19 @@ export interface DirEntry {
   kind: 'file' | 'dir'
 }
 
+export interface ApiKeyStatusView {
+  source: 'env' | 'file' | 'encrypted' | 'plaintext' | 'none'
+  storedAt: string | null
+  plaintextCopy: boolean
+  rotateRecommended: boolean
+}
+
 export interface NeonForgeBridge {
   version: string
   config: {
     hasKey: () => Promise<boolean>
     getKey: () => Promise<string | null>
+    getKeyStatus?: () => Promise<ApiKeyStatusView>
     getProvider: () => Promise<string>
     setKey: (key: string, providerId?: string, modelId?: string | null) => Promise<void>
     clearKey: () => Promise<void>

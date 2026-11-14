@@ -1,11 +1,18 @@
 import { useEffect, useState } from 'react'
 import { IconCheck, IconDot, IconSettings } from './icons'
-import type { ExtensionInfo, McpServerStatus } from './types'
+import type { ApiKeyStatusView, ExtensionInfo, McpServerStatus } from './types'
 
 // 设置（ticket 08 / D0 §9 最小集）——2026-08-03 A1 审计修复：移除不生效的假设置（语言/默认视图/主动提醒无消费方——诚实性优先）
 // 保留真实内容：内置插件（真实 IPC 注册表）+ 快捷键表（真实已实现）
 // 2026-08-04：L4 委托开关产品入口（原只在 demo TrustLadderPanel——产品运行时不可达）；与 ConversationPanel 同 localStorage key + 事件联动
 const DELEGATE_KEY = 'nf-delegate-lowrisk'
+const KEY_SOURCE_LABEL: Record<ApiKeyStatusView['source'], string> = {
+  env: '环境变量（不落盘）',
+  file: '凭据文件（不落盘）',
+  encrypted: '系统安全存储（加密）',
+  plaintext: '本机明文（已显式允许）',
+  none: '未配置',
+}
 const readDelegate = () => {
   try {
     return localStorage.getItem(DELEGATE_KEY) === '1'
@@ -173,6 +180,12 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
     })
   }
 
+  // P1-09：密钥来源/轮换提醒（只读，不回传密钥值）
+  const [keyStatus, setKeyStatus] = useState<ApiKeyStatusView | null>(null)
+  useEffect(() => {
+    void window.neonforge.config.getKeyStatus?.().then((s) => setKeyStatus(s ?? null))
+  }, [])
+
   // 外网检索（web_search / web_fetch）
   const [webEnabled, setWebEnabled] = useState(false)
   const [webProbeOk, setWebProbeOk] = useState(false)
@@ -260,6 +273,30 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
         </button>
       </div>
       {exportMsg && <p className="nf-settings__export-msg">{exportMsg}</p>}
+
+      <div className="nf-settings__plugins">
+        <span className="nf-settings__plugins-title">API Key 存储</span>
+        {keyStatus ? (
+          <>
+            <p className="nf-settings__export-msg">
+              来源：{KEY_SOURCE_LABEL[keyStatus.source]}
+              {keyStatus.storedAt
+                ? `；最近保存：${new Date(keyStatus.storedAt).toLocaleDateString()}`
+                : ''}
+            </p>
+            {keyStatus.plaintextCopy && (
+              <p className="nf-settings__export-msg">
+                配置中仍存在明文副本——建议重新保存以清除，或改用环境变量/凭据文件
+              </p>
+            )}
+            {keyStatus.rotateRecommended && (
+              <p className="nf-settings__export-msg">密钥已保存超过 90 天，建议轮换</p>
+            )}
+          </>
+        ) : (
+          <p className="nf-settings__export-msg">未获取到密钥状态</p>
+        )}
+      </div>
 
       <div className="nf-settings__plugins">
         <span className="nf-settings__plugins-title">外网检索（web_search / web_fetch）</span>

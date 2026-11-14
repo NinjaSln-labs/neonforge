@@ -15,6 +15,17 @@ const KEENABLE_KEY_ENV = 'NEONFORGE_KEENABLE_API_KEY'
 const KEENABLE_KEY_FILE_ENV = 'NEONFORGE_KEENABLE_API_KEY_FILE'
 const ALLOW_PLAINTEXT_ENV = 'NEONFORGE_ALLOW_PLAINTEXT_KEY'
 const SECRET_PREFIX = 'enc1:'
+const KEY_ROTATION_DAYS = 90
+
+export type ApiKeySource = 'env' | 'file' | 'encrypted' | 'plaintext' | 'none'
+
+export interface ApiKeyStatus {
+  source: ApiKeySource
+  storedAt: string | null
+  /** 配置中仍存在明文副本（即使当前使用加密值/环境变量） */
+  plaintextCopy: boolean
+  rotateRecommended: boolean
+}
 
 /** 环境变量/凭据文件优先（不落盘、不进日志）；文件内容 trim */
 function secretFromEnv(valueEnv: string, fileEnv: string): string | null {
@@ -71,6 +82,8 @@ function allowPlaintextFallback(): boolean {
 interface NeonForgeConfig {
   apiKey?: string // safeStorage 加密后 base64
   apiKeyPlain?: string // 明文 fallback（0600 权限——safeStorage 解密失败时使用，V1 本机降级）
+  /** 最近一次保存 Key 的时间（轮换提醒） */
+  apiKeyStoredAt?: string
   /** 接入方；缺省（旧配置）→ commandcode */
   providerId?: ProviderId
   /** 手填上游模型 id（无 /models 或列表无 DeepSeek 时） */
@@ -170,6 +183,45 @@ export class ConfigStore {
     return this.config.apiKeyPlain ?? null
   }
 
+  /** 密钥来源与轮换提示（不含密钥值；供设置页只读展示） */
+  getApiKeyStatus(): ApiKeyStatus {
+    const plaintextCopy = Boolean(this.config.apiKeyPlain)
+    const envValue = process.env[API_KEY_ENV]?.trim()
+    if (envValue) return { source: 'env', storedAt: null, plaintextCopy, rotateRecommended: false }
+    const fileEnv = process.env[API_KEY_FILE_ENV]?.trim()
+    if (fileEnv) {
+      try {
+        if (readFileSync(fileEnv, 'utf-8').trim()) {
+          return { source: 'file', storedAt: null, plaintextCopy, rotateRecommended: false }
+        }
+      } catch {
+        /* 文件不可读 → 继续检查本地配置 */
+      }
+    }
+    let source: ApiKeySource = 'none'
+    if (this.config.apiKey) {
+      try {
+        if (
+          safeStorage.isEncryptionAvailable() &&
+          safeStorage.decryptString(Buffer.from(this.config.apiKey, 'base64'))
+        ) {
+          source = 'encrypted'
+        }
+      } catch {
+        /* 解密失败 → 明文/无 */
+      }
+    }
+    if (source === 'none' && plaintextCopy) source = 'plaintext'
+    const storedAt = this.config.apiKeyStoredAt ?? null
+    const age = storedAt ? Date.now() - Date.parse(storedAt) : Number.NaN
+    return {
+      source,
+      storedAt,
+      plaintextCopy,
+      rotateRecommended: Number.isFinite(age) && age > KEY_ROTATION_DAYS * 86_400_000,
+    }
+  }
+
   async setApiKey(
     key: string,
     providerId: ProviderId = DEFAULT_PROVIDER_ID,
@@ -203,6 +255,7 @@ export class ConfigStore {
       next.apiKeyPlain = trimmed
     }
     next.providerId = isProviderId(providerId) ? providerId : DEFAULT_PROVIDER_ID
+    next.apiKeyStoredAt = new Date().toISOString()
     const mid = modelId?.trim()
     if (mid) next.modelId = mid
     else delete next.modelId
@@ -213,6 +266,7 @@ export class ConfigStore {
   clearApiKey(): void {
     delete this.config.apiKey
     delete this.config.apiKeyPlain
+    delete this.config.apiKeyStoredAt
     delete this.config.providerId
     delete this.config.modelId
     writeFileSync(configPath(), JSON.stringify(this.config, null, 2), { mode: 0o600 })

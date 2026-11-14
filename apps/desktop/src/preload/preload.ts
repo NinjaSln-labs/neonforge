@@ -12,6 +12,13 @@ contextBridge.exposeInMainWorld('neonforge', {
   config: {
     hasKey: () => ipcRenderer.invoke('config:has-key'),
     getKey: () => ipcRenderer.invoke('config:get-key'),
+    getKeyStatus: () =>
+      ipcRenderer.invoke('config:key-status') as Promise<{
+        source: 'env' | 'file' | 'encrypted' | 'plaintext' | 'none'
+        storedAt: string | null
+        plaintextCopy: boolean
+        rotateRecommended: boolean
+      }>,
     getProvider: () => ipcRenderer.invoke('config:get-provider'),
     setKey: (key: string, providerId?: string, modelId?: string | null) =>
       ipcRenderer.invoke('config:set-key', key, providerId, modelId),

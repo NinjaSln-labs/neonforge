@@ -61,6 +61,7 @@ export function registerIpc(): void {
   syncPlanApprovedFromStore()
   ipcMain.handle('config:has-key', () => configStore.hasValidKey())
   ipcMain.handle('config:get-key', () => configStore.getApiKey())
+  ipcMain.handle('config:key-status', () => configStore.getApiKeyStatus())
   ipcMain.handle('config:get-provider', () => configStore.getProviderId())
   ipcMain.handle('config:get-model', () => configStore.getModelId())
   ipcMain.handle(

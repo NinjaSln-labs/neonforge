@@ -83,6 +83,11 @@ describe('ConfigStore 密钥存储（P1-09）', () => {
     expect(typeof cfg.apiKey).toBe('string')
     expect(cfg.apiKeyPlain).toBeUndefined()
     expect(store.getApiKey()).toBe('secret')
+    const status = store.getApiKeyStatus()
+    expect(status.source).toBe('encrypted')
+    expect(status.storedAt).toBeTruthy()
+    expect(status.plaintextCopy).toBe(false)
+    expect(status.rotateRecommended).toBe(false)
   })
 
   it('safeStorage 不可用且未 opt-in：拒绝落盘明文', async () => {
@@ -98,6 +103,32 @@ describe('ConfigStore 密钥存储（P1-09）', () => {
     await store.setApiKey('legacy-secret')
     expect(readConfig().apiKeyPlain).toBe('legacy-secret')
     expect(store.getApiKey()).toBe('legacy-secret')
+    const status = store.getApiKeyStatus()
+    expect(status.source).toBe('plaintext')
+    expect(status.plaintextCopy).toBe(true)
+    expect(status.storedAt).toBeTruthy()
+  })
+
+  it('环境变量来源不显示保存时间；旧明文超过 90 天提示轮换', () => {
+    process.env.NEONFORGE_API_KEY = 'env-key'
+    const store = new ConfigStore()
+    expect(store.getApiKeyStatus().source).toBe('env')
+    expect(store.getApiKeyStatus().storedAt).toBeNull()
+    delete process.env.NEONFORGE_API_KEY
+
+    mkdirSync(path.join(TMP, 'config'), { recursive: true })
+    writeFileSync(
+      configFile(),
+      JSON.stringify({
+        apiKeyPlain: 'old-secret',
+        apiKeyStoredAt: new Date(Date.now() - 100 * 86_400_000).toISOString(),
+      }),
+      { mode: 0o600 },
+    )
+    const oldStore = new ConfigStore()
+    const status = oldStore.getApiKeyStatus()
+    expect(status.source).toBe('plaintext')
+    expect(status.rotateRecommended).toBe(true)
   })
 
   it('加密不可用时不把加密 base64 当明文返回（旧配置安全降级）', () => {
