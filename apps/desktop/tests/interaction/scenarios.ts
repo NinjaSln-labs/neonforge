@@ -153,31 +153,56 @@ import type { Page } from '@playwright/test'
 import { expectVisible } from '../helpers/assertions'
 
 /**
- * 启动页等待 + 失败诊断（flaky 定位）：超时时把页面真实状态（DOM/桥注入/href）带进错误，
- * 避免只看到「element(s) not found」而无法区分「Vite 未渲染」「bridge 缺失→配置页」「渲染崩溃」。
+ * 启动页等待 + 失败诊断 + 一次重载重试。
+ *
+ * 根因（2026-11-15 trace 实证）：WSL/Chromium 偶发 `net::ERR_NETWORK_CHANGED`，网络栈变更事件
+ * 取消进行中的模块请求（main.tsx/依赖图全部失败）→ 页面只剩 `<div id="root">`，React 从未挂载。
+ * 这不是应用启动逻辑问题；重载一次即可重新拉取模块。第二次仍失败才判真实故障。
  */
 async function expectStartPage(page: Page): Promise<void> {
-  try {
-    await expectVisible(page.locator('.nf-start'))
-  } catch (e) {
-    const diag = await page
-      .evaluate(() => {
-        const b = (window as unknown as { neonforge?: { config?: { hasKey?: unknown } } })
-          .neonforge
-        const app = document.querySelector('.nf-app')
-        return {
-          href: location.href,
-          title: document.title,
-          appClass: app?.className ?? null,
-          bodyLen: document.body.innerHTML.length,
-          bodyHead: document.body.innerHTML.slice(0, 400),
-          neonforge: typeof b,
-          hasKey: typeof b?.config?.hasKey,
-        }
-      })
-      .catch((err) => ({ evalError: String(err) }))
-    throw new Error(`启动页未出现：${JSON.stringify(diag)}`, { cause: e })
+  let lastErr: unknown
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const consoleErrors: string[] = []
+    const onConsole = (m: { type: () => string; text: () => string }) => {
+      if (m.type() === 'error') consoleErrors.push(m.text())
+    }
+    page.on('console', onConsole)
+    try {
+      await expectVisible(page.locator('.nf-start'), 20_000)
+      page.off('console', onConsole)
+      return
+    } catch (e) {
+      lastErr = e
+      page.off('console', onConsole)
+      const diag = await page
+        .evaluate(() => {
+          const b = (window as unknown as { neonforge?: { config?: { hasKey?: unknown } } })
+            .neonforge
+          const app = document.querySelector('.nf-app')
+          return {
+            href: location.href,
+            title: document.title,
+            appClass: app?.className ?? null,
+            bodyLen: document.body.innerHTML.length,
+            bodyHead: document.body.innerHTML.slice(0, 400),
+            neonforge: typeof b,
+            hasKey: typeof b?.config?.hasKey,
+          }
+        })
+        .catch((err) => ({ evalError: String(err) }))
+      console.warn(
+        `[boot] 启动页未出现（attempt ${attempt}/2）：${JSON.stringify({
+          ...diag,
+          consoleErrors: consoleErrors.slice(0, 6),
+        })}`,
+      )
+      if (attempt === 2) break
+      // ERR_NETWORK_CHANGED 是瞬时网络栈事件——重载重新拉取模块（不改变应用启动语义）
+      await page.waitForTimeout(300)
+      await page.reload({ waitUntil: 'load', timeout: 30_000 }).catch(() => {})
+    }
   }
+  throw new Error('启动页未出现（重载后仍失败）', { cause: lastErr })
 }
 
 /** 打开已有项目（配合 project: 'open'） */
