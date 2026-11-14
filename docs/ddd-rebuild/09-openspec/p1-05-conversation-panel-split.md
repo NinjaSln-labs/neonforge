@@ -15,7 +15,7 @@
 3. [x] **输入区**（2026-11-15）：输入框、@引用浮层、发送/停止/合并授权按钮 → `ConversationComposer.tsx`；输入区本地状态内聚，发送/停止由面板回传。core interaction 28 项：27 通过 / 1 既有 `.nf-start` flaky。
 4. [ ] **流式/工具链编排**（分步迁移）：
    - [x] **4a 历史构建**（2026-11-15）：`buildHistory` → `conversationHistory.ts`（纯函数 + 单测；工具轮 rawResult/reasoning_content 语义不变）。
-   - [ ] **4b 流式事件**：`applyChunk` → `useChatStream.ts`（显式依赖对象；状态所有权仍归面板）。
+   - [x] **4b 流式事件**（2026-11-15）：`applyChunk` → `useChatStream.ts` 的 `createApplyChunk(deps)` 工厂（35 项显式依赖）；状态所有权仍归面板，闭包时序与 `applyChunkRef` 更新方式不变。interaction 71 项：69 通过 / 2 既有 flaky（`.nf-start`、自动续跑双发）；单测 760 通过。
    - [ ] **4c 轮次编排**：`runChat` / `maybeContinue` / `send` / `finishError` / `retryFailedTurn` → `useChatEngine.ts`。
 5. [ ] **面板收敛**：`ConversationPanel` 仅组合布局、订阅 hook 返回值与渲染子组件。
 
