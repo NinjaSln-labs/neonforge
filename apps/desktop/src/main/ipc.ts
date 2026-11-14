@@ -432,7 +432,7 @@ export function registerIpc(): void {
     return valid.ok ? getTaskQueueStore().list(sessionId) : { entries: [] }
   })
   ipcMain.handle('queue:enqueue', (_e, opts: { sessionId: string; title: string }) => {
-    const valid = validateIpc(opts, IPC_SCHEMAS.queueSession)
+    const valid = validateIpc(opts, IPC_SCHEMAS.queueEnqueue)
     return valid.ok
       ? queueSafe(() => getTaskQueueStore().enqueue(opts.sessionId, opts.title))
       : queueInvalid(valid.error)

@@ -57,7 +57,7 @@
 
 - [x] 3.1 **P1-01 Web 访问边界**：`webTools.ts` 的 `web_fetch` 拒绝 localhost/私网/链路本地/云元数据地址；`redirect:'manual'` 逐跳校验，最多 5 跳，非 http/https 拒绝；新增测试。
 - [x] 3.2 **P1-10 符号链接**：`isInSandbox`/`resolvePath` 对已存在路径使用 `realpath` 校验，根外链接不因“路径字符串在根内”被放行；悬空链接同样解析，write/edit 根内逃逸硬阻断（`sandboxSymlink.test.ts`）。
-- [x] 3.3 **P1-04 IPC 契约校验**：高风险通道运行时 schema（`ipcSchema.ts`：tools/stream）+ 全通道静态契约测试（`ipcContractParity.test.ts`：main handler ↔ preload invoke ↔ 推送通道），防 preload/main 漂移。**2026-11-15 第二批**：新增 `config:set-key`/`config:set-web-access`、队列命令（enqueue/entry/reason/reorder）、验收（derive/mark/waive/evidence）、变更集、`delivery:apply-diff`/`revert-diff`、`tools:revert`、`completion:verify`、`context:resolve`/`rag:search`、`plugins:toggle`、`planned-files:add`、`session:plan-confirmed` 入口校验；校验器修正「required 值为 undefined 仍通过」与新增 `nullable`；schema 单测扩充。
+- [x] 3.3 **P1-04 IPC 契约校验**：高风险通道运行时 schema（`ipcSchema.ts`：tools/stream）+ 全通道静态契约测试（`ipcContractParity.test.ts`：main handler ↔ preload invoke ↔ 推送通道），防 preload/main 漂移。**2026-11-15 第二批**：新增 `config:set-key`/`config:set-web-access`、队列命令（enqueue/entry/reason/reorder）、验收（derive/mark/waive/evidence）、变更集、`delivery:apply-diff`/`revert-diff`、`tools:revert`、`completion:verify`、`context:resolve`/`rag:search`、`plugins:toggle`、`planned-files:add`、`session:plan-confirmed` 入口校验；校验器修正「required 值为 undefined 仍通过」与新增 `nullable`；schema 单测扩充。**2026-11-15 收尾**：队列 `enqueue` 的 `title` 与 `block`/`fail` 的 `reason` 提升为必填，避免空载荷进入存储后才抛泛化 TypeError。
 
 ---
 

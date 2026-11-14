@@ -67,16 +67,27 @@ describe('IPC 契约校验（P1-04）', () => {
     expect(validateIpc({ id: 'x' }, IPC_SCHEMAS.sessionId).ok).toBe(false)
   })
 
-  it('queue 命令：entryId 必填；reorder position 整数', () => {
+  it('queue 命令：entryId/title/reason 必填；reorder position 整数', () => {
+    expect(validateIpc({ sessionId: 's', title: 't' }, IPC_SCHEMAS.queueEnqueue).ok).toBe(true)
+    expect(validateIpc({ sessionId: 's' }, IPC_SCHEMAS.queueEnqueue).ok).toBe(false)
+    expect(validateIpc({ sessionId: 's', title: '' }, IPC_SCHEMAS.queueEnqueue).ok).toBe(false)
     expect(validateIpc({ sessionId: 's', entryId: 'e' }, IPC_SCHEMAS.queueEntry).ok).toBe(true)
     expect(validateIpc({ sessionId: 's' }, IPC_SCHEMAS.queueEntry).ok).toBe(false)
+    expect(
+      validateIpc(
+        { sessionId: 's', entryId: 'e', reason: '等待授权' },
+        IPC_SCHEMAS.queueEntryReason,
+      ).ok,
+    ).toBe(true)
+    expect(
+      validateIpc({ sessionId: 's', entryId: 'e', reason: '' }, IPC_SCHEMAS.queueEntryReason).ok,
+    ).toBe(false)
     expect(
       validateIpc({ sessionId: 's', entryId: 'e', position: 1.5 }, IPC_SCHEMAS.queueReorder).ok,
     ).toBe(false)
     expect(
       validateIpc({ sessionId: 's', entryId: 'e', position: 2 }, IPC_SCHEMAS.queueReorder).ok,
     ).toBe(true)
-    expect(validateIpc({ sessionId: 's', title: 't' }, IPC_SCHEMAS.queueSession).ok).toBe(true)
   })
 
   it('acceptance：状态枚举与豁免原因必填', () => {

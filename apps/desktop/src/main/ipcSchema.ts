@@ -145,16 +145,13 @@ export const IPC_SCHEMAS = {
     required: ['apiKey', 'messages'],
   },
   sessionId: { type: 'string', minLength: 1, maxLength: 200 },
-  queueSession: {
+  queueEnqueue: {
     type: 'object',
     properties: {
       sessionId: { type: 'string', minLength: 1, maxLength: 200 },
-      entryId: { type: 'string', minLength: 1, maxLength: 200 },
       title: { type: 'string', minLength: 1, maxLength: 2000 },
-      reason: { type: 'string', maxLength: 2000 },
-      position: { type: 'number', integer: true, min: 0, max: 10000 },
     },
-    required: ['sessionId'],
+    required: ['sessionId', 'title'],
   },
   // P1-04 第二批：队列命令/验收/变更集/配置入口的载荷校验
   webAccessPatch: {
@@ -232,9 +229,9 @@ export const IPC_SCHEMAS = {
     properties: {
       sessionId: { type: 'string', minLength: 1, maxLength: 200 },
       entryId: { type: 'string', minLength: 1, maxLength: 200 },
-      reason: { type: 'string', maxLength: 2000 },
+      reason: { type: 'string', minLength: 1, maxLength: 2000 },
     },
-    required: ['sessionId', 'entryId'],
+    required: ['sessionId', 'entryId', 'reason'],
   },
   queueReorder: {
     type: 'object',
