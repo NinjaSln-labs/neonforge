@@ -195,14 +195,29 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
   const [keenableTrial, setKeenableTrial] = useState(false)
   const [webBusy, setWebBusy] = useState(false)
   const [webMsg, setWebMsg] = useState<string | null>(null)
+  // 2026-11-15 审查修复：Key 只在**用户实际编辑**时随 patch 提交——设置页其它字段的保存
+  // （开关/URL/试用/探测）不得把回填值（含 env/文件来源）写回本地配置或误删已有 Key。
+  const [webKeySource, setWebKeySource] = useState<'env' | 'file' | 'config' | 'none'>('none')
+  const [keenableKeySource, setKeenableKeySource] = useState<'env' | 'file' | 'config' | 'none'>(
+    'none',
+  )
+  const [webKeyDirty, setWebKeyDirty] = useState(false)
+  const [keenableKeyDirty, setKeenableKeyDirty] = useState(false)
   useEffect(() => {
     void window.neonforge.config.getWebAccess?.().then((w) => {
       if (!w) return
       setWebEnabled(w.enabled)
       setWebProbeOk(w.probeOk)
       setWebUrl(w.searchUrl ?? '')
-      setWebKey(w.searchKey ?? '')
-      setKeenableKey(w.keenableApiKey ?? '')
+      // env/file 来源不回传值（ipc 已脱敏）——只按来源回填本地可编辑值
+      const searchSrc = w.searchKeySource ?? (w.searchKey ? 'config' : 'none')
+      const keenSrc = w.keenableApiKeySource ?? (w.keenableApiKey ? 'config' : 'none')
+      setWebKeySource(searchSrc)
+      setKeenableKeySource(keenSrc)
+      setWebKey(searchSrc === 'config' ? (w.searchKey ?? '') : '')
+      setKeenableKey(keenSrc === 'config' ? (w.keenableApiKey ?? '') : '')
+      setWebKeyDirty(false)
+      setKeenableKeyDirty(false)
       setKeenableTrial(w.keenablePublicTrial)
     })
   }, [])
@@ -211,15 +226,25 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
     setWebBusy(true)
     setWebMsg(null)
     const trial = opts?.keenablePublicTrial ?? keenableTrial
+    const sentWebKey = webKeyDirty
+    const sentKeenKey = keenableKeyDirty
+    const patch: {
+      enabled?: boolean
+      searchUrl?: string | null
+      searchKey?: string | null
+      keenableApiKey?: string | null
+      keenablePublicTrial?: boolean
+      probe?: boolean
+    } = {
+      enabled,
+      searchUrl: webUrl.trim() || null,
+      keenablePublicTrial: trial,
+      probe: enabled,
+    }
+    if (sentWebKey) patch.searchKey = webKey.trim() || null
+    if (sentKeenKey) patch.keenableApiKey = keenableKey.trim() || null
     try {
-      const res = await window.neonforge.config.setWebAccess?.({
-        enabled,
-        searchUrl: webUrl.trim() || null,
-        searchKey: webKey.trim() || null,
-        keenableApiKey: keenableKey.trim() || null,
-        keenablePublicTrial: trial,
-        probe: enabled,
-      })
+      const res = await window.neonforge.config.setWebAccess?.(patch)
       if (!res) {
         setWebMsg('当前环境不支持外网设置')
         return
@@ -230,10 +255,20 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
         setWebMsg(res.error ?? '外网探测失败')
         return
       }
+      setWebKeyDirty(false)
+      setKeenableKeyDirty(false)
+      setWebKeySource(res.config.searchKeySource ?? 'none')
+      setKeenableKeySource(res.config.keenableApiKeySource ?? 'none')
       setWebEnabled(res.config.enabled)
       setWebProbeOk(res.config.probeOk)
+      const envSource = (s?: string) => s === 'env' || s === 'file'
+      const envNote =
+        (sentWebKey && envSource(res.config.searchKeySource)) ||
+        (sentKeenKey && envSource(res.config.keenableApiKeySource))
+          ? '；环境变量/凭据文件优先——新 Key 暂不生效'
+          : ''
       setWebMsg(
-        res.config.enabled
+        (res.config.enabled
           ? res.config.searchUrl
             ? '已开启（使用自有搜索端点）'
             : res.config.builtinProvider === 'keenable'
@@ -245,7 +280,7 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
               : res.config.builtinProvider === 'ddg'
                 ? '已开启（内置：DuckDuckGo）'
                 : '已开启（外网探测通过）'
-          : '已关闭外网检索',
+          : '已关闭外网检索') + envNote,
       )
     } catch (e) {
       // P1-09：安全存储不可用且未显式 opt-in 时拒绝落盘明文（不留下半更新配置）
@@ -332,13 +367,29 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
           />
         </label>
         <label className="nf-settings__row">
-          <span>自有搜索 Key（可选 Bearer）</span>
+          <span>
+            自有搜索 Key（可选 Bearer）
+            {(webKeySource === 'env' || webKeySource === 'file') && (
+              <em>
+                当前由{webKeySource === 'env' ? '环境变量' : '凭据文件'}提供（优先于应用内保存）
+              </em>
+            )}
+          </span>
           <input
             type="password"
             className="nf-config__input"
-            placeholder="留空则不带 Authorization"
+            placeholder={
+              webKeySource === 'env'
+                ? '已由环境变量提供（应用内保存不覆盖）'
+                : webKeySource === 'file'
+                  ? '已由凭据文件提供（应用内保存不覆盖）'
+                  : '留空则不带 Authorization'
+            }
             value={webKey}
-            onChange={(e) => setWebKey(e.target.value)}
+            onChange={(e) => {
+              setWebKey(e.target.value)
+              setWebKeyDirty(true)
+            }}
             onBlur={() => {
               if (webEnabled) void saveWebAccess(true)
             }}
@@ -350,13 +401,28 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
             <em>
               DDG 不可达时使用；查询由 Keenable 在美国处理。免费额度见 keenable.ai（需账号）。
             </em>
+            {(keenableKeySource === 'env' || keenableKeySource === 'file') && (
+              <em>
+                {' '}
+                当前由{keenableKeySource === 'env' ? '环境变量' : '凭据文件'}提供（优先于应用内保存）
+              </em>
+            )}
           </span>
           <input
             type="password"
             className="nf-config__input"
-            placeholder="keen_…"
+            placeholder={
+              keenableKeySource === 'env'
+                ? '已由环境变量提供（应用内保存不覆盖）'
+                : keenableKeySource === 'file'
+                  ? '已由凭据文件提供（应用内保存不覆盖）'
+                  : 'keen_…'
+            }
             value={keenableKey}
-            onChange={(e) => setKeenableKey(e.target.value)}
+            onChange={(e) => {
+              setKeenableKey(e.target.value)
+              setKeenableKeyDirty(true)
+            }}
             onBlur={() => {
               if (webEnabled) void saveWebAccess(true)
             }}

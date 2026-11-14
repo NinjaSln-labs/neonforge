@@ -76,6 +76,15 @@ export function isConfirmIntent(t: string): boolean {
   if (/[?？]$/.test(s) || /吗[。！!~～]?$|行不行|可以吗/.test(s)) return false
   return /按这个方案|就这么办|确认执行|确认目标|同意这个方案|可以开始|开始写吧|就按这个来/.test(s)
 }
+/**
+ * approval 期文本批准判定：只认**明确批准词**（短句精确匹配——不匹配措辞）。
+ * 2026-11-15 代码审查修复：原判断正则的裸子串备选 `|批准|同意` 会让「我不同意执行这个命令」
+ * 之类的否定句命中批准分支 → 自动批掉所有待授权工具调用。批准闸门不得由否定/条件句触发。
+ */
+export function isApprovalIntent(t: string): boolean {
+  const s = String(t ?? '').trim()
+  return /^(行|好|可以|批准|同意|没问题|确认|就这么办)[。！!~～]?$/.test(s)
+}
 export function isCommunicationLike(t: string): boolean {
   return /(确认|复述|说明|解释|总结|澄清|商量|理解|明白|知道|收到|确认一下|跟你确认|和你确认|跟您确认|介绍一下|跟你聊|和你聊)/.test(
     t,

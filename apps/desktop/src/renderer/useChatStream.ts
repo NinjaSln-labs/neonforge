@@ -710,6 +710,11 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
       chunk.toolCall.name !== 'approve-files'
     ) {
       const tc = chunk.toolCall
+      // 2026-11-15 审查修复：工具结果/拦截按稳定 id 绑定——同名并发调用（如两个 read）结果乱序
+      // 返回时，仅按 name 匹配会把结果挂到错误卡片；旧存档工具卡无 id → 回退 name（首个 pending）。
+      const callId = tcId ?? ''
+      const isThisCall = (c: ToolCallMsg): boolean =>
+        callId && c.id ? c.id === callId : c.name === tc.name
       // 2026-08-06 用户反馈「第一句话就有一个工具执行」：目标确认前工具门控——目标没澄清前不执行任何工具
       // （目标都没澄清，看目录/写文件都没意义）；工具直接 done + 提示（maybeContinue 回填给模型 → 模型停止调工具继续澄清目标）
       // 2026-08-03 v35：workingStage 人类化（原「调用工具 bash…」技术腔——按工具名映射自然描述）
@@ -799,7 +804,7 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
           const last = prev[prev.length - 1]
           if (!last || last.role !== 'assistant') return prev
           const calls = (last.toolCalls ?? []).map((c) =>
-            c.name === tc.name && c.status === 'pending'
+            isThisCall(c) && c.status === 'pending'
               ? {
                   ...c,
                   status: 'done' as const,
@@ -836,7 +841,7 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
           const last = prev[prev.length - 1]
           if (!last || last.role !== 'assistant') return prev
           const calls = (last.toolCalls ?? []).map((c) =>
-            c.name === tc.name && c.status === 'pending'
+            isThisCall(c) && c.status === 'pending'
               ? {
                   ...c,
                   status: 'done' as const,
@@ -875,7 +880,7 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
           const last = prev[prev.length - 1]
           if (!last || last.role !== 'assistant') return prev
           const calls = (last.toolCalls ?? []).map((c) =>
-            c.name === tc.name && c.status === 'pending'
+            isThisCall(c) && c.status === 'pending'
               ? (() => {
                   const approved = [...stateRef.current.plannedFiles]
                     .map((p) => p.split('/').pop())
@@ -932,10 +937,23 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
         }
         setMessages((prev) => {
           if (prev.length === 0) return prev
-          const last = prev[prev.length - 1]
-          if (!last || last.role !== 'assistant') return prev
+          // 2026-11-15 审查修复：工具结果可能晚于更新的 assistant 消息落地——按稳定 id 在全部消息中
+          // 定位承载该调用的消息（原只看最后一条：新消息存在时结果被静默丢弃）。
+          let mi = -1
+          for (let j = prev.length - 1; j >= 0; j--) {
+            const m = prev[j]
+            if (
+              m.role === 'assistant' &&
+              (m.toolCalls ?? []).some((c) => isThisCall(c) && c.status === 'pending')
+            ) {
+              mi = j
+              break
+            }
+          }
+          if (mi === -1) return prev
+          const last = prev[mi]
           const calls = (last.toolCalls ?? []).map((c) => {
-            if (c.name !== tc.name || c.status !== 'pending') return c
+            if (!isThisCall(c) || c.status !== 'pending') return c
             return r.ok
               ? (() => {
                   // 2026-08-08 O2：check-capability 检测结果——能力齐备 → 工具卡隐藏（hidden——用户不被打扰，结果仍回填模型）；
@@ -991,7 +1009,7 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
                   result: r.error,
                 }
           })
-          return [...prev.slice(0, -1), { ...last, toolCalls: calls }]
+          return [...prev.slice(0, mi), { ...last, toolCalls: calls }, ...prev.slice(mi + 1)]
         })
       })
     }

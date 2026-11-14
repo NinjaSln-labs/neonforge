@@ -28,17 +28,24 @@ export interface ApiKeyStatus {
 }
 
 /** 环境变量/凭据文件优先（不落盘、不进日志）；文件内容 trim */
-function secretFromEnv(valueEnv: string, fileEnv: string): string | null {
+function secretFromEnvSource(
+  valueEnv: string,
+  fileEnv: string,
+): { value: string | null; source: 'env' | 'file' | null } {
   const value = process.env[valueEnv]?.trim()
-  if (value) return value
+  if (value) return { value, source: 'env' }
   const file = process.env[fileEnv]?.trim()
-  if (!file) return null
+  if (!file) return { value: null, source: null }
   try {
     const fromFile = readFileSync(file, 'utf-8').trim()
-    return fromFile || null
+    return fromFile ? { value: fromFile, source: 'file' } : { value: null, source: null }
   } catch {
-    return null
+    return { value: null, source: null }
   }
+}
+
+function secretFromEnv(valueEnv: string, fileEnv: string): string | null {
+  return secretFromEnvSource(valueEnv, fileEnv).value
 }
 
 function keyFromEnv(): string | null {
@@ -98,14 +105,21 @@ interface NeonForgeConfig {
   webSearchUrl?: string
   /** 覆盖端点可选 Bearer Key（safeStorage 加密 `enc1:` 或旧明文） */
   webSearchKey?: string
+  /** opt-in 明文副本（仅 NEONFORGE_ALLOW_PLAINTEXT_KEY=1——keychain 失效时读取） */
+  webSearchKeyPlain?: string
   /** Keenable API Key（safeStorage 加密 `enc1:` 或旧明文） */
   webKeenableApiKey?: string
+  /** opt-in 明文副本（仅 NEONFORGE_ALLOW_PLAINTEXT_KEY=1——keychain 失效时读取） */
+  webKeenableApiKeyPlain?: string
   /** 允许无 Key 时走 Keenable 公共试用（默认关） */
   webKeenablePublicTrial?: boolean
   language?: 'zh' | 'en'
 }
 
 export type BuiltinSearchProvider = 'keenable' | 'ddg'
+
+/** Web Key 实际生效来源（env/凭据文件优先——renderer 不应把 env 值回写为本地配置） */
+export type WebSecretSource = 'env' | 'file' | 'config' | 'none'
 
 export interface WebAccessConfig {
   enabled: boolean
@@ -116,8 +130,11 @@ export interface WebAccessConfig {
   /** 是否有 Key（不回传明文给 UI 列表以外——设置页编辑时另取） */
   hasSearchKey: boolean
   searchKey: string | null
+  /** searchKey 的实际来源（env/file 优先；ipc 对 env/file 值做脱敏） */
+  searchKeySource: WebSecretSource
   keenableApiKey: string | null
   hasKeenableKey: boolean
+  keenableApiKeySource: WebSecretSource
   keenablePublicTrial: boolean
 }
 
@@ -274,22 +291,36 @@ export class ConfigStore {
 
   getWebAccess(): WebAccessConfig {
     const url = this.config.webSearchUrl?.trim() || null
-    const key =
-      secretFromEnv(WEB_SEARCH_KEY_ENV, WEB_SEARCH_KEY_FILE_ENV) ??
-      revealSecret(this.config.webSearchKey)
+    // 2026-11-15 审查修复：web key 也支持 opt-in 明文副本（与 setApiKey 一致——keychain 重置后
+    // 不会只丢 web 凭据）；并记录实际来源，renderer 据此不回写 env/文件值。
+    const envSearch = secretFromEnvSource(WEB_SEARCH_KEY_ENV, WEB_SEARCH_KEY_FILE_ENV)
+    const searchKey =
+      envSearch.value ??
+      revealSecret(this.config.webSearchKey) ??
+      this.config.webSearchKeyPlain ??
+      null
+    const envKeen = secretFromEnvSource(KEENABLE_KEY_ENV, KEENABLE_KEY_FILE_ENV)
     const keenKey =
-      secretFromEnv(KEENABLE_KEY_ENV, KEENABLE_KEY_FILE_ENV) ??
-      revealSecret(this.config.webKeenableApiKey)
+      envKeen.value ??
+      revealSecret(this.config.webKeenableApiKey) ??
+      this.config.webKeenableApiKeyPlain ??
+      null
+    const searchKeySource: WebSecretSource =
+      envSearch.source ?? (searchKey ? 'config' : 'none')
+    const keenableApiKeySource: WebSecretSource =
+      envKeen.source ?? (keenKey ? 'config' : 'none')
     const b = this.config.webAccessBuiltin
     return {
       enabled: Boolean(this.config.webAccessEnabled),
       probeOk: Boolean(this.config.webAccessProbeOk),
       builtinProvider: b === 'keenable' || b === 'ddg' ? b : null,
       searchUrl: url,
-      hasSearchKey: Boolean(key),
-      searchKey: key,
+      hasSearchKey: Boolean(searchKey),
+      searchKey,
+      searchKeySource,
       keenableApiKey: keenKey,
       hasKeenableKey: Boolean(keenKey),
+      keenableApiKeySource,
       keenablePublicTrial: Boolean(this.config.webKeenablePublicTrial),
     }
   }
@@ -322,13 +353,32 @@ export class ConfigStore {
     }
     if (patch.searchKey !== undefined) {
       const k = patch.searchKey?.trim()
-      if (k) next.webSearchKey = protectSecret(k)
-      else delete next.webSearchKey
+      if (k) {
+        next.webSearchKey = protectSecret(k)
+        // 加密可用 + 显式 opt-in → 保留明文副本（keychain 解密失败时仍可用）
+        if (next.webSearchKey.startsWith(SECRET_PREFIX) && allowPlaintextFallback()) {
+          next.webSearchKeyPlain = k
+        } else {
+          delete next.webSearchKeyPlain
+        }
+      } else {
+        delete next.webSearchKey
+        delete next.webSearchKeyPlain
+      }
     }
     if (patch.keenableApiKey !== undefined) {
       const k = patch.keenableApiKey?.trim()
-      if (k) next.webKeenableApiKey = protectSecret(k)
-      else delete next.webKeenableApiKey
+      if (k) {
+        next.webKeenableApiKey = protectSecret(k)
+        if (next.webKeenableApiKey.startsWith(SECRET_PREFIX) && allowPlaintextFallback()) {
+          next.webKeenableApiKeyPlain = k
+        } else {
+          delete next.webKeenableApiKeyPlain
+        }
+      } else {
+        delete next.webKeenableApiKey
+        delete next.webKeenableApiKeyPlain
+      }
     }
     if (patch.keenablePublicTrial !== undefined) {
       next.webKeenablePublicTrial = patch.keenablePublicTrial

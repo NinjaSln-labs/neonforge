@@ -24,6 +24,10 @@ export default function ConfigPage({ onDone }: { onDone: () => void }) {
   const [needModelId, setNeedModelId] = useState(false)
   const [status, setStatus] = useState<'idle' | 'validating' | 'fail' | 'network'>('idle')
   const [errorText, setErrorText] = useState('')
+  // 2026-11-15 审查修复：env/凭据文件优先于本地保存——页面须提示，避免「保存成功但请求仍失败」的循环
+  const [keySource, setKeySource] = useState<'env' | 'file' | 'encrypted' | 'plaintext' | 'none' | null>(
+    null,
+  )
 
   useEffect(() => {
     const cfg = window.neonforge?.config
@@ -43,6 +47,7 @@ export default function ConfigPage({ onDone }: { onDone: () => void }) {
         setNeedModelId(true)
       }
     })
+    void cfg.getKeyStatus?.().then((s) => setKeySource(s?.source ?? null))
   }, [])
 
   const options = providers.length > 0 ? providers : FALLBACK_PROVIDERS
@@ -63,6 +68,16 @@ export default function ConfigPage({ onDone }: { onDone: () => void }) {
         // P1-09：系统安全存储不可用且未显式允许明文 → 不落盘，提示改用 env/凭据文件
         setStatus('fail')
         setErrorText(e instanceof Error ? e.message : String(e))
+        return
+      }
+      // 2026-11-15 审查修复：新 Key 已保存，但生效 Key 若来自 env/凭据文件则不会覆盖——
+      // 不能假装修复成功直接进工作区（否则每个请求仍失败、错误循环）。
+      const post = await window.neonforge.config.getKeyStatus?.()
+      if (post?.source === 'env' || post?.source === 'file') {
+        setStatus('fail')
+        setErrorText(
+          `新 Key 已保存到本机，但当前生效的 Key 来自${post.source === 'env' ? '环境变量' : '凭据文件'}（优先于应用内保存）——请更新或移除该来源后重启应用。`,
+        )
         return
       }
       onDone()
@@ -176,6 +191,12 @@ export default function ConfigPage({ onDone }: { onDone: () => void }) {
           </label>
         )}
 
+        {(keySource === 'env' || keySource === 'file') && (
+          <p className="nf-config__err" aria-live="polite">
+            当前 Key 来源：{keySource === 'env' ? '环境变量' : '凭据文件'}（优先于应用内保存）——如已失效，
+            请更新或移除该来源后重启应用；此处保存的新 Key 不会覆盖它。
+          </p>
+        )}
         {status === 'fail' && (
           <p className="nf-config__err" aria-live="polite">
             {errorText}

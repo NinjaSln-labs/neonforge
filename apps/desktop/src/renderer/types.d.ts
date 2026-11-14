@@ -29,8 +29,11 @@ export interface NeonForgeBridge {
       searchUrl: string | null
       hasSearchKey: boolean
       searchKey: string | null
+      /** env/file 来源时 searchKey 为脱敏 null（应用内保存不覆盖） */
+      searchKeySource?: 'env' | 'file' | 'config' | 'none'
       keenableApiKey: string | null
       hasKeenableKey: boolean
+      keenableApiKeySource?: 'env' | 'file' | 'config' | 'none'
       keenablePublicTrial: boolean
     }>
     setWebAccess?: (patch: {
@@ -50,8 +53,10 @@ export interface NeonForgeBridge {
         searchUrl: string | null
         hasSearchKey: boolean
         searchKey: string | null
+        searchKeySource?: 'env' | 'file' | 'config' | 'none'
         keenableApiKey: string | null
         hasKeenableKey: boolean
+        keenableApiKeySource?: 'env' | 'file' | 'config' | 'none'
         keenablePublicTrial: boolean
       }
     }>

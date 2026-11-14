@@ -451,8 +451,8 @@ export default function ConversationPanel({
   const evidenceGuideCountRef = useRef(0)
   // evidence_missing 后纯文本收尾 → 再催 report_completion（每会话最多 1 次；对齐 planReject nudge）
   const evidenceReportNudgedRef = useRef(false)
-  // 排队衔接（输入≠打断）——提前声明：verifyThenResolve 对账引导在 working 时写入此 ref
-  const pendingSendRef = useRef('')
+  // 排队衔接（输入≠打断）——多槽队列（连续发送按序送达；verifyThenResolve 对账引导也写入此队列）
+  const pendingSendRef = useRef<string[]>([])
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
@@ -473,6 +473,7 @@ export default function ConversationPanel({
     rootPath,
     sendRef,
     sessionId,
+    sessionRef,
     setPendingState,
     stateRef,
     tlog,
@@ -864,11 +865,11 @@ export default function ConversationPanel({
                       (lastSignalIdx.goal === -1 && goalFallback && !dcKind)) &&
                     i !== rejectedCardIdx.goal ? (
                       <GoalConfirmCard
-                        statement={goalDc?.statement ?? initialPrompt ?? '你描述的目标'}
+                        statement={goalDc?.statement || initialPrompt || '你描述的目标'}
                         assumptions={goalDc?.assumptions ?? []}
                         onConfirm={() => {
                           // 先取快照 statement 再 confirm（confirm 清 decisionContent——时序）
-                          const confirmedGoal = goalDc?.statement ?? initialPrompt ?? '目标已确认'
+                          const confirmedGoal = goalDc?.statement || initialPrompt || '目标已确认'
                           confirm('goal')
                           tlog('card.resolved', { card: 'goal', action: 'confirm' }, 'system')
                           onGoalConfirmed?.(confirmedGoal)
@@ -1028,7 +1029,11 @@ export default function ConversationPanel({
                             (o) => o && typeof o.label === 'string',
                           )
                           if (opts.length === 0) return null
-                          const replied = messages.slice(i + 1).some((mm) => mm.role === 'user')
+                          // 2026-11-15 审查修复：此处内层 map 的 i 是 toolCalls 索引（遮蔽消息索引），
+                          // 已回复判定必须按**消息位置**切片——用 m 的引用反查（O(n)，候选卡极少）。
+                          const replied = messages.slice(messages.indexOf(m) + 1).some(
+                            (mm) => mm.role === 'user',
+                          )
                           return (
                             <CandidateButtons
                               options={opts}

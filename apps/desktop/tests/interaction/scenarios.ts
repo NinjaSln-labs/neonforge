@@ -205,9 +205,23 @@ async function expectStartPage(page: Page): Promise<void> {
   throw new Error('启动页未出现（重载后仍失败）', { cause: lastErr })
 }
 
-/** 导航到启动页（含 ERR_NETWORK_CHANGED 重载重试——所有 interaction 入口统一走这里） */
+/** 导航到启动页（含 ERR_NETWORK_CHANGED 重载重试——所有 interaction 入口统一走这里）
+ * 2026-11-15 审查修复：导航本身也可能被瞬时网络变更中断（page.goto reject）——原实现只覆盖
+ * 「导航成功但页面未挂载」；现在 goto 失败也会重试一次，再进入启动页等待/重载诊断。 */
 export async function gotoStart(page: Page): Promise<void> {
-  await page.goto('http://localhost:5175/')
+  let navErr: unknown
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      await page.goto('http://localhost:5175/')
+      navErr = undefined
+      break
+    } catch (e) {
+      navErr = e
+      console.warn(`[boot] 导航到启动页失败（attempt ${attempt}/2）：${String(e)}`)
+      if (attempt === 1) await page.waitForTimeout(300)
+    }
+  }
+  if (navErr) throw new Error('导航到启动页失败（重试后仍失败）', { cause: navErr })
   await expectStartPage(page)
 }
 

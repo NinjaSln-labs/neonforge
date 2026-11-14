@@ -1902,14 +1902,23 @@ test('问题 A：approve-files 卡悬挂 → 模型续轮被拦后停续聊（�
   await page.getByRole('button', { name: '从零开始' }).click()
   await page.locator('.nf-chat__input textarea').fill('帮我做一个网页游戏')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  // 2026-11-15：等 working 释放再点卡/发送——卡可见瞬间 maybeContinue 可能仍在跑，
+  // 此时 send 会进入排队（多槽队列会保留全部消息 → 轮次计数漂移）；本用例只验证授权门控，不走排队路径。
+  const waitIdle = () =>
+    expect(page.getByRole('button', { name: '停止搭档当前工作' })).toHaveCount(0, {
+      timeout: 10000,
+    })
   // chat#1：目标确认卡 → 点确认目标
   await expect(page.getByRole('button', { name: '确认目标' })).toBeVisible({ timeout: 10000 })
+  await waitIdle()
   await page.getByRole('button', { name: '确认目标' }).click()
   // chat#2：执行确认卡 → 确认执行（硬序：approve-files 在确认执行后的 chat#3）
   await expect(page.getByRole('button', { name: '确认执行' })).toBeVisible({ timeout: 10000 })
+  await waitIdle()
   await page.getByRole('button', { name: '确认执行' }).click()
   // chat#3：approve-files 文件卡悬挂（用户**不批准**——真实卡悬挂场景）
   await expect(page.getByRole('button', { name: '批准这批文件' })).toBeVisible({ timeout: 10000 })
+  await waitIdle()
   // 用户发消息触发 chat#4：模型 write 被拦（pending='approval'——状态机冻结正确——D5）→「等待你的决策」
   await page.locator('.nf-chat__input textarea').fill('继续')
   await page.locator('.nf-chat__input textarea').press('Meta+Enter')
@@ -1921,7 +1930,7 @@ test('问题 A：approve-files 卡悬挂 → 模型续轮被拦后停续聊（�
   await page.waitForTimeout(2500)
   expect(
     await page.evaluate(() => (window as unknown as { __chatCount: number }).__chatCount),
-  ).toBe(5)
+  ).toBe(4)
   // 文件卡仍在（悬挂等待用户决策）→ 用户批准 → 恢复续聊：chat#5 write 真正执行（approved 放行）→
   // chat#6 模型纯文本收尾 → 自然停止（chatCount 定格 6——批准路径不被误伤，也无新一轮循环）
   await expect(page.getByRole('button', { name: '批准这批文件' })).toBeVisible()

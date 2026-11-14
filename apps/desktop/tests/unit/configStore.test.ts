@@ -169,7 +169,46 @@ describe('ConfigStore 密钥存储（P1-09）', () => {
     process.env.NEONFORGE_SEARCH_KEY = 'env-search'
     const store = new ConfigStore()
     expect(store.getWebAccess().searchKey).toBe('env-search')
+    expect(store.getWebAccess().searchKeySource).toBe('env')
     delete process.env.NEONFORGE_SEARCH_KEY
     expect(store.getWebAccess().searchKey).toBe('legacy-search')
+    expect(store.getWebAccess().searchKeySource).toBe('config')
+  })
+
+  it('Web Key opt-in 明文副本：keychain 解密失败时仍可用（与 API Key 同策略）', () => {
+    process.env.NEONFORGE_ALLOW_PLAINTEXT_KEY = '1'
+    state.encryptionAvailable = true
+    const store = new ConfigStore()
+    store.setWebAccess({ searchKey: 'search-secret', keenableApiKey: 'keen-secret' })
+    const cfg = readConfig()
+    expect(String(cfg.webSearchKey)).toMatch(/^enc1:/)
+    expect(cfg.webSearchKeyPlain).toBe('search-secret')
+    expect(String(cfg.webKeenableApiKey)).toMatch(/^enc1:/)
+    expect(cfg.webKeenableApiKeyPlain).toBe('keen-secret')
+    // 模拟 keychain 重置/解密不可用：密文不可读 → 回退 opt-in 明文副本
+    state.encryptionAvailable = false
+    expect(store.getWebAccess().searchKey).toBe('search-secret')
+    expect(store.getWebAccess().keenableApiKey).toBe('keen-secret')
+  })
+
+  it('Web Key 未 opt-in：不保留明文副本，重新保存会清除历史副本', () => {
+    process.env.NEONFORGE_ALLOW_PLAINTEXT_KEY = '1'
+    state.encryptionAvailable = true
+    const store = new ConfigStore()
+    store.setWebAccess({ searchKey: 'old-secret' })
+    expect(readConfig().webSearchKeyPlain).toBe('old-secret')
+    delete process.env.NEONFORGE_ALLOW_PLAINTEXT_KEY
+    store.setWebAccess({ searchKey: 'new-secret' })
+    expect(readConfig().webSearchKeyPlain).toBeUndefined()
+    expect(store.getWebAccess().searchKey).toBe('new-secret')
+  })
+
+  it('Web Key 来源标注：凭据文件 → file', () => {
+    const keyFile = path.join(TMP, 'search.txt')
+    writeFileSync(keyFile, 'file-search\n', 'utf-8')
+    process.env.NEONFORGE_SEARCH_KEY_FILE = keyFile
+    const store = new ConfigStore()
+    expect(store.getWebAccess().searchKey).toBe('file-search')
+    expect(store.getWebAccess().searchKeySource).toBe('file')
   })
 })

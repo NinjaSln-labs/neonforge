@@ -166,6 +166,80 @@ async function mockAutoRetryAfterPlan(page: Page): Promise<void> {
   })
 }
 
+/** 第二轮失败 → 点「重试」须重放**第二轮**上下文（原 chatRef 只在成功回合更新，重试会回到上一轮） */
+async function mockSecondTurnFailure(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const chat = { n: 0, cb: null as null | ((c: unknown) => void) }
+    let lastUser = ''
+    ;(window as unknown as { neonforge: unknown }).neonforge = {
+      version: 'test',
+      config: {
+        hasKey: async () => true,
+        getKey: async () => 'test-key',
+        getProvider: async () => 'commandcode',
+        setKey: async () => {},
+        clearKey: async () => {},
+        listProviders: async () => [],
+      },
+      workspace: {
+        openFolder: async () => '/test',
+        listDir: async () => [],
+        readFile: async (p: string) => ({ ok: true, content: '// ' + p }),
+        updateProjectTitle: async () => ({ ok: true }),
+      },
+      gateway: {
+        validate: async () => ({ ok: true }),
+        activeModel: async () => ({
+          providerId: 'commandcode',
+          providerLabel: 'Command Code',
+          upstream: 'deepseek/deepseek-v4.1-flash',
+          shortName: 'deepseek-v4.1-flash',
+        }),
+        streamChat: async (opts?: { messages?: { role?: string; content?: string }[] }) => {
+          for (let i = (opts?.messages?.length ?? 0) - 1; i >= 0; i--) {
+            const m = opts?.messages?.[i]
+            if (m?.role === 'user') {
+              lastUser = String(m.content ?? '')
+              break
+            }
+          }
+          chat.n++
+          if (chat.n === 1) {
+            setTimeout(() => {
+              chat.cb?.({ type: 'content', text: '第一轮完成' })
+              chat.cb?.({ type: 'done' })
+            }, 30)
+            return { ok: true }
+          }
+          if (chat.n === 2) {
+            return { ok: false, error: 'service-error', errorType: 'service' as const }
+          }
+          setTimeout(() => {
+            chat.cb?.({ type: 'content', text: '重放：' + lastUser })
+            chat.cb?.({ type: 'done' })
+          }, 30)
+          return { ok: true }
+        },
+        onStreamChunk: (cb: (c: unknown) => void) => {
+          chat.cb = cb
+          return () => {
+            chat.cb = null
+          }
+        },
+      },
+      tools: { list: async () => [], execute: async () => ({ ok: true }) },
+      chatLog: { log: async () => {} },
+      session: { setPlanConfirmed: async () => ({ ok: true }) },
+      plannedFiles: {
+        load: async () => ({ files: [], approved: false }),
+        add: async (files: string[]) => ({ files: files ?? [], approved: true }),
+        reset: async () => ({ files: [], approved: false }),
+      },
+      timeline: { log: async () => {} },
+    }
+  })
+}
+
 async function enter(page: Page): Promise<void> {
   await gotoStart(page)
   await expect(page.locator('.nf-start')).toBeVisible()
@@ -185,6 +259,23 @@ test('服务失败气泡显示「重试」→ 点击后不追加用户消息且�
   await expect(page.locator('.nf-msg--user')).toHaveCount(1)
   await expect(page.locator('.nf-msg--assistant')).toContainText('重试后回来了', { timeout: 5000 })
   await expect(page.getByRole('button', { name: '重试' })).toHaveCount(0)
+})
+
+test('第二轮失败后点「重试」重放第二轮上下文（不回到上一轮）', async ({ page }) => {
+  await mockSecondTurnFailure(page)
+  await enter(page)
+  await page.locator('.nf-chat__input textarea').fill('第一问')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  await expect(page.getByText('第一轮完成')).toBeVisible({ timeout: 10000 })
+  // 等 working 释放（done 后 maybeContinue 有 500ms 窗口——期间发送会被排队而非新回合）
+  await expect(page.getByRole('button', { name: '停止搭档当前工作' })).toHaveCount(0, {
+    timeout: 10000,
+  })
+  await page.locator('.nf-chat__input textarea').fill('第二问')
+  await page.locator('.nf-chat__input textarea').press('Meta+Enter')
+  await expect(page.getByRole('button', { name: '重试' })).toBeVisible({ timeout: 8000 })
+  await page.getByRole('button', { name: '重试' }).click()
+  await expect(page.getByText('重放：第二问')).toBeVisible({ timeout: 8000 })
 })
 
 test('计划确认后 service 自动续跑一次；第二次 service 须点重试', async ({ page }) => {

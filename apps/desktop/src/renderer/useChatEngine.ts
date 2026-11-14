@@ -13,7 +13,7 @@ import {
   shouldStopContinuation,
   type ConversationState,
 } from '../domain/conversationState'
-import { evaluateTurnProgress, isConfirmIntent } from '../domain/agentLoop'
+import { evaluateTurnProgress, isApprovalIntent, isConfirmIntent } from '../domain/agentLoop'
 import { buildHistory, type HistoryMessage } from './conversationHistory'
 import type { Msg, ToolCallMsg } from './ConversationPanel'
 import type { useConversationState } from './useConversationState'
@@ -39,7 +39,8 @@ export interface ChatEngineDeps {
   onActionPromiseHint?: (hint: string | null) => void
   onUserMessage?: (text: string) => void
   onWorkingChange?: (working: boolean) => void
-  pendingSendRef: RefObject<string>
+  /** 排队衔接消息（多条按发送顺序保留——单槽会覆盖前一条用户消息） */
+  pendingSendRef: RefObject<string[]>
   prevReadFilesRef: RefObject<Set<string>>
   recentFilesExternal?: string[]
   confirm: Confirm
@@ -305,6 +306,10 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
       }
       return
     }
+    // 2026-11-15 代码审查修复：本轮上下文在请求前记录——失败回合的重试必须重放**本回合**。
+    // 原只在 streamChat 成功后记录：第二回合失败时 chatRef 仍指向上一次成功回合，重试会丢掉
+    // 失败的用户消息（重放上一轮）。失败后无续聊路径，记录失败回合上下文无副作用。
+    chatRef.current = { msgs, depth }
     const key = await window.neonforge.config.getKey()
     if (!key) {
       finishError('key-invalid', undefined, sid)
@@ -507,7 +512,7 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
     }
 
     // 记录本轮上下文 → 由 maybeContinue 轮询工具完成（自动执行）→ 续聊
-    chatRef.current = { msgs, depth }
+    // （上下文已在请求前记录——见上方 2026-11-15 审查修复注释）
     // 2026-08-04 体验修复：等流式 done（模型回复完成 → working 立即释放——原固定等 1000ms+轮询，用户快速「确认推进」被 working 守卫拦截）；
     // 800ms 超时兜底（流式异常未发 done 时防挂起）
     await new Promise<void>((r) => {
@@ -529,7 +534,9 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
   const stopGeneration = async (source: 'button' | 'silent' = 'button') => {
     tlog('conversation.interrupted', { source }, 'system') // 2026-08-08 打断打点（停止按钮 / silent 自动干预）
     sessionRef.current++ // 旧会话失效——旧流 chunk（streamingSidRef 检查）、maybeContinue 续聊（sessionRef 检查）全失效
-    streamingSidRef.current = sessionRef.current
+    // 2026-11-15 代码审查修复：**不得**把 streamingSidRef 同步成新 sid——旧 sid 的 chunk 才能被
+    // ConversationPanel 的 `streamingSidRef !== sessionRef` 守卫丢弃（原赋值让旧流的 done/tool-call
+    // 继续落地，停止后仍可能执行工具）。下一次 runChat 会在流开始时设置新的 streamingSid。
     onActionPromiseHint?.(null)
     try {
       await window.neonforge.tools.cancel?.()
@@ -540,14 +547,28 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
     setWorking(false)
     onWorkingChange?.(false)
     setWorkingStage('已停止')
+    // 2026-11-15 代码审查修复：显式停止时，排队消息已提交但当前回合被放弃——退回输入框，
+    // 不静默滞留（原最后回合 finally 因 sid 归属跳过 flush，消息会等到下一次发送后才乱序送出）。
+    // silent 打断不走这里：系统消息马上开启新回合，其 finally 会按序 flush。
+    if (source === 'button' && pendingSendRef.current.length > 0) {
+      const queued = pendingSendRef.current.splice(0)
+      const restored = [...queued, inputRef.current]
+        // 系统对账引导属于被放弃的回合（不是用户草稿）——停止后不退回输入框
+        .filter((s) => !isSystemNudgeText(s))
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join('\n\n')
+      inputRef.current = restored
+      setInput(restored)
+    }
   }
 
   // 2026-08-07 无阶段修复（用户「输入≠打断」）：排队衔接机制——模型产出中用户发送 → 存 pending，
   // 当前轮（流式+工具链）完成后自动发送（不打断）；打断 = 显式停止按钮（.nf-chat__stop）
   const flushPendingSend = () => {
-    const pending = pendingSendRef.current
+    // 多槽队列按序一次送一条：该条回合结束后 finally 再次 flush 下一条（不并发、不覆盖）
+    const pending = pendingSendRef.current.shift()
     if (!pending) return
-    pendingSendRef.current = ''
     // 直送——不经输入框（避免 pending 文案闪进 textarea）
     setTimeout(() => void sendRef.current({ text: pending, queued: true }), 50)
   }
@@ -592,7 +613,7 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
         // 只存 pending——消息显示/onUserMessage（确认词处理）由 flush 后 send 统一执行一次
         // （原排队时 push + flush 后 send 再 push = 重复用户消息——398 实测两条「可以」）
         console.log('[conversation] 处理中发送——排队衔接（当前轮完成后自动发送；要停请点停止按钮）')
-        pendingSendRef.current = text
+        pendingSendRef.current.push(text)
         return
       }
       console.log('[conversation] 待授权中发送——新指令直接处理（未批准给新指令）')
@@ -611,9 +632,9 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
         }
       } else if (
         pendingKind === 'approval' &&
-        // 收紧（T0-3/P2 回归修正）：approval 期只认**明确批准词**（「批准/可以/行/同意」——
-        // 「继续」等非批准语义不自动批——手动按卡测试与真实「让模型继续」路径保持手动）
-        /^(行|好|可以|批准|同意|没问题|确认|就这么办)[。！!~～]?$|批准|同意/.test(text)
+        // 收紧（T0-3/P2 回归修正）：approval 期只认**明确批准词**（短句精确匹配——「继续」等非批准语义不自动批；
+        // 2026-11-15 审查修复：裸子串「批准/同意」会把「我不同意执行」误判为批准——见 isApprovalIntent）
+        isApprovalIntent(text)
       ) {
         // S7（C2 完善——e2e-0to1 场景 B）：approval 期确认文本 → 自动批准当前待批授权卡
         // （真实用户打字「行/批准」——确认卡时代只处理按钮批准遗漏文本批准）
@@ -782,7 +803,9 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
     tlog('conversation.error', { errorType, message: err }, 'system') // 2026-08-08 错误打点（错误链路可追溯）
     let content = '刚才出错了，点「重试」继续——不用重新说一遍。'
     if (errorType === 'key-invalid') {
-      content = 'API Key 好像失效了，换个 Key 试试。'
+      // 2026-11-15 审查：应用内保存的 Key 不覆盖 env/凭据文件（来源优先级）——提示用户必须改来源
+      content =
+        'API Key 好像失效了——请在设置里检查 Key 来源：环境变量/凭据文件优先于应用内保存，需更新该来源后重启。'
     } else if (errorType === 'service') {
       content = '服务暂时不可用（已自动重试）。点「重试」再试一次。'
     }
@@ -812,10 +835,12 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
       (stateRef.current.goalConfirmed || stateRef.current.planConfirmed) &&
       !autoRetriedServiceRef.current
     ) {
-      autoRetriedServiceRef.current = true
       // 失败轮期间已有排队用户消息（当前轮 finally 会 flush）：由用户消息继任，不再自动续跑
       // （两者同 tick 并发启动 = 双回合 + chunk 混写；实测「自动续跑成功」重复）
-      if (pendingSendRef.current) return
+      // 2026-11-15 审查修复：先判排队再置 autoRetried——排队消息继任的回合若也瞬态失败，
+      // 仍可享受一次自动续跑（原实现先把一次性机会消耗掉，再因排队直接 return）。
+      if (pendingSendRef.current.length > 0) return
+      autoRetriedServiceRef.current = true
       setTimeout(() => {
         void retryFailedTurnRef.current?.()
       }, 0)

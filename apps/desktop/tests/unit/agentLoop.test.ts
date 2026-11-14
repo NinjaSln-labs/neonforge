@@ -8,6 +8,7 @@ import {
   goalFallbackTrigger,
   isQuestionLike,
   isConfirmIntent,
+  isApprovalIntent,
   shouldNudgeProposeAfterResearch,
   shouldNudgeProposeAfterPlanReject,
   shouldNudgeReportAfterEvidenceMissing,
@@ -458,6 +459,28 @@ describe('isConfirmIntent（确认语义判定——条件式/将来时排除）
     expect(isConfirmIntent('可以吗？')).toBe(false)
     expect(isConfirmIntent('确认执行吗？')).toBe(false)
     expect(isConfirmIntent('按这个方案可以吗')).toBe(false)
+  })
+})
+
+// 2026-11-15 代码审查：approval 期文本批准只认明确批准词——裸子串「批准/同意」曾被否定句命中
+// （「我不同意执行这个命令」会自动批掉全部待授权工具调用）。
+describe('isApprovalIntent（approval 期文本批准）', () => {
+  it('明确批准词 → 批准', () => {
+    expect(isApprovalIntent('行')).toBe(true)
+    expect(isApprovalIntent('好')).toBe(true)
+    expect(isApprovalIntent('可以')).toBe(true)
+    expect(isApprovalIntent('批准')).toBe(true)
+    expect(isApprovalIntent('同意')).toBe(true)
+    expect(isApprovalIntent('确认！')).toBe(true)
+  })
+  it('否定/条件/完整句 → 不批准（不得由子串触发）', () => {
+    expect(isApprovalIntent('我不同意执行这个命令')).toBe(false)
+    expect(isApprovalIntent('先不要批准')).toBe(false)
+    expect(isApprovalIntent('暂时不批准这个操作')).toBe(false)
+    expect(isApprovalIntent('同意吗？')).toBe(false)
+    expect(isApprovalIntent('我同意执行这个命令')).toBe(false)
+    expect(isApprovalIntent('批准执行后告诉我')).toBe(false)
+    expect(isApprovalIntent('继续')).toBe(false)
   })
 })
 

@@ -59,6 +59,21 @@ export function registerIpc(): void {
   const budgetNotified = new Set<string>()
   // D3（ADR-005）：启动恢复——write 门控布尔镜像从 store 同步（批准事实跨重启；renderer 挂载时另经 planned-files:load 恢复清单）
   syncPlanApprovedFromStore()
+  // 2026-11-15 审查修复：env/凭据文件来源的 Web Key 不回传 renderer——
+  // 设置页只回填本地可编辑值；来源用 source 字段标注（避免整表单保存把 env 值加密落盘）。
+  const webAccessView = (w: ReturnType<typeof configStore.getWebAccess>) => ({
+    enabled: w.enabled,
+    probeOk: w.probeOk,
+    builtinProvider: w.builtinProvider,
+    searchUrl: w.searchUrl,
+    hasSearchKey: w.hasSearchKey,
+    searchKey: w.searchKeySource === 'config' ? w.searchKey : null,
+    searchKeySource: w.searchKeySource,
+    keenableApiKey: w.keenableApiKeySource === 'config' ? w.keenableApiKey : null,
+    hasKeenableKey: w.hasKeenableKey,
+    keenableApiKeySource: w.keenableApiKeySource,
+    keenablePublicTrial: w.keenablePublicTrial,
+  })
   ipcMain.handle('config:has-key', () => configStore.hasValidKey())
   ipcMain.handle('config:get-key', () => configStore.getApiKey())
   ipcMain.handle('config:key-status', () => configStore.getApiKeyStatus())
@@ -75,21 +90,7 @@ export function registerIpc(): void {
   )
   ipcMain.handle('config:clear-key', () => configStore.clearApiKey())
   ipcMain.handle('config:list-providers', () => listProviders())
-  ipcMain.handle('config:get-web-access', () => {
-    const w = configStore.getWebAccess()
-    return {
-      enabled: w.enabled,
-      probeOk: w.probeOk,
-      builtinProvider: w.builtinProvider,
-      searchUrl: w.searchUrl,
-      hasSearchKey: w.hasSearchKey,
-      // 设置页回填编辑用——仅本机 IPC
-      searchKey: w.searchKey,
-      keenableApiKey: w.keenableApiKey,
-      hasKeenableKey: w.hasKeenableKey,
-      keenablePublicTrial: w.keenablePublicTrial,
-    }
-  })
+  ipcMain.handle('config:get-web-access', () => webAccessView(configStore.getWebAccess()))
   ipcMain.handle(
     'config:set-web-access',
     async (
@@ -136,7 +137,7 @@ export function registerIpc(): void {
             return {
               ok: false,
               error: r.error ?? '外网探测失败',
-              config: configStore.getWebAccess(),
+              config: webAccessView(configStore.getWebAccess()),
             }
           }
         }
@@ -149,7 +150,7 @@ export function registerIpc(): void {
           keenableApiKey: patch.keenableApiKey,
           keenablePublicTrial: patch.keenablePublicTrial,
         })
-        return { ok: true, config }
+        return { ok: true, config: webAccessView(config) }
       }
       const config = configStore.setWebAccess({
         enabled: nextEnabled,
@@ -159,7 +160,7 @@ export function registerIpc(): void {
         keenableApiKey: patch.keenableApiKey,
         keenablePublicTrial: patch.keenablePublicTrial,
       })
-      return { ok: true, config }
+      return { ok: true, config: webAccessView(config) }
     },
   )
 
