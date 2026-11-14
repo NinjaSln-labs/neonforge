@@ -6,6 +6,8 @@ import {
   timelineLogger,
   resetTimelineDedupe,
   drainTimelineDlq,
+  drainTimelineOutbox,
+  resetTimelineRuntimeState,
 } from '../../src/main/timelineLogger'
 
 // timelineFile/logTimeline 用 os.homedir() 定位 logs 目录——重定向到 /tmp（不污染真实 userData）
@@ -17,6 +19,7 @@ describe('timelineLogger（会话时间线——2026-08-08 会话级文件）', 
     mkdirSync('/tmp/nf-timeline-test/Library/Application Support/neonforge-desktop/logs', {
       recursive: true,
     })
+    resetTimelineRuntimeState()
   })
   afterEach(() => {
     rmSync('/tmp/nf-timeline-test', { recursive: true, force: true })
@@ -95,7 +98,7 @@ describe('timelineLogger（会话时间线——2026-08-08 会话级文件）', 
     expect(event.version).toBe(1)
   })
 
-  it('P1-02：主文件写入失败 → DLQ 保留；恢复后可重放', () => {
+  it('P1-02：主文件写入失败 → Outbox 保留；恢复后重放', () => {
     const sid = 'dlq-0000-4000-8000-000000000001'
     const f = timelineFile(sid)
     mkdirSync(f) // 同名目录让 appendFileSync 失败（EISDIR）
@@ -105,14 +108,61 @@ describe('timelineLogger（会话时间线——2026-08-08 会话级文件）', 
       role: 'user',
       detail: { content: 'dlq' },
     })
-    const dlq = f.replace('timeline-' + sid + '.jsonl', 'timeline-dlq.jsonl')
-    expect(existsSync(dlq)).toBe(true)
-    expect(readFileSync(dlq, 'utf-8')).toContain('conversation.message_sent')
+    const outbox = f.replace('timeline-' + sid + '.jsonl', 'timeline-outbox.jsonl')
+    expect(existsSync(outbox)).toBe(true)
+    expect(readFileSync(outbox, 'utf-8')).toContain('conversation.message_sent')
     rmSync(f, { recursive: true, force: true })
-    const result = drainTimelineDlq()
-    expect(result.replayed).toBe(1)
+    const result = drainTimelineOutbox()
+    expect(result.delivered).toBe(1)
+    expect(result.remaining).toBe(0)
     expect(existsSync(f)).toBe(true)
     expect(readFileSync(f, 'utf-8')).toContain('conversation.message_sent')
+    expect(existsSync(outbox)).toBe(false)
+    // 再重放不重复（outboxId 幂等）
+    expect(drainTimelineOutbox()).toMatchObject({ delivered: 0, duplicates: 0, remaining: 0 })
+  })
+
+  it('P1-02：重启后 seq 从已落盘文件续接（不再从 1 覆盖 eventId）', () => {
+    const sid = 'restart-0000-4000-8000-000000000001'
+    logTimeline({ session: sid, type: 'user-message', role: 'user', detail: { content: 'a' } })
+    logTimeline({ session: sid, type: 'assistant-start', role: 'assistant', detail: {} })
+    // 模拟进程重启：清空进程内 seq/索引/outbox 句柄，但保留时间线文件
+    resetTimelineRuntimeState()
+    logTimeline({ session: sid, type: 'assistant-start', role: 'assistant', detail: {} })
+    const events = readFileSync(timelineFile(sid), 'utf-8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line))
+    expect(events.map((e) => e.seq)).toEqual([1, 2, 3])
+    expect(events.map((e) => e.eventId)).toEqual([`${sid}:1`, `${sid}:2`, `${sid}:3`])
+  })
+
+  it('P1-02：旧 DLQ 文件启动重放仍兼容', () => {
+    const sid = 'legacy-dlq-0000-4000-8000-0000000001'
+    const f = timelineFile(sid)
+    const dlq = f.replace('timeline-' + sid + '.jsonl', 'timeline-dlq.jsonl')
+    const event = JSON.stringify({
+      ts: new Date().toISOString(),
+      seq: -1,
+      session: sid,
+      type: 'conversation.message_sent',
+      role: 'user',
+      detail: { content: 'legacy' },
+    })
+    writeFileSync(
+      dlq,
+      JSON.stringify({
+        failedAt: new Date().toISOString(),
+        session: sid,
+        type: 'conversation.message_sent',
+        error: 'legacy-failure',
+        event,
+      }) + '\n',
+    )
+    const result = drainTimelineDlq()
+    expect(result.replayed).toBe(1)
+    expect(result.remaining).toBe(0)
+    expect(readFileSync(f, 'utf-8')).toContain('legacy')
   })
 })
 

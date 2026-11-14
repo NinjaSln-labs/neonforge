@@ -16,6 +16,8 @@ export interface TimelineEvent {
   detail: Record<string, unknown>
   /** P2-07：事件唯一标识（session + 会话内 seq）——消费方去重/幂等 */
   eventId?: string
+  /** P1-02：轻量 Outbox 投递键——重启重放时按此幂等跳过（普通直写事件可缺省） */
+  outboxId?: string
   /** P2-07：事件 schema 版本（当前 1；破坏性载荷变更时递增） */
   version?: number
 }

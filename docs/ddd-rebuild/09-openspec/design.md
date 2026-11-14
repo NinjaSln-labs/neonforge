@@ -273,8 +273,9 @@ state transition (useConversationState.transition)
 ### 6.1 已落地与预留
 
 - **已落地（2026-11-14）**：事件版本（`version`）、`eventId`、去重存储、DLQ + 启动重放；代码证据见 `10-code-evidence.md §4`。
-- **预留（Outbox）**：当前状态变更与事件 append 仍是两个独立动作（renderer transition → IPC → JSONL）。若要保证“状态落库后事件不丢”，应在 main 侧建立 outbox 表/文件，状态变更事务提交后投递；当前桌面单进程可用“事件文件 + 失败重试”轻量实现。现有 DLQ/重放只保证“已发出的 append 失败不丢”，不构成跨存储事务保证。
-- **后续可选**：查询按事件版本兼容；Outbox 统一投递器。
+- **已落地（2026-11-15）· 轻量 Outbox**：`timelineOutbox.ts` 提供单文件 outbox；`logTimeline` 先将事件入队（`fsync`），再投递会话时间线；投递失败保留待下次/启动重放；`outboxId` 写入事件，重放按幂等跳过；`drainTimelineOutbox()` 接入 `main.ts` 启动流程。
+- **预留 · 完整跨存储事务**：轻量 Outbox 只覆盖已进入 `logTimeline` 的事件；renderer transition → IPC → JSONL 的“状态变更”与“事件入队”仍是两个独立动作。若要保证跨存储事务，需要状态存储与事件入队同文件/同事务提交；当前单进程不做。
+- **后续可选**：查询按事件版本兼容；完整跨存储事务 Outbox。
 
 ### 6.2 一次事务修改一个聚合
 
@@ -294,7 +295,7 @@ state transition (useConversationState.transition)
 | 系统代跑 | 只读 + localhost 网络只读 | 安全 vs 外网证据不可代跑 |
 | web_fetch | 拒私网 + 手动重定向 | 安全 vs 本地文档调试（走 open/curl） |
 | pid 清理 | 跳过 <=0 | 安全 vs 可能漏清异常 pid（正常 pid 不受影响） |
-| Outbox | 本次不实现，设计预留 | 交付速度 vs 强一致审计 |
+| Outbox | 轻量 Outbox 已实现（2026-11-15）；完整跨存储事务不做 | 已发出事件不丢 vs 单进程交付成本 |
 
 ---
 

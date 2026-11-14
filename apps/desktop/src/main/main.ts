@@ -9,7 +9,7 @@ import { killAllSubprocesses } from './tools.js'
 import { stopAllServices } from './serviceManager.js'
 import { TEST_HOOKS } from './testHooks.js'
 import { configStore } from './configStore.js'
-import { setTimelineUserData, drainTimelineDlq } from './timelineLogger.js'
+import { setTimelineUserData, drainTimelineDlq, drainTimelineOutbox } from './timelineLogger.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -40,6 +40,12 @@ try {
   drainTimelineDlq()
 } catch (e) {
   console.error('[timeline] DLQ 启动重放失败', e)
+}
+// P1-02：轻量 Outbox 中未投递事件在启动时重放（outboxId 幂等，崩溃窗口不重复）
+try {
+  drainTimelineOutbox()
+} catch (e) {
+  console.error('[timeline] Outbox 启动重放失败', e)
 }
 const gotTheLock = app.requestSingleInstanceLock()
 

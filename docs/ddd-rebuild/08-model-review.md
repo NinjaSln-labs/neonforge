@@ -17,7 +17,7 @@
 | 不变量表达率 | 8 | 8 条不变量有显式函数与测试，但 I06（计划清单单一来源）在渲染层被违反：`propose_plan` 提议即写入 `plannedFiles` | `conversationState.ts:831-840`；`ConversationPanel.tsx:880-883`；测试 `Inv 6` |
 | 事件完整性 | 8 | 55+ 事件已注册、diff 派生；但无事件版本/eventId；日志写失败静默；`tool.executed` 可能重复；部分事件靠手工 tlog | `timeline.ts:20-233`；`timelineLogger.ts:55-77`；`07 §9` |
 | 耦合度 | 6 | renderer 直接消费 domain + 20+ IPC；main 工具/环境/服务互依；演示面板与生产路径混在同一文件；状态镜像异步 | `ConversationPanel.tsx`、`ipc.ts`、`05 §1` |
-| 行业对标偏离 | 8 | 已吸收 Claude/Codex/Cursor 授权、Aider/Cline 验证与拒绝原因、reasonix/deer-flow 循环与挂起；事件版本与契约 schema 已补齐（P2-07、P1-04），缺口仅剩跨上下文事务性 Outbox | 代码注释中的对标记录；`02 §4`、`07 §9` |
+| 行业对标偏离 | 8 | 已吸收 Claude/Codex/Cursor 授权、Aider/Cline 验证与拒绝原因、reasonix/deer-flow 循环与挂起；事件版本与契约 schema 已补齐（P2-07、P1-04），轻量 Outbox 已实现（P1-02，2026-11-15）；仅完整跨存储事务性 Outbox 未覆盖 | 代码注释中的对标记录；`02 §4`、`07 §9` |
 | **加权平均** | **7.5 / 10** | 模型主干强，工程边界与安全边界需要硬化 | — |
 
 > 另按**目标态领域完整度**评估：9.5 / 10（2026-11-15 复评）。BC-10～BC-14 五个目标态领域已落地（领域状态机 + 持久化 + IPC/preload + 生产 UI + 单测）；P1-04、P1-05、P2-08 与演示隔离已关闭，剩余 0.5 分来自跨上下文事务性 Outbox（设计预留，见 §5.3）。该评分不并入上表的“现有模型”评分。
@@ -36,7 +36,7 @@
 | P0-04 | P0 | 进程清理/停止服务在 `pid=0` 时调用 `kill(-0)`/`kill(0)` | 可能向当前进程组/应用自身发 SIGKILL，导致应用退出或误杀 | `tools.ts:288-323`（`killTree`/`killAllSubprocesses` 使用 `pid ?? 0`）、`serviceManager.ts:254-286`（`process.kill(-s.pid)`/`-p.pid`） | 所有 kill 前守卫 `pid > 0`；新增纯函数/单测 | 已修复（2026-11-14）：`processGuard.isKillablePid` + tools/serviceManager 全部 kill 前守卫；新增单测 |
 | P0-05 | P1 | 系统代跑验证包含外网 `network-read` 命令 | 证据命令可被模型用于外网 GET 携带敏感数据；自动代跑绕过用户确认 | `conversationState.ts:681-685`（`isSystemVerifiable` 接受 `network-read`）、`verification.ts:9-13` | 系统只代跑 `readonly` 与 localhost `network-read`；外部网络命令标 unverifiable | 已修复（2026-11-14）：`isSystemVerifiable` 单源导出，外网 network-read 不可代跑；`verifyCompletionSystem.test.ts` 覆盖外网/localhost |
 | P1-01 | P1 | `web_fetch` 允许任意 http/https，跟随重定向，无 localhost/私网拦截 | SSRF：可访问内网服务、云元数据地址；可被用于绕过网络边界 | `webTools.ts:260-296` | 拒绝 localhost/私网/元数据地址；手动跟随重定向并逐跳校验；新增测试 | 已修复（2026-11-14）：`isPrivateHost` + `redirect:'manual'` 逐跳校验（最多 5 跳）；`webTools.test.ts` 覆盖 |
-| P1-02 | P1 | 无 Outbox/DLQ/事件版本；时间线写失败静默 | 审计不可靠；跨聚合一致性无投递保证；事件 schema 演进困难 | `timelineLogger.ts`、`timeline.ts` | 引入事件 `eventId/version`；失败可见化；跨上下文写库后发事件（Outbox） | 部分修复（2026-11-14）：`eventId/version` + 写失败计数 + DLQ 落盘 + 启动重放 + dedupe；跨上下文事务性 Outbox 仍后置 |
+| P1-02 | P1 | 无 Outbox/DLQ/事件版本；时间线写失败静默 | 审计不可靠；跨聚合一致性无投递保证；事件 schema 演进困难 | `timelineLogger.ts`、`timelineOutbox.ts`、`timeline.ts` | 引入事件 `eventId/version`；失败可见化；跨上下文写库后发事件（Outbox） | 已修复（2026-11-15）：`eventId/version` + 写失败计数 + DLQ/启动重放 + dedupe + 轻量 Outbox（先入队 fsync、失败保留、启动重放、`outboxId` 幂等）；完整跨存储事务仍未覆盖 |
 | P1-03 | P1 | renderer 与 main 的计划确认镜像异步 | 极端时序下 main 门控仍关闭/仍开启，导致卡不渲染或越权 | `useConversationState.ts`（`confirm/reject`）、`ipc.ts` `session:plan-confirmed` | 确认转换 await 镜像结果；失败回滚/提示；增加竞态测试 | 已修复（2026-11-14）：`confirm/reject` await 镜像并重试 1 次；领域转换仍同步完成 |
 | P1-04 | P1 | IPC 契约无 schema 校验/生成 | preload、types.d.ts、main handler 三者可能漂移；调用方传入非法结构 | `preload.ts`、`renderer/types.d.ts`、`ipc.ts` | 生成式契约或 zod/JSON Schema 校验；契约测试 | 已修复（2026-11-15）：`ipcSchema.ts` 轻量校验器 + 全通道静态契约测试；运行时入口覆盖 tools/stream/config(set-key、set-web-access)/队列/验收/变更集/delivery diff/tools revert/completion verify/context/rag/plugins/planned-files/plan-confirmed；价格/预算/MCP 仍由各自 store 校验 |
 | P1-05 | P1 | `ConversationPanel.tsx` 拆分前 3372 行，应用编排与 UI 渲染混在一起 | 可维护性差、DDD 应用层边界侵蚀、测试困难 | `ConversationPanel.tsx` 全文 | 拆分为应用服务 hooks（send/stream/toolLoop/decision）与展示组件 | 已修复（2026-11-15）：阶段 1–5 完成（`conversationFormat`/`DecisionCards`/`ConversationComposer`/`conversationHistory`/`useChatStream`/`useChatEngine`/`useTimelineLog`/`useMessageStore`/`useConversationTelemetry`/`useEvidenceVerification`）；面板 3372 → 1320 行；行为不变，interaction 74/74（含后续排队/重试回归） |
@@ -137,7 +137,7 @@
 - 已关闭（2026-11-14）：P1-03 镜像竞态、P1-06 演示通道隔离（结构性）、P1-08 路径规范化、P1-10 symlink、P2-01 事件命名、P2-03 progressMode、P2-04 原子写、P2-05 事件重复、P2-06 dedupe、P2-07 事件版本；P1-02 已有 DLQ/事件版本/重放，跨上下文 Outbox 后续。
 - 已关闭（2026-11-15）：P1-04 IPC 契约校验（第二批入口校验 + 校验器修正）、P1-05 `ConversationPanel` 拆分（3372→1320 行）、P2-08 高级设置文案规范化。
 - 二次代码评审修复（2026-11-14）：悬空 symlink/写边界硬阻断、变更集自有基线（快照缺失不误删原文件）、会话 ID 提升工作区（Tab 重挂载不失联）、价格表可配置 + 月度预算、`system_clarify` 按底层决策点执行副作用、异步预检异常收敛、授权拒绝不自动恢复队列、交付面板异步响应竞态、MCP UTF-8 分片与进程退出清理。
-- 待后续：跨上下文事务性 Outbox（设计预留——事件已有 eventId/version/DLQ/重放，但无跨库事务投递保证）。
+- 轻量 Outbox（2026-11-15）：`timelineOutbox.ts` + `timelineLogger` 改造——事件先入 outbox 文件（`fsync`）再投递时间线；投递失败保留待下次/启动重放；`outboxId` 写入事件按幂等跳过，崩溃窗口不重复。**完整跨存储事务**（状态落库与事件入队同一事务）仍未覆盖。
 - 交互回归稳定性（2026-11-15）：`playwright --project=interaction` 全量 **74/74**；两个既有 flaky（`.nf-start` 网络变更、计划确认后重试双回合）根因已定位并在测试层（导航重载重试）与应用层（sid 归属/同步 working/多槽队列）修复；新增第二轮重试上下文、排队 FIFO/停止回填回归。
 
 ### 5.4 通过标准（建议）
@@ -164,4 +164,4 @@ NeonForge 的领域模型主干是清晰的：**用户决策驱动的任务状�
 
 这些都可以在不改变产品方向的前提下修复。修复完成后，本模型可以从 Conditional Ready 进入 Ready。
 
-但“现有模型可用”不等于“产品领域完整”。按 `00-domain-blueprint.md` 的目标态目录，产品应有 5 个目标态领域（变更集、任务队列、用量成本、扩展集成、验收门禁）；截至 2026-11-14 已全部实现：变更集与验收门禁补齐了“交付是否可信”，任务队列/用量/扩展补齐了工作台承诺。演示面板仍在 UI 中保留，但生产交付路径不再依赖它们（隔离已结构性完成）；后续工作仅剩跨上下文事务性 Outbox（设计预留）；IPC 契约校验（P1-04）、ConversationPanel 拆分（P1-05）与 P2-08 文案规范已于 2026-11-15 完成。
+但“现有模型可用”不等于“产品领域完整”。按 `00-domain-blueprint.md` 的目标态目录，产品应有 5 个目标态领域（变更集、任务队列、用量成本、扩展集成、验收门禁）；截至 2026-11-14 已全部实现：变更集与验收门禁补齐了“交付是否可信”，任务队列/用量/扩展补齐了工作台承诺。演示面板仍在 UI 中保留，但生产交付路径不再依赖它们（隔离已结构性完成）；后续工作仅剩**完整跨存储事务性 Outbox**（轻量 Outbox 已于 2026-11-15 实现：入队 fsync + 启动重放 + `outboxId` 幂等）；IPC 契约校验（P1-04）、ConversationPanel 拆分（P1-05）与 P2-08 文案规范已于 2026-11-15 完成。

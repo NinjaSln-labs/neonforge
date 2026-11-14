@@ -5,12 +5,14 @@
 // 2026-08-08 会话级文件：renderer 进入对话（ConversationPanel 挂载）生成 UUID 会话 ID → timeline-<会话ID>.jsonl
 // （每会话独立文件——不再按日期聚合所有会话；无会话 ID（启动页阶段/单元测试）→ 降级按日期文件）
 // 2026-09-28：落盘对齐 app.getPath('userData')/logs（NF_TEST_USERDATA 隔离——不再写死 Application Support）
+// 2026-11-15：P1-02 轻量 Outbox——事件先入 outbox 文件（fsync），再投递时间线；失败保留，启动重放。
 
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import type { TimelineEvent, TimelineLogger, TimelineEventType } from '../domain/timeline.js'
 import { TIMELINE_EVENT_SPECS, dedupeKey } from '../domain/timeline.js'
+import { TimelineOutbox, type OutboxEvent } from './timelineOutbox.js'
 
 // 会话内 seq（设计文档 §2.1：seq=会话内序号）——按会话隔离自增（原进程级计数器——多次启动 seq 冲突）
 const seqBySession = new Map<string, number>()
@@ -33,6 +35,135 @@ function timelineDlqFile(): string {
   return path.join(timelineLogsDir(), 'timeline-dlq.jsonl')
 }
 
+function timelineOutboxFile(): string {
+  return path.join(timelineLogsDir(), 'timeline-outbox.jsonl')
+}
+
+// P1-02 / P2-07：每会话文件索引——重启后 seq 续接 + outboxId 幂等重放
+interface TimelineFileIndex {
+  maxSeq: number
+  outboxIds: Set<string>
+  scanned: boolean
+}
+const fileIndexes = new Map<string, TimelineFileIndex>()
+
+let outbox: TimelineOutbox | null = null
+let outboxFilePath: string | null = null
+
+function timelineFileIndex(file: string): TimelineFileIndex {
+  const cached = fileIndexes.get(file)
+  if (cached?.scanned) return cached
+  const index = cached ?? { maxSeq: 0, outboxIds: new Set<string>(), scanned: false }
+  fileIndexes.set(file, index)
+  index.scanned = true
+  if (!existsSync(file)) return index
+  try {
+    for (const line of readFileSync(file, 'utf-8').split('\n')) {
+      if (!line.trim()) continue
+      try {
+        const evt = JSON.parse(line) as Partial<TimelineEvent> & { outboxId?: string }
+        if (typeof evt.seq === 'number' && evt.seq > index.maxSeq) index.maxSeq = evt.seq
+        if (typeof evt.outboxId === 'string' && evt.outboxId) index.outboxIds.add(evt.outboxId)
+      } catch {
+        /* 坏行跳过 */
+      }
+    }
+  } catch {
+    /* 读取失败按空索引 */
+  }
+  return index
+}
+
+/** 重置进程内时间线状态（测试隔离 / userData 切换；不影响已落盘事件）。 */
+export function resetTimelineRuntimeState(): void {
+  seqBySession.clear()
+  dedupeSeen.clear()
+  fileIndexes.clear()
+  outbox = null
+  outboxFilePath = null
+  writeFailures = 0
+  lastWriteError = null
+}
+
+function getTimelineOutbox(): TimelineOutbox {
+  const file = timelineOutboxFile()
+  if (!outbox || outboxFilePath !== file) {
+    outbox = new TimelineOutbox(file, (event, outboxId) => appendTimelineEvent(event, outboxId))
+    outboxFilePath = file
+  }
+  return outbox
+}
+
+/** 重放 outbox（成功/重复条目移除；失败保留）；供启动与诊断调用。 */
+export function drainTimelineOutbox(): {
+  delivered: number
+  duplicates: number
+  remaining: number
+  error?: string
+} {
+  try {
+    return getTimelineOutbox().drain()
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e)
+    console.error('[timeline] Outbox 重放失败', error)
+    return { delivered: 0, duplicates: 0, remaining: 0, error }
+  }
+}
+
+/** 追加一条事件到时间线；outboxId 已存在 → duplicate（崩溃窗口重放幂等）。失败抛出。 */
+function appendTimelineEvent(evt: OutboxEvent, outboxId?: string): 'inserted' | 'duplicate' {
+  const key = evt.session ?? 'default'
+  const detail = evt.detail ?? {}
+  const file = timelineFile(evt.session)
+  const index = timelineFileIndex(file)
+  if (outboxId && index.outboxIds.has(outboxId)) return 'duplicate'
+  const spec = TIMELINE_EVENT_SPECS[evt.type as TimelineEventType]
+  const dedupe = spec?.dedupe ? `${key}:${dedupeKey(evt.type, detail)}` : null
+  if (dedupe && dedupeSeen.has(dedupe)) return 'duplicate'
+  const seq = Math.max(seqBySession.get(key) ?? 0, index.maxSeq) + 1
+  const line = JSON.stringify({
+    ts: new Date().toISOString(),
+    seq,
+    eventId: `${key}:${seq}`, // P2-07：消费方幂等键
+    version: 1, // P2-07：事件 schema 版本
+    session: key,
+    type: evt.type,
+    role: evt.role,
+    detail,
+    ...(outboxId ? { outboxId } : {}),
+  })
+  appendFileSync(file, line + '\n')
+  seqBySession.set(key, seq)
+  index.maxSeq = seq
+  if (outboxId) index.outboxIds.add(outboxId)
+  if (dedupe) dedupeSeen.add(dedupe)
+  return 'inserted'
+}
+
+function writeTimelineDlq(evt: OutboxEvent, error: string): void {
+  try {
+    appendFileSync(
+      timelineDlqFile(),
+      JSON.stringify({
+        failedAt: new Date().toISOString(),
+        session: evt.session,
+        type: evt.type,
+        error,
+        event: JSON.stringify({
+          ts: new Date().toISOString(),
+          seq: -1,
+          session: evt.session ?? 'default',
+          type: evt.type,
+          role: evt.role,
+          detail: evt.detail ?? {},
+        }),
+      }) + '\n',
+    )
+  } catch (dlqError) {
+    console.error('[timeline] DLQ 写入也失败', dlqError)
+  }
+}
+
 /** 重放 DLQ（成功写入原会话文件的行移除；坏行保留）；返回重放统计 */
 export function drainTimelineDlq(): { replayed: number; remaining: number } {
   try {
@@ -53,6 +184,7 @@ export function drainTimelineDlq(): { replayed: number; remaining: number } {
     }
     if (remaining.length > 0) writeFileSync(timelineDlqFile(), remaining.join('\n') + '\n')
     else rmSync(timelineDlqFile(), { force: true })
+    fileIndexes.clear() // DLQ 直写后强制下次 append 重扫 seq/outboxId
     return { replayed, remaining: remaining.length }
   } catch (e) {
     console.error('[timeline] DLQ 重放失败', e)
@@ -66,6 +198,8 @@ let userDataLogsDir: string | null = null
 /** 与 configStore.reload 同序：NF_TEST_USERDATA / 默认 userData 就绪后调用 */
 export function setTimelineUserData(userData: string): void {
   userDataLogsDir = path.join(userData, 'logs')
+  // 切换 userData / 测试隔离：清空进程内 seq、索引与 outbox 句柄（不删除已落盘事件）
+  resetTimelineRuntimeState()
 }
 
 // 文件名安全（会话 ID 是 UUID，防御性清洗——防路径注入）
@@ -98,62 +232,37 @@ export function timelineFile(session?: string): string {
   return path.join(dir, name)
 }
 
-export function logTimeline(evt: {
-  session?: string
-  type: string
-  role?: 'user' | 'assistant' | 'system' | 'tool'
-  detail?: Record<string, unknown>
-}): void {
-  const key = evt.session ?? 'default'
-  const detail = evt.detail ?? {}
-  // P2-06：注册表标记 dedupe 的事件（同一会话同一 detail 签名只落一次）
+/** 记录事件（轻量 Outbox）：先入队 fsync，再投递；失败保留待下次/启动重放。 */
+export function logTimeline(evt: OutboxEvent): void {
   const spec = TIMELINE_EVENT_SPECS[evt.type as TimelineEventType]
   if (spec?.dedupe) {
-    const dedupe = dedupeKey(evt.type, detail)
-    const fullKey = `${key}:${dedupe}`
+    const fullKey = `${evt.session ?? 'default'}:${dedupeKey(evt.type, evt.detail ?? {})}`
     if (dedupeSeen.has(fullKey)) return
-    dedupeSeen.add(fullKey)
   }
   try {
-    const s = (seqBySession.get(key) ?? 0) + 1
-    seqBySession.set(key, s)
-    const line = JSON.stringify({
-      ts: new Date().toISOString(),
-      seq: s,
-      eventId: `${key}:${s}`, // P2-07：消费方幂等键
-      version: 1, // P2-07：事件 schema 版本
-      session: evt.session ?? 'default',
-      type: evt.type,
-      role: evt.role,
-      detail,
-    })
-    appendFileSync(timelineFile(evt.session), line + '\n')
-  } catch (e) {
-    writeFailures += 1
-    lastWriteError = e instanceof Error ? e.message : String(e)
-    console.error('[timeline] 事件写入失败', evt.type, lastWriteError)
-    // 写入 DLQ（含会话与原事件 JSON），下次启动 drainTimelineDlq 重放
-    try {
-      appendFileSync(
-        timelineDlqFile(),
-        JSON.stringify({
-          failedAt: new Date().toISOString(),
-          session: evt.session,
-          type: evt.type,
-          error: lastWriteError,
-          event: JSON.stringify({
-            ts: new Date().toISOString(),
-            seq: -1,
-            session: evt.session ?? 'default',
-            type: evt.type,
-            role: evt.role,
-            detail,
-          }),
-        }) + '\n',
-      )
-    } catch (dlqError) {
-      console.error('[timeline] DLQ 写入也失败', dlqError)
+    const queue = getTimelineOutbox()
+    queue.enqueue(evt)
+    const result = queue.drain()
+    if (result.error) {
+      writeFailures += 1
+      lastWriteError = result.error
+      console.error('[timeline] Outbox 投递失败（已保留待重放）', evt.type, result.error)
+    } else if (result.remaining > 0) {
+      writeFailures += 1
+      lastWriteError = 'outbox-pending'
     }
+  } catch (e) {
+    // Outbox 自身不可用（目录/权限等）——降级直写 + 旧 DLQ（保留既有失败可见性）
+    try {
+      appendTimelineEvent(evt)
+    } catch (e2) {
+      writeFailures += 1
+      lastWriteError = e2 instanceof Error ? e2.message : String(e2)
+      console.error('[timeline] 事件写入失败', evt.type, lastWriteError)
+      writeTimelineDlq(evt, lastWriteError)
+      return
+    }
+    console.warn('[timeline] Outbox 不可用，已降级直写', e instanceof Error ? e.message : String(e))
   }
 }
 

@@ -203,7 +203,7 @@ flowchart LR
 - **决策**：领域事件由 `deriveStateEvents(prev, next)` 在唯一转换点自动派生；事件目录必须在 `TIMELINE_EVENT_SPECS` 注册；时间线 append 到 JSONL，支持 query。
 - **理由**：避免散落打点；状态转换与事件一致；可回放诊断。
 - **权衡**：事件是派生事实，不是持久化事件源；日志写失败有计数与 DLQ（P1-02），但不能保证强一致审计。
-- **风险**：未注册事件只 warn；跨进程事件顺序依赖调用时序；事件已有 `eventId`/`version`（P2-07）与去重（P2-06），但跨上下文事务投递仍无保证（Outbox 设计预留）。
+- **风险**：未注册事件只 warn；跨进程事件顺序依赖调用时序；事件已有 `eventId`/`version`（P2-07）与去重（P2-06）；轻量 Outbox（2026-11-15）保证已进入 `logTimeline` 的事件先入队 fsync、失败保留并启动重放（`outboxId` 幂等）；跨存储事务投递仍无保证。
 - **备选方案**：每个组件手写打点（已拒绝）；完整 Event Sourcing + 事件存储（当前过重）。
 - **代码**：`timeline.ts`（`deriveStateEvents`/`TIMELINE_EVENT_SPECS`）；`timelineLogger.ts`（`logTimeline`）；`useConversationState.ts`。
 

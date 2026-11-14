@@ -311,7 +311,7 @@ sequenceDiagram
 
 ## 9. 当前交互层的缺口
 
-1. **没有完整 Outbox**：跨聚合/跨进程一致性仍靠 UI 层顺序调用；时间线已有 DLQ/重放（P1-02）与 `eventId`/`version`（P2-07），但跨上下文事务性投递仍待建设（设计预留）。
+1. **轻量 Outbox 已实现（2026-11-15）**：`logTimeline` 先写入 `timeline-outbox.jsonl`（fsync），再投递会话时间线；失败保留、启动重放、`outboxId` 幂等。完整跨存储事务（状态落库与事件入队同一事务）仍待建设（设计预留）。
 2. **没有事件版本字段**：已修复（P2-07）——`TimelineEvent` 增加 `eventId`/`version`（当前 1）。
 3. **时间线写失败静默**：已修复（P1-02）——失败计数可见 + DLQ 落盘 + 启动重放。
 4. **`dedupeKey` 函数存在但全局去重存储未落地**：已修复（P2-06）——`timelineLogger` 按会话 + 类型 + detail 签名去重。
