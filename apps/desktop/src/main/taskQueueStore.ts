@@ -17,8 +17,17 @@ import {
 
 type QueueFile = Record<string, TaskQueueState>
 
+export type QueueEventSink = (event: {
+  session: string
+  type: string
+  detail: Record<string, unknown>
+}) => void
+
 export class TaskQueueStore {
-  constructor(private readonly filePath: string) {}
+  constructor(
+    private readonly filePath: string,
+    private readonly emit: QueueEventSink = () => {},
+  ) {}
 
   private loadAll(): QueueFile {
     try {
@@ -63,7 +72,8 @@ export class TaskQueueStore {
     title: string,
     taskRef: string = title.trim().toLowerCase(),
   ): TaskQueueState {
-    return this.mutate(sessionId, (state, at) =>
+    const before = this.list(sessionId)
+    const next = this.mutate(sessionId, (state, at) =>
       enqueueTask(
         state,
         {
@@ -74,38 +84,88 @@ export class TaskQueueStore {
         at,
       ),
     )
+    const added = next.entries.find((e) => !before.entries.some((p) => p.id === e.id))
+    if (added) {
+      this.emit({
+        session: sessionId,
+        type: 'queue.entry_enqueued',
+        detail: {
+          entryId: added.id,
+          taskRef: added.taskRef,
+          position: next.entries.indexOf(added),
+        },
+      })
+    }
+    return next
   }
 
   start(sessionId: string, entryId: string): TaskQueueState {
-    return this.mutate(sessionId, (state, at) => startTask(state, entryId, at))
+    const next = this.mutate(sessionId, (state, at) => startTask(state, entryId, at))
+    const entry = next.entries.find((e) => e.id === entryId)
+    this.emit({
+      session: sessionId,
+      type: 'queue.entry_started',
+      detail: { entryId, taskRef: entry?.taskRef },
+    })
+    return next
   }
 
   block(sessionId: string, entryId: string, reason: string): TaskQueueState {
-    return this.mutate(sessionId, (state, at) => blockTask(state, entryId, reason, at))
+    const next = this.mutate(sessionId, (state, at) => blockTask(state, entryId, reason, at))
+    this.emit({
+      session: sessionId,
+      type: 'queue.entry_blocked',
+      detail: { entryId, reason },
+    })
+    return next
   }
 
   resume(sessionId: string, entryId: string): TaskQueueState {
-    return this.mutate(sessionId, (state, at) => resumeTask(state, entryId, at))
+    const next = this.mutate(sessionId, (state, at) => resumeTask(state, entryId, at))
+    this.emit({ session: sessionId, type: 'queue.entry_resumed', detail: { entryId } })
+    return next
   }
 
   pause(sessionId: string, entryId: string): TaskQueueState {
-    return this.mutate(sessionId, (state, at) => pauseTask(state, entryId, at))
+    const next = this.mutate(sessionId, (state, at) => pauseTask(state, entryId, at))
+    this.emit({ session: sessionId, type: 'queue.entry_paused', detail: { entryId } })
+    return next
   }
 
   complete(sessionId: string, entryId: string): TaskQueueState {
-    return this.mutate(sessionId, (state, at) => completeTask(state, entryId, at))
+    const next = this.mutate(sessionId, (state, at) => completeTask(state, entryId, at))
+    this.emit({
+      session: sessionId,
+      type: 'queue.entry_completed',
+      detail: { entryId, outcome: 'completed' },
+    })
+    return next
   }
 
   fail(sessionId: string, entryId: string, reason: string): TaskQueueState {
-    return this.mutate(sessionId, (state, at) => failTask(state, entryId, reason, at))
+    const next = this.mutate(sessionId, (state, at) => failTask(state, entryId, reason, at))
+    this.emit({
+      session: sessionId,
+      type: 'queue.entry_completed',
+      detail: { entryId, outcome: 'failed', reason },
+    })
+    return next
   }
 
   cancel(sessionId: string, entryId: string): TaskQueueState {
-    return this.mutate(sessionId, (state, at) => cancelTask(state, entryId, at))
+    const next = this.mutate(sessionId, (state, at) => cancelTask(state, entryId, at))
+    this.emit({ session: sessionId, type: 'queue.entry_cancelled', detail: { entryId } })
+    return next
   }
 
   reorder(sessionId: string, entryId: string, position: number): TaskQueueState {
-    return this.mutate(sessionId, (state, at) => reorderTask(state, entryId, position, at))
+    const next = this.mutate(sessionId, (state, at) => reorderTask(state, entryId, position, at))
+    this.emit({
+      session: sessionId,
+      type: 'queue.entry_reordered',
+      detail: { entryId, position },
+    })
+    return next
   }
 
   clear(sessionId: string): void {

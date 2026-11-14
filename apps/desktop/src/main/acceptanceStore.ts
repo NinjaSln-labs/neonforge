@@ -17,8 +17,17 @@ interface AcceptanceFile {
   records: Record<string, AcceptanceRecord>
 }
 
+export type AcceptanceEventSink = (event: {
+  session: string
+  type: string
+  detail: Record<string, unknown>
+}) => void
+
 export class AcceptanceStore {
-  constructor(private readonly filePath: string) {}
+  constructor(
+    private readonly filePath: string,
+    private readonly emit: AcceptanceEventSink = () => {},
+  ) {}
 
   private loadAll(): AcceptanceFile {
     try {
@@ -59,6 +68,11 @@ export class AcceptanceStore {
     const data = this.loadAll()
     data.records[sessionId] = record
     this.saveAll(data)
+    this.emit({
+      session: sessionId,
+      type: 'acceptance.criteria_derived',
+      detail: { recordId: record.id, source, items: record.items.map((i) => i.label) },
+    })
     return record
   }
 
@@ -84,6 +98,21 @@ export class AcceptanceStore {
     const data = this.loadAll()
     data.records[sessionId] = next
     this.saveAll(data)
+    const item = next.items.find((i) => i.id === itemId)
+    this.emit({
+      session: sessionId,
+      type:
+        status === 'passed'
+          ? 'acceptance.item_passed'
+          : status === 'failed'
+            ? 'acceptance.item_failed'
+            : 'acceptance.item_waived',
+      detail: {
+        recordId: next.id,
+        itemId,
+        ...(status === 'passed' ? { evidenceRef: item?.evidenceRef } : { reason: opts.reason }),
+      },
+    })
     return next
   }
 
@@ -97,6 +126,11 @@ export class AcceptanceStore {
       const ref = evidenceRefs[i]
       if (!ref) return
       next = markPassed(next, item.id, { evidenceRef: `verification:${ref}` })
+      this.emit({
+        session: sessionId,
+        type: 'acceptance.item_passed',
+        detail: { recordId: next.id, itemId: item.id, evidenceRef: `verification:${ref}` },
+      })
     })
     const data = this.loadAll()
     data.records[sessionId] = next
@@ -117,12 +151,33 @@ export class AcceptanceStore {
     const data = this.loadAll()
     data.records[sessionId] = waived
     this.saveAll(data)
+    this.emit({
+      session: sessionId,
+      type: 'acceptance.criteria_derived',
+      detail: { recordId: waived.id, source: 'manual', items: waived.items.map((i) => i.label) },
+    })
+    this.emit({
+      session: sessionId,
+      type: 'acceptance.item_waived',
+      detail: {
+        recordId: waived.id,
+        itemId: waived.items[0].id,
+        reason: '用户显式确认接受空验收',
+      },
+    })
     return waived
   }
 
   evaluate(sessionId: string): GateResult | null {
     const record = this.get(sessionId)
-    return record ? evaluateGate(record) : null
+    if (!record) return null
+    const gate = evaluateGate(record)
+    this.emit({
+      session: sessionId,
+      type: 'quality_gate.evaluated',
+      detail: { verdict: gate.verdict, blocking: gate.blocking, waived: gate.waived },
+    })
+    return gate
   }
 
   clear(sessionId: string): void {

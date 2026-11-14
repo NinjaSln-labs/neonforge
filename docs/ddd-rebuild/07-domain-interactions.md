@@ -63,22 +63,23 @@
 | `proposal.clarify` | — | Task | ask_user 澄清 | question, type, options | Domain | UI 候选、审计 |
 | `protocol.text_fallback` | — | Task | 文本标记降级 | marker, content_snip | Domain | 系统引导改用协议工具 |
 | `completion.evidence_missing` | — | Task | 证据门拒绝 | ok, missing, unverifiable | Domain | 回填引导、用户提示 |
-| `changeset.proposed` | — | ChangeSet（目标态） | 模型/工具产生真实变更 | changeId, files, baseHash | Domain | 审核 UI、交付 |
-| `changeset.reviewed` | — | ChangeSet（目标态） | 用户审核变更项 | changeId, itemId, decision | Domain | 应用/回滚 |
-| `changeset.applied` | — | ChangeSet（目标态） | 应用成功 | changeId, files | Domain | 交付包、工作区 |
-| `changeset.reverted` | — | ChangeSet（目标态） | 回滚成功 | changeId, files | Domain | 交付包、审计 |
-| `changeset.conflict_detected` | — | ChangeSet（目标态） | 基线不一致 | changeId, file, expected, actual | Domain | 阻止应用、用户提示 |
-| `queue.entry_enqueued` | — | TaskQueueEntry（目标态） | 任务入队 | entryId, taskRef, position | Domain | 队列 UI、调度 |
-| `queue.entry_started` | — | TaskQueueEntry（目标态） | 调度启动 | entryId, taskRef | Domain | 队列 UI、会话 |
-| `queue.entry_blocked` | — | TaskQueueEntry（目标态） | 任务等待用户决策/授权 | entryId, reason | Domain | 队列 UI、用户提示 |
-| `queue.entry_completed` | — | TaskQueueEntry（目标态） | 任务完成/失败/取消 | entryId, outcome | Domain | 队列 UI、审计 |
-| `usage.recorded` | — | UsageLedger（目标态） | 收到 Provider usage | entryId, provider, model, tokens, cache, cost | Domain | UI 用量、审计 |
-| `usage.budget_threshold_reached` | — | UsageLedger（目标态） | 达到用户预算阈值 | period, spent, limit | Domain | 用户提醒（不硬中断） |
-| `extension.registered` / `extension.activated` / `extension.deactivated` | — | Extension（目标态） | 扩展生命周期 | extensionId, kind, version | Domain | 插件 UI、工具目录 |
-| `extension.invocation_denied` | — | Extension（目标态） | 未注册/未激活/未授权调用 | extensionId, capability, reason | Domain | 安全审计、用户提示 |
-| `acceptance.criteria_derived` | — | AcceptanceRecord（目标态） | 从方案/DoD 派生验收项 | recordId, source, items | Domain | 交付 UI、门禁 |
-| `acceptance.item_passed` / `acceptance.item_failed` / `acceptance.item_waived` | — | AcceptanceRecord（目标态） | 验收项判定 | recordId, itemId, evidenceRef/reason | Domain | 门禁、交付 |
-| `quality_gate.evaluated` | — | AcceptanceRecord（目标态） | 门禁计算 | recordId, verdict, blockingItems | Domain | 关闭前置、交付包 |
+| `changeset.proposed` | — | ChangeSet（已实现） | 模型/工具产生真实变更 | changeId, files, baseHash | Domain | 审核 UI、交付 |
+| `changeset.reviewed` | — | ChangeSet（已实现） | 用户审核变更项 | changeId, itemId, decision | Domain | 应用/回滚 |
+| `changeset.applied` | — | ChangeSet（已实现） | 应用成功 | changeId, files | Domain | 交付包、工作区 |
+| `changeset.reverted` | — | ChangeSet（已实现） | 回滚成功 | changeId, files | Domain | 交付包、审计 |
+| `changeset.conflict_detected` | — | ChangeSet（已实现） | 基线不一致 | changeId, file, expected, actual | Domain | 阻止应用、用户提示 |
+| `queue.entry_enqueued` | — | TaskQueueEntry（已实现） | 任务入队 | entryId, taskRef, position | Domain | 队列 UI、调度 |
+| `queue.entry_started` | — | TaskQueueEntry（已实现） | 调度启动 | entryId, taskRef | Domain | 队列 UI、会话 |
+| `queue.entry_blocked` | — | TaskQueueEntry（已实现） | 任务等待用户决策/授权 | entryId, reason | Domain | 队列 UI、用户提示 |
+| `queue.entry_completed` | — | TaskQueueEntry（已实现） | 任务完成/失败/取消 | entryId, outcome | Domain | 队列 UI、审计 |
+| `queue.entry_resumed` / `queue.entry_paused` / `queue.entry_cancelled` / `queue.entry_reordered` | — | TaskQueueEntry（已实现） | 队列状态变化 | entryId, position? | Domain | 队列 UI、审计 |
+| `usage.recorded` | — | UsageLedger（已实现） | 收到 Provider usage | entryId, provider, model, tokens, cache, cost | Domain | UI 用量、审计 |
+| `usage.budget_threshold_reached` | — | UsageLedger（已实现） | 达到用户预算阈值 | period, spent, limit | Domain | 用户提醒（不硬中断） |
+| `extension.registered` / `extension.activated` / `extension.deactivated` | — | Extension（已实现） | 扩展生命周期 | extensionId, kind, version | Domain | 插件 UI、工具目录 |
+| `extension.invocation_denied` | — | Extension（已实现） | 未注册/未激活/未授权调用 | extensionId, capability, reason | Domain | 安全审计、用户提示 |
+| `acceptance.criteria_derived` | — | AcceptanceRecord（已实现） | 从方案/DoD 派生验收项 | recordId, source, items | Domain | 交付 UI、门禁 |
+| `acceptance.item_passed` / `acceptance.item_failed` / `acceptance.item_waived` | — | AcceptanceRecord（已实现） | 验收项判定 | recordId, itemId, evidenceRef/reason | Domain | 门禁、交付 |
+| `quality_gate.evaluated` | — | AcceptanceRecord（已实现） | 门禁计算 | recordId, verdict, blockingItems | Domain | 关闭前置、交付包 |
 
 ### 1.1 事件派生关系
 
@@ -133,11 +134,11 @@ flowchart TD
 | `chat:log` / `chat:export` | renderer → main | entry / — | void / `{ok,path,error}` | 是（追加/固定覆盖） | 写失败静默/无记录 | BC-06 |
 | `config:*` | renderer → main | key/provider/model/web patch | 配置值/操作结果 | 是（覆盖写） | 解密失败/落盘失败 | BC-07 |
 | `plugins:list` / `plugins:toggle` | renderer → main | — / name,active | 插件列表 / boolean | 是 | 未注册 → false | BC-09 |
-| `changeset:list/apply/revert`（目标态） | renderer → main | — / changeId, approved / changeId | 变更集 / 应用结果 / 回滚结果 | apply 非幂等（带基线校验）；revert 幂等 | 未授权/冲突/快照缺失 | BC-10 |
-| `queue:enqueue/list/pause/resume/cancel`（目标态） | renderer → main | taskRef/policy/entryId | 队列条目 | 命令幂等按 entryId；list 是查询 | 重复启动/状态漂移 | BC-11 |
-| `usage:query/export`（目标态） | renderer → main | period/filter | 用量汇总 / 导出路径 | 是（只读） | 无 usage/导出失败 | BC-12 |
-| `extensions:list/activate/deactivate/invoke`（目标态） | renderer → main | extensionId/capability/args | 扩展列表 / 结果 | 生命周期幂等；invoke 非幂等 | 未注册/未授权/连接失败 | BC-13 |
-| `acceptance:derive/list/attach-evidence/waive/evaluate`（目标态） | renderer → main | recordId/source/item/evidence | 验收记录 / 门禁结论 | derive 按任务边界幂等；mark 需证据 | 无来源/证据缺失/豁免无理由 | BC-14 |
+| `changeset:list/revert/clear` + `delivery:apply-diff/revert-diff`（已实现） | renderer → main | sessionId | 变更集 / 回滚结果 | revert 带基线校验；clear 幂等 | 未授权/冲突/快照缺失 | BC-10 |
+| `queue:enqueue/list/start/block/resume/pause/complete/fail/cancel/reorder/clear`（已实现） | renderer → main | sessionId/title/entryId/reason/position | 队列状态 | 命令按 entryId；list 是查询 | 重复启动/状态漂移 | BC-11 |
+| `usage:summary/export` + `budget:get/set`（已实现） | renderer → main | sessionId/settings | 用量汇总 / 预算状态 / 导出路径 | 查询只读；set 幂等 | 无 usage/导出失败 | BC-12 |
+| `extensions:list/toggle/authorize` + `mcp:config/save/refresh/status` + `git:read`（已实现） | renderer → main | extensionId/active/servers | 扩展列表 / 连接结果 / Git 只读数据 | 生命周期幂等；refresh 有并发保护 | 未注册/未授权/连接失败 | BC-13 |
+| `acceptance:derive/list/mark/waive/apply-evidence/evaluate/accept-empty/clear`（已实现） | renderer → main | sessionId/itemId/status/evidenceRefs | 验收记录 / 门禁结论 | derive 按任务边界重写；mark 需证据/理由 | 无来源/证据缺失/豁免无理由 | BC-14 |
 
 ---
 

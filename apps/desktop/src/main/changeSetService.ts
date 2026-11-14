@@ -48,8 +48,17 @@ export interface RevertResult {
   error?: string
 }
 
+export type ChangeSetEventSink = (event: {
+  session: string
+  type: string
+  detail: Record<string, unknown>
+}) => void
+
 export class ChangeSetService {
-  constructor(private readonly filePath: string) {}
+  constructor(
+    private readonly filePath: string,
+    private readonly emit: ChangeSetEventSink = () => {},
+  ) {}
 
   private loadAll(): ChangeSetFile {
     try {
@@ -110,6 +119,16 @@ export class ChangeSetService {
       }
       data.sets[sessionId] = applied
       this.saveAll(data)
+      this.emit({
+        session: sessionId,
+        type: 'changeset.proposed',
+        detail: { changeId: applied.id, files: [filePath], baseHash },
+      })
+      this.emit({
+        session: sessionId,
+        type: 'changeset.applied',
+        detail: { changeId: applied.id, files: [filePath] },
+      })
       return applied
     }
     let items = existing.items
@@ -129,6 +148,18 @@ export class ChangeSetService {
     }
     data.sets[sessionId] = next
     this.saveAll(data)
+    if (!found) {
+      this.emit({
+        session: sessionId,
+        type: 'changeset.proposed',
+        detail: { changeId: next.id, files: [filePath], baseHash },
+      })
+    }
+    this.emit({
+      session: sessionId,
+      type: 'changeset.applied',
+      detail: { changeId: next.id, files: [filePath] },
+    })
     return next
   }
 
@@ -142,6 +173,11 @@ export class ChangeSetService {
     const data = this.loadAll()
     data.sets[sessionId] = next
     this.saveAll(data)
+    this.emit({
+      session: sessionId,
+      type: 'changeset.reverted',
+      detail: { changeId: next.id, files: [filePath] },
+    })
     return next
   }
 
@@ -184,6 +220,20 @@ export class ChangeSetService {
     const data = this.loadAll()
     data.sets[sessionId] = next
     this.saveAll(data)
+    for (const file of reverted) {
+      this.emit({
+        session: sessionId,
+        type: 'changeset.reverted',
+        detail: { changeId: next.id, files: [file] },
+      })
+    }
+    for (const file of conflicted) {
+      this.emit({
+        session: sessionId,
+        type: 'changeset.conflict_detected',
+        detail: { changeId: next.id, file },
+      })
+    }
     return {
       ok: conflicted.length === 0 && reverted.length > 0,
       reverted,

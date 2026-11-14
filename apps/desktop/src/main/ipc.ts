@@ -24,7 +24,7 @@ import { registerLspTools, lsp } from './lsp.js'
 import { context } from './context.js'
 import { codeRag } from './codeRag.js'
 import { buildStandardPrefix, planPreheat, prefixCache, preheating } from './preheat.js'
-import { initPlugins, pluginRegistry } from './pluginSystem.js'
+import { initPlugins, pluginRegistry, setPluginTimelineSink } from './pluginSystem.js'
 import { compaction } from './compact.js'
 import { appendChatLog, exportChatLog } from './chatLog.js'
 import { logTimeline, timelineLogger } from './timelineLogger.js'
@@ -42,6 +42,10 @@ import { IPC_SCHEMAS, validateIpc } from './ipcSchema.js'
 
 export function registerIpc(): void {
   initTools()
+  // BC-13：扩展生命周期事件进时间线（无会话归属——默认日期日志）
+  setPluginTimelineSink((event) =>
+    logTimeline({ type: event.type, role: event.role ?? 'system', detail: event.detail }),
+  )
   initPlugins() // 08：注册 5 内置插件（生命周期钩子）
   registerLspTools(toolRegistry)
   // BC-12：预算阈值提醒去重（每进程周期；budget:set 重置）

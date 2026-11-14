@@ -84,6 +84,32 @@ export type TimelineEventType =
   | 'usage.recorded' // Provider 真实 usage 已入账（tokens/cost）
   | 'usage.budget_threshold_reached' // 周期预算达阈值（默认提醒一次；不硬中断）
   | 'usage.period_closed' // 周期结算（预留）
+  // —— ChangeSet（BC-10）——
+  | 'changeset.proposed' // 变更集产生（真实变更记录）
+  | 'changeset.reviewed' // 用户审核变更项
+  | 'changeset.applied' // 变更应用成功
+  | 'changeset.reverted' // 变更回滚成功
+  | 'changeset.conflict_detected' // 基线不一致，拒绝覆盖
+  // —— TaskQueue（BC-11）——
+  | 'queue.entry_enqueued' // 任务入队
+  | 'queue.entry_started' // 调度启动
+  | 'queue.entry_blocked' // 等待用户决策/授权
+  | 'queue.entry_resumed' // 阻塞恢复
+  | 'queue.entry_paused' // 暂停
+  | 'queue.entry_completed' // 完成/失败/取消终态（outcome）
+  | 'queue.entry_cancelled'
+  | 'queue.entry_reordered'
+  // —— Extension（BC-13）——
+  | 'extension.registered' // 扩展注册
+  | 'extension.activated' // 激活
+  | 'extension.deactivated' // 停用
+  | 'extension.invocation_denied' // 未注册/未激活/未授权调用
+  // —— Acceptance（BC-14）——
+  | 'acceptance.criteria_derived' // 从方案/DoD 派生验收项
+  | 'acceptance.item_passed' // 验收项通过
+  | 'acceptance.item_failed' // 验收项失败
+  | 'acceptance.item_waived' // 验收项豁免
+  | 'quality_gate.evaluated' // 门禁判定
   // —— Card：确认/授权卡 UI 生命周期（用户交互路径可观测——2026-08-15 补全）——
   | 'card.shown' // 卡弹出（载荷：card/name?/args?）
   | 'card.resolved' // 卡被确认/批准（载荷：card/action）
@@ -119,6 +145,10 @@ export interface TimelineEventSpec {
     | 'stuck'
     | 'problem'
     | 'usage'
+    | 'changeset'
+    | 'queue'
+    | 'extension'
+    | 'acceptance'
     | 'card'
     | 'decision'
     | 'proposal'
@@ -201,6 +231,76 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
   'usage.recorded': { domain: 'usage', role: 'system', detailKeys: ['provider', 'model', 'tokens', 'cost'] },
   'usage.budget_threshold_reached': { domain: 'usage', role: 'system', detailKeys: ['limit', 'spent'] },
   'usage.period_closed': { domain: 'usage', role: 'system', detailKeys: ['period', 'total'] },
+  'changeset.proposed': { domain: 'changeset', role: 'system', detailKeys: ['changeId', 'files'] },
+  'changeset.reviewed': {
+    domain: 'changeset',
+    role: 'system',
+    detailKeys: ['changeId', 'itemId', 'decision'],
+  },
+  'changeset.applied': { domain: 'changeset', role: 'system', detailKeys: ['changeId', 'files'] },
+  'changeset.reverted': { domain: 'changeset', role: 'system', detailKeys: ['changeId', 'files'] },
+  'changeset.conflict_detected': {
+    domain: 'changeset',
+    role: 'system',
+    detailKeys: ['changeId', 'file'],
+  },
+  'queue.entry_enqueued': {
+    domain: 'queue',
+    role: 'system',
+    detailKeys: ['entryId', 'taskRef', 'position'],
+  },
+  'queue.entry_started': { domain: 'queue', role: 'system', detailKeys: ['entryId', 'taskRef'] },
+  'queue.entry_blocked': { domain: 'queue', role: 'system', detailKeys: ['entryId', 'reason'] },
+  'queue.entry_resumed': { domain: 'queue', role: 'system', detailKeys: ['entryId'] },
+  'queue.entry_paused': { domain: 'queue', role: 'system', detailKeys: ['entryId'] },
+  'queue.entry_completed': {
+    domain: 'queue',
+    role: 'system',
+    detailKeys: ['entryId', 'outcome'],
+  },
+  'queue.entry_cancelled': { domain: 'queue', role: 'system', detailKeys: ['entryId'] },
+  'queue.entry_reordered': {
+    domain: 'queue',
+    role: 'system',
+    detailKeys: ['entryId', 'position'],
+  },
+  'extension.registered': {
+    domain: 'extension',
+    role: 'system',
+    detailKeys: ['extensionId', 'kind', 'version'],
+  },
+  'extension.activated': { domain: 'extension', role: 'system', detailKeys: ['extensionId'] },
+  'extension.deactivated': { domain: 'extension', role: 'system', detailKeys: ['extensionId'] },
+  'extension.invocation_denied': {
+    domain: 'extension',
+    role: 'system',
+    detailKeys: ['extensionId', 'capability', 'reason'],
+  },
+  'acceptance.criteria_derived': {
+    domain: 'acceptance',
+    role: 'system',
+    detailKeys: ['recordId', 'source', 'items'],
+  },
+  'acceptance.item_passed': {
+    domain: 'acceptance',
+    role: 'system',
+    detailKeys: ['recordId', 'itemId', 'evidenceRef'],
+  },
+  'acceptance.item_failed': {
+    domain: 'acceptance',
+    role: 'system',
+    detailKeys: ['recordId', 'itemId', 'reason'],
+  },
+  'acceptance.item_waived': {
+    domain: 'acceptance',
+    role: 'system',
+    detailKeys: ['recordId', 'itemId', 'reason'],
+  },
+  'quality_gate.evaluated': {
+    domain: 'acceptance',
+    role: 'system',
+    detailKeys: ['verdict', 'blocking', 'waived'],
+  },
   'card.shown': { domain: 'card', role: 'system', detailKeys: ['card'], dedupe: true },
   'card.resolved': { domain: 'card', role: 'system', detailKeys: ['card', 'action'] },
   'card.rejected': { domain: 'card', role: 'system', detailKeys: ['card', 'action'] },

@@ -45,6 +45,17 @@ interface Entry {
   state: ExtensionState
 }
 
+export type PluginEventSink = (event: {
+  type: string
+  role?: 'user' | 'assistant' | 'system' | 'tool'
+  detail: Record<string, unknown>
+}) => void
+
+let eventSink: PluginEventSink = () => {}
+export function setPluginTimelineSink(sink: PluginEventSink): void {
+  eventSink = sink
+}
+
 function nowIso(): string {
   return new Date().toISOString()
 }
@@ -105,7 +116,13 @@ export class PluginRegistry {
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e)
       const plugin: Plugin = { ...p, active: false }
-      this.plugins.set(p.name, { plugin, state: failedState(p, reason, at) })
+      const state = failedState(p, reason, at)
+      this.plugins.set(p.name, { plugin, state })
+      eventSink({
+        type: 'extension.registered',
+        role: 'system',
+        detail: { extensionId: state.id, kind: state.kind, version: state.version, failureReason: reason },
+      })
       return plugin
     }
 
@@ -121,6 +138,16 @@ export class PluginRegistry {
       plugin.active = false
     }
     this.plugins.set(p.name, { plugin, state })
+    eventSink({
+      type: 'extension.registered',
+      role: 'system',
+      detail: {
+        extensionId: state.id,
+        kind: state.kind,
+        version: state.version,
+        ...(state.failureReason ? { failureReason: state.failureReason } : {}),
+      },
+    })
     return plugin
   }
 
@@ -161,6 +188,11 @@ export class PluginRegistry {
         entry.state = activateExtension(entry.state, at)
         entry.plugin.activate?.()
         entry.plugin.active = true
+        eventSink({
+          type: 'extension.activated',
+          role: 'system',
+          detail: { extensionId: entry.state.id },
+        })
         return true
       } catch (e) {
         entry.state = markExtensionFailed(
@@ -181,6 +213,11 @@ export class PluginRegistry {
       entry.plugin.deactivate?.()
       entry.state = deactivateExtension(entry.state, at)
       entry.plugin.active = false
+      eventSink({
+        type: 'extension.deactivated',
+        role: 'system',
+        detail: { extensionId: entry.state.id },
+      })
       return true
     } catch (e) {
       entry.state = markExtensionFailed(
@@ -222,9 +259,26 @@ export class PluginRegistry {
   canInvoke(name: string, capabilityId: string): InvocationDecision {
     const entry = this.plugins.get(name)
     if (!entry) {
+      eventSink({
+        type: 'extension.invocation_denied',
+        role: 'system',
+        detail: { extensionId: name, capability: capabilityId, reason: '未知扩展' },
+      })
       return { allowed: false, requiresApproval: false, reason: `未知扩展：${name}` }
     }
-    return decideInvocation(entry.state, capabilityId)
+    const decision = decideInvocation(entry.state, capabilityId)
+    if (!decision.allowed) {
+      eventSink({
+        type: 'extension.invocation_denied',
+        role: 'system',
+        detail: {
+          extensionId: entry.state.id,
+          capability: capabilityId,
+          reason: decision.reason ?? '拒绝',
+        },
+      })
+    }
+    return decision
   }
 }
 
