@@ -71,6 +71,7 @@
   ② 计划确认后重试双回合 = `finishError` 自动续跑与队列发送并发、旧回合清掉新回合 working、`messagesRef` 滞后导致失败路径覆盖消息——应用层改为 sid 归属校验 / 同步 working / 排队消息继任与自动续跑择一 / 引擎消息写入同步 ref；重试场景 10/10、全量 71/71。另修正 `use.expect` 配置被 Playwright 忽略的问题（断言超时 30s / 单测 90s）。
   **2026-11-15 代码审查修复后**全量 72/72（新增「第二轮失败重试重放第二轮上下文」回归）；队列已改多槽 FIFO，既有 approve-files 用例改为等 working 释放后操作（不再依赖旧单槽覆盖行为）。**排队回归补齐后**全量 74/74（新增「连续排队两条按序送达」「停止回填输入框」）。）
 - [x] 4.5 回归：现有 P0 用例与既有 `conversationState` / `tools` / `verifyCompletionSystem` 测试全部仍通过
+- [x] 4.6 `npx prettier --check "src/**/*.{ts,tsx}" "tests/**/*.{ts,tsx}" "*.mjs" "*.config.*"`（qa.yml 格式门禁；2026-11-15 对齐 42 个既有文件，326 行格式化，无逻辑变更）
 
 ---
 
