@@ -2,6 +2,7 @@
 
 > 对应 Change：`ddd-rebuild-2026-11`
 > 目标：把 06/07 的领域模型映射到 NeonForge 现有工程结构，并为本次代码修正提供技术设计。
+> 状态（2026-11-15）：BC-10～BC-14 已于 2026-11-14 全部实现；文中 `目标态` 为设计阶段的来源标记，当前代码锚点见 `10-code-evidence.md §8`。
 
 ---
 
@@ -267,15 +268,13 @@ state transition (useConversationState.transition)
 
 ---
 
-## 6. 一致性、事件与 Outbox（后续）
+## 6. 一致性、事件与 Outbox
 
-### 6.1 本次不做、但设计上预留
+### 6.1 已落地与预留
 
-- **Outbox**：当前状态变更与事件 append 是两个独立动作（renderer transition → IPC → JSONL）。若要保证“状态落库后事件不丢”，应在 main 侧建立 outbox 表/文件，状态变更事务提交后投递；当前桌面单进程可用“事件文件 + 失败重试”轻量实现。
-- **事件版本**：`TimelineEvent` 增加 `v` 字段；查询按版本兼容。
-- **eventId**：`session + seq` 已可唯一标识；可增加 `eventId` 便于去重/重放。
-- **去重存储**：`dedupeKey` 接入 append 层的会话级 Set/持久化索引。
-- **DLQ**：事件投递失败进入死信文件，提供 query/重放。
+- **已落地（2026-11-14）**：事件版本（`version`）、`eventId`、去重存储、DLQ + 启动重放；代码证据见 `10-code-evidence.md §4`。
+- **预留（Outbox）**：当前状态变更与事件 append 仍是两个独立动作（renderer transition → IPC → JSONL）。若要保证“状态落库后事件不丢”，应在 main 侧建立 outbox 表/文件，状态变更事务提交后投递；当前桌面单进程可用“事件文件 + 失败重试”轻量实现。现有 DLQ/重放只保证“已发出的 append 失败不丢”，不构成跨存储事务保证。
+- **后续可选**：查询按事件版本兼容；Outbox 统一投递器。
 
 ### 6.2 一次事务修改一个聚合
 
