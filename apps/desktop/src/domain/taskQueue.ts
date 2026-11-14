@@ -176,3 +176,18 @@ export function reorderTask(state: TaskQueueState, entryId: string, position: nu
   const moved = { ...target, updatedAt: at }
   return { entries: [...entries.slice(0, index), moved, ...entries.slice(index)] }
 }
+
+/** 应用重启恢复：运行中任务不得假装仍在运行——转为 blocked 等用户确认（不自动续跑）。 */
+export function recoverInterruptedTasks(
+  state: TaskQueueState,
+  reason: string,
+  at: string,
+): TaskQueueState {
+  let changed = false
+  const entries = state.entries.map((entry) => {
+    if (entry.status !== 'running') return entry
+    changed = true
+    return { ...entry, status: 'blocked' as const, blockReason: reason, updatedAt: at }
+  })
+  return changed ? { entries } : state
+}

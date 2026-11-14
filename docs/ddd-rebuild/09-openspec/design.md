@@ -186,7 +186,7 @@ state transition (useConversationState.transition)
 - `completion:verify`：只代跑范围收紧；返回结构不变。
 - `planned-files:add`：调用时机从提议改为确认；契约不变。
 - `web_fetch`：无 IPC 变化（工具内部拦截）。
-- 目标态新增通道（本次不实现，仅设计）：`changeset:*`、`queue:*`、`usage:*`、`extensions:*`、`acceptance:*`；见 §10。
+- 新增通道（已实现）：`changeset:*`、`queue:*`、`usage:*`/`budget:*`、`extensions:*`/`mcp:*`、`acceptance:*`、`git:read`；见 §10。
 
 ### 4.2 协议工具（模型工具面）
 
@@ -331,7 +331,7 @@ state transition (useConversationState.transition)
 
 ---
 
-## 10. 目标态领域设计（BC-10～BC-14）
+## 10. 目标领域设计（BC-10～BC-14，均已实现）
 
 > 本节只做架构与契约设计，不改变本轮已落地的运行时代码。实现顺序见 `00-domain-blueprint.md §6`。
 
@@ -366,9 +366,9 @@ write/edit/diff
   → Task 完成/失败/取消 → queue.entry_completed
 ```
 
-- 领域模块：目标态 `domain/taskQueue.ts`（队列状态机；不复制 Task 状态）。
-- 调度器：main 目标态 `taskScheduler.ts`；每工作区单活跃。
-- 持久化：队列条目 + 断点；重启后 running → interrupted。
+- 领域模块：`domain/taskQueue.ts`（队列状态机；不复制 Task 状态）。
+- 调度：main `taskQueueStore`（单活跃 + 持久化）；renderer TaskPanel 发起启动/暂停/恢复；授权等待自动 blocked。
+- 持久化：队列条目 + 断点；重启后 running → blocked（`recoverInterruptedTasks`，等用户确认，不自动续跑）。
 - 与 BC-01：只消费 Task 事件，不反向修改任务确认位。
 
 ### 10.3 用量与成本（BC-12）

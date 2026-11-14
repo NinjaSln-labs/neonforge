@@ -93,11 +93,11 @@ NeonForge 的领域模型主干（用户决策驱动的任务状态机、证据�
 | A6 ProblemInstance | 无 |
 | A7 DeliveryPackage | 无（文档记录） |
 | A8 SessionTimeline | 无（文档记录缺口） |
-| A13 ChangeSet（目标态） | 新增：变更集/基线/审核/应用/回滚 |
-| A14 TaskQueueEntry（目标态） | 新增：队列/调度/阻塞/取消 |
-| A15 UsageLedger（目标态） | 新增：usage/成本/预算 |
-| A16 Extension（目标态） | 新增：注册/生命周期/信任 |
-| A17 AcceptanceRecord（目标态） | 新增：验收来源/证据/门禁 |
+| A13 ChangeSet（已实现） | 新增：变更集/基线/审核/应用/回滚 |
+| A14 TaskQueueEntry（已实现） | 新增：队列/调度/阻塞/取消 |
+| A15 UsageLedger（已实现） | 新增：usage/成本/预算 |
+| A16 Extension（已实现） | 新增：注册/生命周期/信任 |
+| A17 AcceptanceRecord（已实现） | 新增：验收来源/证据/门禁 |
 
 ---
 

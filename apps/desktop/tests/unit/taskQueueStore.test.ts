@@ -22,7 +22,9 @@ describe('TaskQueueStore（BC-11 持久化）', () => {
     expect(started.entries[0].status).toBe('running')
     expect(() => store.start('s1', started.entries[1].id)).toThrow(/运行/)
     const reopened = new TaskQueueStore(path.join(TMP, 'queue.json'))
-    expect(reopened.list('s1').entries[0].status).toBe('running')
+    // 重启语义：running 不假装仍在运行——首次访问转 blocked，等用户恢复
+    expect(reopened.list('s1').entries[0].status).toBe('blocked')
+    expect(reopened.list('s1').entries[0].blockReason).toMatch(/重启/)
   })
 
   it('block/resume/complete：阻塞原因与终态', () => {

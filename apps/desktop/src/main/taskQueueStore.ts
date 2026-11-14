@@ -12,6 +12,7 @@ import {
   failTask,
   cancelTask,
   reorderTask,
+  recoverInterruptedTasks,
   type TaskQueueState,
 } from '../domain/taskQueue.js'
 
@@ -24,6 +25,8 @@ export type QueueEventSink = (event: {
 }) => void
 
 export class TaskQueueStore {
+  private accessedSessions = new Set<string>()
+
   constructor(
     private readonly filePath: string,
     private readonly emit: QueueEventSink = () => {},
@@ -64,7 +67,35 @@ export class TaskQueueStore {
   }
 
   list(sessionId: string): TaskQueueState {
-    return this.loadAll()[sessionId] ?? emptyQueue()
+    const data = this.loadAll()
+    let state = data[sessionId] ?? emptyQueue()
+    // 重启后首次访问：running → blocked（进程内不误伤正在运行的任务）
+    if (!this.accessedSessions.has(sessionId)) {
+      this.accessedSessions.add(sessionId)
+      const recovered = recoverInterruptedTasks(
+        state,
+        '应用重启——请确认后恢复',
+        new Date().toISOString(),
+      )
+      if (recovered !== state) {
+        const before = state.entries
+        state = recovered
+        data[sessionId] = state
+        this.saveAll(data)
+        for (const entry of state.entries) {
+          if (entry.status !== 'blocked') continue
+          const wasRunning = before.find((e) => e.id === entry.id)?.status === 'running'
+          if (wasRunning) {
+            this.emit({
+              session: sessionId,
+              type: 'queue.entry_blocked',
+              detail: { entryId: entry.id, reason: entry.blockReason },
+            })
+          }
+        }
+      }
+    }
+    return state
   }
 
   enqueue(
@@ -171,6 +202,7 @@ export class TaskQueueStore {
   clear(sessionId: string): void {
     const data = this.loadAll()
     delete data[sessionId]
+    this.accessedSessions.delete(sessionId)
     this.saveAll(data)
   }
 }
