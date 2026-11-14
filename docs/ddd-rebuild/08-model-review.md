@@ -39,7 +39,7 @@
 | P1-03 | P1 | renderer 与 main 的计划确认镜像异步 | 极端时序下 main 门控仍关闭/仍开启，导致卡不渲染或越权 | `useConversationState.ts`（`confirm/reject`）、`ipc.ts` `session:plan-confirmed` | 确认转换 await 镜像结果；失败回滚/提示；增加竞态测试 | 已修复（2026-11-14）：`confirm/reject` await 镜像并重试 1 次；领域转换仍同步完成 |
 | P1-04 | P1 | IPC 契约无 schema 校验/生成 | preload、types.d.ts、main handler 三者可能漂移；调用方传入非法结构 | `preload.ts`、`renderer/types.d.ts`、`ipc.ts` | 生成式契约或 zod/JSON Schema 校验；契约测试 | 部分修复（2026-11-14）：`ipcSchema.ts` 轻量校验器 + `tools:execute`/`gateway:stream-chat` 入口校验 + 单测；其余 handler 迁移后续 |
 | P1-05 | P1 | `ConversationPanel.tsx` 3437 行，应用编排与 UI 渲染混在一起 | 可维护性差、DDD 应用层边界侵蚀、测试困难 | `ConversationPanel.tsx` 全文 | 拆分为应用服务 hooks（send/stream/toolLoop/decision）与展示组件 | 待修复（重构——大范围，后置） |
-| P1-06 | P1 | 演示/占位能力与生产能力混排 | 用户可能以为 DoD/数字交付/任务队列已可用；产品预期失真 | `MainWorkspace.tsx`（任务队列已真实）、`ConversationPanel.tsx:2568-2576`（demo 面板）、`DoDAlignPanel.tsx:9-13`（硬编码）、`DigitalDeliveryPanel.tsx:14-67`（demo） | 明确标记/隐藏；或将 DoD/验收接入真实方案验证计划 | 部分修复（2026-11-14）：任务队列/验收已真实；演示面板仍在，隔离机制化列入后续 |
+| P1-06 | P1 | 演示/占位能力与生产能力混排 | 用户可能以为 DoD/数字交付/任务队列已可用；产品预期失真 | `ConversationPanel.tsx`（demo 面板仅经测试 bridge 注入）、`DoDAlignPanel.tsx`（演示）、`DigitalDeliveryPanel.tsx`（demo） | 明确标记/隐藏；或将 DoD/验收接入真实方案验证计划 | 已修复（结构性）：生产运行无 `demo` 字段，演示仅在测试注入时可达；任务队列/验收已真实化 |
 | P1-07 | P1 | 交付包验收项在生产路径为空 | `DeliveryPackage` 有验收字段，但无 DoD 来源；用户看不到“按什么验收” | `MainWorkspace.tsx`（历史 `acceptance: []`） | 方案确认时捕获 `verificationPlan` 作为验收项；或引入 DoD 决策点 | 已修复（BC-14）：`acceptance:derive` 取 `verificationPlan`；门禁阻断关闭 |
 | P1-08 | P1 | 路径相对/绝对双形态与末段匹配启发式 | 可能把同名不同目录文件误判为已产出；完成核验误通过/误拒绝 | `conversationState.ts` 的 `inPlannedFiles/deriveDiffs/matchesPlannedPath` | 统一绝对路径规范；保存文件标识（inode/realpath）；补测试 | 已修复（2026-11-14）：`normalizeComparePath` 规范化 + 裸文件名多候选 fail-closed；单测覆盖 |
 | P1-09 | P1 | API Key/Web Key 明文 fallback 0600 | 本机其他进程可读；macOS 未签名场景的安全折衷 | `configStore.ts:1-3`、`24-28`、`92-106` | 优先 OS keychain；明文 fallback 加显式设置/到期提醒 | 保留（安全决策）：未签名 macOS 的 safeStorage 重启失效是已知约束；本轮不改存储协议，后续做显式同意/到期提醒 |
@@ -133,8 +133,8 @@
 
 ### 5.3 非阻塞但建议尽快处理
 
-- 已关闭（2026-11-14）：P1-03 镜像竞态、P1-08 路径规范化、P1-10 symlink、P2-01 事件命名、P2-04 原子写、P2-05 事件重复、P2-06 dedupe、P2-07 事件版本；P1-02 已有 DLQ/事件版本，跨上下文 Outbox 后续；P1-04 已有校验基础与关键入口。
-- 待后续：P1-05 ConversationPanel 拆分、P1-09 密钥存储安全决策、P2-08 文案规范；P1-06 演示隔离机制化。
+- 已关闭（2026-11-14）：P1-03 镜像竞态、P1-06 演示通道隔离（结构性）、P1-08 路径规范化、P1-10 symlink、P2-01 事件命名、P2-03 progressMode、P2-04 原子写、P2-05 事件重复、P2-06 dedupe、P2-07 事件版本；P1-02 已有 DLQ/事件版本/重放，跨上下文 Outbox 后续；P1-04 已有校验基础与关键入口。
+- 待后续：P1-05 ConversationPanel 拆分、P1-09 密钥存储安全决策、P2-08 文案规范。
 
 ### 5.4 通过标准（建议）
 
