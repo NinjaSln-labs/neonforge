@@ -43,4 +43,5 @@
 - [S2 提议解析](S2.md)（初稿——开工前定稿）
 - [V2 任务快照跨重启](V2-task-snapshot.md)（GitHub #11——2026-11-15）
 - [V2 结构化澄清与假设来源](V2-structured-clarify.md)（GitHub #13——2026-11-16）
+- [V2 信任模式预设与低危委托边界](V2-trust-modes.md)（GitHub #12——2026-11-16）
 - S3-S7：随开工前补（来源设计 §6 行）
