@@ -46,6 +46,8 @@ import { useToolApproval } from './useToolApproval'
 import { parseCandidates, stripCandidates, stripTags } from './candidates'
 // A-019（S4-St-1）：候选按钮共享组件——candidates 降级通道 + ask_user 选项按钮单源
 import { CandidateButtons, type CandidateOption } from './CandidateButtons'
+// ADR-014（GitHub #13）：ask_user.assumptions → 结构化假设核对卡
+import { AssumptionCheckCard } from './AssumptionCheckCard'
 // 2026-08-03 视觉审计 P1-6：内联 SVG 图标（替换 emoji 图标）
 import {
   IconBrain,
@@ -1016,18 +1018,39 @@ export default function ConversationPanel({
                           打字与点选等价）；本消息之后出现用户消息 = 已回应 → 按钮转已回复态（同 candidates 语义） */}
                       {tc.name === 'ask_user' &&
                         tc.status === 'done' &&
-                        Array.isArray(tc.args?.options) &&
                         (() => {
-                          // A-019：共享 CandidateButtons（原 ask_user 内联按钮块——S4-St-1 去重）
-                          const opts = (tc.args.options as CandidateOption[]).filter(
-                            (o) => o && typeof o.label === 'string',
-                          )
-                          if (opts.length === 0) return null
                           // 2026-11-15 审查修复：此处内层 map 的 i 是 toolCalls 索引（遮蔽消息索引），
                           // 已回复判定必须按**消息位置**切片——用 m 的引用反查（O(n)，候选卡极少）。
                           const replied = messages
                             .slice(messages.indexOf(m) + 1)
                             .some((mm) => mm.role === 'user')
+                          // ADR-014：假设核对清单优先——逐条选择「符合/不符合」+ 修正，提交结构化回答
+                          const assumptions = (
+                            Array.isArray(tc.args?.assumptions) ? tc.args.assumptions : []
+                          ).filter((a): a is string => typeof a === 'string' && a.trim().length > 0)
+                          if (assumptions.length > 0) {
+                            return (
+                              <AssumptionCheckCard
+                                question={
+                                  typeof tc.args?.question === 'string' ? tc.args.question : ''
+                                }
+                                assumptions={assumptions}
+                                replied={replied}
+                                onSubmit={(answer) => {
+                                  inputRef.current = answer
+                                  void sendRef.current()
+                                }}
+                              />
+                            )
+                          }
+                          // 无假设清单 → 既有单题选项按钮（A-019：CandidateButtons 单源）
+                          let opts: CandidateOption[] = []
+                          if (Array.isArray(tc.args?.options)) {
+                            opts = (tc.args.options as CandidateOption[]).filter(
+                              (o) => o && typeof o.label === 'string',
+                            )
+                          }
+                          if (opts.length === 0) return null
                           return (
                             <CandidateButtons
                               options={opts}

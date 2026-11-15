@@ -18,7 +18,7 @@
 | E03 | `ConversationMessageSent` 用户消息已发送 | 输入框发送 / 候选点选 / 系统引导（silent） | 用户、系统 | 输入：文本、@mention、`.neonforge`；输出：消息入列 + 历史组装 | `working` 中非 silent → 排队；silent → 打断当前轮 |
 | E04 | `AssistantTurnStarted` 搭档回合已开始 | `streamChat` 请求 | 搭档、Provider | 输入：system prompt、环境快照、批准清单、历史；输出：SSE 流 | provider 错误 → `GatewayError`；401 → `KeyInvalid` |
 | E05 | `UserClarified` 澄清已发生（可选） | `ask_user` 工具 | 搭档、用户 | 输入：question/type/options；输出：模型停轮等用户回复 | 无回复 → 超时/用户继续输入；模型重复提问 → `LoopGuard` |
-| E06 | `GoalProposed` 目标已提议 | `propose_goal` 或文本【目标确认】降级 | 搭档 | 输入：statement + assumptions；输出：`pending='goal'` + 决策内容快照 | 参数非法 → `ProtocolInvalid`；仅有文本标记 → `ProtocolTextFallback` |
+| E06 | `GoalProposed` 目标已提议 | `propose_goal` 或文本【目标确认】降级 | 搭档 | 输入：statement + assumptions[{text,source}]；输出：`pending='goal'` + 决策内容快照 | 参数非法 → `ProtocolInvalid`；仅有文本标记 → `ProtocolTextFallback` |
 | E07 | `GoalConfirmed` 目标已确认 | 用户点“确认目标” / 明确确认文本 | 用户 | 输入：确认动作；输出：`goalConfirmed=true`，任务边界重置 | 用户拒绝 → `GoalRejected` |
 | E08 | `PlanProposed` 方案已提议 | `propose_plan` / 文本【执行方案】降级 | 搭档 | 输入：summary、files[{path,reason}]、assumptions、verificationPlan；输出：`pending='plan'` | 目标未确认 → 硬序拒绝；参数非法 → 路径化错误 |
 | E09 | `PlanConfirmed` 方案已确认 | 用户点“确认执行” / 明确确认文本 | 用户 | 输入：确认动作；输出：`planConfirmed=true`，`plannedFiles` 由方案派生，main 镜像同步 | 用户拒绝 → `PlanRejected`；镜像失败 → 门控不一致风险 |

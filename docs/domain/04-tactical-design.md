@@ -166,7 +166,7 @@ interface Confirmation {
 interface PlanProposal {
   summary: string // 一句话方案
   files: Array<{ path: string; reason: string }> // 文件清单（含理由——plannedFiles 单一来源，A0 §5）
-  assumptions: string[] // 方案假设（技术选型/行为细节——用户审阅点——A0 §3.6）
+  assumptions: Assumption[] // 方案假设（技术选型/行为细节——用户审阅点——A0 §3.6；ADR-014 带来源）
   verificationPlan: string[] // 验证计划（怎么证明做成了——「解决确认」的证据承诺，A0 §4.2）
   status: 'proposed' | 'confirmed' | 'rejected'
 }
@@ -177,10 +177,16 @@ interface PlanProposal {
 ### 2.3b 意图确认值对象（2026-08-16 第 12 轮审计 #1 补——签名权威：设计文档 §3.2；§3.6 引用落地）
 
 ```typescript
+interface Assumption {
+  // 提议假设（ADR-014——确认卡可追溯来源）
+  text: string
+  source: 'model_inference' | 'user_choice' | 'clarification'
+}
+
 interface GoalProposal {
   // 目标提议（模型产出——A0 §3.6）
   statement: string // 一句话目标（原【目标确认】文本）
-  assumptions: string[] // 模型的关键假设（用户从未确认过的细节——必须显式呈现）
+  assumptions: Assumption[] // 模型的关键假设（用户从未确认过的细节——必须显式呈现）
 }
 
 interface CompletionClaim {

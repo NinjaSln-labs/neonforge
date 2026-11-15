@@ -62,9 +62,10 @@
 | 名称 | 类型 | 所属聚合 | 标识策略 / 相等性定义 |
 | :--- | :--- | :--- | :--- |
 | `ConversationState` | 聚合根状态 | A1 Task | 会话/任务级单实例；不可变转换返回新对象 |
-| `GoalProposal` | 值对象 | A1 | 按 `statement + assumptions` 值相等 |
-| `PlanProposal` | 值对象 | A1 | 按 `summary + files + assumptions + verificationPlan` 值相等 |
+| `GoalProposal` | 值对象 | A1 | 按 `statement + assumptions` 值相等；假设为 `Assumption`（ADR-014） |
+| `PlanProposal` | 值对象 | A1 | 按 `summary + files + assumptions + verificationPlan` 值相等；假设为 `Assumption`（ADR-014） |
 | `PlanFileEntry` | 值对象 | A1 | 按 `path + reason` 值相等 |
+| `Assumption` | 值对象 | A1 | 按 `text + source` 值相等；`source ∈ model_inference/user_choice/clarification`（ADR-014） |
 | `CompletionClaim` | 值对象 | A1 | 按 `summary + evidence` 值相等 |
 | `CompletionEvidence` | 值对象 | A1 | 按 `verification + diffs + pendingQuestions` 值相等 |
 | `VerificationItem` | 值对象 | A1 | 按 `command + output + passed` 值相等 |

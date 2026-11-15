@@ -3,9 +3,9 @@
 
 ## DoD（机器可验证断言——stage-gate 逐条执行）
 
-- [x] L1 全量绿：`npx vitest run`（71 文件 / 837 用例；ADR-013 初始 9 条 + 审查修复批 8 条——见 TDD 网格）
+- [x] L1 全量绿：`npx vitest run`（ADR-013 阶段时点：71 文件 / 837 用例；初始 9 条 + 审查修复批 8 条——见 TDD 网格）
 - [x] L2 契约：`npx tsc -p tsconfig.json --noEmit` + `npx tsc -p tsconfig.main.json --noEmit` 0 错
-- [x] L3 交互：`npx playwright test --project=interaction`（全量 78/78；新增恢复场景 3 条）
+- [x] L3 交互：`npx playwright test --project=interaction`（ADR-013 阶段时点：全量 78/78；新增恢复场景 3 条）
 - [x] 行为验收：种子化 V2 会话快照 → 重启/新页面恢复 pending 卡与确认位；损坏快照不崩、旧 V1 存档可读；恢复待授权工具卡可见且启动时间线不出现伪造的 `session.pending_set`/`decision.requested`/`decision.resolved`
 - [x] 审计状态：本阶段无 open 审计项
 - [x] 覆盖矩阵已更新（`docs/tests/coverage-matrix.md`）

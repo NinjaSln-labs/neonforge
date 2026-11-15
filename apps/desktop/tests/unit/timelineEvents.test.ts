@@ -212,7 +212,7 @@ describe('proposal.goal 事件（S7——A0 审校 P1-3 补登）', () => {
   it('validateTimelineEvent：目标提议载荷（statement + assumptions）通过校验', () => {
     const warns = validateTimelineEvent('proposal.goal', {
       statement: '做一个待办应用',
-      assumptions: ['使用 React 19'],
+      assumptions: [{ text: '使用 React 19', source: 'model_inference' }],
     })
     expect(warns).toEqual([])
   })

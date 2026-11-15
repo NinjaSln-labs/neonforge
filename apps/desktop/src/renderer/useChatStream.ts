@@ -332,7 +332,11 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
           ? {
               statement: goalMark[1]?.trim() ?? (initialPrompt || content.trim()),
               // V1.5-S4 退役标注——extractAssumptionsSection 为假设提取（文本节提取，非解析），见 ADR-009
-              assumptions: extractAssumptionsSection(content),
+              // ADR-014：文本降级无来源信息 → 全部记为模型推断
+              assumptions: extractAssumptionsSection(content).map((text) => ({
+                text,
+                source: 'model_inference' as const,
+              })),
             }
           : undefined
       // V1.5-S4 退役标注——兜底调用（受 fallbackDetected 守卫：无降级标记才解析），见 ADR-009

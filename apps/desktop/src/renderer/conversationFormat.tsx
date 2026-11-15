@@ -21,15 +21,34 @@ export function fmtToolResult(r: { ok: boolean; data?: unknown }): string {
 }
 
 // A-008：关键假设/验证计划列表渲染共享（目标卡 + 方案卡共用）
-export function AssumptionList({ items }: { items: string[] }): React.ReactElement | null {
+const ASSUMPTION_SOURCE_LABEL: Record<string, string> = {
+  user_choice: '你的选择',
+  clarification: '你的澄清',
+  model_inference: '模型推断',
+}
+
+export function AssumptionList({
+  items,
+}: {
+  items: Array<string | { text: string; source?: string }>
+}): React.ReactElement | null {
   if (!items || items.length === 0) return null
   return (
     <div className="nf-confirmcard__plan-section">
       <div className="nf-confirmcard__plan-label">关键假设</div>
       <ul>
-        {items.map((a, idx) => (
-          <li key={idx}>{a}</li>
-        ))}
+        {items.map((a, idx) => {
+          // ADR-014：结构化假设带来源标签；旧 string[]（旧存档/旧模型输出）防御性兼容
+          const text = typeof a === 'string' ? a : a?.text
+          if (!text) return null
+          const label = typeof a === 'string' ? '' : ASSUMPTION_SOURCE_LABEL[a.source ?? '']
+          return (
+            <li key={idx}>
+              {text}
+              {label ? <span className="nf-assumption__source">{label}</span> : null}
+            </li>
+          )
+        })}
       </ul>
     </div>
   )

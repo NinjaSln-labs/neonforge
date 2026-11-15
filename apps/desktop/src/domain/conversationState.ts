@@ -14,10 +14,19 @@
 // 值对象（设计 §3.2）
 // ============================================================================
 
+/** 假设来源（ADR-014）——确认卡可追溯「用户确认过」与「模型自行假定」 */
+export type AssumptionSource = 'model_inference' | 'user_choice' | 'clarification'
+
+/** 一条提议假设（文本 + 来源） */
+export interface Assumption {
+  text: string
+  source: AssumptionSource
+}
+
 /** 目标提议（模型产出） */
 export interface GoalProposal {
   statement: string // 一句话目标（原【目标确认】文本）
-  assumptions: string[] // 模型的关键假设（用户从未确认过的细节——必须显式呈现）
+  assumptions: Assumption[] // 模型的关键假设（用户从未确认过的细节——必须显式呈现）
 }
 
 /** 方案文件条目 */
@@ -30,7 +39,7 @@ export interface PlanFileEntry {
 export interface PlanProposal {
   summary: string // 一句话方案
   files: Array<{ path: string; reason: string }> // 文件清单（含理由——A0 §5 派生源）
-  assumptions: string[] // 方案假设（技术选型/行为细节——用户审阅点）
+  assumptions: Assumption[] // 方案假设（技术选型/行为细节——用户审阅点）
   verificationPlan: string[] // 验证计划（怎么证明做成了——「已解决」的证据承诺）
 }
 

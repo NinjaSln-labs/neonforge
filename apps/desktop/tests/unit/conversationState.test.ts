@@ -45,7 +45,7 @@ import {
 // —— 测试夹具（值对象——§9.2 测试对象 1：构造即校验） ——
 const goal = (statement: string, assumptions: string[] = []): GoalProposal => ({
   statement,
-  assumptions,
+  assumptions: assumptions.map((text) => ({ text, source: 'model_inference' })),
 })
 const plan = (
   files: Array<{ path: string; reason: string }>,
@@ -786,11 +786,11 @@ describe('值对象——结构契约与快照', () => {
   it('PlanProposal：summary + files（含理由）+ assumptions + verificationPlan（拍板 1 只读呈现的数据基础）', () => {
     const p = plan([{ path: '/test/a.js', reason: '入口' }], {
       summary: '用 Vite 搭',
-      assumptions: ['Node 20'],
+      assumptions: [{ text: 'Node 20', source: 'model_inference' }],
       verificationPlan: ['npm run build'],
     })
     expect(p.files[0].reason).toBe('入口')
-    expect(p.assumptions).toContain('Node 20')
+    expect(p.assumptions.map((a) => a.text)).toContain('Node 20')
     expect(p.verificationPlan).toContain('npm run build')
   })
 

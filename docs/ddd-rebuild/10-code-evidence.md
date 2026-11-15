@@ -1,7 +1,7 @@
 # 10 · 代码证据索引
 
 > 目的：保证 `01–09` 的每条“现状”断言都可回溯到源码位置。
-> 行号按 2026-11-15 当前文件刷新（审查修复与格式化之后）；若行号漂移，以括号内符号名为准。
+> 行号按 2026-11-16 当前文件刷新（ADR-014 结构化澄清与格式化之后）；若行号漂移，以括号内符号名为准。
 > 路径缩写：`R/` = `apps/desktop/src/renderer/`，`M/` = `apps/desktop/src/main/`，`D/` = `apps/desktop/src/domain/`。
 
 ---
@@ -10,34 +10,35 @@
 
 | 文档断言 | 证据 |
 | :--- | :--- |
-| Task 聚合类型与 18 个状态字段 | `D/conversationState.ts:111-129`（`ConversationState`、`TaskState`） |
-| 决策点种类 `goal/plan/approval/resolution/system_clarify` | `D/conversationState.ts:89`（`DecisionKind`）、`D/conversationState.ts:748-776`（`deriveDecisionPoint`） |
-| 单 PENDING 不变量 | `D/conversationState.ts:306-319`（`setPending`） |
-| 用户确认 → 任务边界重置（清计划清单/产出/批准/拒绝记忆） | `D/conversationState.ts:152-226`（`userDecided`） |
-| 拒绝必须带原因 | `D/conversationState.ts:265-286`（`approvalDecided`） |
-| 方案确认派生计划清单（唯一派生点） | `D/conversationState.ts:945-951`（`derivePlannedFiles`）、`884-909`（`deriveDiffs`/`matchesPlannedPath`） |
-| 完成核验汇总（证据 + 计划产出） | `D/conversationState.ts:830-876`（`verifyCompletion`） |
-| 证据回填与缺失项 | `D/conversationState.ts:915-934`（`buildEvidenceBackfill`） |
-| 进展保证与计划完成判定 | `D/conversationState.ts:971-1003`（`decideProgressGuarantee`）、`1004-1009`（`plannedComplete`） |
-| 结构化方案/完成声明消费标记 | `D/conversationState.ts:1013-1034`（`isStructuredProposal`/`isConsumedProposal`） |
-| 停止续聊判定 | `D/conversationState.ts:1064-1069`（`shouldStopContinuation`） |
+| Task 聚合类型与 18 个状态字段 | `D/conversationState.ts:120-137`（`ConversationState`、`TaskState`） |
+| 决策点种类 `goal/plan/approval/resolution/system_clarify` | `D/conversationState.ts:98`（`DecisionKind`）、`D/conversationState.ts:757-785`（`deriveDecisionPoint`） |
+| 单 PENDING 不变量 | `D/conversationState.ts:315-328`（`setPending`） |
+| 用户确认 → 任务边界重置（清计划清单/产出/批准/拒绝记忆） | `D/conversationState.ts:161-235`（`userDecided`） |
+| 拒绝必须带原因 | `D/conversationState.ts:274-295`（`approvalDecided`） |
+| 方案确认派生计划清单（唯一派生点） | `D/conversationState.ts:954-960`（`derivePlannedFiles`）、`893-918`（`deriveDiffs`/`matchesPlannedPath`） |
+| 完成核验汇总（证据 + 计划产出） | `D/conversationState.ts:839-885`（`verifyCompletion`） |
+| 证据回填与缺失项 | `D/conversationState.ts:924-943`（`buildEvidenceBackfill`） |
+| 进展保证与计划完成判定 | `D/conversationState.ts:980-1012`（`decideProgressGuarantee`）、`1013-1018`（`plannedComplete`） |
+| 结构化方案/完成声明消费标记 | `D/conversationState.ts:1022-1043`（`isStructuredProposal`/`isConsumedProposal`） |
+| 停止续聊判定 | `D/conversationState.ts:1073-1078`（`shouldStopContinuation`） |
 | 停滞检测与引导注入 | `D/agentLoop.ts:208-259`（`detectStuck`）、`263-334`（nudges） |
 | 回合进展评估与强制工具 | `D/agentLoop.ts:127-189`（`evaluateTurnProgress`）、`D/agentLoop.ts:24-44`（`TurnProgress`） |
 | 确认意图识别（文本降级） | `D/agentLoop.ts:54-78`（`isConfirmIntent`）、`84-87`（`isApprovalIntent`） |
 | 目标兜底触发 | `D/agentLoop.ts:367-377`（`goalFallbackTrigger`） |
 | 任务状态跨重启快照（ADR-013） | `D/taskSnapshot.ts`（`toTaskSnapshot`/`fromTaskSnapshot` 全字段+校验+聚合不变量）、`R/sessionStore.ts`（V2 消息+任务同记录）、`R/useConversationState.ts`（`restoreTaskState`）、`R/useMessageStore.ts`（恢复/持久化）、`R/MainWorkspace.tsx`（`handleTaskStateRestored` 确认位镜像） |
+| 结构化澄清与假设来源（ADR-014） | `D/conversationState.ts:18-25`（`AssumptionSource`/`Assumption`）、`D/protocolTools.ts:70-220`（`ask_user.assumptions` 与提议假设 schema）、`D/protocolTools.ts:243-292`（`checkAssumptions`/`normalizeAssumptions`）、`R/AssumptionCheckCard.tsx`（假设核对卡）、`R/conversationFormat.tsx`（来源标签）、`R/useChatStream.ts`（文本降级假设来源） |
 
 ## 2. 门控与动作属性
 
 | 文档断言 | 证据 |
 | :--- | :--- |
-| 只读命令白名单与命令链递归 | `D/conversationState.ts:356-472`（`BASH_READONLY_HEADS`、危险参数形态） |
-| 只读判定入口（供 main 消费） | `D/conversationState.ts:473-532`（`classifyReadonly`） |
-| 副作用动作判定 | `D/conversationState.ts:551-556`（`isSideEffectAction`） |
-| 会话级门控（pending/goal） | `D/conversationState.ts:572-609`（`sessionGate`） |
-| 动作级门控（plan/trust/delegate） | `D/conversationState.ts:655-699`（`actionGate`） |
-| 可执行判定 | `D/conversationState.ts:704-734`（`canExecute`） |
-| 系统可代跑判定（当前实现接受 network-read） | `D/conversationState.ts:782-786`（`isSystemVerifiable`） |
+| 只读命令白名单与命令链递归 | `D/conversationState.ts:365-481`（`BASH_READONLY_HEADS`、危险参数形态） |
+| 只读判定入口（供 main 消费） | `D/conversationState.ts:482-541`（`classifyReadonly`） |
+| 副作用动作判定 | `D/conversationState.ts:560-565`（`isSideEffectAction`） |
+| 会话级门控（pending/goal） | `D/conversationState.ts:581-618`（`sessionGate`） |
+| 动作级门控（plan/trust/delegate） | `D/conversationState.ts:664-708`（`actionGate`） |
+| 可执行判定 | `D/conversationState.ts:713-743`（`canExecute`） |
+| 系统可代跑判定（当前实现接受 network-read） | `D/conversationState.ts:791-795`（`isSystemVerifiable`） |
 | 主进程只读命令判定 | `M/tools.ts:601-606`（`isReadOnlyBash`） |
 | 权限规则裁决与持久化（BC-02） | `M/tools.ts`（`canonicalRuleArg`/`matchesRule`/`selectRule`：deny > allow > ask、真实字段匹配、路径归一、bash 链守卫、ask 来源校验）、`M/permissionRulesStore.ts`（校验/0600/原子写/单条容错）、`M/ipc.ts`（`permissions:list`/`permissions:set`）、`P/preload.ts`（`permissions`）、`R/SettingsPanel.tsx`（规则编辑/保存串行化）、`R/useChatStream.ts`/`useToolApproval.ts`（auto/user 来源） |
 | bash 工具的预授权调用 | `M/tools.ts:709-716`（`bash` 注册，`preApproval`） |
@@ -56,9 +57,9 @@
 
 | 文档断言 | 证据 |
 | :--- | :--- |
-| 协议工具定义（goal/plan/completion/ask_user） | `D/protocolTools.ts:68-186`（`PROTOCOL_TOOL_DEFS`） |
-| 参数校验（一层数组、路径形态） | `D/protocolTools.ts:225-319`（`validate`） |
-| 决策分派（setPending/clarify/reject/invalid） | `D/protocolTools.ts:381-478`（`decide`） |
+| 协议工具定义（goal/plan/completion/ask_user） | `D/protocolTools.ts:70-220`（`PROTOCOL_TOOL_DEFS`） |
+| 参数校验（一层数组、路径形态） | `D/protocolTools.ts:306-412`（`validate`） |
+| 决策分派（setPending/clarify/reject/invalid） | `D/protocolTools.ts:475-573`（`decide`） |
 | 方案解析（summary + files） | `D/planProposalParser.ts`（`parsePlanProposal`） |
 | 完成声明解析（verification 非空） | `D/completionClaimParser.ts`（`parseCompletionClaim`） |
 | 文本完成声明降级解析 | `D/completionClaimParser.ts`（`parseTextCompletionClaim`） |
@@ -105,7 +106,7 @@
 | 项目初始化（不覆盖已有目录） | `M/projectInit.ts` |
 | 环境检测 | `M/envManager.ts` |
 | 服务与端口 | `M/serviceManager.ts` |
-| 完成核验代跑 | `M/verification.ts:15-61`（`VerificationResult`/`runOne`）、`D/conversationState.ts:782-786`（`isSystemVerifiable`） |
+| 完成核验代跑 | `M/verification.ts:15-61`（`VerificationResult`/`runOne`）、`D/conversationState.ts:791-795`（`isSystemVerifiable`） |
 | Web 访问（私网/云元数据拦截 + 手动逐跳重定向校验） | `M/webTools.ts`（`web_fetch`） |
 | 配置存储（env/凭据文件优先 + safeStorage；明文 fallback 显式 opt-in） | `M/configStore.ts` |
 | 插件注册表 | `M/pluginSystem.ts:79-282`（`PluginRegistry`）、`286-337`（`BUILTIN_EXTENSIONS`） |

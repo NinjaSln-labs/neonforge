@@ -193,10 +193,10 @@ state transition (useConversationState.transition)
 
 | 工具 | 用途 | 关键约束 |
 | :--- | :--- | :--- |
-| `propose_goal` | 目标确认提议 | `statement` 必填；`assumptions` 可选 |
-| `propose_plan` | 方案提议 | `summary` + 非空 `files[{path,reason}]`；goal 未确认 → 硬序拒绝 |
+| `propose_goal` | 目标确认提议 | `statement` 必填；`assumptions` 可选（`{text,source}[]`，旧 string[] 兼容） |
+| `propose_plan` | 方案提议 | `summary` + 非空 `files[{path,reason}]`；`assumptions` 支持 `{text,source}[]`；goal 未确认 → 硬序拒绝 |
 | `report_completion` | 完成声明 | `summary` + 非空 `verification[{command,passed}]`；goal+plan 未确认 → 硬序拒绝 |
-| `ask_user` | 会话级澄清 | 任何时点合法；不置决策点；可带 options |
+| `ask_user` | 会话级澄清 | 任何时点合法；不置决策点；可带 options + `assumptions`（假设核对卡） |
 
 硬约束：数组一层为限；`additionalProperties:false`；`files[].path` 经 `splitPathReason` + `isLikelyPath` 校验。
 
@@ -297,6 +297,7 @@ state transition (useConversationState.transition)
 | web_fetch | 拒私网 + 手动重定向 | 安全 vs 本地文档调试（走 open/curl） |
 | pid 清理 | 跳过 <=0 | 安全 vs 可能漏清异常 pid（正常 pid 不受影响） |
 | Outbox | 轻量 Outbox + 跨存储事务性 WAL 已实现并硬化（2026-11-15） | 已发出事件不丢 / 状态与事件一致 vs 每次写入多一次 fsync |
+| 结构化澄清 | `ask_user.assumptions` 核对卡 + 提议假设 `{text,source}`（ADR-014） | 用户逐条核对降低目标歧义 vs 模型需标注来源、参数面扩大 |
 
 ---
 

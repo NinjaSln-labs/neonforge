@@ -157,6 +157,47 @@ describe('validateProtocolArgs（协议参数校验器——V1.5 Task 1.1）', (
     expect(bad.errors.some((e) => e.includes('type'))).toBe(true)
   })
 
+  it('ask_user assumptions：字符串数组 ≤6 合格；超限/非字符串 → errors 含 "assumptions"', () => {
+    expect(
+      validateProtocolArgs('ask_user', {
+        question: '这些理解对吗？',
+        type: 'risk_confirmation',
+        assumptions: ['使用原生 HTML', '数据存 localStorage'],
+      }),
+    ).toEqual({ ok: true })
+    const tooMany = validateProtocolArgs('ask_user', {
+      question: '？',
+      type: 'missing_info',
+      assumptions: ['a', 'b', 'c', 'd', 'e', 'f', 'g'],
+    })
+    expect(tooMany.ok).toBe(false)
+    if (tooMany.ok) return
+    expect(tooMany.errors.some((e) => e.includes('assumptions'))).toBe(true)
+    const badType = validateProtocolArgs('ask_user', {
+      question: '？',
+      type: 'missing_info',
+      assumptions: ['ok', 3],
+    })
+    expect(badType.ok).toBe(false)
+    if (badType.ok) return
+    expect(badType.errors.some((e) => e.includes('assumptions[1]'))).toBe(true)
+  })
+
+  it('propose_goal assumptions 结构化来源：合法 source 保留；非法 source → errors 含 "source"', () => {
+    const ok = validateProtocolArgs('propose_goal', {
+      statement: '做一个待办应用',
+      assumptions: [{ text: '用 React', source: 'clarification' }],
+    })
+    expect(ok).toEqual({ ok: true })
+    const bad = validateProtocolArgs('propose_goal', {
+      statement: '做一个待办应用',
+      assumptions: [{ text: '用 React', source: 'user' }],
+    })
+    expect(bad.ok).toBe(false)
+    if (bad.ok) return
+    expect(bad.errors.some((e) => e.includes('source'))).toBe(true)
+  })
+
   it('未知工具 → { ok: false, errors }（防御）', () => {
     const r = validateProtocolArgs('nonexistent', {})
     expect(r.ok).toBe(false)
@@ -218,6 +259,7 @@ describe('decideProtocolToolCall（协议工具调用乱序矩阵——V1.5 Task
         { label: 'A', description: '方案 A' },
         { label: 'B', description: '' },
       ],
+      assumptions: [],
     })
   })
 
@@ -233,6 +275,7 @@ describe('decideProtocolToolCall（协议工具调用乱序矩阵——V1.5 Task
       question: '验证命令跑哪个？',
       type: 'suggestion',
       options: [],
+      assumptions: [],
     })
   })
 
@@ -266,10 +309,37 @@ describe('decideProtocolToolCall（协议工具调用乱序矩阵——V1.5 Task
     expect(r.content.kind).toBe('goal')
     expect(r.content.proposal).toEqual({
       statement: '做一个待办应用',
-      assumptions: ['数据存内存即可', '单用户本地使用'],
+      assumptions: [
+        { text: '数据存内存即可', source: 'model_inference' },
+        { text: '单用户本地使用', source: 'model_inference' },
+      ],
     })
     expect(typeof r.content.since).toBe('string')
     expect(r.content.since.length).toBeGreaterThan(0)
+  })
+
+  it('propose_goal 结构化假设：source 原样映射；字符串缺省 model_inference', () => {
+    const r = decideProtocolToolCall(state(), 'propose_goal', {
+      statement: '做一个待办应用',
+      assumptions: [{ text: '用户要单页', source: 'clarification' }, '数据存 localStorage'],
+    })
+    expect(r.action).toBe('pending')
+    if (r.action !== 'pending') return
+    expect((r.content.proposal as { assumptions: unknown[] }).assumptions).toEqual([
+      { text: '用户要单页', source: 'clarification' },
+      { text: '数据存 localStorage', source: 'model_inference' },
+    ])
+  })
+
+  it('ask_user assumptions 映射到 clarify.content（假设核对卡数据源）', () => {
+    const r = decideProtocolToolCall(state(), 'ask_user', {
+      question: '这些理解对吗？',
+      type: 'risk_confirmation',
+      assumptions: ['使用原生 HTML', '数据存 localStorage'],
+    })
+    expect(r.action).toBe('clarify')
+    if (r.action !== 'clarify') return
+    expect(r.content.assumptions).toEqual(['使用原生 HTML', '数据存 localStorage'])
   })
 
   it('goal 已确认 plan 未确认：propose_plan 合法 → pending:plan，files/summary/verificationPlan 映射', () => {
@@ -285,7 +355,7 @@ describe('decideProtocolToolCall（协议工具调用乱序矩阵——V1.5 Task
     expect(r.content.proposal).toEqual({
       summary: '单文件落地首页',
       files: [{ path: 'index.html', reason: '新建首页' }],
-      assumptions: ['纯静态页即可'],
+      assumptions: [{ text: '纯静态页即可', source: 'model_inference' }],
       verificationPlan: ['npx vitest run'],
     })
   })

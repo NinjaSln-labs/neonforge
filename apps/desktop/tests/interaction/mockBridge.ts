@@ -61,11 +61,13 @@ export const toolCall = {
     question: string,
     type: string,
     options: Array<{ label: string; description?: string }> = [],
+    assumptions: string[] = [],
   ): StreamChunk =>
     chunk.tool('ask_user', {
       question,
       type,
       ...(options.length ? { options } : {}),
+      ...(assumptions.length ? { assumptions } : {}),
     }),
 }
 

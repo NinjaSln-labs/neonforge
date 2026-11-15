@@ -57,10 +57,10 @@
 | `card.resolved` / `card.rejected` / `card.dismissed` | — | UI 卡 | 卡确认/拒绝/消失 | card, action, cause | Domain（UI 生命周期） | 时间线、审计 |
 | `decision.requested` | — | Task | 决策点出现 | kind, since | Domain | UI 卡、审计 |
 | `decision.resolved` | — | Task | 决策确认/拒绝 | point, action, reason | Domain | 回填模型、审计 |
-| `proposal.goal` | — | Task | GoalProposal 结构化解析 | statement, assumptions | Domain | 决策点、审计 |
+| `proposal.goal` | — | Task | GoalProposal 结构化解析 | statement, assumptions[{text,source}] | Domain | 决策点、审计 |
 | `proposal.plan` | — | Task | PlanProposal 结构化解析 | ok, summary, files/reason | Domain | 决策点、审计 |
 | `proposal.completion` | — | Task | CompletionClaim 结构化解析 | ok, summary, verification, pendingQuestions | Domain | 证据门、审计 |
-| `proposal.clarify` | — | Task | ask_user 澄清 | question, type, options | Domain | UI 候选、审计 |
+| `proposal.clarify` | — | Task | ask_user 澄清 | question, type, options, assumptions? | Domain | UI 候选/假设核对、审计 |
 | `protocol.text_fallback` | — | Task | 文本标记降级 | marker, content_snip | Domain | 系统引导改用协议工具 |
 | `completion.evidence_missing` | — | Task | 证据门拒绝 | ok, missing, unverifiable | Domain | 回填引导、用户提示 |
 | `changeset.proposed` | — | ChangeSet（已实现） | 模型/工具产生真实变更 | changeId, files, baseHash | Domain | 审核 UI、交付 |

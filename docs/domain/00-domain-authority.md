@@ -164,8 +164,8 @@ ActionAttribute {
 
 ```
 模型产出提议（结构化值对象——非文本标记）：
-  GoalProposal{ statement, assumptions }          // 目标提议（含关键假设）
-  PlanProposal{ summary, files[{path,reason}], assumptions[], verificationPlan[] }  // 方案提议
+  GoalProposal{ statement, assumptions: Assumption[] }          // 目标提议（含关键假设+来源）
+  PlanProposal{ summary, files[{path,reason}], assumptions: Assumption[], verificationPlan[] }  // 方案提议
   CompletionClaim{ summary, evidence }            // 完成声明（含证据——§4.2）
   ── 提议本身不产生任何状态变化，只进入「待求值」──
 系统派生决策点（确定性纯函数 deriveDecisionPoint(state, proposals, pendingActions)）：
@@ -179,6 +179,7 @@ ActionAttribute {
 
 1. **决策点 = 状态 × 提议 × 动作属性的确定性函数**——同一输入永远同一决策点；模型措辞不参与判定（原 pendingCardToShow 以模型文本为输入的建模废除）
 2. **提议是值对象**（结构化内容：假设/证据/验证计划）——不是文本标记；解析层（parsePlanProposal/parseCompletionClaim）负责从模型输出结构化，判定层只消费结构
+2b. **假设来源可追溯（ADR-014）**：`Assumption = { text, source }`，`source ∈ model_inference | user_choice | clarification`——`clarification` 来自 `ask_user.assumptions` 核对卡的结构化回答，`user_choice` 来自候选点选，`model_inference` 为模型自行推断；确认卡显示来源标签，旧字符串假设归一化为 `model_inference`
 3. **决策内容快照**（decisionContent——呈现与审计的唯一来源）：卡弹出时携带完整提议内容，确认/拒绝事件记录快照（「用户确认了什么」可追溯——2026-08-15 run4 实证的追溯缺口）
 4. **用户主动确认通道保留**（goalFallback 语义重定义）：用户可在无提议时主动发起确认（对齐竞品 Plan 门——用户发起 vs 模型触发）——但卡出现的**默认路径**是确定性派生
 
@@ -220,7 +221,7 @@ CompletionEvidence{ verification: [{command, output?, passed?}], diffs: [{path}]
 
 ## 5. 宿主强制边界（模型漂移防护——行业共识）
 
-- **方案提议（PlanProposal——2026-08-16 新增值对象）**：模型方案确认前的结构化提议——`{ summary, files: [{path, reason}], assumptions[], verificationPlan[] }`——**文件清单含理由、方案含假设清单与验证计划**（用户确认的是「看到全部假设并接受」——竞品计划工件/学术「确认内容含未验证假设」）；渲染为可审阅方案卡（批准/修改/重出）
+- **方案提议（PlanProposal——2026-08-16 新增值对象）**：模型方案确认前的结构化提议——`{ summary, files: [{path, reason}], assumptions: Assumption[], verificationPlan[] }`——**文件清单含理由、方案含假设清单与验证计划**（用户确认的是「看到全部假设并接受」——竞品计划工件/学术「确认内容含未验证假设」）；渲染为可审阅方案卡（批准/修改/重出）
 - **计划清单（PlannedFiles）**：由已确认的 PlanProposal.files 派生（单一来源——不变量 6）——approve-files（2026-08-08 坑 95 改名，原 plan_approval）追加语义保持——模型只能写清单内——**清单对模型显式可见**（系统提示注入）
 - **追加语义**：分批 approve-files 合并（Codex rules AppendRule 同理——不覆盖前批）
 - **拒绝回填边界**：写清单外被拒 → 拒绝信息带清单内容（「X 不在批准清单（批准的是：A/B/C）」）——模型回到边界内

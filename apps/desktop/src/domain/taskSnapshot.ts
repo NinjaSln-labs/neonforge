@@ -2,10 +2,15 @@
 // 领域层单源序列化：Set → string[]；恢复时严格校验（损坏快照返回 null，不阻断启动）。
 // 持久化位置由 renderer sessionStore 与消息存档同一记录原子写入（compaction 基准一致）。
 import {
+  type Assumption,
+  type AssumptionSource,
+  type CompletionClaim,
   type ConversationState,
   type DecisionContent,
   type DecisionKind,
+  type GoalProposal,
   type PendingKind,
+  type PlanProposal,
   type RejectKind,
   type RejectReason,
 } from './conversationState.js'
@@ -59,6 +64,11 @@ const REJECT_KINDS: readonly RejectKind[] = [
   'other',
 ]
 
+const ASSUMPTION_SOURCES: readonly AssumptionSource[] = [
+  'model_inference',
+  'user_choice',
+  'clarification',
+]
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   Boolean(v) && typeof v === 'object' && !Array.isArray(v)
 const isStringArray = (v: unknown): v is string[] =>
@@ -89,22 +99,56 @@ export function toTaskSnapshot(state: ConversationState): TaskSnapshot {
   }
 }
 
-function parseGoalProposal(raw: unknown): boolean {
-  if (!isRecord(raw)) return false
-  return typeof raw.statement === 'string' && isStringArray(raw.assumptions)
+/** 假设条目兼容解析（ADR-014）：旧字符串 → model_inference；新对象保留来源；非法 → null */
+function parseAssumption(raw: unknown): Assumption | null {
+  if (typeof raw === 'string') {
+    return raw.trim() ? { text: raw, source: 'model_inference' } : null
+  }
+  if (!isRecord(raw) || typeof raw.text !== 'string' || !raw.text.trim()) return null
+  const source = raw.source === undefined ? 'model_inference' : raw.source
+  if (typeof source !== 'string' || !ASSUMPTION_SOURCES.includes(source as AssumptionSource)) {
+    return null
+  }
+  return { text: raw.text, source: source as AssumptionSource }
 }
 
-function parsePlanProposal(raw: unknown): boolean {
-  if (!isRecord(raw)) return false
-  return (
-    typeof raw.summary === 'string' &&
-    Array.isArray(raw.files) &&
-    raw.files.every(
+function parseAssumptions(raw: unknown): Assumption[] | null {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw)) return null
+  const out: Assumption[] = []
+  for (const item of raw) {
+    const parsed = parseAssumption(item)
+    if (!parsed) return null
+    out.push(parsed)
+  }
+  return out
+}
+
+function parseGoalProposal(raw: unknown): GoalProposal | undefined {
+  if (!isRecord(raw) || typeof raw.statement !== 'string') return undefined
+  const assumptions = parseAssumptions(raw.assumptions)
+  if (!assumptions) return undefined
+  return { statement: raw.statement, assumptions }
+}
+
+function parsePlanProposal(raw: unknown): PlanProposal | undefined {
+  if (!isRecord(raw) || typeof raw.summary !== 'string') return undefined
+  if (
+    !Array.isArray(raw.files) ||
+    !raw.files.every(
       (f) => isRecord(f) && typeof f.path === 'string' && typeof f.reason === 'string',
-    ) &&
-    isStringArray(raw.assumptions) &&
-    isStringArray(raw.verificationPlan)
-  )
+    )
+  ) {
+    return undefined
+  }
+  const assumptions = parseAssumptions(raw.assumptions)
+  if (!assumptions || !isStringArray(raw.verificationPlan)) return undefined
+  return {
+    summary: raw.summary,
+    files: raw.files.map((f) => ({ path: f.path as string, reason: f.reason as string })),
+    assumptions,
+    verificationPlan: raw.verificationPlan,
+  }
 }
 
 function parseCompletionClaim(raw: unknown): boolean {
@@ -146,7 +190,8 @@ function parseSystemClarify(raw: unknown): boolean {
   )
 }
 
-/** 决策内容深层校验：卡渲染会直接读 proposal.files/assumptions/pendingQuestions——结构不符必须拒绝。 */
+/** 决策内容深层校验：卡渲染会直接读 proposal.files/assumptions/pendingQuestions——结构不符必须拒绝。
+ * 校验同时归一化（旧字符串假设 → Assumption[]——ADR-014），返回可安全渲染的干净对象。 */
 function parseDecisionContent(raw: unknown): DecisionContent | undefined {
   if (!isRecord(raw)) return undefined
   if (typeof raw.kind !== 'string' || !DECISION_KINDS.includes(raw.kind as DecisionKind)) {
@@ -154,12 +199,39 @@ function parseDecisionContent(raw: unknown): DecisionContent | undefined {
   }
   if (typeof raw.since !== 'string') return undefined
   const kind = raw.kind as DecisionKind
-  if (kind === 'goal' && !parseGoalProposal(raw.proposal)) return undefined
-  if (kind === 'plan' && !parsePlanProposal(raw.proposal)) return undefined
-  if (kind === 'resolution' && !parseCompletionClaim(raw.proposal)) return undefined
-  if (kind === 'system_clarify' && !parseSystemClarify(raw.proposal)) return undefined
-  if (kind === 'approval' && !parseApproval(raw.approval)) return undefined
-  return raw as unknown as DecisionContent
+  if (kind === 'goal') {
+    const proposal = parseGoalProposal(raw.proposal)
+    return proposal ? { kind, since: raw.since, proposal } : undefined
+  }
+  if (kind === 'plan') {
+    const proposal = parsePlanProposal(raw.proposal)
+    return proposal ? { kind, since: raw.since, proposal } : undefined
+  }
+  if (kind === 'resolution') {
+    if (!parseCompletionClaim(raw.proposal)) return undefined
+    return {
+      kind,
+      since: raw.since,
+      proposal: raw.proposal as unknown as CompletionClaim,
+    }
+  }
+  if (kind === 'system_clarify') {
+    if (!parseSystemClarify(raw.proposal)) return undefined
+    return {
+      kind,
+      since: raw.since,
+      proposal: raw.proposal as unknown as DecisionContent['proposal'],
+    }
+  }
+  if (kind === 'approval') {
+    if (!parseApproval(raw.approval)) return undefined
+    return {
+      kind,
+      since: raw.since,
+      approval: raw.approval as unknown as DecisionContent['approval'],
+    }
+  }
+  return undefined
 }
 
 function parseRejectReason(raw: unknown): RejectReason | undefined {

@@ -1,6 +1,6 @@
 // P1-05 阶段 2：确认卡展示组件（目标/执行/达成）。
 // 只接收领域快照与回调，不读写 stateRef——决策状态仍由 ConversationPanel/状态机持有。
-import type { PlanProposal } from '../domain/conversationState'
+import type { Assumption, PlanProposal } from '../domain/conversationState'
 import { AssumptionList } from './conversationFormat'
 
 export function GoalConfirmCard({
@@ -10,7 +10,7 @@ export function GoalConfirmCard({
   onReject,
 }: {
   statement: string
-  assumptions: string[]
+  assumptions: Array<Assumption | string>
   onConfirm: () => void
   onReject: () => void
 }) {

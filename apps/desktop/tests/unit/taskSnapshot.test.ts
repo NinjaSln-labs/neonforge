@@ -22,7 +22,7 @@ const richState = (): ConversationState => ({
     proposal: {
       summary: '写首页',
       files: [{ path: '/test/index.html', reason: '入口' }],
-      assumptions: ['原生 HTML'],
+      assumptions: [{ text: '原生 HTML', source: 'model_inference' }],
       verificationPlan: ['打开页面'],
     },
   },
@@ -63,6 +63,59 @@ describe('taskSnapshot（A1 Task 跨重启快照）', () => {
     const restored = fromTaskSnapshot(JSON.parse(JSON.stringify(toTaskSnapshot(richState()))))
     expect(restored?.plannedFiles.has('/test/index.html')).toBe(true)
     expect(restored?.decisionContent?.proposal).toBeTruthy()
+  })
+
+  it('旧存档字符串假设 → 归一化为 model_inference（ADR-014 兼容）', () => {
+    const snapshot = toTaskSnapshot(richState()) as unknown as Record<string, unknown>
+    const legacy = {
+      ...snapshot,
+      decisionContent: {
+        kind: 'plan',
+        since: '2026-11-15T00:00:00.000Z',
+        proposal: {
+          summary: '旧方案',
+          files: [{ path: '/test/a.html', reason: '入口' }],
+          assumptions: ['旧假设'],
+          verificationPlan: [],
+        },
+      },
+    }
+    const restored = fromTaskSnapshot(legacy)
+    expect(restored).not.toBeNull()
+    const dc = restored?.decisionContent
+    expect(dc?.kind).toBe('plan')
+    expect(dc?.proposal).toBeTruthy()
+    if (dc?.kind !== 'plan' || !dc.proposal) return
+    expect(dc.proposal.assumptions).toEqual([{ text: '旧假设', source: 'model_inference' }])
+  })
+
+  it('结构化假设来源保留；非法来源 → 整快照拒绝（防来源标签丢失/乱标）', () => {
+    const snapshot = toTaskSnapshot(richState()) as unknown as Record<string, unknown>
+    const structured = {
+      ...snapshot,
+      decisionContent: {
+        kind: 'goal',
+        since: 't',
+        proposal: {
+          statement: '目标',
+          assumptions: [{ text: '用户选 React', source: 'user_choice' }],
+        },
+      },
+    }
+    const restored = fromTaskSnapshot(structured)
+    expect(restored?.decisionContent?.kind).toBe('goal')
+    const dc = restored?.decisionContent
+    if (dc?.kind !== 'goal' || !dc.proposal) return
+    expect(dc.proposal.assumptions).toEqual([{ text: '用户选 React', source: 'user_choice' }])
+    expect(
+      fromTaskSnapshot({
+        ...structured,
+        decisionContent: {
+          ...structured.decisionContent,
+          proposal: { statement: '目标', assumptions: [{ text: 'x', source: 'user' }] },
+        },
+      }),
+    ).toBeNull()
   })
 
   it('版本不符 → null（不崩溃）', () => {
