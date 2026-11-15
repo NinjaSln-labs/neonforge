@@ -35,23 +35,29 @@ if (TEST_HOOKS.testUserData) {
   configStore.reload()
 }
 setTimelineUserData(app.getPath('userData'))
-// P1-02：上次运行写入失败的事件（DLQ）在启动时重放
-try {
-  drainTimelineDlq()
-} catch (e) {
-  console.error('[timeline] DLQ 启动重放失败', e)
-}
-// P1-02：轻量 Outbox 中未投递事件在启动时重放（outboxId 幂等，崩溃窗口不重复）
-try {
-  drainTimelineOutbox()
-} catch (e) {
-  console.error('[timeline] Outbox 启动重放失败', e)
-}
 const gotTheLock = app.requestSingleInstanceLock()
 
 if (!gotTheLock) {
   app.quit()
 } else {
+  // P1-02：重放必须在拿到单实例锁之后——第二个实例不得改写/删除共享日志文件
+  try {
+    drainTimelineDlq()
+  } catch (e) {
+    console.error('[timeline] DLQ 启动重放失败', e)
+  }
+  try {
+    const result = drainTimelineOutbox()
+    if (result.error) {
+      console.error(
+        '[timeline] Outbox 启动重放未完成',
+        result.error,
+        'remaining=' + result.remaining,
+      )
+    }
+  } catch (e) {
+    console.error('[timeline] Outbox 启动重放失败', e)
+  }
   app.on('second-instance', () => {
     const win = BrowserWindow.getAllWindows()[0]
     if (win) {

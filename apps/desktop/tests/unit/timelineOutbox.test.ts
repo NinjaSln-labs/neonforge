@@ -92,4 +92,39 @@ describe('TimelineOutbox（P1-02 轻量 Outbox）', () => {
     expect(result).toEqual({ delivered: 1, duplicates: 0, remaining: 0 })
     expect(seen).toEqual(['a'])
   })
+
+  it('尾部半行（无换行）不吞掉下一条入队事件', () => {
+    const seen: string[] = []
+    const outbox = new TimelineOutbox(FILE, (evt) => {
+      seen.push(evt.type)
+      return 'inserted'
+    })
+    writeFileSync(FILE, '{"id":"crash-partial"') // 崩溃残留：写入中断，无换行
+    outbox.enqueue(event('a'))
+    const result = outbox.drain()
+    expect(result).toEqual({ delivered: 1, duplicates: 0, remaining: 0 })
+    expect(seen).toEqual(['a'])
+    expect(existsSync(FILE)).toBe(false)
+  })
+
+  it('读取失败返回 error（不静默当作空队列）', () => {
+    mkdirSync(FILE) // 同名目录 → readFileSync EISDIR
+    const outbox = new TimelineOutbox(FILE, () => 'inserted')
+    const result = outbox.drain()
+    expect(result.delivered).toBe(0)
+    expect(result.remaining).toBe(0)
+    expect(result.error).toBeTruthy()
+    expect(outbox.pendingCount()).toBe(0)
+  })
+
+  it('入队固定目标文件，重放按原文件投递（日期文件跨午夜不漂移）', () => {
+    const files: Array<string | undefined> = []
+    const outbox = new TimelineOutbox(FILE, (_evt, _id, targetFile) => {
+      files.push(targetFile)
+      return 'inserted'
+    })
+    outbox.enqueue(event('a'), '/logs/timeline-2026-11-15.jsonl')
+    outbox.drain()
+    expect(files).toEqual(['/logs/timeline-2026-11-15.jsonl'])
+  })
 })

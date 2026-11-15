@@ -159,7 +159,7 @@
 | BC-03 | 项目初始化只创建最小骨架，没有模板/场景工程初始化 | `projectInit.ts`、`scenes.tsx` | 模板化列为候选，不建新上下文 |
 | BC-04 | 交付包验收项为空；diff 审核与变更集未统一 | `MainWorkspace.tsx`、`DeliveryPanel.tsx` | 由 BC-10/BC-14 补齐 |
 | BC-05 | 无 usage 解析、无价格表、无模型健康/降级策略 | `gateway.ts` | 由 BC-12 补齐；健康策略列入后续 |
-| BC-06 | 事件版本/DLQ/重放/去重已落地（P1-02、P2-06、P2-07）；轻量 Outbox 已落地（2026-11-15：入队 fsync + 启动重放 + outboxId 幂等）；完整跨存储事务仍预留 | `timeline.ts`、`timelineLogger.ts`、`timelineOutbox.ts` | 仅完整跨存储事务保留为可选硬化项（设计见 `09-openspec/design.md §6`） |
+| BC-06 | 事件版本/DLQ/重放/去重已落地（P1-02、P2-06、P2-07）；轻量 Outbox 已落地并硬化（2026-11-15：入队 fsync + 启动重放 + outboxId 幂等 + 投递/压缩 fsync 顺序 + 半行/跨午夜防护） | `timeline.ts`、`timelineLogger.ts`、`timelineOutbox.ts` | 仅完整跨存储事务保留为可选硬化项（设计见 `09-openspec/design.md §6`） |
 | BC-07 | 明文 fallback 的风险决策未产品化 | `configStore.ts` | 保留为安全决策项 |
 | BC-08 | 无长期记忆/项目知识库；RAG 是关键词级 | `codeRag.ts`、`context.ts` | 明确为非目标（无代码证据），避免虚构 |
 | BC-09 | 无自动更新/签名/崩溃上报；插件市场/公开分发非目标 | `main.ts`、`pluginSystem.ts` | 内置扩展 + MCP 已落地（BC-13）；平台发布与插件市场列为非目标 |

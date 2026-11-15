@@ -70,7 +70,7 @@
 | 去重键 | `D/timeline.ts:485-487`（`dedupeKey`） |
 | 方案提议检测 | `D/timeline.ts:492-509`（`detectProposed`） |
 | JSONL 追加（`seq` 单调、eventId/version、失败可见 + DLQ） | `M/timelineLogger.ts`（`logTimeline`）、`M/timelineLogger.ts`（`drainTimelineDlq`） |
-| 轻量 Outbox（P1-02） | `M/timelineOutbox.ts`（`TimelineOutbox.enqueue`/`drain`）、`M/timelineLogger.ts`（`drainTimelineOutbox`/`appendTimelineEvent`）、`D/timeline.ts`（`TimelineEvent.outboxId`） |
+| 轻量 Outbox（P1-02） | `M/timelineOutbox.ts`（`TimelineOutbox.enqueue`/`drain`、fsync 追加与压缩、targetFile）、`M/timelineLogger.ts`（`drainTimelineOutbox`/`appendTimelineEvent`/`appendTimelineLine`）、`D/timeline.ts`（`TimelineEvent.outboxId`） |
 | 时间线通道 | `M/ipc.ts`（`timeline:log`、`timeline:query`） |
 
 ## 5. 应用层编排（renderer）
@@ -127,7 +127,7 @@
 | 计划清单存储 | `tests/unit/plannedFilesStore.test.ts` |
 | IPC 运行时契约 / 通道漂移 | `tests/unit/ipcSchema.test.ts`、`tests/unit/ipcContractParity.test.ts` |
 | 交互回归（重试上下文/排队 FIFO/停止回填/启动重试） | `tests/interaction/retry.interaction.ts`、`tests/interaction/queue.interaction.ts`、`tests/interaction/scenarios.ts`（`gotoStart`） |
-| 轻量 Outbox | `tests/unit/timelineOutbox.test.ts`（入队/FIFO/失败保留/幂等）+ `tests/unit/timelineLogger.test.ts`（重放/重启 seq 续接/旧 DLQ 兼容） |
+| 轻量 Outbox | `tests/unit/timelineOutbox.test.ts`（入队/FIFO/失败保留/幂等/半行/读取失败/目标文件）+ `tests/unit/timelineLogger.test.ts`（重放/重启 seq 续接/崩溃窗口幂等/跨午夜/索引重试/旧 DLQ 兼容） |
 | 主路径 e2e-sim | `apps/desktop/e2e-sim/journey.mjs`、`signals.mjs`、`decide.mjs`、`convergence.mjs` |
 | 本轮安全修正 | `conversationState.test.ts`（危险参数形态）、`tools.test.ts`（read 边界/pid 守卫）、`verifyCompletionSystem.test.ts`（外网证据）、`webTools.test.ts`（SSRF/重定向） |
 

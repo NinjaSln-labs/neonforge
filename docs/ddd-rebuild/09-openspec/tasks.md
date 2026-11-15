@@ -64,7 +64,7 @@
 ## 4. 验证
 
 - [x] 4.1 `npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit`
-- [x] 4.2 `npx vitest run`（68 文件 / 780 用例通过，2026-11-15；含审查修复、P1-04 第二批、入口硬化与轻量 Outbox 新增回归）
+- [x] 4.2 `npx vitest run`（68 文件 / 786 用例通过，2026-11-15；含审查修复、P1-04 第二批、入口硬化、轻量 Outbox 与持久化硬化新增回归）
 - [x] 4.3 `npx eslint .`（0 error，6 条既有 hook 依赖 warning）
 - [x] 4.4 `npx playwright test --project=interaction`（2026-11-15 全量 71/71 通过。两个既有 flaky 已定位并处置：
   ① `.nf-start` 启动竞态 = WSL/Chromium 偶发 `net::ERR_NETWORK_CHANGED`，网络栈变更取消模块请求，页面只剩空 `<div id="root">`（非应用启动逻辑 bug）——所有 interaction 入口统一走 `gotoStart`（启动超时一次重载重试 + DOM/bridge/hasKey/console 诊断），环境问题在测试层消除；
@@ -72,7 +72,7 @@
   **2026-11-15 代码审查修复后**全量 72/72（新增「第二轮失败重试重放第二轮上下文」回归）；队列已改多槽 FIFO，既有 approve-files 用例（1804）改为等 working 释放后操作（不再依赖旧单槽覆盖行为）。**排队回归补齐后**全量 74/74（新增「连续排队两条按序送达」「停止回填输入框」）。**入口硬化批次**：`approve-files 多卡并存` 用例（1560）也改为等 working 释放后再发送「继续」——原在流式未结束时发送会按排队语义进入 FIFO，第二卡在授权等待期间可能不生成（排队语义已由 `queue.interaction.ts` 单独覆盖）；repeat-each=5 稳定。）
 - [x] 4.5 回归：现有 P0 用例与既有 `conversationState` / `tools` / `verifyCompletionSystem` 测试全部仍通过
 - [x] 4.6 `npx prettier --check "src/**/*.{ts,tsx}" "tests/**/*.{ts,tsx}" "*.mjs" "*.config.*"`（qa.yml 格式门禁；2026-11-15 对齐 42 个既有文件，326 行格式化，无逻辑变更）
-- [x] 4.7 文档一致性（2026-11-15）：14 spec / 69 Requirement / 268 Scenario（单 Requirement ≤5 Scenario）；`10-code-evidence.md` 行号刷新并校验 0 越界；`docs/ddd-rebuild` 相对链接 0 缺失；`docs/tests/coverage-matrix.md` 增补 68 文件 / 780 用例 / 74 场景快照与 BC-10～BC-14 覆盖表
+- [x] 4.7 文档一致性（2026-11-15）：14 spec / 69 Requirement / 268 Scenario（单 Requirement ≤5 Scenario）；`10-code-evidence.md` 行号刷新并校验 0 越界；`docs/ddd-rebuild` 相对链接 0 缺失；`docs/tests/coverage-matrix.md` 增补 68 文件 / 786 用例 / 74 场景快照与 BC-10～BC-14 覆盖表
 
 ---
 
@@ -96,8 +96,8 @@
 
 ## 6. 后续（部分已完成 / 预留）
 
-- [x] 6.1 事件 `eventId/version` + dedupe + DLQ/启动重放 + **轻量 Outbox（2026-11-15）**：事件先入 `timeline-outbox.jsonl`（fsync），投递失败保留，启动重放，`outboxId` 幂等；完整跨存储事务性 Outbox 仍预留。
-- [x] 6.2 `ConversationPanel.tsx` 拆分（应用层与领域编排分离）：阶段 1（纯格式化/展示辅助 → `conversationFormat.tsx`）、阶段 2（确认卡 → `DecisionCards.tsx`）、阶段 3（输入区 → `ConversationComposer.tsx`）、阶段 4a（历史构建 → `conversationHistory.ts`）、阶段 4b（流式事件 → `useChatStream.ts`）、阶段 4c（轮次编排 → `useChatEngine.ts`）、阶段 5（时间线/消息持久化/遥测/证据对账 → `useTimelineLog`/`useMessageStore`/`useConversationTelemetry`/`useEvidenceVerification`）已完成（2026-11-15，面板 3372 → 1320 行；interaction 74/74；单测 780），见 `09-openspec/p1-05-conversation-panel-split.md`
+- [x] 6.1 事件 `eventId/version` + dedupe + DLQ/启动重放 + **轻量 Outbox（2026-11-15）**：事件先入 `timeline-outbox.jsonl`（fsync），投递失败保留，启动重放，`outboxId` 幂等；持久化硬化同批完成：目标时间线先 fsync 再压缩、压缩 fsync/目录同步、尾部半行防护、启动重放在单实例锁之后、读失败可见且不缓存空索引、日期文件跨午夜按入队目标文件重放。完整跨存储事务性 Outbox 仍预留。
+- [x] 6.2 `ConversationPanel.tsx` 拆分（应用层与领域编排分离）：阶段 1（纯格式化/展示辅助 → `conversationFormat.tsx`）、阶段 2（确认卡 → `DecisionCards.tsx`）、阶段 3（输入区 → `ConversationComposer.tsx`）、阶段 4a（历史构建 → `conversationHistory.ts`）、阶段 4b（流式事件 → `useChatStream.ts`）、阶段 4c（轮次编排 → `useChatEngine.ts`）、阶段 5（时间线/消息持久化/遥测/证据对账 → `useTimelineLog`/`useMessageStore`/`useConversationTelemetry`/`useEvidenceVerification`）已完成（2026-11-15，面板 3372 → 1320 行；interaction 74/74；单测 786），见 `09-openspec/p1-05-conversation-panel-split.md`
 - [x] 6.3 演示面板与生产 UI 隔离（结构性）：生产运行无 `demo` 字段，仅测试桥注入
 - [x] 6.4 交付包验收来源（DoD 对齐）接入真实来源，消除空验收（与 5.7 协同）
 

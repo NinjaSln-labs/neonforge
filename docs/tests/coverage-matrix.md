@@ -1,7 +1,7 @@
 # 覆盖矩阵（Coverage Matrix）
 
 > 首版：2026-08-16（S2）→ 增补：2026-09-29（Keenable 合规）
-> 当前快照（2026-11-15）：L1 **68 文件 / 780 用例** · 事件注册表 55+ 事件 · 不变量 Inv 1-8 + I17-I21 · L3 interaction **74 场景**
+> 当前快照（2026-11-15）：L1 **68 文件 / 786 用例** · 事件注册表 55+ 事件 · 不变量 Inv 1-8 + I17-I21 · L3 interaction **74 场景**
 > 表 1-表 10 保留各阶段时点的基线记录；当前总数以本快照与 `09-openspec/tasks.md §4` 为准。
 > 维护：阶段末更新（coverage-matrix skill）；缺口入 audit-items
 
@@ -169,7 +169,7 @@
 | BC-13 扩展与集成 | `extension.test.ts`、`extensionRegistry.test.ts`、`mcpClient.test.ts`、`mcpConfig.test.ts`、`mcpManager.test.ts`、`gitBridge.test.ts`、`pluginSystem.test.ts` | ✅ |
 | BC-14 验收与质量门禁 | `acceptance.test.ts`、`acceptanceStore.test.ts`、`applyDiff.test.ts`（交付 diff 与门禁联动） | ✅ |
 | P1-04 IPC 契约校验 | `ipcSchema.test.ts`（结构/必填/nullable）、`ipcContractParity.test.ts`（main ↔ preload 静态对齐） | ✅ |
-| P1-02 轻量 Outbox | `timelineOutbox.test.ts`（FIFO 投递/失败保留重放/outboxId 幂等/损坏条目跳过）、`timelineLogger.test.ts`（投递失败留 Outbox/启动重放/重启 seq 续接/旧 DLQ 兼容） | ✅ |
+| P1-02 轻量 Outbox | `timelineOutbox.test.ts`（FIFO 投递/失败保留重放/outboxId 幂等/损坏条目跳过/尾部半行/读取失败可见/目标文件固定）、`timelineLogger.test.ts`（投递失败留 Outbox/启动重放/重启 seq 续接/崩溃窗口幂等/跨午夜重放/索引读失败重试/旧 DLQ 兼容） | ✅ |
 | 审查回归（2026-11-15） | `agentLoop.test.ts::isApprovalIntent`（否定不批准）、`retry.interaction.ts`（第二轮失败重试上下文）、`queue.interaction.ts`（FIFO/停止回填） | ✅ |
 | P1-05 会话/轮次编排拆分 | `conversationHistory.test.ts`、`useConversationState.test.ts` + interaction 全量 74 场景 | ✅ |
 | Web Key 来源与明文副本 | `configStore.test.ts`（env/file/config 来源、opt-in 明文、删除清理） | ✅ |

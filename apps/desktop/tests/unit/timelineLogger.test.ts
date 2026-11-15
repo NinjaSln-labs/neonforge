@@ -137,6 +137,88 @@ describe('timelineLogger（会话时间线——2026-08-08 会话级文件）', 
     expect(events.map((e) => e.eventId)).toEqual([`${sid}:1`, `${sid}:2`, `${sid}:3`])
   })
 
+  it('P1-02：崩溃窗口（时间线已写、outbox 未压缩）重放按 outboxId 幂等', () => {
+    const sid = 'idem-0000-4000-8000-000000000001'
+    const f = timelineFile(sid)
+    const outbox = f.replace('timeline-' + sid + '.jsonl', 'timeline-outbox.jsonl')
+    logTimeline({
+      session: sid,
+      type: 'conversation.message_sent',
+      role: 'user',
+      detail: { content: 'once' },
+    })
+    const written = JSON.parse(readFileSync(f, 'utf-8').trim())
+    expect(written.outboxId).toMatch(/^outbox-/)
+    // 模拟「时间线已写、outbox 未压缩」：恢复同一 outboxId 的待投递条目
+    writeFileSync(
+      outbox,
+      JSON.stringify({
+        id: written.outboxId,
+        enqueuedAt: new Date().toISOString(),
+        event: {
+          session: sid,
+          type: 'conversation.message_sent',
+          role: 'user',
+          detail: { content: 'once' },
+        },
+      }) + '\n',
+    )
+    expect(drainTimelineOutbox()).toMatchObject({ delivered: 0, duplicates: 1, remaining: 0 })
+    expect(readFileSync(f, 'utf-8').trim().split('\n')).toHaveLength(1)
+    expect(existsSync(outbox)).toBe(false)
+  })
+
+  it('P1-02：无会话日期文件跨午夜重放仍落原日期文件', () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date('2026-11-15T23:59:00Z'))
+      const day1 = timelineFile()
+      mkdirSync(day1) // 同名目录让投递失败（EISDIR）——事件留在 Outbox
+      logTimeline({ type: 'tool-exec', role: 'tool', detail: { name: 'read' } })
+      vi.setSystemTime(new Date('2026-11-16T00:01:00Z'))
+      const day2 = timelineFile()
+      expect(day2).not.toBe(day1)
+      rmSync(day1, { recursive: true, force: true })
+      expect(drainTimelineOutbox()).toMatchObject({ delivered: 1, remaining: 0 })
+      expect(existsSync(day1)).toBe(true)
+      expect(existsSync(day2)).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('P1-02：会话文件读失败不缓存空索引（恢复后 seq 续接）', () => {
+    const sid = 'scan-retry-0000-4000-8000-00000001'
+    const f = timelineFile(sid)
+    mkdirSync(f) // 索引读取 EISDIR + 投递失败
+    logTimeline({
+      session: sid,
+      type: 'conversation.message_sent',
+      role: 'user',
+      detail: { content: 'before' },
+    })
+    rmSync(f, { recursive: true, force: true })
+    writeFileSync(
+      f,
+      JSON.stringify({
+        ts: new Date().toISOString(),
+        seq: 5,
+        eventId: `${sid}:5`,
+        version: 1,
+        session: sid,
+        type: 'conversation.message_sent',
+        role: 'user',
+        detail: { content: 'seed' },
+      }) + '\n',
+    )
+    logTimeline({ session: sid, type: 'assistant-start', role: 'assistant', detail: {} })
+    const events = readFileSync(f, 'utf-8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line))
+    expect(events.map((e) => e.seq)).toEqual([5, 6, 7])
+  })
+
   it('P1-02：旧 DLQ 文件启动重放仍兼容', () => {
     const sid = 'legacy-dlq-0000-4000-8000-0000000001'
     const f = timelineFile(sid)
