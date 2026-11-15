@@ -290,12 +290,18 @@ contextBridge.exposeInMainWorld('neonforge', {
     execute: (
       name: string,
       args: Record<string, unknown>,
-      opts?: { approved?: boolean; rootPath?: string; sessionId?: string },
+      opts?: {
+        approved?: boolean
+        approvalSource?: 'user' | 'auto'
+        rootPath?: string
+        sessionId?: string
+      },
     ) =>
       ipcRenderer.invoke('tools:execute', {
         name,
         args,
         approved: opts?.approved ?? false,
+        approvalSource: opts?.approvalSource,
         rootPath: opts?.rootPath,
         sessionId: opts?.sessionId,
       }) as Promise<{

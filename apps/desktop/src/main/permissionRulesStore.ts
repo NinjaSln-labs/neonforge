@@ -49,7 +49,7 @@ export function normalizePermissionRules(input: unknown): PermissionRule[] {
       tool: value.tool.trim(),
       specifier: value.specifier,
     }
-    const key = `${rule.action}\u0000${rule.tool}\u0000${rule.specifier}`
+    const key = JSON.stringify([rule.action, rule.tool, rule.specifier])
     if (!seen.has(key)) {
       seen.add(key)
       rules.push(rule)
@@ -62,11 +62,22 @@ export function normalizePermissionRules(input: unknown): PermissionRule[] {
 export class PermissionRulesStore {
   constructor(private readonly filePath: string) {}
 
-  /** 读取规则；缺失/损坏/非法项 → 空规则（不阻断启动）。 */
+  /** 读取规则；缺失/整体损坏 → 空规则；单条非法只丢弃该条（不因一条坏记录清空全部 deny 规则）。 */
   load(): PermissionRule[] {
     try {
       if (!existsSync(this.filePath)) return []
-      return normalizePermissionRules(JSON.parse(readFileSync(this.filePath, 'utf-8')))
+      const parsed = JSON.parse(readFileSync(this.filePath, 'utf-8')) as unknown
+      if (!Array.isArray(parsed)) return []
+      const valid: unknown[] = []
+      for (const item of parsed.slice(0, MAX_PERMISSION_RULES)) {
+        try {
+          normalizePermissionRules([item])
+          valid.push(item)
+        } catch {
+          /* 单条非法——跳过 */
+        }
+      }
+      return normalizePermissionRules(valid)
     } catch {
       return []
     }

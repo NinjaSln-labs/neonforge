@@ -909,6 +909,7 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
       void (
         window.neonforge.tools?.execute?.(tc.name, tc.args, {
           approved: autoApproved,
+          approvalSource: 'auto',
           rootPath: rootPath ?? undefined,
           sessionId,
         }) ?? Promise.resolve({ ok: false, error: 'tools 通道未就绪' })

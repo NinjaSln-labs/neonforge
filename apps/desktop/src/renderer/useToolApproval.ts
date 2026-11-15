@@ -126,7 +126,12 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
     if (tc.name === 'write' || tc.name === 'edit') addTrust(tc.args)
     patchToolCall(idx, (c) => ({ ...c, status: 'pending' as const }), tc)
     void window.neonforge.tools
-      ?.execute?.(tc.name, tc.args, { approved: true, rootPath: rootPath ?? undefined, sessionId })
+      ?.execute?.(tc.name, tc.args, {
+        approved: true,
+        approvalSource: 'user',
+        rootPath: rootPath ?? undefined,
+        sessionId,
+      })
       .then((r) => {
         const data = r.data as { file?: string; snapshot?: boolean } | undefined
         if (r.ok && data?.file) onToolResult?.({ name: tc.name, file: data.file, ok: true })

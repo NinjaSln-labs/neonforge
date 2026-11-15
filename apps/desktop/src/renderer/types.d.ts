@@ -496,7 +496,12 @@ export interface NeonForgeTools {
   execute: (
     name: string,
     args: Record<string, unknown>,
-    opts?: { approved?: boolean; rootPath?: string; sessionId?: string },
+    opts?: {
+      approved?: boolean
+      approvalSource?: 'user' | 'auto'
+      rootPath?: string
+      sessionId?: string
+    },
   ) => Promise<{
     ok: boolean
     data?: { file?: string; snapshot?: boolean } | unknown

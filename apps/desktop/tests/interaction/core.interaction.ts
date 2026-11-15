@@ -53,6 +53,7 @@ async function mockBridge(page: Page): Promise<void> {
         return {
           list: async () => rules,
           set: async (next: Array<{ action: string; tool: string; specifier: string }>) => {
+            await new Promise((resolve) => setTimeout(resolve, 30))
             rules = next
             return { ok: true, rules }
           },
@@ -166,7 +167,9 @@ test('设置：权限规则添加/删除（main 持久化接口）', async ({ pa
   await expect(section).toContainText('暂无规则')
   await page.getByLabel('规则工具').fill('bash')
   await page.getByLabel('规则匹配前缀').fill('npm run ')
-  await section.getByRole('button', { name: '添加规则' }).click()
+  // 双击 Add：保存串行化（ref 守卫）——不得产生第二条空 specifier 规则
+  await section.getByRole('button', { name: '添加规则' }).dblclick()
+  await expect(section.locator('.nf-settings__plugin')).toHaveCount(1)
   await expect(section).toContainText(/allow · bash · npm run/)
   await section.getByRole('button', { name: /删除规则 bash/ }).click()
   await expect(section).toContainText('暂无规则')

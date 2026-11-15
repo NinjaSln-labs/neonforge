@@ -128,6 +128,7 @@ export const IPC_SCHEMAS = {
       name: { type: 'string', minLength: 1, maxLength: 200 },
       args: { type: 'object' },
       approved: { type: 'boolean' },
+      approvalSource: { type: 'string', enum: ['user', 'auto'] as const },
       rootPath: { type: 'string' },
       sessionId: { type: 'string' },
     },

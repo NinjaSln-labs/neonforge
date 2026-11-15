@@ -1,7 +1,7 @@
 # 覆盖矩阵（Coverage Matrix）
 
 > 首版：2026-08-16（S2）→ 增补：2026-09-29（Keenable 合规）
-> 当前快照（2026-11-15）：L1 **69 文件 / 799 用例** · 事件注册表 55+ 事件 · 不变量 Inv 1-8 + I17-I21 · L3 interaction **75 场景**
+> 当前快照（2026-11-15）：L1 **69 文件 / 809 用例** · 事件注册表 55+ 事件 · 不变量 Inv 1-8 + I17-I21 · L3 interaction **75 场景**
 > 表 1-表 10 保留各阶段时点的基线记录；当前总数以本快照与 `09-openspec/tasks.md §4` 为准。
 > 维护：阶段末更新（coverage-matrix skill）；缺口入 audit-items
 
@@ -164,7 +164,7 @@
 | 领域 / 硬化项 | 覆盖测试 | 判定 |
 |---------------|----------|------|
 | BC-10 变更与版本 | `changeSet.test.ts`（状态机/不变量 I17）、`changeSetService.test.ts`（快照/应用/回滚）、`applyDiff.test.ts`（diff 审核） | ✅ |
-| BC-02 权限规则持久化 | `permissionRulesStore.test.ts`（校验/去重/原子写/边界）、`permissionRules.test.ts`（selectRule deny>allow>ask）、`tools.test.ts`（allow/deny/ask 执行路径）、interaction「设置：权限规则添加/删除」 | ✅ |
+| BC-02 权限规则持久化 | `permissionRulesStore.test.ts`（校验/去重/原子写/边界/单条坏规则容错）、`permissionRules.test.ts`（selectRule 优先级、canonical 参数防 decoy、路径归一、bash 链守卫）、`tools.test.ts`（allow/deny/ask 执行路径、auto/user 来源）、interaction「设置：权限规则添加/删除（双击串行化）」 | ✅ |
 | BC-11 任务编排 | `taskQueue.test.ts`、`taskQueueStore.test.ts`、`queue.interaction.ts`（连续排队 FIFO、停止回填输入框） | ✅ |
 | BC-12 用量与成本 | `usageLedger.test.ts`、`usageStore.test.ts`、`budgetStore.test.ts`、`priceStore.test.ts`、`gatewayUsage.test.ts` | ✅ |
 | BC-13 扩展与集成 | `extension.test.ts`、`extensionRegistry.test.ts`、`mcpClient.test.ts`、`mcpConfig.test.ts`、`mcpManager.test.ts`、`gitBridge.test.ts`、`pluginSystem.test.ts` | ✅ |

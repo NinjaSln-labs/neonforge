@@ -84,6 +84,46 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     expect(r.needApproval).toBe(true)
   })
 
+  it('ask 规则：自动批准来源仍要求用户授权，user 来源放行', async () => {
+    const file = path.join(TMP, 'ask-read.txt')
+    writeFileSync(file, 'x')
+    toolRegistry.setRules([{ action: 'ask', tool: 'read', specifier: TMP }])
+    const auto = await toolRegistry.execute(
+      'read',
+      { path: file },
+      { approved: true, approvalSource: 'auto', rootPath: TMP },
+    )
+    expect(auto.ok).toBe(false)
+    expect(auto.needApproval).toBe(true)
+    const user = await toolRegistry.execute(
+      'read',
+      { path: file },
+      { approved: true, approvalSource: 'user', rootPath: TMP },
+    )
+    expect(user.ok).toBe(true)
+  })
+
+  it('ask 规则对无需授权的工具也生效', async () => {
+    toolRegistry.setRules([{ action: 'ask', tool: 'search', specifier: 'x' }])
+    const r = await toolRegistry.execute('search', { query: 'x' }, { rootPath: TMP })
+    expect(r.ok).toBe(false)
+    expect(r.needApproval).toBe(true)
+  })
+
+  it('allow read 前缀不能借 .. 逃出项目根（回到逐次授权）', async () => {
+    const outside = '/tmp/nf-unit-outside-read.txt'
+    writeFileSync(outside, 'secret')
+    try {
+      toolRegistry.setRules([{ action: 'allow', tool: 'read', specifier: path.join(TMP, 'src') }])
+      const escape = path.join(TMP, 'src', '../../nf-unit-outside-read.txt')
+      const r = await toolRegistry.execute('read', { path: escape }, { rootPath: TMP })
+      expect(r.ok).toBe(false)
+      expect(r.needApproval).toBe(true)
+    } finally {
+      rmSync(outside, { force: true })
+    }
+  })
+
   it('非授权错误不带 needApproval 字段（未知工具——T2 协议边界）', async () => {
     const r = await toolRegistry.execute('nonexistent-tool', {}, {})
     expect(r.ok).toBe(false)

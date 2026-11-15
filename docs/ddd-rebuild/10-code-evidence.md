@@ -38,7 +38,7 @@
 | 可执行判定 | `D/conversationState.ts:704-734`（`canExecute`） |
 | 系统可代跑判定（当前实现接受 network-read） | `D/conversationState.ts:782-786`（`isSystemVerifiable`） |
 | 主进程只读命令判定 | `M/tools.ts:601-606`（`isReadOnlyBash`） |
-| 权限规则裁决与持久化（BC-02） | `M/tools.ts`（`selectRule`：deny > allow > ask）、`M/permissionRulesStore.ts`（校验/0600/原子写）、`M/ipc.ts`（`permissions:list`/`permissions:set`）、`P/preload.ts`（`permissions`）、`R/SettingsPanel.tsx`（规则编辑） |
+| 权限规则裁决与持久化（BC-02） | `M/tools.ts`（`canonicalRuleArg`/`matchesRule`/`selectRule`：deny > allow > ask、真实字段匹配、路径归一、bash 链守卫、ask 来源校验）、`M/permissionRulesStore.ts`（校验/0600/原子写/单条容错）、`M/ipc.ts`（`permissions:list`/`permissions:set`）、`P/preload.ts`（`permissions`）、`R/SettingsPanel.tsx`（规则编辑/保存串行化）、`R/useChatStream.ts`/`useToolApproval.ts`（auto/user 来源） |
 | bash 工具的预授权调用 | `M/tools.ts:709-716`（`bash` 注册，`preApproval`） |
 | 工具风险分级 | `M/tools.ts:37-140`（`ToolRisk`、规则、`isInSandbox`） |
 | 工具注册与执行 | `M/tools.ts:141-280`（`Tool`、`ToolRegistry.execute`） |

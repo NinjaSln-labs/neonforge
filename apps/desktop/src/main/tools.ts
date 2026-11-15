@@ -44,18 +44,124 @@ export interface PermissionRule {
   specifier: string // 参数前缀（路径/命令）——空 = 该工具全部
 }
 
-// 规则匹配参数：优先取路径类参数（path/filePath/file），命令类取 command/pattern
-function ruleArg(args: Record<string, unknown>): string {
-  return String(args.path ?? args.filePath ?? args.file ?? args.command ?? args.pattern ?? '')
+// 规则匹配参数：按工具的**真实执行字段**取（防 decoy 参数绕过——bash 只认 command，read/write/edit 只认 path）
+// deny 例外：任一候选字段命中即拒绝（宁可多拦，不可漏拦）
+const PATH_RULE_TOOLS = new Set([
+  'read',
+  'write',
+  'edit',
+  'check-capability',
+  'start-server',
+  'check-server',
+  'stop-server',
+  'find_definition',
+  'find_references',
+  'get_imports',
+  'get_call_chain',
+  'get_type_info',
+  'get_diagnostics',
+])
+const GENERIC_RULE_ARG_KEYS = [
+  'command',
+  'path',
+  'filePath',
+  'file',
+  'url',
+  'target',
+  'query',
+  'pattern',
+  'dir',
+  'server',
+  'tool',
+  'action',
+] as const
+
+function canonicalRuleArg(tool: string, args: Record<string, unknown>): string | null {
+  const str = (v: unknown): string => String(v ?? '')
+  switch (tool) {
+    case 'read':
+    case 'write':
+    case 'edit':
+    case 'find_definition':
+    case 'find_references':
+    case 'get_imports':
+    case 'get_call_chain':
+    case 'get_type_info':
+    case 'get_diagnostics':
+      return str(args.path)
+    case 'bash':
+      return str(args.command)
+    case 'open':
+      // openExecutor 的实际优先级：url ?? target ?? path
+      return str(args.url ?? args.target ?? args.path)
+    case 'search':
+    case 'web_search':
+      return str(args.query)
+    case 'web_fetch':
+      return str(args.url)
+    case 'check-capability':
+      return str(args.dir ?? args.rootPath)
+    case 'start-server':
+    case 'check-server':
+    case 'stop-server':
+      return str(args.dir)
+    case 'git':
+      return str(args.action ?? 'status')
+    case 'mcp':
+      return str(args.server)
+    default:
+      return null
+  }
 }
+
+function ruleMatchValues(
+  tool: string,
+  args: Record<string, unknown>,
+  action: RuleAction,
+): string[] {
+  const canonical = canonicalRuleArg(tool, args)
+  if (action !== 'deny') return canonical ? [canonical] : []
+  const values = [canonical ?? '', ...GENERIC_RULE_ARG_KEYS.map((key) => String(args[key] ?? ''))]
+  return [...new Set(values.filter(Boolean))]
+}
+
+/** bash allow：前缀 + 仅当每一段命令都以同一前缀开头且无重定向/命令替换（防 `prefix; curl` 绕过）。 */
+function bashAllowMatches(command: string, specifier: string): boolean {
+  if (!command.startsWith(specifier)) return false
+  // 2>&1 / 2>/dev/null 不是写重定向；先移除再检查其余重定向与命令替换
+  const withoutStderr = command.replace(/2>&1|2>>1|2>>?\/dev\/null/g, '')
+  if (/[<>`]|\$\(/.test(withoutStderr)) return false
+  const protectedCmd = command.replace(/2>&1|2>>1|2>>?\/dev\/null/g, '§§§')
+  const segments = protectedCmd
+    .split(/[;&|\n]/)
+    .map((seg) => seg.trim().replace(/§§§/g, '2>&1'))
+    .filter(Boolean)
+  return segments.length > 0 && segments.every((seg) => seg.startsWith(specifier))
+}
+
 export function matchesRule(
   tool: string,
   args: Record<string, unknown>,
   rule: PermissionRule,
+  rootPath?: string,
 ): boolean {
   if (rule.tool !== tool) return false
   if (!rule.specifier) return true
-  return ruleArg(args).startsWith(rule.specifier)
+  const pathTool = PATH_RULE_TOOLS.has(tool)
+  // 路径类规则做 resolve 归一（防 `src/../../etc/passwd` 借前缀逃逸；相对 specifier 以项目根为基准）
+  const base = rootPath || process.cwd()
+  const specifier = pathTool ? path.resolve(base, rule.specifier) : rule.specifier
+  for (const value of ruleMatchValues(tool, args, rule.action)) {
+    if (pathTool) {
+      const resolved = path.resolve(base, value)
+      if (resolved === specifier || resolved.startsWith(specifier)) return true
+    } else if (tool === 'bash' && rule.action === 'allow') {
+      if (bashAllowMatches(value, rule.specifier)) return true
+    } else if (value.startsWith(rule.specifier)) {
+      return true
+    }
+  }
+  return false
 }
 
 /** 规则裁决：deny > allow > ask（同优先级取列表最前）；无匹配返回 undefined（fail-closed）。 */
@@ -63,8 +169,9 @@ export function selectRule(
   rules: PermissionRule[],
   tool: string,
   args: Record<string, unknown>,
+  rootPath?: string,
 ): PermissionRule | undefined {
-  const matched = rules.filter((rule) => matchesRule(tool, args, rule))
+  const matched = rules.filter((rule) => matchesRule(tool, args, rule, rootPath))
   return (
     matched.find((rule) => rule.action === 'deny') ??
     matched.find((rule) => rule.action === 'allow') ??
@@ -195,6 +302,11 @@ class ToolRegistry {
     this.rules = rules
   }
 
+  /** 当前生效规则（permissions:list 返回执行侧快照，避免磁盘与内存不一致）。 */
+  getRules(): PermissionRule[] {
+    return [...this.rules]
+  }
+
   list(): Array<{
     name: string
     source: Tool['source']
@@ -212,7 +324,12 @@ class ToolRegistry {
   async execute(
     name: string,
     args: Record<string, unknown>,
-    opts: { approved?: boolean; rootPath?: string; sessionId?: string } = {},
+    opts: {
+      approved?: boolean
+      approvalSource?: 'user' | 'auto'
+      rootPath?: string
+      sessionId?: string
+    } = {},
   ): Promise<ToolResult> {
     console.log('[tools] execute', name, 'rootPath=' + (opts.rootPath ?? 'NONE'))
     // 2026-08-07 会话时间线（Session Timeline BC——main 侧工具执行记录兜底：renderer 崩溃也有工具时间线）
@@ -238,7 +355,7 @@ class ToolRegistry {
       }
     }
     // 2026-08-04 授权架构 v4：规则裁决 deny > allow > ask（fail-closed）——对齐 Claude/Codex/Cursor 共识
-    const rule = selectRule(this.rules, name, args)
+    const rule = selectRule(this.rules, name, args, opts.rootPath)
     if (rule?.action === 'deny') {
       return {
         ok: false,
@@ -246,7 +363,23 @@ class ToolRegistry {
         error: `已阻止：${name}（deny 规则 ${rule.specifier || '全部'}）——如需执行请先调整授权规则`,
       }
     }
-    const ruleAllows = rule?.action === 'allow'
+    // 显式 ask 规则：即使调用方自动批准（delegate/信任路径）也必须回到用户 —— 仅 user 来源的 approved 放行
+    if (rule?.action === 'ask' && !(opts.approved && opts.approvalSource !== 'auto')) {
+      return {
+        ok: false,
+        needApproval: true,
+        error: `「${name}」按权限规则需要逐次授权——approved=true 后执行`,
+      }
+    }
+    let ruleAllows = rule?.action === 'allow'
+    // read allow 不越过项目根（含 symlink realpath 逃逸）：根外读取仍需逐次授权；显式根外 specifier 除外
+    if (ruleAllows && name === 'read') {
+      const inside = await isInSandboxRealpath(args.path, opts.rootPath)
+      const specifier = String(rule?.specifier ?? '')
+      const specifierOutsideRoot =
+        !!opts.rootPath && !!specifier && !isInSandbox(specifier, opts.rootPath)
+      if (!inside && !specifierOutsideRoot) ruleAllows = false
+    }
     if (!ruleAllows && tool.requiresApproval && !opts.approved) {
       // 2026-08-04 授权架构重构：preApproval 裁决（如 bash 只读命令自动执行）——原一律 need-approval（授权疲劳根因：ls/cat 也弹卡）
       // 显式 ask 规则优先于 preApproval（用户要求「此类调用每次都问」不能被只读自动放行绕过）

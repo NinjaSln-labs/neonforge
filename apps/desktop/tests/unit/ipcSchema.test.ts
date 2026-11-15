@@ -12,6 +12,15 @@ describe('IPC 契约校验（P1-04）', () => {
     expect(validateIpc({ name: '' }, IPC_SCHEMAS.toolsExecute).ok).toBe(false)
     expect(validateIpc({ name: 'read', args: 'nope' }, IPC_SCHEMAS.toolsExecute).ok).toBe(false)
     expect(validateIpc({ name: 'read', approved: 1 }, IPC_SCHEMAS.toolsExecute).ok).toBe(false)
+    expect(validateIpc({ name: 'read', approvalSource: 'auto' }, IPC_SCHEMAS.toolsExecute).ok).toBe(
+      true,
+    )
+    expect(validateIpc({ name: 'read', approvalSource: 'user' }, IPC_SCHEMAS.toolsExecute).ok).toBe(
+      true,
+    )
+    expect(validateIpc({ name: 'read', approvalSource: 'bad' }, IPC_SCHEMAS.toolsExecute).ok).toBe(
+      false,
+    )
   })
 
   it('streamChat：messages 数组/role 必填；枚举约束', () => {

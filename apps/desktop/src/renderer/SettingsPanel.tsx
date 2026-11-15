@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { IconCheck, IconDot, IconSettings } from './icons'
 import type { ApiKeyStatusView, ExtensionInfo, McpServerStatus, PermissionRuleView } from './types'
 
@@ -178,32 +178,75 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
   const [permTool, setPermTool] = useState('bash')
   const [permSpec, setPermSpec] = useState('')
   const [permMsg, setPermMsg] = useState<string | null>(null)
+  // 保存竞态：全量 set 由 ref 串行化（双击 Add / 删除与保存交错不得覆盖新规则）；
+  // 初次 list 完成前禁止写（否则空数组会覆盖已持久化的 deny 规则）
+  const permBusyRef = useRef(false)
+  const [permBusy, setPermBusy] = useState(false)
+  const [permLoaded, setPermLoaded] = useState(false)
   useEffect(() => {
-    void window.neonforge.permissions?.list?.().then((rules) => setPermRules(rules ?? []))
+    let alive = true
+    const list = window.neonforge.permissions?.list
+    if (!list) {
+      setPermLoaded(true)
+      return
+    }
+    void list
+      .call(window.neonforge.permissions)
+      .then((rules) => {
+        if (alive) setPermRules(rules ?? [])
+      })
+      .catch(() => {
+        /* 读取失败保持空规则——保存前用户仍可重试 */
+      })
+      .finally(() => {
+        if (alive) setPermLoaded(true)
+      })
+    return () => {
+      alive = false
+    }
   }, [])
-  const savePermissionRules = (next: PermissionRuleView[]) => {
-    void window.neonforge.permissions
-      ?.set?.(next)
+  const savePermissionRules = (next: PermissionRuleView[], onSaved?: () => void) => {
+    if (permBusyRef.current) return
+    permBusyRef.current = true
+    setPermBusy(true)
+    setPermMsg(null)
+    const finish = () => {
+      permBusyRef.current = false
+      setPermBusy(false)
+    }
+    const set = window.neonforge.permissions?.set
+    if (!set) {
+      setPermMsg('权限规则通道未就绪')
+      finish()
+      return
+    }
+    void set
+      .call(window.neonforge.permissions, next)
       .then((r) => {
         if (r?.ok) {
           setPermRules(r.rules)
           setPermMsg('已保存（对后续工具调用立即生效）')
+          onSaved?.()
         } else {
           setPermMsg(r?.error ?? '保存失败')
         }
       })
       .catch((e) => setPermMsg(e instanceof Error ? e.message : String(e)))
+      .finally(finish)
   }
   const addPermissionRule = () => {
+    if (!permLoaded || permBusyRef.current) return
     const tool = permTool.trim()
     if (!tool) {
       setPermMsg('工具名不能为空（如 bash / write / edit）')
       return
     }
-    savePermissionRules([...permRules, { action: permAction, tool, specifier: permSpec }])
-    setPermSpec('')
+    savePermissionRules([...permRules, { action: permAction, tool, specifier: permSpec }], () =>
+      setPermSpec(''),
+    )
   }
   const removePermissionRule = (index: number) => {
+    if (permBusyRef.current) return
     savePermissionRules(permRules.filter((_, i) => i !== index))
   }
 
@@ -619,7 +662,9 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
         <span className="nf-settings__plugins-title">
           权限规则（全局持久化；拒绝优先于允许；匹配前缀留空 = 该工具全部）
         </span>
-        {permRules.length === 0 ? (
+        {!permLoaded ? (
+          <p className="nf-settings__key-status">正在读取已保存规则…</p>
+        ) : permRules.length === 0 ? (
           <p className="nf-settings__key-status">暂无规则——未匹配调用仍按授权卡 / 只读预授权处理</p>
         ) : (
           <div className="nf-settings__plugins-list">
@@ -633,6 +678,7 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
                   type="button"
                   className="nf-settings__plugin-toggle"
                   aria-label={`删除规则 ${rule.tool}（${rule.specifier || '全部'}）`}
+                  disabled={permBusy}
                   onClick={() => removePermissionRule(i)}
                 >
                   删除
@@ -644,6 +690,7 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
         <div className="nf-settings__mcp-actions">
           <select
             value={permAction}
+            disabled={!permLoaded || permBusy}
             onChange={(e) => setPermAction(e.target.value as 'allow' | 'deny' | 'ask')}
             aria-label="规则动作"
           >
@@ -654,6 +701,7 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
           <input
             className="nf-config__input"
             value={permTool}
+            disabled={!permLoaded || permBusy}
             onChange={(e) => setPermTool(e.target.value)}
             placeholder="工具（bash / write / edit）"
             aria-label="规则工具"
@@ -661,11 +709,12 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
           <input
             className="nf-config__input"
             value={permSpec}
+            disabled={!permLoaded || permBusy}
             onChange={(e) => setPermSpec(e.target.value)}
             placeholder="匹配前缀（留空 = 全部）"
             aria-label="规则匹配前缀"
           />
-          <button type="button" onClick={addPermissionRule}>
+          <button type="button" disabled={!permLoaded || permBusy} onClick={addPermissionRule}>
             添加规则
           </button>
         </div>

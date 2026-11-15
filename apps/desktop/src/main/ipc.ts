@@ -702,7 +702,12 @@ ipcMain.handle('planned-files:reset', () => {
 })
 
 // BC-02 权限规则（userData/config/permission-rules.json）：规则引擎跨重启保留
-ipcMain.handle('permissions:list', () => getPermissionRulesStore().load())
+ipcMain.handle('permissions:list', () => {
+  // 以磁盘为源重新加载并同步 registry——返回的就是执行侧实际生效规则
+  const rules = getPermissionRulesStore().load()
+  toolRegistry.setRules(rules)
+  return rules
+})
 ipcMain.handle('permissions:set', (_e, input: unknown) => {
   const valid = validateIpc(input, IPC_SCHEMAS.permissionsSet)
   if (!valid.ok) {
@@ -732,6 +737,7 @@ ipcMain.handle(
       name: string
       args: Record<string, unknown>
       approved?: boolean
+      approvalSource?: 'user' | 'auto'
       rootPath?: string
       sessionId?: string
     },
@@ -740,6 +746,7 @@ ipcMain.handle(
     if (!valid.ok) return { ok: false, error: `参数校验失败：${valid.error}` }
     const res = await toolRegistry.execute(opts.name, opts.args ?? {}, {
       approved: opts.approved ?? false,
+      approvalSource: opts.approvalSource,
       rootPath: opts.rootPath ?? workspace.getCurrentRoot() ?? undefined,
       sessionId: opts.sessionId,
     })
