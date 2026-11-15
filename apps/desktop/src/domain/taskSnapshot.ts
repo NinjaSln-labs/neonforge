@@ -89,25 +89,77 @@ export function toTaskSnapshot(state: ConversationState): TaskSnapshot {
   }
 }
 
+function parseGoalProposal(raw: unknown): boolean {
+  if (!isRecord(raw)) return false
+  return typeof raw.statement === 'string' && isStringArray(raw.assumptions)
+}
+
+function parsePlanProposal(raw: unknown): boolean {
+  if (!isRecord(raw)) return false
+  return (
+    typeof raw.summary === 'string' &&
+    Array.isArray(raw.files) &&
+    raw.files.every(
+      (f) => isRecord(f) && typeof f.path === 'string' && typeof f.reason === 'string',
+    ) &&
+    isStringArray(raw.assumptions) &&
+    isStringArray(raw.verificationPlan)
+  )
+}
+
+function parseCompletionClaim(raw: unknown): boolean {
+  if (!isRecord(raw)) return false
+  if (typeof raw.summary !== 'string' || !isRecord(raw.evidence)) return false
+  const evidence = raw.evidence
+  return (
+    Array.isArray(evidence.verification) &&
+    evidence.verification.every(
+      (v) =>
+        isRecord(v) &&
+        typeof v.command === 'string' &&
+        (v.output === undefined || typeof v.output === 'string') &&
+        (v.passed === undefined || typeof v.passed === 'boolean'),
+    ) &&
+    Array.isArray(evidence.diffs) &&
+    evidence.diffs.every((d) => isRecord(d) && typeof d.path === 'string') &&
+    isStringArray(evidence.pendingQuestions)
+  )
+}
+
+function parseApproval(raw: unknown): boolean {
+  if (!isRecord(raw)) return false
+  return (
+    typeof raw.toolName === 'string' &&
+    typeof raw.subject === 'string' &&
+    typeof raw.reason === 'string' &&
+    typeof raw.risk === 'string' &&
+    ['low', 'medium', 'high'].includes(raw.risk)
+  )
+}
+
+function parseSystemClarify(raw: unknown): boolean {
+  if (!isRecord(raw)) return false
+  return (
+    typeof raw.statement === 'string' &&
+    typeof raw.underlying === 'string' &&
+    ['goal', 'plan', 'resolution'].includes(raw.underlying)
+  )
+}
+
+/** 决策内容深层校验：卡渲染会直接读 proposal.files/assumptions/pendingQuestions——结构不符必须拒绝。 */
 function parseDecisionContent(raw: unknown): DecisionContent | undefined {
   if (!isRecord(raw)) return undefined
   if (typeof raw.kind !== 'string' || !DECISION_KINDS.includes(raw.kind as DecisionKind)) {
     return undefined
   }
   if (typeof raw.since !== 'string') return undefined
-  if (raw.proposal !== undefined && !isRecord(raw.proposal)) return undefined
-  if (raw.approval !== undefined && !isRecord(raw.approval)) return undefined
-  const content: DecisionContent = {
-    kind: raw.kind as DecisionKind,
-    since: raw.since,
-  }
-  if (isRecord(raw.proposal)) {
-    content.proposal = raw.proposal as unknown as DecisionContent['proposal']
-  }
-  if (isRecord(raw.approval)) {
-    content.approval = raw.approval as unknown as DecisionContent['approval']
-  }
-  return content
+  const kind = raw.kind as DecisionKind
+  if (kind === 'goal' && !parseGoalProposal(raw.proposal)) return undefined
+  if (kind === 'plan' && !parsePlanProposal(raw.proposal)) return undefined
+  if (kind === 'resolution' && !parseCompletionClaim(raw.proposal)) return undefined
+  if (kind === 'system_clarify' && !parseSystemClarify(raw.proposal)) return undefined
+  if (kind === 'approval' && !parseApproval(raw.approval)) return undefined
+  return raw as unknown as DecisionContent
 }
 
 function parseRejectReason(raw: unknown): RejectReason | undefined {
@@ -141,9 +193,6 @@ export function fromTaskSnapshot(raw: unknown): ConversationState | null {
     return null
   }
   if (!isStringArray(raw.plannedFiles) || !isStringArray(raw.producedFiles)) return null
-  // 聚合不变量：方案确认必然在目标确认之后；解决确认必然在方案确认之后——非法组合视为损坏快照
-  if (raw.planConfirmed && !raw.goalConfirmed) return null
-  if (raw.resolutionConfirmed && !raw.planConfirmed) return null
   if (!Array.isArray(raw.deniedApprovals)) return null
   const deniedApprovals: DeniedApproval[] = []
   for (const entry of raw.deniedApprovals) {
@@ -160,6 +209,8 @@ export function fromTaskSnapshot(raw: unknown): ConversationState | null {
   }
   const decisionContent = parseDecisionContent(raw.decisionContent)
   const lastRejectReason = parseRejectReason(raw.lastRejectReason)
+  // 非 approval 决策点必须有可渲染内容；approval 卡由消息中的授权工具调用承载（可无 decisionContent）
+  if (raw.pending !== 'none' && raw.pending !== 'approval' && !decisionContent) return null
   return {
     goalConfirmed: raw.goalConfirmed,
     planConfirmed: raw.planConfirmed,

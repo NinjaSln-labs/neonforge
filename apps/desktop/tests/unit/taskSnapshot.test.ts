@@ -77,17 +77,60 @@ describe('taskSnapshot（A1 Task 跨重启快照）', () => {
     expect(fromTaskSnapshot({ ...snapshot, deniedApprovals: [{}] })).toBeNull()
   })
 
+  it('合法状态：resolution 确认后 planConfirmed=false 不被拒（A-025 任务边界）', () => {
+    const state: ConversationState = {
+      ...initialState(),
+      goalConfirmed: true,
+      planConfirmed: false,
+      resolutionConfirmed: true,
+      producedFiles: new Set(['/test/x.html']),
+    }
+    expect(fromTaskSnapshot(toTaskSnapshot(state))?.resolutionConfirmed).toBe(true)
+  })
+
+  it('合法状态：目标拒绝后 planConfirmed=true 不被拒（拒绝不回滚方案确认位）', () => {
+    const state: ConversationState = {
+      ...initialState(),
+      goalConfirmed: false,
+      planConfirmed: true,
+      plannedFiles: new Set(['/test/a.js']),
+    }
+    expect(fromTaskSnapshot(toTaskSnapshot(state))?.planConfirmed).toBe(true)
+  })
+
   it('可选字段损坏 → 丢弃该字段，不阻断其余快照', () => {
     const snapshot = toTaskSnapshot(richState()) as unknown as Record<string, unknown>
     const restored = fromTaskSnapshot({
       ...snapshot,
+      pending: 'none',
       decisionContent: { kind: 'unknown', since: 't' },
       lastRejectReason: { kind: 'nope' },
     })
     expect(restored).not.toBeNull()
     expect(restored?.decisionContent).toBeUndefined()
     expect(restored?.lastRejectReason).toBeUndefined()
-    expect(restored?.pending).toBe('plan')
+    expect(restored?.pending).toBe('none')
+  })
+
+  it('非 approval 决策点缺少可渲染内容 → 整快照拒绝（防卡渲染崩溃/卡死）', () => {
+    const snapshot = toTaskSnapshot(richState()) as unknown as Record<string, unknown>
+    expect(
+      fromTaskSnapshot({
+        ...snapshot,
+        decisionContent: { kind: 'plan', since: 't', proposal: { summary: 'x' } },
+      }),
+    ).toBeNull()
+    expect(fromTaskSnapshot({ ...snapshot, decisionContent: undefined })).toBeNull()
+  })
+
+  it('proposal 嵌套字段结构非法 → 拒绝（防止卡渲染 TypeError）', () => {
+    const snapshot = toTaskSnapshot(richState()) as unknown as Record<string, unknown>
+    const badPlan = {
+      kind: 'plan',
+      since: 't',
+      proposal: { summary: 'x', files: [{ path: 'a' }], assumptions: [], verificationPlan: [] },
+    }
+    expect(fromTaskSnapshot({ ...snapshot, decisionContent: badPlan })).toBeNull()
   })
 
   it('非对象/损坏 JSON 值 → null', () => {

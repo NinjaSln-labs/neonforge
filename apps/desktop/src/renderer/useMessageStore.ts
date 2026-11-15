@@ -23,6 +23,8 @@ export interface MessageStore {
   messagesRef: RefObject<Msg[]>
   nextMsgId: () => string
   setMessages: Dispatch<SetStateAction<Msg[]>>
+  /** 会话恢复完成（messages 与任务快照已一致）——依赖消息的同步效应须等此标志置位 */
+  sessionReady: boolean
 }
 
 export function useMessageStore({
@@ -33,6 +35,7 @@ export function useMessageStore({
   onTaskStateRestored,
 }: MessageStoreDeps): MessageStore {
   const [messages, setMessages] = useState<Msg[]>([])
+  const [sessionReady, setSessionReady] = useState(false)
   const messagesRef = useRef<Msg[]>([])
   useEffect(() => {
     messagesRef.current = messages
@@ -45,7 +48,10 @@ export function useMessageStore({
   // 卡重显旧内容（用户确认/修改后才更新——模型首轮只能响应用户对已有决策点的决策）
   useEffect(() => {
     const snapshot = loadSessionSnapshot()
-    if (!snapshot) return
+    if (!snapshot) {
+      setSessionReady(true)
+      return
+    }
     // ADR-013：任务快照优先——目标/方案/解决确认态、pending、执行进度与拒绝记忆完整恢复；
     // 快照损坏/版本不符 → 回退旧消息快照恢复路径（legacy）。
     const taskRestored = snapshot.task != null && restoreTaskState(snapshot.task)
@@ -75,6 +81,9 @@ export function useMessageStore({
         }
       }
     }
+    // 恢复完成：消息与任务状态此刻一致；依赖消息的同步效应（授权 pending 对账）从下一次渲染起生效，
+    // 避免与首渲染的空消息快照竞态（错误清掉任务快照里的 approval pending 再经 transition 重建 → 伪造决策事件）
+    setSessionReady(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   // 断点续做：完整消息变化 → 持久化（过滤半截 streaming——streaming 时 serialize 为空不覆盖存档）
@@ -93,5 +102,5 @@ export function useMessageStore({
     if (serialized.length > 0) saveSession(serialized, toTaskSnapshot(stateRef.current))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, stateRef.current.decisionContent, stateVersion])
-  return { messages, messagesRef, nextMsgId, setMessages }
+  return { messages, messagesRef, nextMsgId, setMessages, sessionReady }
 }

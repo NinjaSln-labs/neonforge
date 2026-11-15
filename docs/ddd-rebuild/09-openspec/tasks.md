@@ -64,7 +64,7 @@
 ## 4. 验证
 
 - [x] 4.1 `npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit`
-- [x] 4.2 `npx vitest run`（71 文件 / 829 用例通过，2026-11-15；含审查修复、P1-04 第二批、入口硬化、轻量/跨存储事务 Outbox、BC-02 权限规则持久化与安全复核新增回归）
+- [x] 4.2 `npx vitest run`（71 文件 / 837 用例通过，2026-11-16；含审查修复、P1-04 第二批、入口硬化、轻量/跨存储事务 Outbox、BC-02 权限规则持久化与安全复核新增回归；ADR-013 审查修复批补快照深校验/恢复竞态/WAL 耐久写回归）
 - [x] 4.3 `npx eslint .`（0 error，6 条既有 hook 依赖 warning）
 - [x] 4.4 `npx playwright test --project=interaction`（2026-11-15 全量 71/71 通过。两个既有 flaky 已定位并处置：
   ① `.nf-start` 启动竞态 = WSL/Chromium 偶发 `net::ERR_NETWORK_CHANGED`，网络栈变更取消模块请求，页面只剩空 `<div id="root">`（非应用启动逻辑 bug）——所有 interaction 入口统一走 `gotoStart`（启动超时一次重载重试 + DOM/bridge/hasKey/console 诊断），环境问题在测试层消除；
@@ -72,7 +72,7 @@
   **2026-11-15 代码审查修复后**全量 72/72（新增「第二轮失败重试重放第二轮上下文」回归）；队列已改多槽 FIFO，既有 approve-files 用例（1804）改为等 working 释放后操作（不再依赖旧单槽覆盖行为）。**排队回归补齐后**全量 74/74（新增「连续排队两条按序送达」「停止回填输入框」）。**入口硬化批次**：`approve-files 多卡并存` 用例（1560）也改为等 working 释放后再发送「继续」——原在流式未结束时发送会按排队语义进入 FIFO，第二卡在授权等待期间可能不生成（排队语义已由 `queue.interaction.ts` 单独覆盖）；repeat-each=5 稳定。）
 - [x] 4.5 回归：现有 P0 用例与既有 `conversationState` / `tools` / `verifyCompletionSystem` 测试全部仍通过
 - [x] 4.6 `npx prettier --check "src/**/*.{ts,tsx}" "tests/**/*.{ts,tsx}" "*.mjs" "*.config.*"`（qa.yml 格式门禁；2026-11-15 对齐 42 个既有文件，326 行格式化，无逻辑变更）
-- [x] 4.7 文档一致性（2026-11-15）：14 spec / 69 Requirement / 268 Scenario（单 Requirement ≤5 Scenario）；`10-code-evidence.md` 行号刷新并校验 0 越界；`docs/ddd-rebuild` 相对链接 0 缺失；`docs/tests/coverage-matrix.md` 增补 71 文件 / 829 用例 / 76 场景快照与 BC-10～BC-14、BC-02、Outbox 覆盖表
+- [x] 4.7 文档一致性（2026-11-15；2026-11-16 计数刷新）：14 spec / 69 Requirement / 268 Scenario（单 Requirement ≤5 Scenario）；`10-code-evidence.md` 行号刷新并校验 0 越界；`docs/ddd-rebuild` 相对链接 0 缺失；`docs/tests/coverage-matrix.md` 增补 71 文件 / 837 用例 / 78 场景快照与 BC-10～BC-14、BC-02、Outbox、ADR-013 恢复覆盖表
 
 ---
 
@@ -134,7 +134,7 @@
 - [x] 8.3 `R/sessionStore.ts` V2 会话记录：消息 + 任务快照一次 `setItem` 原子写；兼容旧 V1 数组（消息可读、任务为空）；`clearSession` 同时清空
 - [x] 8.4 `R/useConversationState.ts` `restoreTaskState`：系统初始化路径，不派生领域事件；`R/useMessageStore.ts` 恢复时任务快照优先、旧消息 decisionContent 兜底；持久化随消息同记录
 - [x] 8.5 渲染镜像同步：`MainWorkspace.handleTaskStateRestored` 恢复 goal/plan 确认位；`restorePlanned` 与 main 批准事实**并集**（防空 main 覆盖已确认方案清单）
-- [x] 8.6 测试：`tests/unit/taskSnapshot.test.ts`（6）、`sessionStore.test.ts` V2/兼容（3）、`tests/interaction/sessionRestore.interaction.ts`（1）；全量 71 文件 / 829 用例、interaction 76/76
+- [x] 8.6 测试：`tests/unit/taskSnapshot.test.ts`（10：含嵌套决策内容深校验与领域合法边界态）、`sessionStore.test.ts` V2/兼容（含待授权工具卡保留）、`tests/interaction/sessionRestore.interaction.ts`（3：方案卡恢复、planConfirmed 镜像与启动无伪造事件、待授权工具卡恢复）；全量 71 文件 / 837 用例、interaction 78/78
 - [ ] 8.7 push + CI 绿（用户当前要求不推送）
 
 ---

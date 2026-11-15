@@ -172,9 +172,14 @@ export class TimelineOutbox {
   /** 入队（同步 + fsync）——返回 outboxId；入队失败抛出，由调用方降级。 */
   enqueue(event: OutboxEvent, targetFile?: string, outboxId?: string): string {
     this.ensureDir()
+    const id = outboxId ?? newOutboxId()
+    // 固定 outboxId 的重放（WAL 保留记录每次 drain 都会重新投递）：已在队列中则幂等跳过，避免队列膨胀。
+    if (outboxId) {
+      const existing = this.readAll()
+      if (!existing.error && existing.entries.some((e) => e.id === outboxId)) return id
+    }
     const existed = existsSync(this.filePath)
     ensureTrailingNewline(this.filePath)
-    const id = outboxId ?? newOutboxId()
     const entry: OutboxEntry = {
       id,
       enqueuedAt: new Date().toISOString(),

@@ -286,7 +286,7 @@ export default function ConversationPanel({
     rejectApproval,
     applyTool,
     setPending: setPendingState,
-    clearPending,
+    clearPendingSilently,
     resetRejectStreak,
     setFilesApproved,
     restorePlanned,
@@ -307,7 +307,7 @@ export default function ConversationPanel({
     },
   })
   // P1-05 阶段 5：消息状态/持久化（历史恢复与决策点快照）
-  const { messages, messagesRef, nextMsgId, setMessages } = useMessageStore({
+  const { messages, messagesRef, nextMsgId, setMessages, sessionReady } = useMessageStore({
     setPendingState,
     stateRef,
     stateVersion,
@@ -321,6 +321,9 @@ export default function ConversationPanel({
   // 2026-08-15 D5：互斥——确认卡 pending（goal/execution/achievement——done 分支 setPending 置位）优先，
   // 授权卡 pending 只在当前无确认卡 pending 时置位（A0：pending 只有一个——决策点互斥，用户先处理先弹的卡）
   useEffect(() => {
+    // 等会话恢复完成：首渲染 messages 还是空数组，若此时按快照 pending 对账会先清掉 approval 再经
+    // transition 重建（派生 pending_set/decision.requested 假事件）。恢复后 messages 与任务态一致再对账。
+    if (!sessionReady) return
     const hasApproval =
       messages.some((m) =>
         m.toolCalls?.some((c) => c.status === 'need-approval' || c.status === 'file-approval'),
@@ -328,10 +331,10 @@ export default function ConversationPanel({
     if (hasApproval && stateRef.current.pending === 'none') {
       setPendingState('approval')
     } else if (!hasApproval && stateRef.current.pending === 'approval') {
-      clearPending()
+      clearPendingSilently()
     }
     onApprovalChange?.(hasApproval)
-  }, [messages, onApprovalChange])
+  }, [messages, onApprovalChange, sessionReady])
   // P1-05 阶段 5：卡弹出/状态变化遥测
   useConversationTelemetry({
     goalConfirmed,
@@ -531,40 +534,41 @@ export default function ConversationPanel({
   })
 
   // P1-05 阶段 4c：轮次编排 hook（与 useToolApproval 互引：approveAllToolCalls 迟绑定读取）
-  const { acquireChain, maybeContinue, retryFailedTurn, send, stopGeneration } = useChatEngine({
-    capReadyRef,
-    chatRef,
-    doneNotifierRef,
-    getApproveAllToolCalls: () => approveAllToolCalls,
-    inputRef,
-    messages,
-    messagesRef,
-    nextMsgId,
-    onActionPromiseHint,
-    onUserMessage,
-    onWorkingChange,
-    pendingSendRef,
-    prevReadFilesRef,
-    recentFilesExternal,
-    confirm,
-    reject,
-    rootPath,
-    sendRef,
-    sessionId,
-    sessionRef,
-    setInput,
-    setMessages,
-    setPendingState,
-    setWorking,
-    setWorkingStage,
-    stateRef,
-    streamingRef,
-    streamingSidRef,
-    suspendRoundRef,
-    tlog,
-    trustPath,
-    workingRef,
-  })
+  const { acquireChain, maybeContinue, retryFailedTurn, send, stopGeneration, flushPendingSend } =
+    useChatEngine({
+      capReadyRef,
+      chatRef,
+      doneNotifierRef,
+      getApproveAllToolCalls: () => approveAllToolCalls,
+      inputRef,
+      messages,
+      messagesRef,
+      nextMsgId,
+      onActionPromiseHint,
+      onUserMessage,
+      onWorkingChange,
+      pendingSendRef,
+      prevReadFilesRef,
+      recentFilesExternal,
+      confirm,
+      reject,
+      rootPath,
+      sendRef,
+      sessionId,
+      sessionRef,
+      setInput,
+      setMessages,
+      setPendingState,
+      setWorking,
+      setWorkingStage,
+      stateRef,
+      streamingRef,
+      streamingSidRef,
+      suspendRoundRef,
+      tlog,
+      trustPath,
+      workingRef,
+    })
 
   const addTrust = (args: Record<string, unknown>): void => {
     // 2026-08-06 安全漏洞（用户反馈「启动服务没弹授权卡」）：bash 点「允许并记住」→ trustPath('') fallback rootPath → 整个项目根被信任 → 后续所有 bash 绕过授权！
@@ -629,6 +633,7 @@ export default function ConversationPanel({
     addTrust,
     acquireChain,
     maybeContinue,
+    flushPendingSend,
     chatRef,
     sessionRef,
     streamingSidRef,

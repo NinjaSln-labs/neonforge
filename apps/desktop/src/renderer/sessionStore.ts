@@ -43,7 +43,13 @@ export function serializeMessages(
         content: m.content,
         reasoning: m.reasoning,
         toolCalls: m.toolCalls?.filter(
-          (t) => t.status === 'done' || t.status === 'error' || t.status === 'reverted',
+          (t) =>
+            t.status === 'done' ||
+            t.status === 'error' ||
+            t.status === 'reverted' ||
+            // ADR-013：待授权工具卡跨重启（否则 pending='approval' 恢复后无卡，mount effect 会伪造批准事件）
+            t.status === 'need-approval' ||
+            t.status === 'file-approval',
         ),
         id: m.id,
         decisionContent: m.decisionContent, // S3：决策点快照随完整消息持久化

@@ -39,6 +39,8 @@ export interface UseToolApprovalDeps {
   // 续聊链
   acquireChain: () => Promise<() => void>
   maybeContinue: (depth: number, sid: number) => Promise<void>
+  // ADR-013/审查修复：授权/批准直连续聊路径结束后衔接排队消息（原只有 send/retry finally 会 flush）
+  flushPendingSend: () => void
   chatRef: { current: { depth: number } | null }
   sessionRef: { current: number }
   // 流式 ref（stopToolCall 中止链用）
@@ -66,6 +68,7 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
     addTrust,
     acquireChain,
     maybeContinue,
+    flushPendingSend,
     chatRef,
     sessionRef,
     streamingSidRef,
@@ -167,11 +170,13 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
         )
         // 流式链互斥：授权续聊也占锁排队（chunk 交错防护）
         setTimeout(async () => {
+          const sid = sessionRef.current
           const release = await acquireChain()
           try {
-            await maybeContinue(chatRef.current?.depth ?? 0, sessionRef.current)
+            await maybeContinue(chatRef.current?.depth ?? 0, sid)
           } finally {
             release()
+            if (sessionRef.current === sid) flushPendingSend()
           }
         }, 150)
       })
@@ -253,7 +258,12 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
       }),
       tc,
     )
-    setTimeout(() => void maybeContinue(chatRef.current?.depth ?? 0, sessionRef.current), 150)
+    setTimeout(() => {
+      const sid = sessionRef.current
+      void maybeContinue(chatRef.current?.depth ?? 0, sid).finally(() => {
+        if (sessionRef.current === sid) flushPendingSend()
+      })
+    }, 150)
   }
 
   // 快照回滚（write/edit 写前已快照——按 file 匹配更新）

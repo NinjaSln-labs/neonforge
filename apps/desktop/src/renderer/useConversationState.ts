@@ -164,8 +164,21 @@ export function useConversationState(opts?: UseConversationStateOpts) {
       const restored = fromTaskSnapshot(snapshot)
       if (!restored) return false
       stateRef.current = restored
+      // P1-03 / 硬序门：main 的 planConfirmedRef 不随 renderer 重启恢复——必须镜像回写（失败不阻断恢复）
+      void syncPlanMirror(restored.planConfirmed)
       setVersion((v) => v + 1)
       return true
+    },
+    // ADR-013：恢复后的陈旧 approval pending（对应工具卡已不在消息中）静默清理——
+    // 不伪造 decision.resolved confirm（原 clearPending transition 会记录用户从未做过的批准）。
+    clearPendingSilently: () => {
+      if (stateRef.current.pending === 'none') return
+      stateRef.current = {
+        ...stateRef.current,
+        pending: 'none',
+        decisionContent: undefined,
+      }
+      setVersion((v) => v + 1)
     },
   }
 }

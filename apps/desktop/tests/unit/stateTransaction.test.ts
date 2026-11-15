@@ -87,13 +87,28 @@ describe('StateTransactionLog（跨存储事务性 Outbox）', () => {
     expect(existsSync(JOURNAL)).toBe(true)
   })
 
-  it('latestWriteContent 返回最新已提交意图；WAL 清空后返回 null', () => {
-    let ok = false
-    const log = new StateTransactionLog(JOURNAL, () => ok)
+  it('latestWriteContent 在状态落盘失败时返回 WAL 意图；清空后 null', () => {
+    mkdirSync(STATE) // 同名目录 → 状态写入失败，记录保留
+    const log = new StateTransactionLog(JOURNAL, () => true)
     log.commit([{ filePath: STATE, content: '{"v":1}' }], [event('a')])
     expect(log.latestWriteContent(STATE)).toBe('{"v":1}')
-    ok = true
+    rmSync(STATE, { recursive: true, force: true })
     log.drain()
+    expect(log.latestWriteContent(STATE)).toBeNull()
+  })
+
+  it('磁盘比 WAL 记录新（WAL 降级直写）→ 不回放旧 WAL 内容', () => {
+    writeFileSync(
+      JOURNAL,
+      JSON.stringify({
+        id: 'tx-old',
+        at: '2020-01-01T00:00:00.000Z',
+        writes: [{ filePath: STATE, content: '{"v":"old"}' }],
+        events: [],
+      }) + '\n',
+    )
+    writeFileSync(STATE, '{"v":"new"}')
+    const log = new StateTransactionLog(JOURNAL, () => true)
     expect(log.latestWriteContent(STATE)).toBeNull()
   })
 
@@ -111,6 +126,26 @@ describe('StateTransactionLog（跨存储事务性 Outbox）', () => {
     expect(result.pending).toBe(false)
     expect(sink).toHaveBeenCalledTimes(2)
     expect(readFileSync(STATE, 'utf-8')).toBe('{"v":2}')
+    expect(existsSync(JOURNAL)).toBe(false)
+  })
+
+  it('非 ASCII 记录后的半条尾行按字节截断（不切断上一条完整记录）', () => {
+    const record = {
+      id: 'tx-中文',
+      at: '2026-11-15T00:00:00.000Z',
+      writes: [{ filePath: STATE, content: '{"v":"第一版中文"}' }],
+      events: [{ session: 's1', type: 'acceptance.criteria_derived', detail: { 中文: '值' } }],
+    }
+    writeFileSync(JOURNAL, JSON.stringify(record) + '\n{"id":"tx-半条中文')
+    const sink = vi.fn(() => true)
+    const log = new StateTransactionLog(JOURNAL, sink)
+    const result = log.commit(
+      [{ filePath: STATE, content: '{"v":"第二版中文"}' }],
+      [{ session: 's1', type: 'acceptance.item_passed', detail: { 中文: '更新' } }],
+    )
+    expect(result.pending).toBe(false)
+    expect(sink).toHaveBeenCalledTimes(2)
+    expect(readFileSync(STATE, 'utf-8')).toBe('{"v":"第二版中文"}')
     expect(existsSync(JOURNAL)).toBe(false)
   })
 })

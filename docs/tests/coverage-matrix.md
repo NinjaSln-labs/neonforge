@@ -1,7 +1,7 @@
 # 覆盖矩阵（Coverage Matrix）
 
 > 首版：2026-08-16（S2）→ 增补：2026-09-29（Keenable 合规）
-> 当前快照（2026-11-15）：L1 **71 文件 / 829 用例** · 事件注册表 55+ 事件 · 不变量 Inv 1-8 + I17-I21 · L3 interaction **76 场景**
+> 当前快照（2026-11-16）：L1 **71 文件 / 837 用例** · 事件注册表 55+ 事件 · 不变量 Inv 1-8 + I17-I21 · L3 interaction **78 场景**
 > 表 1-表 10 保留各阶段时点的基线记录；当前总数以本快照与 `09-openspec/tasks.md §4` 为准。
 > 维护：阶段末更新（coverage-matrix skill）；缺口入 audit-items
 
@@ -172,9 +172,10 @@
 | P1-04 IPC 契约校验 | `ipcSchema.test.ts`（结构/必填/nullable）、`ipcContractParity.test.ts`（main ↔ preload 静态对齐） | ✅ |
 | P1-02 轻量 Outbox | `timelineOutbox.test.ts`（FIFO 投递/失败保留重放/outboxId 幂等/损坏条目跳过/尾部半行/读取失败可见/目标文件固定）、`timelineLogger.test.ts`（投递失败留 Outbox/启动重放/重启 seq 续接/崩溃窗口幂等/跨午夜重放/索引读失败重试/旧 DLQ 兼容） | ✅ |
 | P1-02 跨存储事务性 Outbox | `stateTransaction.test.ts`（WAL 提交/失败保留/FIFO 重放/确定性 outboxId/损坏 WAL/半行尾丢弃/latestWriteContent）、`acceptanceStore.test.ts`/`taskQueueStore.test.ts`/`changeSetService.test.ts`（commit 回调：状态+基线+事件同事务） | ✅ |
-| 任务状态机跨重启（ADR-013 / GitHub #11） | `taskSnapshot.test.ts`（全字段往返/损坏/版本/聚合不变量）、`sessionStore.test.ts`（V2 消息+任务原子记录/旧 V1 兼容）、`sessionRestore.interaction.ts`（快照恢复 pending 方案卡） | ✅ |
+| 任务状态机跨重启（ADR-013 / GitHub #11） | `taskSnapshot.test.ts`（全字段往返/损坏/版本/嵌套决策内容深校验/合法边界态）、`sessionStore.test.ts`（V2 消息+任务原子记录/旧 V1 兼容/待授权工具卡保留）、`sessionRestore.interaction.ts`（快照恢复 pending 方案卡与决策内容、planConfirmed 主进程镜像、待授权工具卡恢复且启动不伪造决策事件） | ✅ |
 | 审查回归（2026-11-15） | `agentLoop.test.ts::isApprovalIntent`（否定不批准）、`retry.interaction.ts`（第二轮失败重试上下文）、`queue.interaction.ts`（FIFO/停止回填） | ✅ |
-| P1-05 会话/轮次编排拆分 | `conversationHistory.test.ts`、`useConversationState.test.ts` + interaction 全量 76 场景 | ✅ |
+| 审查修复批（2026-11-16，`a9f8a84..HEAD`） | `stateTransaction.test.ts`（写失败回退 mtime、非 ASCII 尾部截断、短写循环）、`timelineLogger.test.ts`/`timelineOutbox.test.ts`（DLQ outboxId 重放不重复、同 id 入队幂等）、`changeSetService.test.ts`（基线仍在 WAL 时回滚不误判 conflict）、`taskSnapshot.test.ts`（决策内容深层校验/合法边界态）、`sessionStore.test.ts`（待授权工具卡持久化）、`sessionRestore.interaction.ts`（恢复待授权卡且无伪造决策事件） | ✅ |
+| P1-05 会话/轮次编排拆分 | `conversationHistory.test.ts`、`useConversationState.test.ts` + interaction 全量 78 场景 | ✅ |
 | Web Key 来源与明文副本 | `configStore.test.ts`（env/file/config 来源、opt-in 明文、删除清理） | ✅ |
 
 > 表 11 为 2026-11-15 增补；逐文件用例数不在此重复，避免与页首快照漂移。

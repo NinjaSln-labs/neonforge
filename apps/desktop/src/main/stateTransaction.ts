@@ -10,7 +10,6 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
-  readSync,
   renameSync,
   rmSync,
   statSync,
@@ -78,30 +77,31 @@ function syncDirBestEffort(dir: string): void {
   }
 }
 
+/** writeSync 可能短写（ENOSPC 等）——循环写满，否则 WAL/状态文件会被静默截断。 */
+function writeAll(fd: number, data: string): void {
+  const buf = Buffer.from(data)
+  let offset = 0
+  while (offset < buf.length) {
+    const written = writeSync(fd, buf, offset, buf.length - offset)
+    if (written <= 0) throw new Error('写入未完成（短写）')
+    offset += written
+  }
+}
+
 /** 上次崩溃若留下未换行的半条事务（未完成提交），截掉该尾部再追加——避免与新记录黏连。 */
 function dropIncompleteTail(filePath: string): void {
   if (!existsSync(filePath)) return
-  const size = statSync(filePath).size
-  if (size === 0) return
-  let lastByte: number
-  const fd = openSync(filePath, 'r')
-  try {
-    const last = Buffer.alloc(1)
-    readSync(fd, last, 0, 1, size - 1)
-    lastByte = last[0]
-  } finally {
-    closeSync(fd)
-  }
-  if (lastByte === 0x0a) return
-  const raw = readFileSync(filePath, 'utf-8')
-  const lastNewline = raw.lastIndexOf('\n')
+  const raw = readFileSync(filePath)
+  if (raw.length === 0 || raw[raw.length - 1] === 0x0a) return
+  // 按**字节**定位最后一个换行（按 UTF-8 字符串索引会让 CJK 前缀偏移，截断到上一条完整记录内部）
+  const lastNewline = raw.lastIndexOf(0x0a)
   truncateSync(filePath, lastNewline >= 0 ? lastNewline + 1 : 0)
 }
 
 function appendLineDurable(filePath: string, line: string): void {
   const fd = openSync(filePath, 'a', 0o600)
   try {
-    writeSync(fd, line)
+    writeAll(fd, line)
     fsyncSync(fd)
   } finally {
     closeSync(fd)
@@ -115,7 +115,7 @@ export function writeStateFile(filePath: string, content: string): void {
   const tmp = `${filePath}.tx-tmp`
   const fd = openSync(tmp, 'w', 0o600)
   try {
-    writeSync(fd, content)
+    writeAll(fd, content)
     fsyncSync(fd)
   } finally {
     closeSync(fd)
@@ -199,7 +199,7 @@ export class StateTransactionLog {
     const tmp = `${this.filePath}.tmp`
     const fd = openSync(tmp, 'w', 0o600)
     try {
-      writeSync(fd, records.map((r) => JSON.stringify(r)).join('\n') + '\n')
+      writeAll(fd, records.map((r) => JSON.stringify(r)).join('\n') + '\n')
       fsyncSync(fd)
     } finally {
       closeSync(fd)
@@ -283,14 +283,14 @@ export class StateTransactionLog {
       writes,
       events,
     }
-    this.ensureDir()
     try {
-      dropIncompleteTail(this.filePath)
-    } catch (e) {
-      console.error('[state-tx] 清理未完成尾行失败', e)
-    }
-    const existed = existsSync(this.filePath)
-    try {
+      this.ensureDir()
+      try {
+        dropIncompleteTail(this.filePath)
+      } catch (e) {
+        console.error('[state-tx] 清理未完成尾行失败', e)
+      }
+      const existed = existsSync(this.filePath)
       appendLineDurable(this.filePath, JSON.stringify(record) + '\n')
       if (!existed) syncDirBestEffort(path.dirname(this.filePath))
     } catch (e) {
@@ -342,8 +342,18 @@ export class StateTransactionLog {
     const read = this.readRecords()
     if (read.error) return null
     for (let i = read.records.length - 1; i >= 0; i -= 1) {
-      const write = read.records[i].writes.find((w) => w.filePath === target)
-      if (write) return write.content
+      const record = read.records[i]
+      const write = record.writes.find((w) => w.filePath === target)
+      if (!write) continue
+      // WAL append 失败时的直写降级不会进入日志：磁盘 mtime 晚于记录时间 → 磁盘是更新的意图，不回放旧 WAL。
+      try {
+        const info = statSync(target)
+        const at = Date.parse(record.at)
+        if (info.isFile() && Number.isFinite(at) && info.mtimeMs >= at) return null
+      } catch {
+        /* 文件不存在/不可 stat → 使用 WAL 内容（重试落盘） */
+      }
+      return write.content
     }
     return null
   }

@@ -283,7 +283,10 @@ export class ChangeSetService {
         continue
       }
       // 只使用变更集自有基线（或旧格式快照且内容哈希仍等于 baseHash）
-      const baseline = item.snapshotRef ? readText(item.snapshotRef) : null
+      // WAL 重放窗口：基线写入可能仍待落盘（状态记录已保留）——优先读已提交意图，避免误判 conflict
+      const baseline = item.snapshotRef
+        ? (this.pendingRead?.(item.snapshotRef) ?? readText(item.snapshotRef))
+        : null
       if (baseline === null || hashContent(baseline) !== item.baseHash) {
         current = markConflict(current, item.id, item.baseHash, nowHash)
         outcomes[item.id] = false

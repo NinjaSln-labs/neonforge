@@ -69,6 +69,24 @@ describe('sessionStore（断点续做——会话持久化）', () => {
     expect(calls[0].name).toBe('write')
   })
 
+  it('serializeMessages：待授权工具卡跨重启保留（need-approval/file-approval）', () => {
+    const out = serializeMessages([
+      DONE_MSG,
+      {
+        role: 'assistant' as const,
+        content: '',
+        status: 'done' as const,
+        toolCalls: [
+          { name: 'bash', args: { command: 'npm install' }, status: 'need-approval' as const },
+          { name: 'approve-files', args: { files: [] }, status: 'file-approval' as const },
+          { name: 'read', args: { path: '/x' }, status: 'pending' as const }, // 执行中——不存
+        ],
+      },
+    ])
+    const calls = out[1].toolCalls ?? []
+    expect(calls.map((c) => c.status)).toEqual(['need-approval', 'file-approval'])
+  })
+
   it('saveSession → loadSession 往返', () => {
     saveSession([
       { role: 'user', content: '你好' },

@@ -181,7 +181,7 @@ function appendTimelineEvent(
   return 'inserted'
 }
 
-function writeTimelineDlq(evt: OutboxEvent, error: string): void {
+function writeTimelineDlq(evt: OutboxEvent, error: string, outboxId?: string): void {
   try {
     appendFileSync(
       timelineDlqFile(),
@@ -190,6 +190,7 @@ function writeTimelineDlq(evt: OutboxEvent, error: string): void {
         session: evt.session,
         type: evt.type,
         error,
+        ...(outboxId ? { outboxId } : {}),
         event: JSON.stringify({
           ts: new Date().toISOString(),
           seq: -1,
@@ -197,6 +198,7 @@ function writeTimelineDlq(evt: OutboxEvent, error: string): void {
           type: evt.type,
           role: evt.role,
           detail: evt.detail ?? {},
+          ...(outboxId ? { outboxId } : {}),
         }),
       }) + '\n',
     )
@@ -216,8 +218,28 @@ export function drainTimelineDlq(): { replayed: number; remaining: number } {
       try {
         const record = JSON.parse(line) as { event?: string; session?: string }
         if (!record.event) throw new Error('missing event')
-        const target = timelineFile(record.session)
-        appendFileSync(target, record.event.endsWith('\n') ? record.event : `${record.event}\n`)
+        const parsed = JSON.parse(record.event) as {
+          session?: string
+          type?: string
+          role?: OutboxEvent['role']
+          detail?: Record<string, unknown>
+          outboxId?: string
+        }
+        if (typeof parsed.type !== 'string') throw new Error('invalid event')
+        const outboxId = typeof parsed.outboxId === 'string' ? parsed.outboxId : undefined
+        const target = timelineFile(record.session ?? parsed.session)
+        // 走 appendTimelineEvent（而非裸 append）：分配新 seq + 按 outboxId 判重——
+        // WAL 已成功投递的同一事件不会被 DLQ 重放再写一遍（无 outboxId 的旧 DLQ 行照常补写）
+        appendTimelineEvent(
+          {
+            session: parsed.session,
+            type: parsed.type,
+            role: parsed.role,
+            detail: parsed.detail ?? {},
+          },
+          outboxId,
+          target,
+        )
         replayed += 1
       } catch {
         remaining.push(line)
@@ -309,7 +331,7 @@ export function logTimeline(evt: OutboxEvent, opts: { outboxId?: string } = {}):
       writeFailures += 1
       lastWriteError = e2 instanceof Error ? e2.message : String(e2)
       console.error('[timeline] 事件写入失败', evt.type, lastWriteError)
-      writeTimelineDlq(evt, lastWriteError)
+      writeTimelineDlq(evt, lastWriteError, outboxId)
       return false
     }
     console.warn('[timeline] Outbox 不可用，已降级直写', e instanceof Error ? e.message : String(e))
