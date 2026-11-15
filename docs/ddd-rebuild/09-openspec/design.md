@@ -139,7 +139,7 @@ tool-call
       → tools:execute(approved)
         → main ToolRegistry.execute
           → write 规划门控（未 approve-files → policy）
-          → 规则 deny > allow > ask
+          → 规则 deny > allow > ask（userData/config/permission-rules.json 持久化；显式 ask 覆盖 preApproval）
           → requiresApproval && !approved → preApproval（只读/本地网络）→ needApproval
           → execute（read/write/edit/bash/search/web/service/...）
           → ToolResult{ok,data,error,needApproval?,policy?}

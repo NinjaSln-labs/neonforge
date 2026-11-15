@@ -58,6 +58,20 @@ export function matchesRule(
   return ruleArg(args).startsWith(rule.specifier)
 }
 
+/** 规则裁决：deny > allow > ask（同优先级取列表最前）；无匹配返回 undefined（fail-closed）。 */
+export function selectRule(
+  rules: PermissionRule[],
+  tool: string,
+  args: Record<string, unknown>,
+): PermissionRule | undefined {
+  const matched = rules.filter((rule) => matchesRule(tool, args, rule))
+  return (
+    matched.find((rule) => rule.action === 'deny') ??
+    matched.find((rule) => rule.action === 'allow') ??
+    matched.find((rule) => rule.action === 'ask')
+  )
+}
+
 // 沙箱判定：项目根内（0-1 创建的项目根 / 打开的项目根）——沙箱内外区分（Codex workspace-write 概念，软沙箱）
 function lexicalSandboxTarget(p: string, rootPath: string): string {
   const rp = path.resolve(rootPath)
@@ -224,7 +238,7 @@ class ToolRegistry {
       }
     }
     // 2026-08-04 授权架构 v4：规则裁决 deny > allow > ask（fail-closed）——对齐 Claude/Codex/Cursor 共识
-    const rule = this.rules.find((r) => matchesRule(name, args, r))
+    const rule = selectRule(this.rules, name, args)
     if (rule?.action === 'deny') {
       return {
         ok: false,
@@ -235,9 +249,10 @@ class ToolRegistry {
     const ruleAllows = rule?.action === 'allow'
     if (!ruleAllows && tool.requiresApproval && !opts.approved) {
       // 2026-08-04 授权架构重构：preApproval 裁决（如 bash 只读命令自动执行）——原一律 need-approval（授权疲劳根因：ls/cat 也弹卡）
+      // 显式 ask 规则优先于 preApproval（用户要求「此类调用每次都问」不能被只读自动放行绕过）
       let pre: { auto: boolean; reason?: string } | undefined
       try {
-        pre = await tool.preApproval?.(args, opts)
+        if (rule?.action !== 'ask') pre = await tool.preApproval?.(args, opts)
       } catch (e) {
         // P1 修复：realpath 异常（ENOTDIR/EACCES/ELOOP）不能穿透 IPC（否则工具卡永久 pending）
         return {

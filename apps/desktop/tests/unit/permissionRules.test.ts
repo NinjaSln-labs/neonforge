@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { matchesRule, isInSandbox } from '../../src/main/tools.js'
+import { matchesRule, selectRule, isInSandbox } from '../../src/main/tools.js'
 
 // 2026-08-04 授权架构 v4：规则引擎（deny > allow > ask，Tool(specifier) 格式对齐 Claude/Codex/Cursor）+ 沙箱判定
 
@@ -54,6 +54,27 @@ describe('matchesRule（Tool(specifier) 匹配）', () => {
         { action: 'allow', tool: 'write', specifier: '/proj/' },
       ),
     ).toBe(true)
+  })
+})
+
+describe('selectRule（裁决优先级 deny > allow > ask）', () => {
+  const allow = { action: 'allow' as const, tool: 'bash', specifier: 'npm run ' }
+  const deny = { action: 'deny' as const, tool: 'bash', specifier: 'npm run ' }
+  const ask = { action: 'ask' as const, tool: 'bash', specifier: 'npm run ' }
+
+  it('deny 优先于列表更早的 allow', () => {
+    expect(selectRule([allow, deny], 'bash', { command: 'npm run test' })?.action).toBe('deny')
+  })
+  it('deny 优先于列表更晚的 allow', () => {
+    expect(selectRule([deny, allow], 'bash', { command: 'npm run test' })?.action).toBe('deny')
+  })
+  it('allow 优先于 ask（与顺序无关）', () => {
+    expect(selectRule([ask, allow], 'bash', { command: 'npm run test' })?.action).toBe('allow')
+    expect(selectRule([allow, ask], 'bash', { command: 'npm run test' })?.action).toBe('allow')
+  })
+  it('无匹配 → undefined（fail-closed）', () => {
+    expect(selectRule([allow], 'bash', { command: 'git push' })).toBeUndefined()
+    expect(selectRule([allow], 'write', { path: '/a.ts' })).toBeUndefined()
   })
 })
 

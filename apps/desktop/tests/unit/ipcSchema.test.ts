@@ -136,4 +136,30 @@ describe('IPC 契约校验（P1-04）', () => {
     expect(validateIpc({}, IPC_SCHEMAS.timelineQuery).ok).toBe(true)
     expect(validateIpc({ limit: 1.5 }, IPC_SCHEMAS.timelineQuery).ok).toBe(false)
   })
+
+  it('permissionsSet：规则数组结构/枚举/数量边界', () => {
+    const rule = { action: 'allow', tool: 'bash', specifier: 'npm run ' }
+    expect(validateIpc({ rules: [rule] }, IPC_SCHEMAS.permissionsSet).ok).toBe(true)
+    expect(validateIpc({ rules: [{ ...rule, action: 'ok' }] }, IPC_SCHEMAS.permissionsSet).ok).toBe(
+      false,
+    )
+    expect(
+      validateIpc(
+        { rules: [{ action: 'allow', tool: '', specifier: '' }] },
+        IPC_SCHEMAS.permissionsSet,
+      ).ok,
+    ).toBe(false)
+    expect(
+      validateIpc({ rules: [{ action: 'allow', tool: 'bash' }] }, IPC_SCHEMAS.permissionsSet).ok,
+    ).toBe(false)
+    expect(validateIpc({}, IPC_SCHEMAS.permissionsSet).ok).toBe(false)
+    expect(
+      validateIpc({ rules: Array.from({ length: 201 }, () => rule) }, IPC_SCHEMAS.permissionsSet)
+        .ok,
+    ).toBe(false)
+    expect(
+      validateIpc({ rules: Array.from({ length: 200 }, () => rule) }, IPC_SCHEMAS.permissionsSet)
+        .ok,
+    ).toBe(true)
+  })
 })

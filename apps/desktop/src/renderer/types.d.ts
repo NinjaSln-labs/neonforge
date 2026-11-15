@@ -263,6 +263,13 @@ export interface NeonForgeBridge {
   }
   tools: NeonForgeTools
   plannedFiles: PlannedFilesApi // D3（ADR-005）：PlannedFiles 契约——权威在 main
+  // BC-02 权限规则（权威在 main userData；deny > allow > ask）
+  permissions: {
+    list: () => Promise<PermissionRuleView[]>
+    set: (
+      rules: PermissionRuleView[],
+    ) => Promise<{ ok: boolean; rules: PermissionRuleView[]; error?: string }>
+  }
   // #6 真机 2026-08-31（复验轮）：方案确认镜像——approve-files 硬序门
   session: {
     setPlanConfirmed: (v: boolean) => Promise<void>
@@ -508,4 +515,11 @@ interface PlannedFilesApi {
   load: () => Promise<{ files: string[]; approved: boolean }>
   add: (files: string[]) => Promise<{ files: string[]; approved: boolean }>
   reset: () => Promise<{ files: string[]; approved: boolean }>
+}
+
+/** BC-02 权限规则视图（与 main tools.ts PermissionRule 保持结构一致） */
+export interface PermissionRuleView {
+  action: 'allow' | 'deny' | 'ask'
+  tool: string
+  specifier: string
 }

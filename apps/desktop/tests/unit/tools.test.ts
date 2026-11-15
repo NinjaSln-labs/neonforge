@@ -29,8 +29,10 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     markPlanApproved() // 2026-08-04 规划强制适配：write/edit 测试默认已规划（规划机制本身有独立行为）
     if (!existsSync(TMP)) mkdirSync(TMP, { recursive: true })
     initTools()
+    toolRegistry.setRules([]) // BC-02：规则测试不得泄漏到其它用例
   })
   afterEach(() => {
+    toolRegistry.setRules([])
     rmSync(TMP, { recursive: true, force: true })
   })
 
@@ -42,6 +44,44 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     expect(r.needApproval).toBe(true)
     expect(r.error).toContain('授权')
     expect(existsSync(file)).toBe(false)
+  })
+
+  // BC-02 权限规则持久化配套：规则引擎在真实执行路径生效
+  it('allow 规则命中 → edit 无需逐次授权', async () => {
+    const file = path.join(TMP, 'rule-allow.txt')
+    writeFileSync(file, 'hello')
+    toolRegistry.setRules([{ action: 'allow', tool: 'edit', specifier: TMP }])
+    const r = await toolRegistry.execute(
+      'edit',
+      { path: file, old: 'hello', new: 'world' },
+      { rootPath: TMP },
+    )
+    expect(r.ok).toBe(true)
+    expect(readFileSync(file, 'utf-8')).toBe('world')
+  })
+
+  it('deny 规则优先于同参数 allow（规则顺序不改变裁决）', async () => {
+    const file = path.join(TMP, 'rule-deny.txt')
+    writeFileSync(file, 'hello')
+    toolRegistry.setRules([
+      { action: 'allow', tool: 'edit', specifier: TMP },
+      { action: 'deny', tool: 'edit', specifier: TMP },
+    ])
+    const r = await toolRegistry.execute(
+      'edit',
+      { path: file, old: 'hello', new: 'world' },
+      { rootPath: TMP, approved: true },
+    )
+    expect(r.ok).toBe(false)
+    expect(r.error).toContain('已阻止')
+    expect(readFileSync(file, 'utf-8')).toBe('hello')
+  })
+
+  it('ask 规则不被只读 preApproval 自动放行绕过', async () => {
+    toolRegistry.setRules([{ action: 'ask', tool: 'bash', specifier: 'ls' }])
+    const r = await toolRegistry.execute('bash', { command: 'ls' }, { rootPath: TMP })
+    expect(r.ok).toBe(false)
+    expect(r.needApproval).toBe(true)
   })
 
   it('非授权错误不带 needApproval 字段（未知工具——T2 协议边界）', async () => {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { IconCheck, IconDot, IconSettings } from './icons'
-import type { ApiKeyStatusView, ExtensionInfo, McpServerStatus } from './types'
+import type { ApiKeyStatusView, ExtensionInfo, McpServerStatus, PermissionRuleView } from './types'
 
 // 设置（ticket 08 / D0 §9 最小集）——2026-08-03 A1 审计修复：移除不生效的假设置（语言/默认视图/主动提醒无消费方——诚实性优先）
 // 保留真实内容：内置插件（真实 IPC 注册表）+ 快捷键表（真实已实现）
@@ -170,6 +170,41 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
       /* 存储不可用——本次会话仍生效 */
     }
     window.dispatchEvent(new Event('nf-delegate-changed'))
+  }
+
+  // BC-02 权限规则（持久化到 main userData；deny > allow > ask，specifier 留空 = 该工具全部）
+  const [permRules, setPermRules] = useState<PermissionRuleView[]>([])
+  const [permAction, setPermAction] = useState<'allow' | 'deny' | 'ask'>('allow')
+  const [permTool, setPermTool] = useState('bash')
+  const [permSpec, setPermSpec] = useState('')
+  const [permMsg, setPermMsg] = useState<string | null>(null)
+  useEffect(() => {
+    void window.neonforge.permissions?.list?.().then((rules) => setPermRules(rules ?? []))
+  }, [])
+  const savePermissionRules = (next: PermissionRuleView[]) => {
+    void window.neonforge.permissions
+      ?.set?.(next)
+      .then((r) => {
+        if (r?.ok) {
+          setPermRules(r.rules)
+          setPermMsg('已保存（对后续工具调用立即生效）')
+        } else {
+          setPermMsg(r?.error ?? '保存失败')
+        }
+      })
+      .catch((e) => setPermMsg(e instanceof Error ? e.message : String(e)))
+  }
+  const addPermissionRule = () => {
+    const tool = permTool.trim()
+    if (!tool) {
+      setPermMsg('工具名不能为空（如 bash / write / edit）')
+      return
+    }
+    savePermissionRules([...permRules, { action: permAction, tool, specifier: permSpec }])
+    setPermSpec('')
+  }
+  const removePermissionRule = (index: number) => {
+    savePermissionRules(permRules.filter((_, i) => i !== index))
   }
 
   const [exportMsg, setExportMsg] = useState<string | null>(null)
@@ -578,6 +613,63 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
           </button>
         </div>
         {priceMsg ? <p className="nf-settings__export-msg">{priceMsg}</p> : null}
+      </div>
+
+      <div className="nf-settings__plugins">
+        <span className="nf-settings__plugins-title">
+          权限规则（全局持久化；拒绝优先于允许；匹配前缀留空 = 该工具全部）
+        </span>
+        {permRules.length === 0 ? (
+          <p className="nf-settings__key-status">暂无规则——未匹配调用仍按授权卡 / 只读预授权处理</p>
+        ) : (
+          <div className="nf-settings__plugins-list">
+            {permRules.map((rule, i) => (
+              <span
+                key={`${rule.action}:${rule.tool}:${rule.specifier}:${i}`}
+                className="nf-settings__plugin"
+              >
+                {rule.action} · {rule.tool} · {rule.specifier || '（全部）'}
+                <button
+                  type="button"
+                  className="nf-settings__plugin-toggle"
+                  aria-label={`删除规则 ${rule.tool}（${rule.specifier || '全部'}）`}
+                  onClick={() => removePermissionRule(i)}
+                >
+                  删除
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="nf-settings__mcp-actions">
+          <select
+            value={permAction}
+            onChange={(e) => setPermAction(e.target.value as 'allow' | 'deny' | 'ask')}
+            aria-label="规则动作"
+          >
+            <option value="allow">允许</option>
+            <option value="deny">拒绝</option>
+            <option value="ask">每次询问</option>
+          </select>
+          <input
+            className="nf-config__input"
+            value={permTool}
+            onChange={(e) => setPermTool(e.target.value)}
+            placeholder="工具（bash / write / edit）"
+            aria-label="规则工具"
+          />
+          <input
+            className="nf-config__input"
+            value={permSpec}
+            onChange={(e) => setPermSpec(e.target.value)}
+            placeholder="匹配前缀（留空 = 全部）"
+            aria-label="规则匹配前缀"
+          />
+          <button type="button" onClick={addPermissionRule}>
+            添加规则
+          </button>
+        </div>
+        {permMsg ? <p className="nf-settings__export-msg">{permMsg}</p> : null}
       </div>
 
       <div className="nf-settings__row">

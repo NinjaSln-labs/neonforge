@@ -155,7 +155,7 @@
 | :--- | :--- | :--- | :--- |
 | BC-01 | 对话策略（系统提示、nudge、阶段提示、确认词）没有作为领域对象表达 | `sysPrompt.ts`、`systemNudge.ts`、`agentLoop.ts` 的 nudges | 在 BC-01 中定义为“对话策略服务”，不属于新聚合 |
 | BC-01 | 会话恢复只恢复消息，不恢复完整 Task 确认位 | `sessionStore.ts`、`useConversationState.ts` 重建 | 在 spec 中明确“以消息重建”的恢复语义 |
-| BC-02 | 权限规则只在内存，跨重启丢失；L4 低危委托与信任阶梯可视化是演示 | `tools.ts` rules、`TrustLadderPanel.tsx` | 记录为部分落地；规则持久化列入后续 |
+| BC-02 | 权限规则持久化已落地（2026-11-15：`permissionRulesStore` + `permissions:*` IPC + 设置页规则编辑；裁决修正为 deny > allow > ask，显式 ask 优先于只读 preApproval）；L4 低危委托与信任阶梯可视化仍为演示 | `tools.ts` rules、`permissionRulesStore.ts`、`SettingsPanel.tsx`、`TrustLadderPanel.tsx` | 规则持久化已关闭；L4 演示面板保留为非目标 |
 | BC-03 | 项目初始化只创建最小骨架，没有模板/场景工程初始化 | `projectInit.ts`、`scenes.tsx` | 模板化列为候选，不建新上下文 |
 | BC-04 | 交付包验收项为空；diff 审核与变更集未统一 | `MainWorkspace.tsx`、`DeliveryPanel.tsx` | 由 BC-10/BC-14 补齐 |
 | BC-05 | 无 usage 解析、无价格表、无模型健康/降级策略 | `gateway.ts` | 由 BC-12 补齐；健康策略列入后续 |

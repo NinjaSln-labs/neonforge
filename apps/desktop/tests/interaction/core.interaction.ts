@@ -48,6 +48,16 @@ async function mockBridge(page: Page): Promise<void> {
         log: async () => {},
         export: async () => ({ ok: true, path: '/tmp/nf-test-export.md' }),
       },
+      permissions: (() => {
+        let rules: Array<{ action: string; tool: string; specifier: string }> = []
+        return {
+          list: async () => rules,
+          set: async (next: Array<{ action: string; tool: string; specifier: string }>) => {
+            rules = next
+            return { ok: true, rules }
+          },
+        }
+      })(),
       demo: {
         delivery: {
           status: 'delivered',
@@ -145,6 +155,21 @@ test('快捷键：⌘, 打开/关闭设置 + 快捷键表完整（D0 §6）', as
   )
   await page.keyboard.press('Meta+,')
   await expect(page.locator('.nf-settings')).toHaveCount(0)
+})
+
+test('设置：权限规则添加/删除（main 持久化接口）', async ({ page }) => {
+  await mockBridge(page)
+  await enterWorkspace(page)
+  await page.keyboard.press('Meta+,')
+  await expect(page.locator('.nf-settings')).toBeVisible()
+  const section = page.locator('.nf-settings__plugins').filter({ hasText: '权限规则' })
+  await expect(section).toContainText('暂无规则')
+  await page.getByLabel('规则工具').fill('bash')
+  await page.getByLabel('规则匹配前缀').fill('npm run ')
+  await section.getByRole('button', { name: '添加规则' }).click()
+  await expect(section).toContainText(/allow · bash · npm run/)
+  await section.getByRole('button', { name: /删除规则 bash/ }).click()
+  await expect(section).toContainText('暂无规则')
 })
 
 test('@引用：输入 @ → 浮层 → 点击插入（ContextEngine 入口）', async ({ page }) => {

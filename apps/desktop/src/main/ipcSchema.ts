@@ -102,7 +102,26 @@ export function validateIpc(value: unknown, schema: IpcSchema): IpcValidationRes
 }
 
 // —— 关键 IPC 契约（新增 handler 应优先复用/扩展；未迁移的既有 handler 见 08 P1-04 说明） ——
+const PERMISSION_RULE_SCHEMA: IpcSchema = {
+  type: 'object',
+  properties: {
+    action: { type: 'string', enum: ['allow', 'deny', 'ask'] as const },
+    tool: { type: 'string', minLength: 1, maxLength: 200 },
+    specifier: { type: 'string', maxLength: 4000 },
+  },
+  required: ['action', 'tool', 'specifier'],
+}
+const PERMISSION_RULE_LIST_SCHEMA: IpcSchema = {
+  type: 'array',
+  maxItems: 200, // 与 permissionRulesStore.MAX_PERMISSION_RULES 对齐
+  items: PERMISSION_RULE_SCHEMA,
+}
 export const IPC_SCHEMAS = {
+  permissionsSet: {
+    type: 'object',
+    properties: { rules: PERMISSION_RULE_LIST_SCHEMA },
+    required: ['rules'],
+  },
   toolsExecute: {
     type: 'object',
     properties: {

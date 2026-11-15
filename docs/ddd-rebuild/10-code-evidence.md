@@ -38,6 +38,7 @@
 | 可执行判定 | `D/conversationState.ts:704-734`（`canExecute`） |
 | 系统可代跑判定（当前实现接受 network-read） | `D/conversationState.ts:782-786`（`isSystemVerifiable`） |
 | 主进程只读命令判定 | `M/tools.ts:601-606`（`isReadOnlyBash`） |
+| 权限规则裁决与持久化（BC-02） | `M/tools.ts`（`selectRule`：deny > allow > ask）、`M/permissionRulesStore.ts`（校验/0600/原子写）、`M/ipc.ts`（`permissions:list`/`permissions:set`）、`P/preload.ts`（`permissions`）、`R/SettingsPanel.tsx`（规则编辑） |
 | bash 工具的预授权调用 | `M/tools.ts:709-716`（`bash` 注册，`preApproval`） |
 | 工具风险分级 | `M/tools.ts:37-140`（`ToolRisk`、规则、`isInSandbox`） |
 | 工具注册与执行 | `M/tools.ts:141-280`（`Tool`、`ToolRegistry.execute`） |
@@ -119,7 +120,7 @@
 | :--- | :--- |
 | Task 聚合与不变量 | `apps/desktop/tests/unit/conversationState.test.ts`（1447 行） |
 | 进展/停滞 | `tests/unit/agentLoop.test.ts` |
-| 工具与授权 | `tests/unit/tools.test.ts`、`tests/unit/permissionRules.test.ts` |
+| 工具与授权 | `tests/unit/tools.test.ts`、`tests/unit/permissionRules.test.ts`、`tests/unit/permissionRulesStore.test.ts` |
 | 完成核验 | `tests/unit/verifyCompletionSystem.test.ts` |
 | 硬序门 | `tests/unit/hardOrderGate.test.ts` |
 | 进展保证 | `tests/unit/progressGuarantee.test.ts` |

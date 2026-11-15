@@ -21,6 +21,7 @@ import {
   syncPlanConfirmed,
 } from './tools.js'
 import { getPlannedFilesStore } from './plannedFilesStore.instance.js'
+import { getPermissionRulesStore } from './permissionRulesStore.instance.js'
 import { registerLspTools, lsp } from './lsp.js'
 import { context } from './context.js'
 import { codeRag } from './codeRag.js'
@@ -50,6 +51,8 @@ export function registerIpc(): void {
   )
   initPlugins() // 08：注册 5 内置插件（生命周期钩子）
   registerLspTools(toolRegistry)
+  // BC-02：权限规则跨重启恢复（deny > allow > ask；IPC 保存后同步 registry）
+  toolRegistry.setRules(getPermissionRulesStore().load())
   // BC-12：预算按自然月累计（周期预算语义；usage 台账本身保留全部历史）
   const currentPeriodSummary = () => {
     const prefix = new Date().toISOString().slice(0, 7) // YYYY-MM
@@ -696,6 +699,30 @@ ipcMain.handle('planned-files:reset', () => {
     /* 清理失败不影响边界重置 */
   }
   return data
+})
+
+// BC-02 权限规则（userData/config/permission-rules.json）：规则引擎跨重启保留
+ipcMain.handle('permissions:list', () => getPermissionRulesStore().load())
+ipcMain.handle('permissions:set', (_e, input: unknown) => {
+  const valid = validateIpc(input, IPC_SCHEMAS.permissionsSet)
+  if (!valid.ok) {
+    return {
+      ok: false,
+      error: `参数校验失败（permissions:set）：${valid.error}`,
+      rules: getPermissionRulesStore().load(),
+    }
+  }
+  try {
+    const rules = getPermissionRulesStore().save((input as { rules: unknown }).rules)
+    toolRegistry.setRules(rules)
+    return { ok: true, rules }
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : String(e),
+      rules: getPermissionRulesStore().load(),
+    }
+  }
 })
 ipcMain.handle(
   'tools:execute',

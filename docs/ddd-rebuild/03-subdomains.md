@@ -17,7 +17,7 @@
 | C05 | 会话流式回合 | 消息发送、SSE reasoning/content/tool-call/done、工具结果回填、自动续聊 | `conversation.message_sent/assistant_start/assistant_done` | 上游：Provider、历史组装；下游：工具执行、决策点 |
 | C06 | 会话恢复与压缩 | 会话消息持久化、决策快照恢复、长对话摘要+保留最近 20 条 | `conversation.created`、`compaction`（IPC） | 上游：会话回合；下游：新会话发送 |
 | C07 | 工具目录与执行 | 工具注册、参数解析、执行分发、结果结构化 | `tool.requested/executing/executed/failed` | 上游：模型 tool_call；下游：文件系统、环境、服务、时间线 |
-| C08 | 授权与信任阶梯 | 规则 deny>allow>ask、逐次授权、允许并记住、L4 低危委托、拒绝记忆 | `tool.approved/rejected/remembered`、`decision.resolved` | 上游：工具请求；下游：执行/拒绝、拒绝记忆 |
+| C08 | 授权与信任阶梯 | 规则 deny>allow>ask（持久化）、逐次授权、允许并记住、L4 低危委托、拒绝记忆 | `tool.approved/rejected/remembered`、`decision.resolved` | 上游：工具请求；下游：执行/拒绝、拒绝记忆 |
 | C09 | 沙箱与快照 | 路径规范化、项目根信任边界、写前 `.nf-bak` 快照、回滚 | `tool.executed/blocked`、回滚 IPC | 上游：工具执行；下游：文件系统、交付包 |
 | C10 | 进程与取消 | bash 进程组、超时、活动命令取消、孤儿清理 | `tool.failed`、`conversation.interrupted` | 上游：工具执行/用户停止；下游：服务、平台退出 |
 | C11 | 项目生命周期 | 打开已有项目、从零初始化、项目标题回写 | `conversation.created`（间接） | 上游：用户/启动页；下游：工作区、环境、LSP |

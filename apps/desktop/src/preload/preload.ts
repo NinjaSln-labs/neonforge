@@ -6,6 +6,13 @@ interface PlannedFilesPayload {
   approved: boolean
 }
 
+// BC-02 权限规则载荷（main permissionRulesStore；空 specifier = 该工具全部参数）
+interface PermissionRuleView {
+  action: 'allow' | 'deny' | 'ask'
+  tool: string
+  specifier: string
+}
+
 // bridge：gateway + config + workspace（IPC 收敛，renderer 不直接碰 node/electron）
 contextBridge.exposeInMainWorld('neonforge', {
   version: process.env.npm_package_version ?? '0.1.0',
@@ -312,6 +319,16 @@ contextBridge.exposeInMainWorld('neonforge', {
     add: (files: string[]) =>
       ipcRenderer.invoke('planned-files:add', files) as Promise<PlannedFilesPayload>,
     reset: () => ipcRenderer.invoke('planned-files:reset') as Promise<PlannedFilesPayload>,
+  },
+  // BC-02 权限规则（authority 在 main userData；deny > allow > ask）
+  permissions: {
+    list: () => ipcRenderer.invoke('permissions:list') as Promise<PermissionRuleView[]>,
+    set: (rules: PermissionRuleView[]) =>
+      ipcRenderer.invoke('permissions:set', { rules }) as Promise<{
+        ok: boolean
+        rules: PermissionRuleView[]
+        error?: string
+      }>,
   },
   // #6 真机 2026-08-31（复验轮）：方案确认布尔镜像——approve-files 硬序门（main 侧 planConfirmedRef）
   session: {
