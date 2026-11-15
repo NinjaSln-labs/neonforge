@@ -22,6 +22,7 @@ import {
 } from './tools.js'
 import { getPlannedFilesStore } from './plannedFilesStore.instance.js'
 import { getPermissionRulesStore } from './permissionRulesStore.instance.js'
+import { getTrustPolicyStore } from './trustPolicyStore.instance.js'
 import { registerLspTools, lsp } from './lsp.js'
 import { context } from './context.js'
 import { codeRag } from './codeRag.js'
@@ -729,6 +730,28 @@ ipcMain.handle('permissions:set', (_e, input: unknown) => {
     }
   }
 })
+// BC-02 信任模式（ADR-015：三档预设——main 持久化；renderer 广播由 useTrustPolicy 承担）
+ipcMain.handle('trust:get', () => getTrustPolicyStore().load())
+ipcMain.handle('trust:set', (_e, input: unknown) => {
+  const valid = validateIpc(input, IPC_SCHEMAS.trustSet)
+  if (!valid.ok) {
+    return {
+      ok: false,
+      error: `参数校验失败（trust:set）：${valid.error}`,
+      mode: getTrustPolicyStore().load(),
+    }
+  }
+  try {
+    const mode = getTrustPolicyStore().save((input as { mode: unknown }).mode)
+    return { ok: true, mode }
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : String(e),
+      mode: getTrustPolicyStore().load(),
+    }
+  }
+})
 ipcMain.handle(
   'tools:execute',
   async (
@@ -737,7 +760,7 @@ ipcMain.handle(
       name: string
       args: Record<string, unknown>
       approved?: boolean
-      approvalSource?: 'user' | 'auto'
+      approvalSource?: 'user' | 'auto' | 'delegate'
       rootPath?: string
       sessionId?: string
     },

@@ -1,24 +1,28 @@
 import { useEffect, useRef, useState } from 'react'
 import { IconCheck, IconDot, IconSettings } from './icons'
 import type { ApiKeyStatusView, ExtensionInfo, McpServerStatus, PermissionRuleView } from './types'
+import { useTrustPolicy } from './useTrustPolicy'
+import type { TrustMode } from '../domain/trustMode'
 
 // 设置（ticket 08 / D0 §9 最小集）——2026-08-03 A1 审计修复：移除不生效的假设置（语言/默认视图/主动提醒无消费方——诚实性优先）
 // 保留真实内容：内置插件（真实 IPC 注册表）+ 快捷键表（真实已实现）
-// 2026-08-04：L4 委托开关产品入口（原只在 demo TrustLadderPanel——产品运行时不可达）；与 ConversationPanel 同 localStorage key + 事件联动
-const DELEGATE_KEY = 'nf-delegate-lowrisk'
+// 2026-08-04：L4 委托开关产品入口（原只在 demo TrustLadderPanel——产品运行时不可达）
+// 2026-08-16 ADR-015：localStorage 布尔开关升级为三档信任模式（main 持久化 + 旧值一次性迁移）
+const TRUST_MODE_OPTIONS: Array<{ mode: TrustMode; label: string; hint: string }> = [
+  { mode: 'strict', label: '谨慎', hint: '每次写入/修改都授权；方案确认本身不放行文件' },
+  { mode: 'standard', label: '标准', hint: '方案确认后清单内新建文件自动放行；修改仍逐次授权' },
+  {
+    mode: 'delegated',
+    label: '低危委托',
+    hint: '清单内新建/修改都自动放行；执行命令与清单外文件仍单独授权',
+  },
+]
 const KEY_SOURCE_LABEL: Record<ApiKeyStatusView['source'], string> = {
   env: '环境变量（不落盘）',
   file: '凭据文件（不落盘）',
   encrypted: '系统安全存储（加密）',
   plaintext: '本机明文（已显式允许）',
   none: '未配置',
-}
-const readDelegate = () => {
-  try {
-    return localStorage.getItem(DELEGATE_KEY) === '1'
-  } catch {
-    return false
-  }
 }
 
 export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
@@ -161,15 +165,17 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
     })
   }
 
-  const [delegate, setDelegate] = useState(readDelegate)
-  const handleDelegate = (v: boolean) => {
-    setDelegate(v)
-    try {
-      localStorage.setItem(DELEGATE_KEY, v ? '1' : '0')
-    } catch {
-      /* 存储不可用——本次会话仍生效 */
-    }
-    window.dispatchEvent(new Event('nf-delegate-changed'))
+  // ADR-015：三档信任模式（main 持久化；旧 localStorage 开关由 useTrustPolicy 迁移）
+  const { mode: trustMode, error: trustError, setMode: setTrustMode } = useTrustPolicy()
+  const [trustMsg, setTrustMsg] = useState<string | null>(null)
+  const handleTrustMode = (mode: TrustMode) => {
+    void setTrustMode(mode).then((r) => {
+      setTrustMsg(
+        r.ok
+          ? `已切换为「${TRUST_MODE_OPTIONS.find((o) => o.mode === mode)?.label}」模式`
+          : (r.error ?? '保存失败'),
+      )
+    })
   }
 
   // BC-02 权限规则（持久化到 main userData；deny > allow > ask，specifier 留空 = 该工具全部）
@@ -723,18 +729,26 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
 
       <div className="nf-settings__row">
         <span>
-          低风险文件操作自动授权{' '}
-          <em>写入/修改文件不再每次确认——会先备份、可随时关闭；执行命令始终单独确认</em>
+          信任模式 <em>{TRUST_MODE_OPTIONS.find((o) => o.mode === trustMode)?.hint}</em>
         </span>
-        <label className="nf-settings__row--switch">
-          <input
-            type="checkbox"
-            checked={delegate}
-            onChange={(e) => handleDelegate(e.target.checked)}
-            aria-label="低风险文件操作自动授权"
-          />
-        </label>
+        <div className="nf-settings__seg" role="radiogroup" aria-label="信任模式">
+          {TRUST_MODE_OPTIONS.map((option) => (
+            <button
+              key={option.mode}
+              type="button"
+              role="radio"
+              aria-checked={trustMode === option.mode}
+              className={`nf-settings__seg-btn${trustMode === option.mode ? ' nf-settings__seg-btn--on' : ''}`}
+              onClick={() => handleTrustMode(option.mode)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
       </div>
+      {(trustMsg ?? trustError) ? (
+        <p className="nf-settings__export-msg">{trustMsg ?? trustError}</p>
+      ) : null}
 
       <div className="nf-settings__shortcuts">
         <span className="nf-settings__plugins-title">快捷键（只列已实现）</span>

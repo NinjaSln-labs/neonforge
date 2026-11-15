@@ -3,14 +3,14 @@
 
 ## DoD（机器可验证断言——stage-gate 逐条执行）
 
-- [ ] L1 全量绿：`npx vitest run`（新增 trustPolicyStore/authModel 判定/tools 委托边界/迁移约 10 条）
-- [ ] L2 契约：`npx tsc -p tsconfig.json --noEmit` + `npx tsc -p tsconfig.main.json --noEmit` 0 错
-- [ ] L3 交互：`npx playwright test --project=interaction`（设置页切换模式持久化、委托仅计划内低危文件自动放行；全量回归）
-- [ ] 行为验收：strict 下计划确认不自动放行写入；standard 计划内 write 自动、edit 授权；delegated 计划内 write/edit 自动；清单外/根外/bash 始终弹卡；旧 localStorage 开关迁移到 delegated
-- [ ] 审计状态：本阶段无 open 审计项
-- [ ] 覆盖矩阵已更新（`docs/tests/coverage-matrix.md`）
-- [ ] 决策日志同步：ADR-015（accepted）；决策日志索引已更新
-- [ ] 已提交（未推送——按用户要求）
+- [x] L1 全量绿：`npx vitest run`（75 文件 / 875 用例；新增 trustPolicyStore/authModel 判定/tools 委托边界/迁移回归）
+- [x] L2 契约：双 tsconfig 0 错；IPC schema + main↔preload parity 通过
+- [x] L3 交互：84/84 通过（含 trustModes 3 场景：设置页切换/迁移、delegated 计划内 edit 自动、strict 计划内 write 仍授权）
+- [x] 行为验收：strict 计划确认不自动放行写入；standard 计划内 write 自动、edit 授权；delegated 计划内 write/edit 自动；清单外/根外/bash 始终弹卡；旧 localStorage 开关迁移到 delegated。L5 像素基线待 macOS 宿主更新（按边界约定）
+- [x] 审计状态：本阶段无 open 审计项
+- [x] 覆盖矩阵已更新（表 12）
+- [x] 决策日志同步：ADR-015（accepted）；决策日志索引已更新
+- [x] 已提交（未推送——按用户要求）
 
 ## TDD 网格（本阶段新增功能——spec-first + test-first）
 

@@ -307,3 +307,44 @@ describe('execution.forced/released（S5——mode/reason 事件语义）', () =
     expect(warns.some((w) => w.includes('reason'))).toBe(true)
   })
 })
+
+// ADR-015：委托越界事件 + tool.executing 带来源审计
+describe('security.trust_delegation_denied / tool.executing（ADR-015）', () => {
+  it('注册表：委托拒绝 = domain security + name/path/reason', () => {
+    const spec = TIMELINE_EVENT_SPECS['security.trust_delegation_denied']
+    expect(spec.domain).toBe('security')
+    expect(spec.role).toBe('system')
+    expect(spec.detailKeys).toEqual(['name', 'path', 'reason'])
+  })
+
+  it('validateTimelineEvent：委托拒绝载荷通过；缺 reason → warn', () => {
+    expect(
+      validateTimelineEvent('security.trust_delegation_denied', {
+        name: 'write',
+        path: '/x/out.txt',
+        reason: '目标不在已批准方案清单内',
+      }),
+    ).toEqual([])
+    expect(
+      validateTimelineEvent('security.trust_delegation_denied', { name: 'write', path: '/x' }).some(
+        (w) => w.includes('reason'),
+      ),
+    ).toBe(true)
+  })
+
+  it('tool.executing：approvalSource 可选载荷（自动/用户/委托可回放）', () => {
+    expect(TIMELINE_EVENT_SPECS['tool.executing'].detailKeys).toEqual([
+      'name',
+      'approved',
+      '?approvalSource',
+    ])
+    expect(
+      validateTimelineEvent('tool.executing', {
+        name: 'edit',
+        approved: true,
+        approvalSource: 'delegate',
+      }),
+    ).toEqual([])
+    expect(validateTimelineEvent('tool.executing', { name: 'edit', approved: false })).toEqual([])
+  })
+})

@@ -424,3 +424,107 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     expect(old.needApproval).toBeUndefined()
   })
 })
+
+// ADR-015（GitHub #12）：低危委托的 main 执行边界二次校验
+describe('ToolRegistry 委托边界（ADR-015）', () => {
+  beforeEach(() => {
+    markPlanApproved()
+    getPlannedFilesStore().reset()
+    initTools()
+    toolRegistry.setRules([])
+    if (!existsSync(TMP)) mkdirSync(TMP, { recursive: true })
+  })
+  afterEach(() => {
+    getPlannedFilesStore().reset()
+    toolRegistry.setRules([])
+    rmSync(TMP, { recursive: true, force: true })
+  })
+
+  it('delegate：根内 + 已批准清单内 edit 放行（自动委托真实执行）', async () => {
+    const file = path.join(TMP, 'delegated-edit.txt')
+    writeFileSync(file, 'alpha\nbeta\n', 'utf-8')
+    getPlannedFilesStore().add([file])
+    const r = await toolRegistry.execute(
+      'edit',
+      { path: file, old: 'beta', new: 'BETA' },
+      { approved: true, approvalSource: 'delegate', rootPath: TMP },
+    )
+    expect(r.ok).toBe(true)
+    expect(readFileSync(file, 'utf-8')).toBe('alpha\nBETA\n')
+  })
+
+  it('delegate：清单外文件拒绝（needApproval + 不执行）', async () => {
+    const file = path.join(TMP, 'out-of-plan.txt')
+    const planned = path.join(TMP, 'planned.txt')
+    writeFileSync(planned, 'x')
+    getPlannedFilesStore().add([planned])
+    const r = await toolRegistry.execute(
+      'write',
+      { path: file, content: 'x' },
+      { approved: true, approvalSource: 'delegate', rootPath: TMP },
+    )
+    expect(r.ok).toBe(false)
+    expect(r.needApproval).toBe(true)
+    expect(r.error).toContain('委托越界')
+    expect(existsSync(file)).toBe(false)
+  })
+
+  it('delegate：项目根外文件拒绝（即使已列入清单）', async () => {
+    const outside = '/tmp/nf-delegated-outside.txt'
+    const file = path.join(TMP, 'root-outside.txt')
+    writeFileSync(outside, 'secret')
+    getPlannedFilesStore().add([file])
+    try {
+      const r = await toolRegistry.execute(
+        'write',
+        { path: file, content: 'x' },
+        { approved: true, approvalSource: 'delegate', rootPath: '/tmp/nf-other-root' },
+      )
+      expect(r.ok).toBe(false)
+      expect(r.needApproval).toBe(true)
+      expect(existsSync(file)).toBe(false)
+    } finally {
+      rmSync(outside, { force: true })
+    }
+  })
+
+  it('delegate：bash / 非文件动作永不委托', async () => {
+    getPlannedFilesStore().add([path.join(TMP, 'x.txt')])
+    const r = await toolRegistry.execute(
+      'bash',
+      { command: 'echo hi' },
+      { approved: true, approvalSource: 'delegate', rootPath: TMP },
+    )
+    expect(r.ok).toBe(false)
+    expect(r.needApproval).toBe(true)
+    expect(r.error).toContain('委托越界')
+  })
+
+  it('delegate 不得借显式 ask 规则绕过（ask 只接受 user 来源）', async () => {
+    const file = path.join(TMP, 'ask-delegate.txt')
+    writeFileSync(file, 'hello')
+    getPlannedFilesStore().add([file])
+    toolRegistry.setRules([{ action: 'ask', tool: 'edit', specifier: TMP }])
+    const r = await toolRegistry.execute(
+      'edit',
+      { path: file, old: 'hello', new: 'world' },
+      { approved: true, approvalSource: 'delegate', rootPath: TMP },
+    )
+    expect(r.ok).toBe(false)
+    expect(r.needApproval).toBe(true)
+    expect(readFileSync(file, 'utf-8')).toBe('hello')
+  })
+
+  it('delegate：清单未批准 → 拒绝（renderer 不能独立宣告方案已批准）', async () => {
+    const file = path.join(TMP, 'no-approved-plan.txt')
+    writeFileSync(file, 'hello')
+    const r = await toolRegistry.execute(
+      'edit',
+      { path: file, old: 'hello', new: 'world' },
+      { approved: true, approvalSource: 'delegate', rootPath: TMP },
+    )
+    expect(r.ok).toBe(false)
+    expect(r.needApproval).toBe(true)
+    expect(readFileSync(file, 'utf-8')).toBe('hello')
+  })
+})

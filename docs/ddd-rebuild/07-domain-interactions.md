@@ -109,13 +109,14 @@ flowchart TD
 | `gateway:validate` | renderer → main | apiKey, providerId, modelId | `{ok,error,suggestModelId,modelSource}` | 是（只验证） | key-invalid/region-blocked/service/timeout/network | BC-05 |
 | `gateway:active-model` | renderer → main | — | providerId/label/upstream/shortName | 是 | 无 | BC-05 |
 | `tools:list` | renderer → main | — | `{name,source,requiresApproval,risk}[]` | 是 | 无 | BC-02 |
-| `tools:execute` | renderer → main | name, args, approved, rootPath, sessionId | `{ok,data,error,needApproval?,policy?}` | 部分（bash 非幂等；write/edit 可回滚） | 未授权/拦截/执行失败 | BC-02 |
+| `tools:execute` | renderer → main | name, args, approved, approvalSource（user/auto/delegate）, rootPath, sessionId | `{ok,data,error,needApproval?,policy?}` | 部分（bash 非幂等；write/edit 可回滚） | 未授权/委托越界/拦截/执行失败 | BC-02 |
 | `tools:revert` | renderer → main | path | `{ok,error}` | 是（恢复快照） | 无快照 | BC-02 |
 | `tools:cancel` | renderer → main | — | `{ok,error}` | 是 | 无活动命令 | BC-02 |
 | `planned-files:load` | renderer → main | — | `{files,approved}` | 是 | 损坏 → 空 | BC-03 |
 | `planned-files:add` | renderer → main | files | `{files,approved}` | 是（追加去重） | 落盘失败静默 | BC-03 |
 | `planned-files:reset` | renderer → main | — | `{files,approved}` | 是 | 清理快照失败忽略 | BC-03 |
 | `session:plan-confirmed` | renderer → main | boolean | void | 是 | 无 | BC-02 |
+| `trust:get` / `trust:set` | renderer → main | — / mode(strict/standard/delegated) | mode / `{ok,mode,error?}` | 是（配置读写） | 非法模式拒绝 | BC-02 |
 | `completion:verify` | renderer → main | commands, rootPath | `Record<command,{ok,output}>` | 是（只读命令） | 非只读跳过；超时 5s；输出 4KB | BC-02/BC-03 |
 | `delivery:apply-diff` | renderer → main | path, diff, approved | `{ok,file,error}` | 部分（快照后应用） | 未授权/解析空/文件不存在 | BC-04/BC-03 |
 | `delivery:revert-diff` | renderer → main | path | `{ok,error}` | 是 | 无快照 | BC-04/BC-03 |
@@ -178,7 +179,8 @@ flowchart TD
 | `EvidenceBackfiller`（`buildEvidenceBackfill`） | 证据不足 → 可执行回填引导文本 | verify result | string | Task | 不发送消息（应用层发送） |
 | `PermissionRuleEngine`（`matchesRule`/rules） | deny > allow > ask；规则匹配 | tool、args、rule | boolean/action | ToolInvocation | 不决定风险等级 |
 | `SandboxPathNormalizer`（`resolveSandboxPath`） | 模型路径 → rootPath 基准 | rootPath、path | normalized path | Workspace | 不做文件存在性检查 |
-| `ToolExecutor`（ToolRegistry） | 工具查找、授权、执行、结果结构化 | name、args、approved、rootPath | `ToolResult` | ToolInvocation、Workspace、Environment | 不做任务决策 |
+| `ToolExecutor`（ToolRegistry） | 工具查找、授权、执行、结果结构化、委托边界二次校验 | name、args、approved、approvalSource、rootPath | `ToolResult` | ToolInvocation、Workspace、Environment | 不做任务决策 |
+| `TrustPolicyStore`（`trustPolicyStore.ts`） | 三档信任模式持久化（0600/原子写） | mode | TrustMode | renderer `useTrustPolicy`、ToolExecutor | 只持久化预设，不自动学习信任分 |
 | `EnvironmentDetector` | 检测项目环境 | rootPath | `ProjectEnvironment` | ProjectEnvironment | 不做能力语义分类 |
 | `CapabilityRegistry` | 平台原生能力 + 外部能力 | rootPath、platform、env | `Capability[]` | ProjectEnvironment | 不安装依赖 |
 | `ServiceLifecycleManager` | start/check/stop、端口/进程 | rootPath、command | ServiceEntry / result | ServiceInstance、Environment | 不执行任意 bash |

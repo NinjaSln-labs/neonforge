@@ -128,11 +128,19 @@ export const IPC_SCHEMAS = {
       name: { type: 'string', minLength: 1, maxLength: 200 },
       args: { type: 'object' },
       approved: { type: 'boolean' },
-      approvalSource: { type: 'string', enum: ['user', 'auto'] as const },
+      approvalSource: { type: 'string', enum: ['user', 'auto', 'delegate'] as const },
       rootPath: { type: 'string' },
       sessionId: { type: 'string' },
     },
     required: ['name'],
+  },
+  // ADR-015：三档信任模式（main 持久化；非法模式在 IPC 边界拒绝）
+  trustSet: {
+    type: 'object',
+    properties: {
+      mode: { type: 'string', enum: ['strict', 'standard', 'delegated'] as const },
+    },
+    required: ['mode'],
   },
   streamChat: {
     type: 'object',

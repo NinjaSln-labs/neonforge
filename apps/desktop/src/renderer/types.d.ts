@@ -263,6 +263,11 @@ export interface NeonForgeBridge {
   }
   tools: NeonForgeTools
   plannedFiles: PlannedFilesApi // D3（ADR-005）：PlannedFiles 契约——权威在 main
+  // BC-02 信任模式（ADR-015：三档预设——权威在 main；renderer 只读镜像 + 用户切换）
+  trust: {
+    get: () => Promise<TrustMode>
+    set: (mode: TrustMode) => Promise<{ ok: boolean; mode: TrustMode; error?: string }>
+  }
   // BC-02 权限规则（权威在 main userData；deny > allow > ask）
   permissions: {
     list: () => Promise<PermissionRuleView[]>
@@ -498,7 +503,7 @@ export interface NeonForgeTools {
     args: Record<string, unknown>,
     opts?: {
       approved?: boolean
-      approvalSource?: 'user' | 'auto'
+      approvalSource?: 'user' | 'auto' | 'delegate'
       rootPath?: string
       sessionId?: string
     },
@@ -528,3 +533,6 @@ export interface PermissionRuleView {
   tool: string
   specifier: string
 }
+
+/** BC-02 信任模式（与 domain/trustMode.ts 保持结构一致——ADR-015） */
+export type TrustMode = 'strict' | 'standard' | 'delegated'

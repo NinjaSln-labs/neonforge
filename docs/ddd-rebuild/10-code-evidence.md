@@ -93,16 +93,20 @@
 | 信任集合追加 | `R/ConversationPanel.tsx:563-...`（`addTrust`） |
 | 会话状态 hook | `R/useConversationState.ts`（`transition`/`stateRef`） |
 | 工具授权卡状态机 | `R/useToolApproval.ts` |
+| 信任模式判定单源（strict/standard/delegated） | `R/authModel.ts`（`shouldAutoApproveTool`/`autoApprovalSource`） |
+| 信任模式读取/切换与旧开关迁移 | `R/useTrustPolicy.ts` |
 | 问题台账 7 态与迁移 | `R/problemStore.ts` |
 
 ## 6. 主进程与基础设施
 
 | 文档断言 | 证据 |
 | :--- | :--- |
-| IPC 通道全集 | `M/ipc.ts:...`（`config:*`、`gateway:*`、`delivery:*`、`workspace:*`、`chat:*`、`timeline:*`、`tools:*`、`planned-files:*`、`session:plan-confirmed`、`context:resolve`、`rag:search`、`plugins:*`、`preheat:status`、`compaction:compact`、`completion:verify`） |
+| IPC 通道全集 | `M/ipc.ts:...`（`config:*`、`gateway:*`、`delivery:*`、`workspace:*`、`chat:*`、`timeline:*`、`tools:*`、`planned-files:*`、`trust:get/set`、`session:plan-confirmed`、`context:resolve`、`rag:search`、`plugins:*`、`preheat:status`、`compaction:compact`、`completion:verify`） |
 | IPC 运行时契约校验（P1-04） | `M/ipcSchema.ts:100-382`（`validateIpc`/`IPC_SCHEMAS`）、`M/ipc.ts`（tools/stream/config/queue/acceptance/changeset/delivery/context/workspace/gateway/chat/timeline 等入口）、`tests/unit/ipcSchema.test.ts` |
 | 预加载桥接 API | `P/preload.ts`（`NeonForgeBridge`） |
 | 计划清单持久化（0600） | `M/plannedFilesStore.ts` |
+| 信任模式持久化（0600） | `M/trustPolicyStore.ts` + `.instance.ts` |
+| 委托执行边界二次校验 / 审计事件 | `M/tools.ts`（`delegationBoundaryViolation`、`security.trust_delegation_denied`） |
 | 项目初始化（不覆盖已有目录） | `M/projectInit.ts` |
 | 环境检测 | `M/envManager.ts` |
 | 服务与端口 | `M/serviceManager.ts` |

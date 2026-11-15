@@ -1,8 +1,9 @@
-import { useState } from 'react'
-import { IconCheck, IconDot, IconShield } from './icons'
+import { IconCheck, IconShield } from './icons'
+import type { TrustMode } from '../domain/trustMode'
 
-// 信任阶梯（ticket 14）：L1-L4 渐进授权可视化 + 授权记录 + 委托规则
-// 2026-08-02：授权记录接真实数据（06 问题快照 authorized——对接 ticket 06「授权记录可回溯」AC）
+// 信任阶梯（ticket 14 / ADR-015）：L1-L4 渐进授权可视化 + 授权记录 + 真实信任模式
+// - 当前等级由真实 trustMode 映射：strict/standard → L3（逐项授权），delegated → L4（低危文件操作委托）
+// - 不再有演示用的「提升信任等级」「记录本次授权」假按钮/假记录；授权记录只取真实问题快照，空则显示暂无
 const LEVELS = [
   ['L1', '观察', '只读分析 / 草稿 / 本地整理', '首次授权，静默'],
   ['L2', '建议', '生成方案 / 补丁 / PR', '一键应用'],
@@ -10,56 +11,28 @@ const LEVELS = [
   ['L4', '委托', '高度信任重复任务', '规则授权，可降级'],
 ] as const
 
-const DEMO_LOGS = [
-  { t: '11:05', action: '只读分析（旅行手册项目）', level: 'L1', ok: true },
-  { t: '11:06', action: '生成方案建议', level: 'L2', ok: true },
-  { t: '11:12', action: '写入：sales-merge.py（快照已建）', level: 'L3', ok: true },
-]
+const MODE_LABEL: Record<TrustMode, string> = {
+  strict: '谨慎',
+  standard: '标准',
+  delegated: '低危委托',
+}
 
 export default function TrustLadderPanel({
   authorizedLogs,
-  delegateLowRisk,
-  onDelegateChange,
+  trustMode,
+  onTrustModeChange,
 }: {
   authorizedLogs?: Array<{ tool: string; file: string } | string> // 2026-08-15 Q9：结构化（旧 string 兼容）
-  // ticket 14 执行引擎对接：委托规则受控（ConversationPanel 持有真实状态——localStorage 持久化；此处仅展示/切换）
-  delegateLowRisk?: boolean
-  onDelegateChange?: (v: boolean) => void
+  /** ADR-015：真实信任模式（main 持久化） */
+  trustMode: TrustMode
+  onTrustModeChange?: (mode: TrustMode) => void
 }) {
-  const [level, setLevel] = useState(1) // 当前信任等级（L1 起步，演示推进）
-  const [internalDelegate, setInternalDelegate] = useState(false) // 无受控时内部兜底（demo 显示）
-  const delegate = delegateLowRisk ?? internalDelegate
-  const setDelegate = (v: boolean) => {
-    setInternalDelegate(v)
-    onDelegateChange?.(v)
-  }
-  // 授权记录：真实数据（06 问题快照 authorized——可回溯）优先；无则 demo 回退
-  // 2026-08-15 Q9：结构化 {tool, file}（旧存档 string 兼容展示）
-  const [demoLogs, setDemoLogs] = useState(DEMO_LOGS)
-  const realLogs = ((authorizedLogs ?? []) as Array<{ tool: string; file: string } | string>).map(
-    (a) => ({
-      t: '',
-      action: typeof a === 'string' ? a : `[${a.tool}] ${a.file}`,
-      level: 'L3',
-      ok: true,
-    }),
-  )
-  const logs = realLogs.length > 0 ? realLogs : demoLogs
-
-  const upgrade = () => {
-    if (level < 3) setLevel((l) => l + 1)
-  }
-  const addLog = () => {
-    setDemoLogs((prev) => [
-      {
-        t: '11:1' + (prev.length + 1),
-        action: `L${level + 1} 操作授权（快照可回滚）`,
-        level: `L${level + 1}`,
-        ok: true,
-      },
-      ...prev,
-    ])
-  }
+  const level = trustMode === 'delegated' ? 4 : 3
+  // 授权记录：真实数据（06 问题快照 authorized——可回溯）；空则诚实显示暂无（不回退演示记录）
+  const logs = (authorizedLogs ?? []).map((a) => ({
+    action: typeof a === 'string' ? a : `[${a.tool}] ${a.file}`,
+    level: 'L3',
+  }))
 
   return (
     <div className="nf-trust">
@@ -67,10 +40,12 @@ export default function TrustLadderPanel({
         <span className="nf-flow__title">
           <IconShield size={14} /> 信任阶梯
         </span>
-        <span className="nf-flow__model">当前：L{level} · 渐进解锁</span>
+        <span className="nf-flow__model">
+          当前：L{level} · {MODE_LABEL[trustMode]}
+        </span>
       </div>
 
-      {/* L1-L4 阶梯 */}
+      {/* L1-L4 阶梯（当前等级来自真实模式） */}
       <div className="nf-trust__ladder">
         {LEVELS.map(([id, name, scope, auth], i) => (
           <div
@@ -83,51 +58,43 @@ export default function TrustLadderPanel({
               <span>{scope}</span>
               <em>{auth}</em>
             </div>
-            {i + 1 === level && (
-              <span className="nf-trust__mark">
-                <IconDot size={10} /> 当前
-              </span>
-            )}
+            {i + 1 === level && <span className="nf-trust__mark">当前</span>}
           </div>
         ))}
       </div>
 
-      {/* 授权记录 */}
+      {/* 授权记录（真实数据；无记录显示暂无） */}
       <div className="nf-trust__logs">
         <h4>授权记录</h4>
-        <ul>
-          {logs.map((l, i) => (
-            <li key={i}>
-              <span className="nf-trust__ok">
-                <IconCheck size={11} />
-              </span>{' '}
-              {l.action} <em>（{l.level}）</em>
-            </li>
-          ))}
-        </ul>
+        {logs.length > 0 ? (
+          <ul>
+            {logs.map((l, i) => (
+              <li key={i}>
+                <span className="nf-trust__ok">
+                  <IconCheck size={11} />
+                </span>{' '}
+                {l.action} <em>（{l.level}）</em>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="nf-trust__empty">暂无授权记录</p>
+        )}
       </div>
 
-      {/* 委托规则 + 推进 */}
+      {/* 委托开关：与设置页同一 main 权威（nf-trust-changed 联动） */}
       <div className="nf-trust__controls">
         <label className="nf-trust__delegate">
           <input
             type="checkbox"
-            checked={delegate}
-            onChange={(e) => setDelegate(e.target.checked)}
+            checked={trustMode === 'delegated'}
+            disabled={!onTrustModeChange}
+            onChange={(e) => onTrustModeChange?.(e.target.checked ? 'delegated' : 'standard')}
+            aria-label="低危委托模式"
           />
           L4
-          委托：低风险文件操作自动授权（不用每次确认）——会先备份、可随时关闭；执行命令始终单独确认
+          委托：清单内低风险文件操作自动授权（不用每次确认）——会先备份、可随时关闭；执行命令与清单外文件始终单独确认
         </label>
-        <div className="nf-trust__btns">
-          {level < 3 && (
-            <button type="button" className="nf-delivery__primary" onClick={upgrade}>
-              提升信任等级
-            </button>
-          )}
-          <button type="button" className="nf-delivery__ghost" onClick={addLog}>
-            记录本次授权
-          </button>
-        </div>
       </div>
     </div>
   )

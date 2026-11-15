@@ -43,7 +43,7 @@
 | I08 | **拒绝必须带原因**：拒绝决策必须携带 `RejectReason`；`modify` 视为拒绝 + 修正内容 | `Reject*`、`ApprovalRejected` | `userDecided` / `approvalDecided` 运行时 throw | 无原因拒绝抛 `TypeError`；测试 `Inv 8` |
 | I09 | **任务边界重置**：goal 确认清空 planned/produced/filesApproved/denied/lastToolFailed；resolution 确认重置 planConfirmed | `ConfirmGoal`、`ConfirmResolution` | `userDecided`（`conversationState.ts`）；`clearTrust`（`ConversationPanel.tsx`） | 新任务的计划/产出/拒绝记忆不得继承；测试 `Inv 1/Inv 6` |
 | I10 | **计划清单追加幂等**：重复文件不重复；空数组 no-op；`approved` 随 add 置 true，reset 置 false | `AddPlannedFiles`、`ResetPlannedFiles` | `PlannedFilesStore`（`plannedFilesStore.ts`） | 损坏 JSON → 空清单；落盘失败 → 内存态仍工作；测试 `plannedFilesStore.test.ts` |
-| I11 | **工具调用安全边界**：write/edit 写前快照；requiresApproval 工具必须 approved；bash 只读才可自动；沙箱外写入逐次授权；拒绝记忆同类短封 | `ExecuteTool` | `ToolRegistry.execute`（`tools.ts`）；`classifyReadonly` / `isSideEffectAction`；`useToolApproval` | 未授权 → `needApproval`；策略引导 → `policy`；沙箱外 → 逐次卡；回滚恢复原样；测试 `tools.test.ts` |
+| I11 | **工具调用安全边界**：write/edit 写前快照；requiresApproval 工具必须 approved；bash 只读才可自动；沙箱外写入逐次授权；低危委托仅限**已批准方案清单内 write/edit**（根内 realpath，main 二次校验）；拒绝记忆同类短封 | `ExecuteTool` | `ToolRegistry.execute` / `delegationBoundaryViolation`（`tools.ts`）；`classifyReadonly` / `isSideEffectAction`；`shouldAutoApproveTool`（`authModel.ts`）；`useToolApproval` | 未授权 → `needApproval`；策略引导 → `policy`；委托越界 → `security.trust_delegation_denied` + 授权卡；回滚恢复原样；测试 `tools.test.ts` |
 | I12 | **服务实例唯一**：每个 rootPath 最多一个服务；端口避开宿主保留端口 5173/5175；只停 NeonForge 自己起的进程 | `StartService`、`StopService` | `serviceManager.ts`（`stopServer`/`stopAllServices`）；`envManager.ts` | 已有服务 → 返回既有；保留端口 → 杀进程 + 拒绝；pid=0 → 不得 kill（本次修复） |
 | I13 | **问题状态机 7 态**：问题 = 一等公民；关闭只能在交付确认后；同标题复跑更新原实例；台账最多 20 条 | `CreateProblem`、`RerunProblem`、`CloseProblem` | `problemStore.ts`；`SessionPanel.tsx`；`MainWorkspace.tsx` | 非法状态转换不得写入；旧 `authorized` 字符串迁移为结构化 |
 | I14 | **交付包真实性**：交付包只能由真实 write/edit 变更和用户确认解决驱动；验收项全勾选才能关闭；demo 注入不得进产品路径 | `BuildDeliveryPackage`、`ConfirmClose` | `MainWorkspace.tsx`、`DeliveryPanel.tsx`（门禁） | 无真实变更 → 不生成交付包；演示仅在 demo bridge 存在时渲染 |
@@ -66,6 +66,7 @@
 | `PlanProposal` | 值对象 | A1 | 按 `summary + files + assumptions + verificationPlan` 值相等；假设为 `Assumption`（ADR-014） |
 | `PlanFileEntry` | 值对象 | A1 | 按 `path + reason` 值相等 |
 | `Assumption` | 值对象 | A1 | 按 `text + source` 值相等；`source ∈ model_inference/user_choice/clarification`（ADR-014） |
+| `TrustMode` | 值对象 | A3 | `strict/standard/delegated` 三档预设（ADR-015）；main `trustPolicyStore` 持久化，renderer `authModel` 判定单源 |
 | `CompletionClaim` | 值对象 | A1 | 按 `summary + evidence` 值相等 |
 | `CompletionEvidence` | 值对象 | A1 | 按 `verification + diffs + pendingQuestions` 值相等 |
 | `VerificationItem` | 值对象 | A1 | 按 `command + output + passed` 值相等 |

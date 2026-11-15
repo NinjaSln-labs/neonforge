@@ -638,13 +638,13 @@ test('D3-1：启动恢复接线——挂载时 planned-files:load 被调（main 
   await expectText(page.locator('.nf-chat__list'), '已批准 1 个文件', 10000)
   await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(0)
   // 恢复接线 + 批准链走 IPC：load 挂载时被调（main 权威→镜像——StrictMode 双挂载 ≥1）；
-  // add 恰好一次（批准按钮单次点击 → 单次 add——main 权威同步）
+  // ADR-015：add 两次 = 方案确认同步委托边界清单一次 + 批准按钮单次点击一次（双击会变 3）
   const counts = await page.evaluate(() => ({
     load: (window as unknown as { __nfPlannedLoadCalls?: number }).__nfPlannedLoadCalls ?? 0,
     add: (window as unknown as { __nfPlannedAddCalls?: number }).__nfPlannedAddCalls ?? 0,
   }))
   expect(counts.load).toBeGreaterThanOrEqual(1)
-  expect(counts.add).toBe(1)
+  expect(counts.add).toBe(2)
 })
 
 test('D3-2：任务边界重置——目标确认 → planned-files:reset 同步 main（批准事实不跨任务）', async ({

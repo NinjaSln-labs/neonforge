@@ -20,7 +20,11 @@ import {
 // 2026-08-06 能力模型（坑 83）：check-env 返回能力视图（平台原生 + 外部扩展 Status——模型按需求选能力）
 import { detectCapabilities, attributeCommandFailure } from './envManager.js'
 import { logTimeline } from './timelineLogger.js'
-import { classifyReadonly, isLocalhostCommand } from '../domain/conversationState.js'
+import {
+  classifyReadonly,
+  isLocalhostCommand,
+  normalizeComparePath,
+} from '../domain/conversationState.js'
 import { configStore } from './configStore.js'
 import { webSearch, webFetch } from './webTools.js'
 import { isKillablePid } from './processGuard.js'
@@ -259,6 +263,39 @@ async function assertNoSymlinkEscape(
   throw new Error('路径经符号链接指向项目外——已阻止。请改用项目内真实路径')
 }
 
+/**
+ * ADR-015：低危委托的执行边界二次校验（renderer 判定不可越过 main）。
+ * 仅允许 write/edit；必须有 rootPath、realpath 在项目根内、main 持久化的计划清单已批准且包含该绝对路径。
+ * 返回 null = 通过；否则返回拒绝原因。
+ */
+export async function delegationBoundaryViolation(
+  name: string,
+  args: Record<string, unknown>,
+  rootPath?: string,
+): Promise<string | null> {
+  if (name !== 'write' && name !== 'edit')
+    return '委托只适用于写入/修改文件（bash 等高危动作永不委托）'
+  if (!rootPath) return '缺少项目根——委托只适用于项目内文件'
+  let target: string
+  try {
+    target = resolvePath(args.path, { rootPath })
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e)
+  }
+  if (!(await isInSandboxRealpath(target, rootPath))) return '目标不在项目根内'
+  const planned = getPlannedFilesStore().load()
+  if (!planned.approved) return '方案尚未批准（计划清单未生效）'
+  const targetKey = normalizeComparePath(target)
+  const listed = planned.files.some((raw) => {
+    try {
+      return normalizeComparePath(resolvePath(raw, { rootPath })) === targetKey
+    } catch {
+      return normalizeComparePath(raw) === targetKey
+    }
+  })
+  return listed ? null : '目标不在已批准方案清单内'
+}
+
 export interface Tool {
   name: string
   source: 'core' | 'lsp' | 'extension'
@@ -326,7 +363,7 @@ class ToolRegistry {
     args: Record<string, unknown>,
     opts: {
       approved?: boolean
-      approvalSource?: 'user' | 'auto'
+      approvalSource?: 'user' | 'auto' | 'delegate'
       rootPath?: string
       sessionId?: string
     } = {},
@@ -334,11 +371,12 @@ class ToolRegistry {
     console.log('[tools] execute', name, 'rootPath=' + (opts.rootPath ?? 'NONE'))
     // 2026-08-07 会话时间线（Session Timeline BC——main 侧工具执行记录兜底：renderer 崩溃也有工具时间线）
     // 2026-08-08 会话归属：sessionId（会话 UUID）优先——工具执行写入对应会话文件
+    // ADR-015：approvalSource 入审计（自动批准来源可回溯）
     logTimeline({
       session: opts.sessionId ?? opts.rootPath ?? undefined,
       type: 'tool.executing',
       role: 'tool',
-      detail: { name, args, approved: opts.approved },
+      detail: { name, args, approved: opts.approved, approvalSource: opts.approvalSource },
     })
     const tool = this.tools.get(name)
     if (!tool) return { ok: false, error: `未知工具：${name}` }
@@ -364,11 +402,29 @@ class ToolRegistry {
       }
     }
     // 显式 ask 规则：即使调用方自动批准（delegate/信任路径）也必须回到用户 —— 仅 user 来源的 approved 放行
-    if (rule?.action === 'ask' && !(opts.approved && opts.approvalSource !== 'auto')) {
+    // ADR-015：delegate 也属于自动来源，不得借 ask 规则绕过；旧调用无 approvalSource 视为非用户
+    if (rule?.action === 'ask' && !(opts.approved && opts.approvalSource === 'user')) {
       return {
         ok: false,
         needApproval: true,
         error: `「${name}」按权限规则需要逐次授权——approved=true 后执行`,
+      }
+    }
+    // ADR-015：低危委托执行边界二次校验——清单外/根外/非文件动作不执行（回授权卡）
+    if (opts.approvalSource === 'delegate') {
+      const violation = await delegationBoundaryViolation(name, args, opts.rootPath)
+      if (violation) {
+        logTimeline({
+          session: opts.sessionId ?? opts.rootPath ?? undefined,
+          type: 'security.trust_delegation_denied',
+          role: 'system',
+          detail: { name, path: String(args.path ?? ''), reason: violation },
+        })
+        return {
+          ok: false,
+          needApproval: true,
+          error: `低危委托越界：${violation}——请逐次授权后执行`,
+        }
       }
     }
     let ruleAllows = rule?.action === 'allow'

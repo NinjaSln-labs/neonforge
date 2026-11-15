@@ -30,7 +30,8 @@ import { parseCompletionClaim } from '../domain/completionClaimParser'
 import type { Assumption } from '../domain/conversationState'
 import type { Msg, ToolCallMsg } from './ConversationPanel'
 import type { useConversationState } from './useConversationState'
-import { toolRisk } from './authModel'
+import { autoApprovalSource } from './authModel'
+import type { TrustMode } from '../domain/trustMode'
 import { fmtToolResult } from './conversationFormat'
 
 type SetPending = ReturnType<typeof useConversationState>['setPending']
@@ -38,7 +39,8 @@ type ApplyTool = ReturnType<typeof useConversationState>['applyTool']
 
 export interface ApplyChunkDeps {
   applyTool: ApplyTool
-  delegateLowRisk: boolean
+  /** ADR-015：三档信任模式（renderer 判定单源——委托来源由 main 二次校验） */
+  trustMode: TrustMode
   doneNotifierRef: RefObject<(() => void) | null>
   evidenceGuideCountRef: RefObject<number>
   evidenceReportNudgedRef: RefObject<boolean>
@@ -90,7 +92,7 @@ export interface ApplyChunkDeps {
 export function createApplyChunk(deps: ApplyChunkDeps) {
   const {
     applyTool,
-    delegateLowRisk,
+    trustMode,
     doneNotifierRef,
     evidenceGuideCountRef,
     evidenceReportNudgedRef,
@@ -932,14 +934,22 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
       // 2026-08-08 根因 3 修复③：write 门控与【执行方案】块联动——用户确认执行（planConfirmedRef）后，
       // 【执行方案】块解析的清单内文件（plannedFilesRef）视为已批准（approved=true）→ 绕过 main 规划门控
       // （模型已列清单 + 用户已确认执行 = 认可这批文件——无需再点 approve-files 卡；清单外文件仍被 main 门控拦）
-      const execPlanApproved =
-        tc.name === 'write' && stateRef.current.planConfirmed && inPlannedFiles(tc.args.path)
-      const autoApproved =
-        execPlanApproved || (delegateLowRisk && toolRisk(tc.name) === 'low') || isTrusted(tc.args)
+      // ADR-015：三档信任模式统一判定（authModel 单源）——strict 不自动；standard 清单内 write；
+      // delegated 清单内 write/edit；bash 与清单外永不自动。来源 delegate 交 main 执行边界二次校验。
+      const targetPath = trustPath(tc.args.path ?? tc.args.filePath ?? '')
+      const autoSource = autoApprovalSource({
+        mode: trustMode,
+        name: tc.name,
+        path: targetPath,
+        planConfirmed: stateRef.current.planConfirmed,
+        plannedFiles: [...stateRef.current.plannedFiles],
+        trusted: isTrusted(tc.args),
+      })
+      const autoApproved = autoSource !== null
       void (
         window.neonforge.tools?.execute?.(tc.name, tc.args, {
           approved: autoApproved,
-          approvalSource: 'auto',
+          approvalSource: autoSource ?? undefined,
           rootPath: rootPath ?? undefined,
           sessionId,
         }) ?? Promise.resolve({ ok: false, error: 'tools 通道未就绪' })

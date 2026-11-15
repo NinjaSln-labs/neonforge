@@ -116,6 +116,6 @@
 | P0-05 | 系统代跑仅 `readonly` 与 localhost `network-read`；外网证据不可代跑 | `tests/unit/verifyCompletionSystem.test.ts` |
 | P1-01 | `web_fetch` 拒绝本机/私网/元数据地址；重定向手动逐跳校验（≤5 跳） | `tests/unit/webTools.test.ts` |
 
-验证结果（截至 2026-11-16）：双 tsconfig 类型检查通过；`npx vitest run` **73 文件 / 850 用例**全部通过；`npx eslint .` 0 error（6 条既有 React Hook 依赖 warning）；interaction **81/81**；构建通过。审查修复批新增恢复竞态回归（启动首渲染空消息不得清掉任务快照 approval pending）；结构化澄清（#13）新增假设核对卡、来源制裁与 JSON 回答格式回归。
+验证结果（截至 2026-11-16）：双 tsconfig 类型检查通过；`npx vitest run` **75 文件 / 875 用例**全部通过；`npx eslint .` 0 error（6 条既有 React Hook 依赖 warning）；interaction **84/84**；构建通过。审查修复批新增恢复竞态回归（启动首渲染空消息不得清掉任务快照 approval pending）；结构化澄清（#13）新增假设核对卡、来源制裁与 JSON 回答格式回归；信任模式（#12）新增三档持久化、renderer 判定、main 委托边界与旧开关迁移回归。
 
 此外，按“先分析应有领域、再以代码校准”的要求补充了 `00-domain-blueprint.md` 与 5 个目标态 spec（`change-version`、`task-orchestration`、`usage-cost`、`extension-integration`、`acceptance-quality`）。这些领域对应的 BC-10～BC-14 已于 2026-11-14 全部实现；实现顺序与任务见 `00-domain-blueprint.md §6` 和 `09-openspec/tasks.md §5`。

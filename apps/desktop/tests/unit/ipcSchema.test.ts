@@ -18,9 +18,21 @@ describe('IPC 契约校验（P1-04）', () => {
     expect(validateIpc({ name: 'read', approvalSource: 'user' }, IPC_SCHEMAS.toolsExecute).ok).toBe(
       true,
     )
+    expect(
+      validateIpc({ name: 'read', approvalSource: 'delegate' }, IPC_SCHEMAS.toolsExecute).ok,
+    ).toBe(true) // ADR-015：委托来源是合法枚举
     expect(validateIpc({ name: 'read', approvalSource: 'bad' }, IPC_SCHEMAS.toolsExecute).ok).toBe(
       false,
     )
+  })
+
+  it('trustSet：三档枚举 + mode 必填（ADR-015）', () => {
+    for (const mode of ['strict', 'standard', 'delegated']) {
+      expect(validateIpc({ mode }, IPC_SCHEMAS.trustSet).ok).toBe(true)
+    }
+    expect(validateIpc({ mode: 'auto' }, IPC_SCHEMAS.trustSet).ok).toBe(false)
+    expect(validateIpc({}, IPC_SCHEMAS.trustSet).ok).toBe(false)
+    expect(validateIpc({ mode: 'delegated', extra: 1 }, IPC_SCHEMAS.trustSet).ok).toBe(true)
   })
 
   it('streamChat：messages 数组/role 必填；枚举约束', () => {

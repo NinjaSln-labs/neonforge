@@ -64,7 +64,7 @@
 ## 4. 验证
 
 - [x] 4.1 `npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit`
-- [x] 4.2 `npx vitest run`（73 文件 / 850 用例通过，2026-11-16；含审查修复、P1-04 第二批、入口硬化、轻量/跨存储事务 Outbox、BC-02 权限规则持久化与安全复核新增回归；ADR-013 审查修复批补快照深校验/恢复竞态/WAL 耐久写回归；ADR-014 结构化澄清新增假设核对/来源制裁/JSON 回答/快照 v1 兼容回归）
+- [x] 4.2 `npx vitest run`（75 文件 / 875 用例通过，2026-11-16；含审查修复、P1-04 第二批、入口硬化、轻量/跨存储事务 Outbox、BC-02 权限规则持久化与安全复核新增回归；ADR-013 审查修复批补快照深校验/恢复竞态/WAL 耐久写回归；ADR-014 结构化澄清新增假设核对/来源制裁/JSON 回答/快照 v1 兼容回归；ADR-015 信任模式新增 store/判定/委托边界/迁移/审计回归）
 - [x] 4.3 `npx eslint .`（0 error，6 条既有 hook 依赖 warning）
 - [x] 4.4 `npx playwright test --project=interaction`（2026-11-15 全量 71/71 通过。两个既有 flaky 已定位并处置：
   ① `.nf-start` 启动竞态 = WSL/Chromium 偶发 `net::ERR_NETWORK_CHANGED`，网络栈变更取消模块请求，页面只剩空 `<div id="root">`（非应用启动逻辑 bug）——所有 interaction 入口统一走 `gotoStart`（启动超时一次重载重试 + DOM/bridge/hasKey/console 诊断），环境问题在测试层消除；
@@ -72,7 +72,7 @@
   **2026-11-15 代码审查修复后**全量 72/72（新增「第二轮失败重试重放第二轮上下文」回归）；队列已改多槽 FIFO，既有 approve-files 用例（1804）改为等 working 释放后操作（不再依赖旧单槽覆盖行为）。**排队回归补齐后**全量 74/74（新增「连续排队两条按序送达」「停止回填输入框」）。**入口硬化批次**：`approve-files 多卡并存` 用例（1560）也改为等 working 释放后再发送「继续」——原在流式未结束时发送会按排队语义进入 FIFO，第二卡在授权等待期间可能不生成（排队语义已由 `queue.interaction.ts` 单独覆盖）；repeat-each=5 稳定。）
 - [x] 4.5 回归：现有 P0 用例与既有 `conversationState` / `tools` / `verifyCompletionSystem` 测试全部仍通过
 - [x] 4.6 `npx prettier --check "src/**/*.{ts,tsx}" "tests/**/*.{ts,tsx}" "*.mjs" "*.config.*"`（qa.yml 格式门禁；2026-11-15 对齐 42 个既有文件，326 行格式化，无逻辑变更）
-- [x] 4.7 文档一致性（2026-11-15；2026-11-16 计数刷新）：14 spec / 69 Requirement / 268 Scenario（单 Requirement ≤5 Scenario）；`10-code-evidence.md` 行号刷新并校验 0 越界；`docs/ddd-rebuild` 相对链接 0 缺失；`docs/tests/coverage-matrix.md` 增补 73 文件 / 850 用例 / 81 场景快照与 BC-10～BC-14、BC-02、Outbox、ADR-013 恢复、ADR-014 结构化澄清覆盖表
+- [x] 4.7 文档一致性（2026-11-15；2026-11-16 计数刷新）：14 spec / 69 Requirement / 268 Scenario（单 Requirement ≤5 Scenario）；`10-code-evidence.md` 行号刷新并校验 0 越界；`docs/ddd-rebuild` 相对链接 0 缺失；`docs/tests/coverage-matrix.md` 增补 75 文件 / 875 用例 / 84 场景快照与 BC-10～BC-14、BC-02、Outbox、ADR-013 恢复、ADR-014 结构化澄清、ADR-015 信任模式覆盖表
 
 ---
 
@@ -147,7 +147,7 @@
 - [x] 9.4 渲染层 `R/AssumptionCheckCard.tsx`（逐条符合/不符合 + 修正 + 提交结构化【澄清回答】）、`R/AssumptionList` 来源标签（你的选择/你的澄清/模型推断）
 - [x] 9.5 提示词 `sysPrompt` ⑬/⑭ 同步：假设不确定时用 `ask_user.assumptions` 核对；提议假设用 `{text,source}` 标注来源
 - [x] 9.6 持久化兼容 `D/taskSnapshot.ts`/`D/planProposalParser.ts`：旧字符串假设归一化、结构化来源跨重启保留、文本降级标记为模型推断
-- [x] 9.7 测试：`protocolTools.test.ts`（假设 schema/来源校验/归一化映射）、`taskSnapshot.test.ts`（v1/v2 兼容、空串跳过、来源保留/非法来源）、`clarifyAnswer.test.ts`（JSON 往返与注入防护）、`assumptionEvidence.test.ts`（来源制裁）、`planProposalParser.test.ts`、`structuredClarify.interaction.ts`（3 场景）；全量 73 文件 / 850 用例、interaction 81/81
+- [x] 9.7 测试：`protocolTools.test.ts`（假设 schema/来源校验/归一化映射）、`taskSnapshot.test.ts`（v1/v2 兼容、空串跳过、来源保留/非法来源）、`clarifyAnswer.test.ts`（JSON 往返与注入防护）、`assumptionEvidence.test.ts`（来源制裁）、`planProposalParser.test.ts`、`structuredClarify.interaction.ts`（3 场景）；全量 75 文件 / 875 用例、interaction 84/84
 - [ ] 9.8 push + CI 绿（用户当前要求不推送）
 
 ---
@@ -159,3 +159,17 @@
 3. 双 tsconfig 类型检查、单测、lint 全绿。
 4. 文档中的每条“现状”断言都能在 `10-code-evidence.md` 找到 `文件:行` 证据。
 5. 目标态领域（BC-10～BC-14）在 00/03/04/05/06/07/08/09 中均有上下文、聚合、不变量、事件、spec 与实现顺序；实现状态与 `10-code-evidence.md` 一致（2026-11-14 已落地）。
+
+## 10. V2 Roadmap · GitHub #12（信任模式预设与低危委托边界，2026-11-16）
+
+- [x] 10.1 开工前细化：`docs/decisions/015-trust-modes-delegation-boundary.md`（ADR-015 accepted）+ `docs/design/stage-specs/V2-trust-modes.md`（DoD/TDD 网格/边界）
+- [x] 10.2 `M/trustPolicyStore.ts` + instance：三档枚举、0600/tmp+rename 原子写、缺失/损坏回退 `standard`
+- [x] 10.3 IPC `trust:get`/`trust:set` 运行时 schema + preload 契约；非法模式 fail-closed
+- [x] 10.4 `R/authModel.ts`：`TrustMode` + `shouldAutoApproveTool`/`autoApprovalSource` 判定单源（strict/standard/delegated）
+- [x] 10.5 `R/useTrustPolicy.ts`：main 读取/切换 + 旧 `nf-delegate-lowrisk` 一次性迁移（无旧键不覆盖 main 已有模式）
+- [x] 10.6 `M/tools.ts` 委托执行边界二次校验：仅 write/edit、根内 realpath、main 计划清单已批准且包含；拒绝回授权卡
+- [x] 10.7 审计：`tool.executing` 携带 approvalSource；新增 `security.trust_delegation_denied` 事件
+- [x] 10.8 UI：设置页三档选择（谨慎/标准/低危委托）；TrustLadderPanel 显示真实模式，移除演示升级/假记录
+- [x] 10.9 方案确认同步 main planned-files（委托边界权威数据源）；批准按钮仍独立一次 add
+- [x] 10.10 测试：`trustPolicyStore.test.ts`（4）、`useTrustPolicy.test.ts`（5）、`authModel.test.ts`（+6）、`tools.test.ts`（+6）、`ipcSchema.test.ts`（+1）、`timelineEvents.test.ts`（+3）、`trustModes.interaction.ts`（3）；全量 75 文件 / 875 用例、interaction 84/84
+- [x] 10.11 文档：ADR-015、V2-trust-modes spec、覆盖矩阵表 12、决策日志/阶段索引

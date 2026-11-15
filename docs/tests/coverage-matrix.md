@@ -1,7 +1,7 @@
 # 覆盖矩阵（Coverage Matrix）
 
 > 首版：2026-08-16（S2）→ 增补：2026-09-29（Keenable 合规）
-> 当前快照（2026-11-16）：L1 **73 文件 / 850 用例** · 事件注册表 55+ 事件 · 不变量 Inv 1-8 + I17-I21 · L3 interaction **81 场景**
+> 当前快照（2026-11-16）：L1 **75 文件 / 875 用例** · 事件注册表 56+ 事件 · 不变量 Inv 1-8 + I17-I21 · L3 interaction **84 场景**
 > 表 1-表 10 保留各阶段时点的基线记录；当前总数以本快照与 `09-openspec/tasks.md §4` 为准。
 > 维护：阶段末更新（coverage-matrix skill）；缺口入 audit-items
 
@@ -41,6 +41,7 @@
 | tool.requested / executing / executed / failed | 工具生命周期 | timelineEvents.test.ts | ✅ |
 | tool.blocked | 拦截 gate | timelineEvents.test.ts | ✅ |
 | tool.approved / rejected / remembered | 授权三态 | timelineEvents.test.ts | ✅ |
+| security.trust_delegation_denied | 低危委托越界被 main 二次校验拒绝 | timelineEvents.test.ts（注册/载荷/缺 reason） | ✅ |
 | capability.checked / ledger_updated | 能力检查/回填 | timelineEvents.test.ts | ✅ |
 | environment.injected | 环境快照 | timelineEvents.test.ts | ✅ |
 | conversation.created | 会话创建 | timelineEvents.test.ts | ✅ |
@@ -131,7 +132,7 @@
 | main 门控跨重启一致（registerIpc → syncPlanApprovedFromStore——write 不再被规划引导拦） | tools.test.ts::D3 syncPlanApprovedFromStore 恢复 approved → needApproval 判定（L1 新增 1） | ✅ |
 | IPC 契约三件套（planned-files:load/add/reset——preload 类型化/无悬挂引用） | L2 双 tsc 0 错 + L3 D3-1（load 挂载被调/add 批准链单次） | ✅ |
 | 恢复接线（挂载 load → 本地镜像——StrictMode 双挂载 ≥1） | L3 D3-1（load 计数 + 主流程正常） | ✅ |
-| 批准链走 IPC（approvePlan → planned-files:add——与 grantPlan 同清单 trustPath） | L3 D3-1（done 卡 + add 恰一次 + 无授权卡） | ✅ |
+| 批准链走 IPC（approvePlan → planned-files:add——与 grantPlan 同清单 trustPath） | L3 D3-1（done 卡 + add 两次（ADR-015 方案确认同步一次 + 批准按钮一次）+ 无授权卡） | ✅ |
 | 任务边界重置（目标确认 → clearTrust → planned-files:reset 同步 main——批准事实不跨任务） | L3 D3-2（reset 计数 1 + 方案卡流程正常）+ 既有 clearTrust→filesApprovedReset 语义回归 | ✅ |
 | 三基准统一（未修 1——planned/produced/projectFiles 绝对基准一致 + plannedComplete 判定单源） | conversationState.test.ts::plannedComplete 绝对路径既有断言（回归）+ plannedFilesStore.test.ts::相对路径原样保留（变换归调用方） | ✅ |
 | **#8 拦截引导优化（sessionGate 拒绝回填下一步明确动作——对齐 sysPrompt ⑬⑭ 提议格式契约）** | **conversationState.test.ts::#8 目标未确认引导【目标确认】/方案未确认引导【执行方案】（L1 +2 断言——940773e）** | ✅ |
@@ -176,10 +177,22 @@
 | 审查回归（2026-11-15） | `agentLoop.test.ts::isApprovalIntent`（否定不批准）、`retry.interaction.ts`（第二轮失败重试上下文）、`queue.interaction.ts`（FIFO/停止回填） | ✅ |
 | 结构化澄清与假设来源（ADR-014 / GitHub #13） | `protocolTools.test.ts`（`ask_user.assumptions` ≤6/逐条非空、提议假设 `{text,source}` 校验与归一化、string→`model_inference`）、`taskSnapshot.test.ts`（v1 兼容/空串跳过/旧字符串归一化/来源保留/非法来源拒绝）、`clarifyAnswer.test.ts`（JSON 往返/换行冒号注入/损坏拒绝）、`assumptionEvidence.test.ts`（无证据来源降级/证据命中保留）、`planProposalParser.test.ts`（文本降级假设 → `model_inference`）、`structuredClarify.interaction.ts`（核对卡选择/修正/JSON 回答/双击防护/草稿保留、options 与 assumptions 并存、待决策点不被误拒、来源制裁与降级、3 场景） | ✅ |
 | 审查修复批（2026-11-16，`a9f8a84..HEAD`） | `stateTransaction.test.ts`（写失败回退 mtime、非 ASCII 尾部截断、短写循环）、`timelineLogger.test.ts`/`timelineOutbox.test.ts`（DLQ outboxId 重放不重复、同 id 入队幂等）、`changeSetService.test.ts`（基线仍在 WAL 时回滚不误判 conflict）、`taskSnapshot.test.ts`（决策内容深层校验/合法边界态）、`sessionStore.test.ts`（待授权工具卡持久化）、`sessionRestore.interaction.ts`（恢复待授权卡且无伪造决策事件） | ✅ |
-| P1-05 会话/轮次编排拆分 | `conversationHistory.test.ts`、`useConversationState.test.ts` + interaction 全量 81 场景 | ✅ |
+| P1-05 会话/轮次编排拆分 | `conversationHistory.test.ts`、`useConversationState.test.ts` + interaction 全量 84 场景 | ✅ |
 | Web Key 来源与明文副本 | `configStore.test.ts`（env/file/config 来源、opt-in 明文、删除清理） | ✅ |
 
 > 表 11 为 2026-11-15 增补；逐文件用例数不在此重复，避免与页首快照漂移。
+
+## 表 12：信任模式预设 ↔ 测试（ADR-015 / GitHub #12，2026-11-16）
+
+| 功能 | 覆盖测试 | 判定 |
+|------|----------|------|
+| 三档 trustMode 持久化（0600/原子写/损坏回退 standard） | `trustPolicyStore.test.ts`（缺失/损坏/非法值回退、三档往返、0600、非法 save 抛出） | ✅ |
+| IPC 契约 `trust:get`/`trust:set` | `ipcSchema.test.ts`（三档枚举 + mode 必填）、`ipcContractParity.test.ts`（main↔preload 通道静态对齐） | ✅ |
+| renderer 判定单源 | `authModel.test.ts`（trusted 恒自动、strict 全否、standard 清单内 write、delegated 清单内 write/edit、清单外/未确认/bash 拒绝、来源 auto/delegate） | ✅ |
+| main 委托执行边界 | `tools.test.ts`（清单内 edit 放行、清单外/根外/bash 拒绝、ask 只接受 user、清单未批准拒绝） | ✅ |
+| 审计事件 | `timelineEvents.test.ts`（`security.trust_delegation_denied` 注册/载荷；`tool.executing` 带 approvalSource） | ✅ |
+| 旧 localStorage 开关迁移 | `useTrustPolicy.test.ts`（'1'→delegated、'0'→standard、无键不覆盖 main、已迁移幂等、存储抛错不阻塞） | ✅ |
+| 设置页三档切换 + 委托仅计划内放行 | `trustModes.interaction.ts`（设置页切换持久化/旧键迁移删除、delegated 清单内 edit 自动且来源 delegate、strict 清单内 write 仍弹授权卡） | ✅ |
 
 ## L5 视觉基线纪律（K8）
 

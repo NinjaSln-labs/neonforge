@@ -292,7 +292,7 @@ contextBridge.exposeInMainWorld('neonforge', {
       args: Record<string, unknown>,
       opts?: {
         approved?: boolean
-        approvalSource?: 'user' | 'auto'
+        approvalSource?: 'user' | 'auto' | 'delegate'
         rootPath?: string
         sessionId?: string
       },
@@ -325,6 +325,16 @@ contextBridge.exposeInMainWorld('neonforge', {
     add: (files: string[]) =>
       ipcRenderer.invoke('planned-files:add', files) as Promise<PlannedFilesPayload>,
     reset: () => ipcRenderer.invoke('planned-files:reset') as Promise<PlannedFilesPayload>,
+  },
+  // BC-02 信任模式（ADR-015：三档预设——authority 在 main userData；trustPolicyStore）
+  trust: {
+    get: () => ipcRenderer.invoke('trust:get') as Promise<'strict' | 'standard' | 'delegated'>,
+    set: (mode: 'strict' | 'standard' | 'delegated') =>
+      ipcRenderer.invoke('trust:set', { mode }) as Promise<{
+        ok: boolean
+        mode: 'strict' | 'standard' | 'delegated'
+        error?: string
+      }>,
   },
   // BC-02 权限规则（authority 在 main userData；deny > allow > ask）
   permissions: {

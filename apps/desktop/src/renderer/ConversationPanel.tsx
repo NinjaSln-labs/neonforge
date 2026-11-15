@@ -10,6 +10,7 @@ import { useConversationTelemetry } from './useConversationTelemetry'
 import { useEvidenceVerification } from './useEvidenceVerification'
 // ticket 14 信任阶梯：授权执行模型（等级/影响/合并判定——L4 委托 + 疲劳防护）
 import { buildAuthHint, canMergeApprove } from './authModel'
+import { useTrustPolicy } from './useTrustPolicy'
 // 2026-08-03 v33：思考过程内容清洗（reasoning 含 Markdown 标记 → 展示为可读纯文字）
 // 2026-08-04：cleanContent 回复正文展示清洗（字面转义/连续换行杂音）
 import { cleanContent, stripMarkdown } from './textClean'
@@ -230,34 +231,12 @@ export default function ConversationPanel({
     execution?: number
     achievement?: number
   }>({})
-  // ticket 14 L4 委托：低危文件操作（write/edit）自动授权免确认（可随时撤销——localStorage 持久化；bash 高危永不委托）
-  const [delegateLowRisk, setDelegateLowRisk] = useState(() => {
-    try {
-      return localStorage.getItem('nf-delegate-lowrisk') === '1'
-    } catch {
-      return false
-    }
-  })
-  const handleDelegateChange = (v: boolean) => {
-    setDelegateLowRisk(v)
-    try {
-      localStorage.setItem('nf-delegate-lowrisk', v ? '1' : '0')
-    } catch {
-      /* 存储不可用——内存态仍工作 */
-    }
+  // ADR-015：信任模式（strict/standard/delegated）——main 持久化权威，renderer 镜像；
+  // 旧 nf-delegate-lowrisk 由 useTrustPolicy 一次性迁移（'1' → delegated）后删除。
+  const { mode: trustMode, setMode: setTrustMode } = useTrustPolicy()
+  const handleTrustModeChange = (mode: 'strict' | 'standard' | 'delegated') => {
+    void setTrustMode(mode)
   }
-  // 2026-08-04：设置面板 L4 委托开关 → 对话授权实时联动（同 localStorage key + 自定义事件）
-  useEffect(() => {
-    const onDelegateChanged = () => {
-      try {
-        setDelegateLowRisk(localStorage.getItem('nf-delegate-lowrisk') === '1')
-      } catch {
-        /* 读不到保持现状 */
-      }
-    }
-    window.addEventListener('nf-delegate-changed', onDelegateChanged)
-    return () => window.removeEventListener('nf-delegate-changed', onDelegateChanged)
-  }, [])
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef('')
   // 2026-08-04 审计修复（A3）：textarea DOM ref——场景卡点击预填后聚焦输入框（原焦点停卡片，需再点输入框）
@@ -306,6 +285,11 @@ export default function ConversationPanel({
     emit: (type, detail) => tlog(type, detail, 'system'),
     // BC-14：方案确认 → 验收标准从 verificationPlan 派生（权威记录在 main；无来源记录为空）
     onPlanConfirmed: (plan) => {
+      // ADR-015：方案确认即批准清单——同步 main plannedFilesStore（委托边界二次校验的权威数据源）。
+      // 清单只来自已确认方案（不变量 6）；不调用 approve-files 的方案也能让委托/自动放行有根可查。
+      // 注意：不动 renderer filesApproved 镜像（approve-files 仍独立；避免清单外 write 从「引导规划」变成授权卡）。
+      const files = (plan.files ?? []).map((f) => trustPath(f.path))
+      if (files.length > 0) void window.neonforge.plannedFiles?.add(files)
       void window.neonforge.acceptance?.derive(
         sessionId,
         plan.verificationPlan ?? [],
@@ -511,7 +495,7 @@ export default function ConversationPanel({
   // P1-05 阶段 4b：流式事件处理（依赖在定义处全部就绪后创建；applyChunkRef 在 effect 中同步）
   const applyChunk = createApplyChunk({
     applyTool,
-    delegateLowRisk,
+    trustMode,
     doneNotifierRef,
     evidenceGuideCountRef,
     evidenceReportNudgedRef,
@@ -682,8 +666,8 @@ export default function ConversationPanel({
       {demoTrust && (
         <TrustLadderPanel
           authorizedLogs={activeAuthorizedLogs}
-          delegateLowRisk={delegateLowRisk}
-          onDelegateChange={handleDelegateChange}
+          trustMode={trustMode}
+          onTrustModeChange={handleTrustModeChange}
         />
       )}
       {demoDod && <DoDAlignPanel />}

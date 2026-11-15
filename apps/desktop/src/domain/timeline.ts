@@ -60,12 +60,14 @@ export type TimelineEventType =
   // —— ToolRegistry：工具（06 §1.3）——
   | 'tool.requested' // 模型请求工具（载荷：name/args）
   | 'tool.blocked' // 工具被拦（载荷：gate——pending/confirm/out-of-plan/policy + reason）
-  | 'tool.executing' // 开始执行（载荷：name/approved）
+  | 'tool.executing' // 开始执行（载荷：name/approved/?approvalSource）
   | 'tool.executed' // 成功（载荷：name/file?）
   | 'tool.failed' // 失败（载荷：name/error）
   | 'tool.approved' // 授权批准
   | 'tool.rejected' // 授权拒绝
   | 'tool.remembered' // 允许并记住（任务信任）
+  // —— 授权安全（ADR-015）——
+  | 'security.trust_delegation_denied' // 低危委托越界被 main 二次校验拒绝（载荷：name/path/reason）
   // —— Capability/Environment（06 §1.4）——
   | 'capability.checked' // 能力检查（载荷：capabilities/missing）
   | 'capability.ledger_updated' // Ledger 回填（载荷：capabilityId/ok——bash 失败归因降级）
@@ -142,6 +144,7 @@ export interface TimelineEventSpec {
     | 'session'
     | 'plan'
     | 'tool'
+    | 'security'
     | 'capability'
     | 'execution'
     | 'stuck'
@@ -204,12 +207,22 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
   'plan.rejected': { domain: 'plan', role: 'tool', detailKeys: ['file'] },
   'tool.requested': { domain: 'tool', role: 'tool', detailKeys: ['name', 'args'] },
   'tool.blocked': { domain: 'tool', role: 'tool', detailKeys: ['name', 'gate', 'reason'] },
-  'tool.executing': { domain: 'tool', role: 'tool', detailKeys: ['name', 'approved'] },
+  'tool.executing': {
+    domain: 'tool',
+    role: 'tool',
+    detailKeys: ['name', 'approved', '?approvalSource'],
+  },
   'tool.executed': { domain: 'tool', role: 'tool', detailKeys: ['name', 'file'] },
   'tool.failed': { domain: 'tool', role: 'tool', detailKeys: ['name', 'error'] },
   'tool.approved': { domain: 'tool', role: 'system', detailKeys: ['name'] },
   'tool.rejected': { domain: 'tool', role: 'system', detailKeys: ['name'] },
   'tool.remembered': { domain: 'tool', role: 'system', detailKeys: ['name', 'file'] },
+  // ADR-015：委托越界拒绝（main 第二道防线审计——渲染端委托判定不能被绕过）
+  'security.trust_delegation_denied': {
+    domain: 'security',
+    role: 'system',
+    detailKeys: ['name', 'path', 'reason'],
+  },
   'capability.checked': {
     domain: 'capability',
     role: 'tool',
