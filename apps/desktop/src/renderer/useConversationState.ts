@@ -25,6 +25,7 @@ import {
   type SystemClarifyProposal,
 } from '../domain/conversationState'
 import { deriveStateEvents } from '../domain/timeline'
+import { fromTaskSnapshot } from '../domain/taskSnapshot'
 
 export type ConfirmPoint = 'goal' | 'plan' | 'resolution' | 'system_clarify'
 
@@ -148,13 +149,23 @@ export function useConversationState(opts?: UseConversationStateOpts) {
     setFilesApproved: (v: boolean) => transition((s) => ({ ...s, filesApproved: v })),
     // D3（ADR-005）：启动恢复——main plannedFilesStore 权威状态 → 本地镜像（批准事实跨重启）；
     // 不走 transition（恢复是系统初始化非用户转换——不 emit 派生事件，防时间线污染）
+    // ADR-013：与任务快照恢复并集——main 只承载批准事实；快照中已确认方案派生的清单不能被空 main 覆盖
     restorePlanned: (files: string[], approved: boolean) => {
       stateRef.current = {
         ...stateRef.current,
-        plannedFiles: new Set(files),
-        filesApproved: approved,
+        plannedFiles: new Set([...stateRef.current.plannedFiles, ...files]),
+        filesApproved: stateRef.current.filesApproved || approved,
       }
       setVersion((v) => v + 1)
+    },
+    // ADR-013（GitHub #11）：任务状态机跨重启——完整快照恢复（确认位/pending/进度/拒绝记忆）；
+    // 与 restorePlanned 同语义：系统初始化，不派生领域事件。损坏/版本不符返回 false（保持初始态）。
+    restoreTaskState: (snapshot: unknown): boolean => {
+      const restored = fromTaskSnapshot(snapshot)
+      if (!restored) return false
+      stateRef.current = restored
+      setVersion((v) => v + 1)
+      return true
     },
   }
 }

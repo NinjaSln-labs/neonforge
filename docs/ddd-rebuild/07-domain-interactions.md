@@ -155,6 +155,7 @@ flowchart TD
 | 证据回填引导 | `evidenceGuideCountRef` | 任务内 | 有 missing 最多 1 次，仅 unverifiable 最多 3 次 | 超限 → 用户侧提示 |
 | 问题复跑 | 标题 | 台账内 | 同标题更新原实例，不新增 | 标题截断可能误合并（风险） |
 | 会话恢复 | 消息 `id` | 会话内（最多 50） | 只存完整消息；streaming 不覆盖 | 损坏 → 空会话 |
+| 任务快照恢复 | 会话（单会话 `nf-session`） | 会话内 | 消息 + TaskSnapshot 同一 V2 记录原子写；快照优先、旧消息 `decisionContent` 兜底；确认位同步渲染镜像 | 版本/类型非法 → 不回填（初始态） |
 | 服务启动 | `rootPath` | 进程内 | 已有服务直接返回 | 失败释放端口 |
 | Diff 应用 | 路径 + diff 内容 | 单次操作 | 应用前快照；逐条状态 | 解析空/文件不存在 → 错误 |
 | 压缩 | 消息数/字符阈值 | 每次 send | 压缩结果写回 messages state | 失败 → 全量发送 |

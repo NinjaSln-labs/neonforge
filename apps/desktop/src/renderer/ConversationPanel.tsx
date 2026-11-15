@@ -112,6 +112,7 @@ export default function ConversationPanel({
   onPlanConfirmed,
   onGoalRejected,
   onPlanRejected,
+  onTaskStateRestored,
   goalConfirmed,
   planConfirmed,
   goalSeq,
@@ -141,6 +142,8 @@ export default function ConversationPanel({
   // 2026-08-15 D1：拒绝路径对称回调（MainWorkspace 渲染镜像回退——修复「拒绝被 effect 反转」双权威缺陷）
   onGoalRejected?: () => void
   onPlanRejected?: () => void
+  // ADR-013：任务快照恢复（确认位）→ MainWorkspace 渲染镜像同步（领域权威在 stateRef）
+  onTaskStateRestored?: (state: { goalConfirmed: boolean; planConfirmed: boolean }) => void
   goalConfirmed?: boolean // 2026-08-06 需求阶段门控（无阶段重构 S4：目标确认）：用户确认（MainWorkspace state）→ 渲染镜像（状态机权威在 stateRef）
   planConfirmed?: boolean // 2026-08-07 无阶段重构 S4：执行确认（ExecutionConfirmCard——目标确认后用户确认执行方案）
   goalSeq?: number // 2026-08-07 无阶段重构 S4：目标确认次数——每次确认 = 任务边界（clearTrust 驱动）
@@ -287,6 +290,7 @@ export default function ConversationPanel({
     resetRejectStreak,
     setFilesApproved,
     restorePlanned,
+    restoreTaskState,
   } = useConversationState({
     emit: (type, detail) => tlog(type, detail, 'system'),
     // BC-14：方案确认 → 验收标准从 verificationPlan 派生（权威记录在 main；无来源记录为空）
@@ -307,6 +311,8 @@ export default function ConversationPanel({
     setPendingState,
     stateRef,
     stateVersion,
+    restoreTaskState,
+    onTaskStateRestored,
   })
   // 2026-08-04 审计修复（D2）：有待批准工具操作 → 上报状态栏提示（need-approval 出现/消失）
   // 2026-08-07 无阶段修复（输入≠打断）：send 排队判定用（待授权时模型停住等批准，

@@ -64,7 +64,7 @@
 ## 4. 验证
 
 - [x] 4.1 `npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit`
-- [x] 4.2 `npx vitest run`（70 文件 / 820 用例通过，2026-11-15；含审查修复、P1-04 第二批、入口硬化、轻量/跨存储事务 Outbox、BC-02 权限规则持久化与安全复核新增回归）
+- [x] 4.2 `npx vitest run`（71 文件 / 829 用例通过，2026-11-15；含审查修复、P1-04 第二批、入口硬化、轻量/跨存储事务 Outbox、BC-02 权限规则持久化与安全复核新增回归）
 - [x] 4.3 `npx eslint .`（0 error，6 条既有 hook 依赖 warning）
 - [x] 4.4 `npx playwright test --project=interaction`（2026-11-15 全量 71/71 通过。两个既有 flaky 已定位并处置：
   ① `.nf-start` 启动竞态 = WSL/Chromium 偶发 `net::ERR_NETWORK_CHANGED`，网络栈变更取消模块请求，页面只剩空 `<div id="root">`（非应用启动逻辑 bug）——所有 interaction 入口统一走 `gotoStart`（启动超时一次重载重试 + DOM/bridge/hasKey/console 诊断），环境问题在测试层消除；
@@ -72,7 +72,7 @@
   **2026-11-15 代码审查修复后**全量 72/72（新增「第二轮失败重试重放第二轮上下文」回归）；队列已改多槽 FIFO，既有 approve-files 用例（1804）改为等 working 释放后操作（不再依赖旧单槽覆盖行为）。**排队回归补齐后**全量 74/74（新增「连续排队两条按序送达」「停止回填输入框」）。**入口硬化批次**：`approve-files 多卡并存` 用例（1560）也改为等 working 释放后再发送「继续」——原在流式未结束时发送会按排队语义进入 FIFO，第二卡在授权等待期间可能不生成（排队语义已由 `queue.interaction.ts` 单独覆盖）；repeat-each=5 稳定。）
 - [x] 4.5 回归：现有 P0 用例与既有 `conversationState` / `tools` / `verifyCompletionSystem` 测试全部仍通过
 - [x] 4.6 `npx prettier --check "src/**/*.{ts,tsx}" "tests/**/*.{ts,tsx}" "*.mjs" "*.config.*"`（qa.yml 格式门禁；2026-11-15 对齐 42 个既有文件，326 行格式化，无逻辑变更）
-- [x] 4.7 文档一致性（2026-11-15）：14 spec / 69 Requirement / 268 Scenario（单 Requirement ≤5 Scenario）；`10-code-evidence.md` 行号刷新并校验 0 越界；`docs/ddd-rebuild` 相对链接 0 缺失；`docs/tests/coverage-matrix.md` 增补 70 文件 / 820 用例 / 75 场景快照与 BC-10～BC-14、BC-02、Outbox 覆盖表
+- [x] 4.7 文档一致性（2026-11-15）：14 spec / 69 Requirement / 268 Scenario（单 Requirement ≤5 Scenario）；`10-code-evidence.md` 行号刷新并校验 0 越界；`docs/ddd-rebuild` 相对链接 0 缺失；`docs/tests/coverage-matrix.md` 增补 71 文件 / 829 用例 / 76 场景快照与 BC-10～BC-14、BC-02、Outbox 覆盖表
 
 ---
 
@@ -97,7 +97,7 @@
 ## 6. 后续（部分已完成 / 预留）
 
 - [x] 6.1 事件 `eventId/version` + dedupe + DLQ/启动重放 + **轻量 Outbox（2026-11-15）**：事件先入 `timeline-outbox.jsonl`（fsync），投递失败保留，启动重放，`outboxId` 幂等；持久化硬化同批完成：目标时间线先 fsync 再压缩、压缩 fsync/目录同步、尾部半行防护、启动重放在单实例锁之后、读失败可见且不缓存空索引、日期文件跨午夜按入队目标文件重放。**跨存储事务性 Outbox（2026-11-15）**：`stateTransaction.ts` WAL 把 BC-10 变更集（状态+自有基线）、BC-11 任务队列、BC-14 验收记录的状态写入与领域事件作为一条记录 fsync 提交；应用失败/事件待投递保留 WAL，启动 `drainStateTransactions()` 按 FIFO 重放；事件以 `txId:index` 幂等。工作区文件写入仍以快照+补偿为边界（不纳入跨文件系统事务）。崩溃恢复追加硬化：未换行的半条事务记录视为未提交并截断/忽略，不阻塞后续重放；提交未完成原因写入 `[state-tx]` 日志。
-- [x] 6.2 `ConversationPanel.tsx` 拆分（应用层与领域编排分离）：阶段 1（纯格式化/展示辅助 → `conversationFormat.tsx`）、阶段 2（确认卡 → `DecisionCards.tsx`）、阶段 3（输入区 → `ConversationComposer.tsx`）、阶段 4a（历史构建 → `conversationHistory.ts`）、阶段 4b（流式事件 → `useChatStream.ts`）、阶段 4c（轮次编排 → `useChatEngine.ts`）、阶段 5（时间线/消息持久化/遥测/证据对账 → `useTimelineLog`/`useMessageStore`/`useConversationTelemetry`/`useEvidenceVerification`）已完成（2026-11-15，面板 3372 → 1320 行；interaction 75/75；单测 820），见 `09-openspec/p1-05-conversation-panel-split.md`
+- [x] 6.2 `ConversationPanel.tsx` 拆分（应用层与领域编排分离）：阶段 1（纯格式化/展示辅助 → `conversationFormat.tsx`）、阶段 2（确认卡 → `DecisionCards.tsx`）、阶段 3（输入区 → `ConversationComposer.tsx`）、阶段 4a（历史构建 → `conversationHistory.ts`）、阶段 4b（流式事件 → `useChatStream.ts`）、阶段 4c（轮次编排 → `useChatEngine.ts`）、阶段 5（时间线/消息持久化/遥测/证据对账 → `useTimelineLog`/`useMessageStore`/`useConversationTelemetry`/`useEvidenceVerification`）已完成（2026-11-15，面板 3372 → 1320 行；interaction 76/76；单测 829），见 `09-openspec/p1-05-conversation-panel-split.md`
 - [x] 6.3 演示面板与生产 UI 隔离（结构性）：生产运行无 `demo` 字段，仅测试桥注入
 - [x] 6.4 交付包验收来源（DoD 对齐）接入真实来源，消除空验收（与 5.7 协同）
 - [x] 6.5 **BC-02 权限规则持久化**（2026-11-15）：`permissionRulesStore`（0600、tmp+rename、校验/去重）+ `permissions:list`/`permissions:set` IPC + 设置页规则编辑；规则裁决修正为 `deny > allow > ask`，显式 `ask` 优先于只读 `preApproval`；存储/优先级/执行路径单测 + 设置页添加/删除 interaction。**安全复核（同日）**：规则按工具真实执行字段匹配（bash=command、read/write/edit=path 等，deny 取全部候选字段防 decoy）；路径规则按项目根 resolve 归一防 `..` 逃逸；bash allow 拒绝链式/重定向/命令替换；`ask` 仅接受 user 来源的 approved（auto/delegate/信任路径仍弹卡）；read allow 不越过项目根（含 symlink realpath）；设置页保存串行化（防双击/初次加载竞态覆盖规则）；单条坏规则只丢弃该条。L4 低危委托与信任阶梯可视化仍为演示（非目标）。
@@ -122,8 +122,20 @@
 - [x] 7.12 **Web Key opt-in 明文副本**：与 API Key 同策略（`webSearchKeyPlain`/`webKeenableApiKeyPlain`，仅 `NEONFORGE_ALLOW_PLAINTEXT_KEY=1`；keychain 解密失败可回退）。
 - [x] 7.13 **Key 失效恢复提示（finding 3）**：错误气泡与首次配置页明确「env/凭据文件优先于应用内保存」；配置页保存后若来源仍是 env/file 不再假报成功。**优先级语义保持既有设计，不改为应用内覆盖 env。**
 - [x] 7.14 **启动导航重试**：`gotoStart` 对 `page.goto` 本身被 `ERR_NETWORK_CHANGED` 中断也重试一次（原只覆盖导航成功后的挂载失败）。
-- [x] 7.15 **排队消息优先于自动续聊**（2026-11-15 全量 interaction 根因）：`maybeContinue` 在工具链本轮完成（`pending.length===0`）且 `pendingSendRef` 非空时释放 working 并停止自动续聊，由 `send` 的 finally 按序衔接待发消息。原行为自动续聊与排队确认消息各发一轮 → 重复回合触发 ADR-010 强制澄清并干扰多张授权卡并存（`approve-files 多卡` 用例在 full suite 偶发失败；修复后 core 87/87×3、全量 75/75）。
-- [x] 7.16 **重试回合衔接排队消息**：`retryFailedTurn` 增加 `finally`（sid 归属校验后释放 working + `flushPendingSend`）。原重试期间排队的用户消息会滞留到下一次发送（计划确认自动续跑用例因此无「重试」按钮）；retry 文件 15/15、全量 75/75。
+- [x] 7.15 **排队消息优先于自动续聊**（2026-11-15 全量 interaction 根因）：`maybeContinue` 在工具链本轮完成（`pending.length===0`）且 `pendingSendRef` 非空时释放 working 并停止自动续聊，由 `send` 的 finally 按序衔接待发消息。原行为自动续聊与排队确认消息各发一轮 → 重复回合触发 ADR-010 强制澄清并干扰多张授权卡并存（`approve-files 多卡` 用例在 full suite 偶发失败；修复后 core 87/87×3、全量 76/76）。
+- [x] 7.16 **重试回合衔接排队消息**：`retryFailedTurn` 增加 `finally`（sid 归属校验后释放 working + `flushPendingSend`）。原重试期间排队的用户消息会滞留到下一次发送（计划确认自动续跑用例因此无「重试」按钮）；retry 文件 15/15、全量 76/76。
+
+---
+
+## 8. V2 Roadmap · GitHub #11（任务状态机跨重启，2026-11-15）
+
+- [x] 8.1 开工前细化：`docs/decisions/013-task-snapshot-cross-restart.md`（ADR-013 accepted）+ `docs/design/stage-specs/V2-task-snapshot.md`（DoD/TDD 网格/边界）
+- [x] 8.2 领域层 `D/taskSnapshot.ts`：`toTaskSnapshot/fromTaskSnapshot` 全字段序列化 + 运行时校验（版本/类型/枚举/聚合不变量）；损坏快照返回 null
+- [x] 8.3 `R/sessionStore.ts` V2 会话记录：消息 + 任务快照一次 `setItem` 原子写；兼容旧 V1 数组（消息可读、任务为空）；`clearSession` 同时清空
+- [x] 8.4 `R/useConversationState.ts` `restoreTaskState`：系统初始化路径，不派生领域事件；`R/useMessageStore.ts` 恢复时任务快照优先、旧消息 decisionContent 兜底；持久化随消息同记录
+- [x] 8.5 渲染镜像同步：`MainWorkspace.handleTaskStateRestored` 恢复 goal/plan 确认位；`restorePlanned` 与 main 批准事实**并集**（防空 main 覆盖已确认方案清单）
+- [x] 8.6 测试：`tests/unit/taskSnapshot.test.ts`（6）、`sessionStore.test.ts` V2/兼容（3）、`tests/interaction/sessionRestore.interaction.ts`（1）；全量 71 文件 / 829 用例、interaction 76/76
+- [ ] 8.7 push + CI 绿（用户当前要求不推送）
 
 ---
 

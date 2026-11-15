@@ -2,7 +2,8 @@
 // messages/messagesRef/nextMsgId + 恢复（含决策点快照）+ 持久化（过滤半截 streaming）。
 import { useEffect, useRef, useState } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
-import { loadSession, saveSession, serializeMessages } from './sessionStore'
+import { loadSessionSnapshot, saveSession, serializeMessages } from './sessionStore'
+import { toTaskSnapshot } from '../domain/taskSnapshot'
 import type { Msg } from './ConversationPanel'
 import type { useConversationState } from './useConversationState'
 import type { ConversationState } from '../domain/conversationState'
@@ -13,6 +14,8 @@ export interface MessageStoreDeps {
   setPendingState: SetPending
   stateRef: RefObject<ConversationState>
   stateVersion: number
+  restoreTaskState: ReturnType<typeof useConversationState>['restoreTaskState']
+  onTaskStateRestored?: (state: ConversationState) => void
 }
 
 export interface MessageStore {
@@ -26,6 +29,8 @@ export function useMessageStore({
   setPendingState,
   stateRef,
   stateVersion,
+  restoreTaskState,
+  onTaskStateRestored,
 }: MessageStoreDeps): MessageStore {
   const [messages, setMessages] = useState<Msg[]>([])
   const messagesRef = useRef<Msg[]>([])
@@ -39,10 +44,15 @@ export function useMessageStore({
   // S3（§8.2 E C5）：恢复后 pending 冻结立即生效——决策点内容快照（decisionContent）随消息恢复，
   // 卡重显旧内容（用户确认/修改后才更新——模型首轮只能响应用户对已有决策点的决策）
   useEffect(() => {
-    const stored = loadSession()
-    if (stored && stored.length > 0) {
+    const snapshot = loadSessionSnapshot()
+    if (!snapshot) return
+    // ADR-013：任务快照优先——目标/方案/解决确认态、pending、执行进度与拒绝记忆完整恢复；
+    // 快照损坏/版本不符 → 回退旧消息快照恢复路径（legacy）。
+    const taskRestored = snapshot.task != null && restoreTaskState(snapshot.task)
+    if (taskRestored) onTaskStateRestored?.(stateRef.current)
+    if (snapshot.messages.length > 0) {
       setMessages(
-        stored.map((s) => ({
+        snapshot.messages.map((s) => ({
           id: s.id ?? nextMsgId(),
           role: s.role,
           content: s.content,
@@ -51,9 +61,11 @@ export function useMessageStore({
           toolCalls: s.toolCalls,
         })),
       )
-      // 恢复决策点冻结：最新消息携带 decisionContent → 恢复 pending（goal/plan/resolution——卡重显）
-      for (let i = stored.length - 1; i >= 0; i--) {
-        const dc = stored[i].decisionContent
+    }
+    // 旧存档兼容：最新消息携带 decisionContent → 恢复 pending（任务快照已恢复时不重复覆盖）
+    if (!taskRestored) {
+      for (let i = snapshot.messages.length - 1; i >= 0; i--) {
+        const dc = snapshot.messages[i].decisionContent
         if (dc) {
           setPendingState(dc.kind, {
             since: dc.since,
@@ -78,7 +90,7 @@ export function useMessageStore({
       : // A-009：决策点已清除（确认/拒绝后）→ 剥离历史消息上的过期快照（防恢复时命中旧卡）
         messages.map((m) => ({ ...m, decisionContent: undefined }))
     const serialized = serializeMessages(withSnapshot)
-    if (serialized.length > 0) saveSession(serialized)
+    if (serialized.length > 0) saveSession(serialized, toTaskSnapshot(stateRef.current))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, stateRef.current.decisionContent, stateVersion])
   return { messages, messagesRef, nextMsgId, setMessages }

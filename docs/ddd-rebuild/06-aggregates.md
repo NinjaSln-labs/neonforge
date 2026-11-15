@@ -145,6 +145,7 @@
 
 | 聚合 | 仓储接口 | 方法（语义） | 查询边界 |
 | :--- | :--- | :--- | :--- |
+| A1 Task | `ITaskRepository`（renderer sessionSnapshot） | `toTaskSnapshot(state)`；`fromTaskSnapshot(raw)`；`loadSessionSnapshot()`/`saveSession(msgs, task)`/`clearSession()` | localStorage `nf-session` V2（消息 + TaskSnapshot 同一记录原子写，ADR-013；旧 V1 数组兼容） |
 | A2 PlannedFiles | `PlannedFilesRepository` | `load() → {files, approved}`；`add(files) → {files, approved}`；`reset() → {files, approved}` | 当前任务/会话；损坏回退空；落盘 userData |
 | A3 ToolInvocation | `ToolInvocationRepository`（当前无独立仓储；由消息状态/时间线承担） | `recordRequest(call)`；`recordResult(callId, result)`；`findByMessage(msgId)` | 会话内；按稳定 id |
 | A4 ProjectEnvironment | `EnvironmentRegistry` | `get(rootPath)`；`register(env)`；`ensure(rootPath)`；`allocatePort(rootPath)`；`releasePort(rootPath)` | 进程内；rootPath 级 |

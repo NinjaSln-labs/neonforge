@@ -567,6 +567,11 @@ export default function MainWorkspace({
   const handleExecutionRejected = () => {
     setPlanConfirmed(false)
   }
+  // ADR-013：任务快照跨重启——恢复确认位到 MainWorkspace 渲染镜像（领域权威仍在 ConversationPanel stateRef）
+  const handleTaskStateRestored = (s: { goalConfirmed: boolean; planConfirmed: boolean }) => {
+    setGoalConfirmed(s.goalConfirmed)
+    setPlanConfirmed(s.planConfirmed)
+  }
   const handleUserMessage = (text: string) => {
     lastPromptRef.current = text
     // 2026-08-07 用户决策：确认词正则匹配删除（「可以撤销吗」也触发等误触发——行业共识是结构化确认动作）——
@@ -770,6 +775,7 @@ export default function MainWorkspace({
               onPlanConfirmed={handlePlanConfirmed}
               onGoalRejected={handleGoalRejected}
               onPlanRejected={handleExecutionRejected}
+              onTaskStateRestored={handleTaskStateRestored}
               goalConfirmed={goalConfirmed}
               planConfirmed={planConfirmed}
               goalSeq={goalSeq}

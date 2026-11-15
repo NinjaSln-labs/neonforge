@@ -138,7 +138,8 @@
 - 已关闭（2026-11-15）：P1-04 IPC 契约校验（第二批入口校验 + 校验器修正）、P1-05 `ConversationPanel` 拆分（3372→1320 行）、P2-08 高级设置文案规范化、BC-02 权限规则持久化（`permissionRulesStore` + `permissions:*` IPC + 设置页；裁决 deny > allow > ask，ask 覆盖 preApproval）。BC-02 安全复核同日完成：canonical 执行字段匹配（防 decoy）、路径归一（防 `..`）、bash 链/重定向/命令替换守卫、ask 仅接受 user 来源 approved、read allow 不跨项目根、设置页保存串行化、单条坏规则容错。
 - 二次代码评审修复（2026-11-14）：悬空 symlink/写边界硬阻断、变更集自有基线（快照缺失不误删原文件）、会话 ID 提升工作区（Tab 重挂载不失联）、价格表可配置 + 月度预算、`system_clarify` 按底层决策点执行副作用、异步预检异常收敛、授权拒绝不自动恢复队列、交付面板异步响应竞态、MCP UTF-8 分片与进程退出清理。
 - 轻量 Outbox（2026-11-15）：`timelineOutbox.ts` + `timelineLogger` 改造——事件先入 outbox 文件（`fsync`）再投递时间线；投递失败保留待下次/启动重放；`outboxId` 写入事件按幂等跳过，崩溃窗口不重复。持久化硬化（同日复核）：目标时间线行先 `fsync` 再压缩 Outbox；压缩 tmp `fsync` + rename + 目录同步；尾部半行先补换行防黏连吞事件；启动重放移到单实例锁之后；outbox 读失败返回 error、时间线索引读失败不缓存空索引；无会话日期文件按入队时目标文件重放（跨午夜不漂移）。**跨存储事务性 Outbox**（同日）：`stateTransaction.ts` WAL 把 BC-10 变更集（状态+自有基线）、BC-11 任务队列、BC-14 验收记录的状态写入与领域事件作为一条记录 fsync 提交；启动 FIFO 重放，事件按 `txId:index` 幂等。工作区文件写入仍以快照+补偿为边界（不纳入跨文件系统事务）。崩溃恢复硬化（同日复核）：未换行半条事务视为未提交并截断/忽略；store 读取优先取 WAL 最新已提交意图，状态写入失败后后续变更不丢更新；提交未完成原因写入 `[state-tx]` 日志。
-- 交互回归稳定性（2026-11-15）：`playwright --project=interaction` 全量 **75/75**（最终复跑；含排队优先与重试回合衔接修复，见 tasks 7.15/7.16）；两个既有 flaky（`.nf-start` 网络变更、计划确认后重试双回合）根因已定位并在测试层（导航重载重试）与应用层（sid 归属/同步 working/多槽队列）修复；新增第二轮重试上下文、排队 FIFO/停止回填回归。
+- 交互回归稳定性（2026-11-15）：`playwright --project=interaction` 全量 **76/76**（最终复跑；含排队优先、重试回合衔接与任务快照恢复；见 tasks 7.15/7.16、§8）；两个既有 flaky（`.nf-start` 网络变更、计划确认后重试双回合）根因已定位并在测试层（导航重载重试）与应用层（sid 归属/同步 working/多槽队列）修复；新增第二轮重试上下文、排队 FIFO/停止回填回归。
+- 任务状态机跨重启（2026-11-15，GitHub #11）：ADR-013 `TaskSnapshot` 持久化确认位/pending/决策内容/计划与产出/拒绝记忆/ADR-010 计数；消息与任务快照同一 V2 记录原子写，恢复时同步 MainWorkspace 渲染镜像并与 main 批准事实并集；旧 V1 消息存档兼容。stage spec 见 `docs/design/stage-specs/V2-task-snapshot.md`。
 
 ### 5.4 通过标准（建议）
 

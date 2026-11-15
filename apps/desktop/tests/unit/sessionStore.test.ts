@@ -3,10 +3,14 @@ import {
   serializeMessages,
   saveSession,
   loadSession,
+  loadSessionSnapshot,
   clearSession,
   SESSION_KEY,
   SESSION_MAX,
+  SESSION_VERSION,
 } from '../../src/renderer/sessionStore'
+import { initialState } from '../../src/domain/conversationState'
+import { toTaskSnapshot } from '../../src/domain/taskSnapshot'
 
 function stubLocalStorage(): void {
   const store = new Map<string, string>()
@@ -78,6 +82,43 @@ describe('sessionStore（断点续做——会话持久化）', () => {
   it('clearSession 清空 → loadSession null', () => {
     saveSession([{ role: 'user', content: 'x' }])
     clearSession()
+    expect(loadSession()).toBeNull()
+  })
+
+  it('V2：消息 + 任务快照同一记录原子写入；loadSessionSnapshot 同时返回两者', () => {
+    const task = toTaskSnapshot({
+      ...initialState(),
+      goalConfirmed: true,
+      planConfirmed: true,
+      plannedFiles: new Set(['/test/a.js']),
+      producedFiles: new Set(['/test/a.js']),
+    })
+    saveSession([{ role: 'user', content: '你好' }], task)
+    const raw = JSON.parse(
+      (
+        globalThis as unknown as { localStorage: { getItem(k: string): string | null } }
+      ).localStorage.getItem(SESSION_KEY) ?? 'null',
+    ) as { version?: number; messages?: unknown[]; task?: unknown }
+    expect(raw.version).toBe(SESSION_VERSION)
+    expect(raw.messages).toHaveLength(1)
+    expect(raw.task).toEqual(task)
+    const snapshot = loadSessionSnapshot()
+    expect(snapshot?.messages).toHaveLength(1)
+    expect(snapshot?.task).toEqual(task)
+  })
+
+  it('V1 旧存档（消息数组）兼容：消息可读、无任务快照', () => {
+    ;(
+      globalThis as unknown as { localStorage: { setItem(k: string, v: string): void } }
+    ).localStorage.setItem(SESSION_KEY, JSON.stringify([{ role: 'user', content: '旧消息' }]))
+    expect(loadSession()).toEqual([{ role: 'user', content: '旧消息' }])
+    expect(loadSessionSnapshot()?.task).toBeUndefined()
+  })
+
+  it('V2 记录版本不符/缺少 messages → null', () => {
+    ;(
+      globalThis as unknown as { localStorage: { setItem(k: string, v: string): void } }
+    ).localStorage.setItem(SESSION_KEY, JSON.stringify({ version: 1, messages: [] }))
     expect(loadSession()).toBeNull()
   })
 

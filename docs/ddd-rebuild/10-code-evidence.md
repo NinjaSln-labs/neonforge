@@ -25,6 +25,7 @@
 | 回合进展评估与强制工具 | `D/agentLoop.ts:127-189`（`evaluateTurnProgress`）、`D/agentLoop.ts:24-44`（`TurnProgress`） |
 | 确认意图识别（文本降级） | `D/agentLoop.ts:54-78`（`isConfirmIntent`）、`84-87`（`isApprovalIntent`） |
 | 目标兜底触发 | `D/agentLoop.ts:367-377`（`goalFallbackTrigger`） |
+| 任务状态跨重启快照（ADR-013） | `D/taskSnapshot.ts`（`toTaskSnapshot`/`fromTaskSnapshot` 全字段+校验+聚合不变量）、`R/sessionStore.ts`（V2 消息+任务同记录）、`R/useConversationState.ts`（`restoreTaskState`）、`R/useMessageStore.ts`（恢复/持久化）、`R/MainWorkspace.tsx`（`handleTaskStateRestored` 确认位镜像） |
 
 ## 2. 门控与动作属性
 
@@ -131,6 +132,7 @@
 | 交互回归（重试上下文/排队 FIFO/停止回填/启动重试） | `tests/interaction/retry.interaction.ts`、`tests/interaction/queue.interaction.ts`、`tests/interaction/scenarios.ts`（`gotoStart`） |
 | 轻量 Outbox | `tests/unit/timelineOutbox.test.ts`（入队/FIFO/失败保留/幂等/半行/读取失败/目标文件）+ `tests/unit/timelineLogger.test.ts`（重放/重启 seq 续接/崩溃窗口幂等/跨午夜/索引重试/旧 DLQ 兼容） |
 | 跨存储事务性 Outbox | `tests/unit/stateTransaction.test.ts`（提交/失败保留/重放/FIFO/损坏 WAL）+ `tests/unit/acceptanceStore.test.ts`/`taskQueueStore.test.ts`/`changeSetService.test.ts`（commit 回调：状态+基线+事件同事务） |
+| 任务快照跨重启 | `tests/unit/taskSnapshot.test.ts`（全字段往返/损坏/版本/不变量）、`tests/unit/sessionStore.test.ts`（V2 原子记录/旧 V1 兼容）、`tests/interaction/sessionRestore.interaction.ts`（快照恢复 pending 卡） |
 | 主路径 e2e-sim | `apps/desktop/e2e-sim/journey.mjs`、`signals.mjs`、`decide.mjs`、`convergence.mjs` |
 | 本轮安全修正 | `conversationState.test.ts`（危险参数形态）、`tools.test.ts`（read 边界/pid 守卫）、`verifyCompletionSystem.test.ts`（外网证据）、`webTools.test.ts`（SSRF/重定向） |
 
