@@ -12,6 +12,12 @@ import {
 } from 'node:fs'
 import path from 'node:path'
 import {
+  applyStateWrites,
+  type StateCommitSink,
+  type StateWrite,
+  type StoreEvent,
+} from './stateTransaction.js'
+import {
   createChangeSet,
   markConflict,
   revertChangeSet,
@@ -45,10 +51,8 @@ function baselineFile(baseFilePath: string, sessionId: string, itemId: string): 
   return path.join(path.dirname(baseFilePath), 'changeset-baselines', safeSession, `${itemId}.base`)
 }
 
-function writeBaseline(target: string, content: string): void {
-  const dir = path.dirname(target)
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-  writeFileSync(target, content, { mode: 0o600 })
+function baselineWrite(target: string, content: string): StateWrite {
+  return { filePath: target, content }
 }
 
 export interface RevertResult {
@@ -58,22 +62,23 @@ export interface RevertResult {
   error?: string
 }
 
-export type ChangeSetEventSink = (event: {
-  session: string
-  type: string
-  detail: Record<string, unknown>
-}) => void
+export type ChangeSetEventSink = (event: StoreEvent) => void
 
 export class ChangeSetService {
   constructor(
     private readonly filePath: string,
     private readonly emit: ChangeSetEventSink = () => {},
+    private readonly commit?: StateCommitSink,
+    private readonly pendingRead?: (filePath: string) => string | null,
   ) {}
 
   private loadAll(): ChangeSetFile {
     try {
-      if (!existsSync(this.filePath)) return { sets: {} }
-      const parsed = JSON.parse(readFileSync(this.filePath, 'utf-8')) as Partial<ChangeSetFile>
+      const pending = this.pendingRead?.(this.filePath)
+      const raw =
+        pending ?? (existsSync(this.filePath) ? readFileSync(this.filePath, 'utf-8') : null)
+      if (raw === null) return { sets: {} }
+      const parsed = JSON.parse(raw) as Partial<ChangeSetFile>
       if (parsed && typeof parsed.sets === 'object' && parsed.sets) return { sets: parsed.sets }
     } catch {
       /* 损坏 → 空（后续可重建） */
@@ -81,16 +86,22 @@ export class ChangeSetService {
     return { sets: {} }
   }
 
-  private saveAll(data: ChangeSetFile): void {
+  /** 状态 + 基线文件 + 事件同一事务（有 commit 回调时走 WAL；单测降级为原子写 + emit）。 */
+  private write(data: ChangeSetFile, events: StoreEvent[], extraWrites: StateWrite[] = []): void {
+    const writes: StateWrite[] = [
+      { filePath: this.filePath, content: JSON.stringify(data, null, 2) },
+      ...extraWrites,
+    ]
+    if (this.commit) {
+      this.commit(writes, events)
+      return
+    }
     try {
-      const dir = path.dirname(this.filePath)
-      if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-      const tmp = `${this.filePath}.tmp`
-      writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 0o600 })
-      renameSync(tmp, this.filePath)
+      applyStateWrites(writes)
     } catch {
       /* 落盘失败不阻断业务 */
     }
+    for (const event of events) this.emit(event)
   }
 
   get(sessionId: string): ChangeSet | null {
@@ -119,6 +130,7 @@ export class ChangeSetService {
     const bakPath = `${filePath}.nf-bak`
     const existingItem = existing?.items.find((i) => i.id === itemId)
     const baselinePath = baselineFile(this.filePath, sessionId, itemId)
+    const extraWrites: StateWrite[] = []
 
     let baseHash: string | null = existingItem?.baseHash ?? null
     let snapshotRef: string | null = null
@@ -131,7 +143,7 @@ export class ChangeSetService {
         } else if (existingItem.snapshotRef && existsSync(existingItem.snapshotRef)) {
           const oldSnapshot = readText(existingItem.snapshotRef)
           if (oldSnapshot !== null && hashContent(oldSnapshot) === baseHash) {
-            writeBaseline(baselinePath, oldSnapshot)
+            extraWrites.push(baselineWrite(baselinePath, oldSnapshot))
             snapshotRef = baselinePath
           }
         }
@@ -146,7 +158,7 @@ export class ChangeSetService {
       }
       if (baseContent !== null) {
         baseHash = hashContent(baseContent)
-        writeBaseline(baselinePath, baseContent)
+        extraWrites.push(baselineWrite(baselinePath, baseContent))
         snapshotRef = baselinePath
       }
     }
@@ -168,17 +180,22 @@ export class ChangeSetService {
         updatedAt: at,
       }
       data.sets[sessionId] = applied
-      this.saveAll(data)
-      this.emit({
-        session: sessionId,
-        type: 'changeset.proposed',
-        detail: { changeId: applied.id, files: [filePath], baseHash },
-      })
-      this.emit({
-        session: sessionId,
-        type: 'changeset.applied',
-        detail: { changeId: applied.id, files: [filePath] },
-      })
+      this.write(
+        data,
+        [
+          {
+            session: sessionId,
+            type: 'changeset.proposed',
+            detail: { changeId: applied.id, files: [filePath], baseHash },
+          },
+          {
+            session: sessionId,
+            type: 'changeset.applied',
+            detail: { changeId: applied.id, files: [filePath] },
+          },
+        ],
+        extraWrites,
+      )
       return applied
     }
     const found = Boolean(existingItem)
@@ -197,19 +214,20 @@ export class ChangeSetService {
       updatedAt: at,
     }
     data.sets[sessionId] = next
-    this.saveAll(data)
+    const events: StoreEvent[] = []
     if (!found) {
-      this.emit({
+      events.push({
         session: sessionId,
         type: 'changeset.proposed',
         detail: { changeId: next.id, files: [filePath], baseHash },
       })
     }
-    this.emit({
+    events.push({
       session: sessionId,
       type: 'changeset.applied',
       detail: { changeId: next.id, files: [filePath] },
     })
+    this.write(data, events, extraWrites)
     return next
   }
 
@@ -222,12 +240,13 @@ export class ChangeSetService {
     const next = revertChangeSet(set, { [item.id]: true })
     const data = this.loadAll()
     data.sets[sessionId] = next
-    this.saveAll(data)
-    this.emit({
-      session: sessionId,
-      type: 'changeset.reverted',
-      detail: { changeId: next.id, files: [filePath] },
-    })
+    this.write(data, [
+      {
+        session: sessionId,
+        type: 'changeset.reverted',
+        detail: { changeId: next.id, files: [filePath] },
+      },
+    ])
     return next
   }
 
@@ -288,21 +307,22 @@ export class ChangeSetService {
     const next = revertChangeSet(current, outcomes)
     const data = this.loadAll()
     data.sets[sessionId] = next
-    this.saveAll(data)
+    const events: StoreEvent[] = []
     for (const file of reverted) {
-      this.emit({
+      events.push({
         session: sessionId,
         type: 'changeset.reverted',
         detail: { changeId: next.id, files: [file] },
       })
     }
     for (const file of conflicted) {
-      this.emit({
+      events.push({
         session: sessionId,
         type: 'changeset.conflict_detected',
         detail: { changeId: next.id, file },
       })
     }
+    this.write(data, events)
     return {
       ok: conflicted.length === 0 && reverted.length > 0,
       reverted,
@@ -316,7 +336,7 @@ export class ChangeSetService {
   clear(sessionId: string): void {
     const data = this.loadAll()
     delete data.sets[sessionId]
-    this.saveAll(data)
+    this.write(data, [])
     try {
       rmSync(
         path.join(

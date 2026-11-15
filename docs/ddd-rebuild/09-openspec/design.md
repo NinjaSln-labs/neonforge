@@ -274,8 +274,8 @@ state transition (useConversationState.transition)
 
 - **已落地（2026-11-14）**：事件版本（`version`）、`eventId`、去重存储、DLQ + 启动重放；代码证据见 `10-code-evidence.md §4`。
 - **已落地（2026-11-15）· 轻量 Outbox**：`timelineOutbox.ts` 提供单文件 outbox；`logTimeline` 先将事件入队（`fsync`），再投递会话时间线；投递失败保留待下次/启动重放；`outboxId` 写入事件，重放按幂等跳过；`drainTimelineOutbox()` 接入 `main.ts` 启动流程（在单实例锁之后）。持久化硬化：目标时间线行先 `fsync` 再压缩 Outbox；压缩 tmp `fsync` + rename + 目录同步；尾部半行补换行；outbox/时间线索引读失败可见且不缓存空索引；无会话日期文件按入队时目标文件重放。
-- **预留 · 完整跨存储事务**：轻量 Outbox 只覆盖已进入 `logTimeline` 的事件；renderer transition → IPC → JSONL 的“状态变更”与“事件入队”仍是两个独立动作。若要保证跨存储事务，需要状态存储与事件入队同文件/同事务提交；当前单进程不做。
-- **后续可选**：查询按事件版本兼容；完整跨存储事务 Outbox。
+- **已落地（2026-11-15）· 跨存储事务性 Outbox**：`stateTransaction.ts` 提供 WAL（`userData/state/transactions.jsonl`）。每次状态变更把「状态文件内容 + 基线写入 + 领域事件」作为一条记录先 fsync 提交，再原子应用状态文件并按确定性 `outboxId` 投递时间线；任一环节失败保留 WAL，启动 `drainStateTransactions()` 按 FIFO 重放（状态覆盖幂等、事件按 outboxId 去重）。已接入 BC-10 变更集（含基线文件）、BC-11 任务队列、BC-14 验收记录；单实例锁之后重放。崩溃恢复：未换行半条记录视为未提交事务（截断/忽略），不阻塞后续重放；store 读取优先 `latestWriteContent`（WAL 最新意图），状态落盘失败后后续变更不丢更新；提交未完成原因写 `[state-tx]` 日志。工作区文件写入（write/edit/diff）仍以快照+补偿为事务边界，不纳入 WAL。
+- **后续可选**：查询按事件版本兼容。
 
 ### 6.2 一次事务修改一个聚合
 
@@ -295,7 +295,7 @@ state transition (useConversationState.transition)
 | 系统代跑 | 只读 + localhost 网络只读 | 安全 vs 外网证据不可代跑 |
 | web_fetch | 拒私网 + 手动重定向 | 安全 vs 本地文档调试（走 open/curl） |
 | pid 清理 | 跳过 <=0 | 安全 vs 可能漏清异常 pid（正常 pid 不受影响） |
-| Outbox | 轻量 Outbox 已实现并硬化（2026-11-15）；完整跨存储事务不做 | 已发出事件不丢 vs 单进程交付成本 |
+| Outbox | 轻量 Outbox + 跨存储事务性 WAL 已实现并硬化（2026-11-15） | 已发出事件不丢 / 状态与事件一致 vs 每次写入多一次 fsync |
 
 ---
 

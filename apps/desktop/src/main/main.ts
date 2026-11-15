@@ -10,6 +10,7 @@ import { stopAllServices } from './serviceManager.js'
 import { TEST_HOOKS } from './testHooks.js'
 import { configStore } from './configStore.js'
 import { setTimelineUserData, drainTimelineDlq, drainTimelineOutbox } from './timelineLogger.js'
+import { drainStateTransactions } from './stateTransaction.instance.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -41,11 +42,22 @@ if (!gotTheLock) {
   app.quit()
 } else {
   // P1-02：重放必须在拿到单实例锁之后——第二个实例不得改写/删除共享日志文件
+  // ① 跨存储事务 WAL：先补状态写入与领域事件（事件进入 timeline outbox）
+  try {
+    const result = drainStateTransactions()
+    if (result.error) {
+      console.error('[state-tx] 启动重放未完成', result.error, 'remaining=' + result.remaining)
+    }
+  } catch (e) {
+    console.error('[state-tx] 启动重放失败', e)
+  }
+  // ② 旧 DLQ（轻量 Outbox 之前的失败事件）
   try {
     drainTimelineDlq()
   } catch (e) {
     console.error('[timeline] DLQ 启动重放失败', e)
   }
+  // ③ timeline outbox 最后重放（吸收 ①② 新入队事件）
   try {
     const result = drainTimelineOutbox()
     if (result.error) {

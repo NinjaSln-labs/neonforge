@@ -126,4 +126,33 @@ describe('ChangeSetService（BC-10 持久化 + 基线校验）', () => {
     expect(svc.get('s2')).toBeNull()
     expect(existsSync(path.join(TMP, 'changesets.json'))).toBe(true)
   })
+
+  it('commit 回调：变更集状态 + 基线文件 + 事件同一事务', () => {
+    const file = path.join(proj, 'tx.txt')
+    writeFileSync(file, 'new', 'utf-8')
+    const commits: Array<{
+      writes: Array<{ filePath: string; content: string }>
+      events: Array<{ type: string }>
+    }> = []
+    let emitted = 0
+    const txSvc = new ChangeSetService(
+      path.join(TMP, 'changesets.json'),
+      () => {
+        emitted += 1
+      },
+      (writes, events) => {
+        commits.push({ writes, events })
+      },
+    )
+    txSvc.recordMutation('s1', file, { content: 'old' })
+    expect(emitted).toBe(0)
+    expect(commits).toHaveLength(1)
+    expect(commits[0].writes.some((w) => w.filePath.endsWith('changesets.json'))).toBe(true)
+    const baseline = commits[0].writes.find((w) => w.filePath.includes('changeset-baselines'))
+    expect(baseline?.content).toBe('old')
+    expect(commits[0].events.map((e) => e.type)).toEqual([
+      'changeset.proposed',
+      'changeset.applied',
+    ])
+  })
 })

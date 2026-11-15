@@ -47,4 +47,24 @@ describe('TaskQueueStore（BC-11 持久化）', () => {
     store.clear('s1')
     expect(store.list('s1').entries).toHaveLength(0)
   })
+
+  it('commit 回调：enqueue 的状态与事件同一事务', () => {
+    const commits: Array<{ writes: Array<{ content: string }>; events: Array<{ type: string }> }> =
+      []
+    let emitted = 0
+    const txStore = new TaskQueueStore(
+      path.join(TMP, 'queue.json'),
+      () => {
+        emitted += 1
+      },
+      (writes, events) => {
+        commits.push({ writes, events })
+      },
+    )
+    txStore.enqueue('s1', '任务')
+    expect(emitted).toBe(0)
+    expect(commits).toHaveLength(1)
+    expect(commits[0].writes[0].content).toContain('任务')
+    expect(commits[0].events.map((e) => e.type)).toEqual(['queue.entry_enqueued'])
+  })
 })

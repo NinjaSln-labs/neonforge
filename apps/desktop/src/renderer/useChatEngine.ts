@@ -204,6 +204,12 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
         return
       } // 卡弹出（确认卡/授权卡）——等用户决策（模型停——不续聊）
       if (pending.length === 0) {
+        // 用户已排队新消息：不再自动续聊，当前工具链本轮结束后由 send() finally 按序衔接待发消息。
+        // （原行为：自动续聊与排队消息各发一轮 → 确认点击在流式期排队时多出重复回合，触发 ADR-010 误判）
+        if (pendingSendRef.current.length > 0) {
+          releaseWorking()
+          return
+        }
         // 2026-08-04 重构：同工具重复检测（同一 name+args 连续 3 次 = 死循环——防模型空转不产出；跨调用累积——原局部变量每轮重置失效）
         // 2026-08-05 体验反馈：只统计写工具（write/edit）——read/bash 只读重复是模型合理排查（曾因 read 摘要化反复读同文件被误伤），不触发；真正空转由 depth 40 兜底
         // 2026-08-14 修复（冒烟实测：npm init 中文目录名失败 exit-1 → 模型 13+ 次原样重试同一命令——空错误无诊断 + bash 重试无上限 = 死循环；
@@ -876,7 +882,17 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
     const sid = ++sessionRef.current
     const hist = chatRef.current?.msgs ?? buildHistory(prev)
     const depth = chatRef.current?.depth ?? 0
-    await runChat(hist, depth, sid)
+    try {
+      await runChat(hist, depth, sid)
+    } finally {
+      // 重试回合也要按序衔接重试期间排队的用户消息（原实现无 finally——消息会滞留到下一次发送）
+      if (sessionRef.current === sid) {
+        workingRef.current = false
+        setWorking(false)
+        onWorkingChange?.(false)
+        flushPendingSend()
+      }
+    }
   }
   retryFailedTurnRef.current = retryFailedTurn
 

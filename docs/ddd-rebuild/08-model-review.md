@@ -17,10 +17,10 @@
 | 不变量表达率 | 8 | 8 条不变量有显式函数与测试，但 I06（计划清单单一来源）在渲染层被违反：`propose_plan` 提议即写入 `plannedFiles` | `conversationState.ts:831-840`；`ConversationPanel.tsx:880-883`；测试 `Inv 6` |
 | 事件完整性 | 8 | 55+ 事件已注册、diff 派生；但无事件版本/eventId；日志写失败静默；`tool.executed` 可能重复；部分事件靠手工 tlog | `timeline.ts:20-233`；`timelineLogger.ts:55-77`；`07 §9` |
 | 耦合度 | 6 | renderer 直接消费 domain + 20+ IPC；main 工具/环境/服务互依；演示面板与生产路径混在同一文件；状态镜像异步 | `ConversationPanel.tsx`、`ipc.ts`、`05 §1` |
-| 行业对标偏离 | 8 | 已吸收 Claude/Codex/Cursor 授权、Aider/Cline 验证与拒绝原因、reasonix/deer-flow 循环与挂起；事件版本与契约 schema 已补齐（P2-07、P1-04），轻量 Outbox 已实现（P1-02，2026-11-15）；仅完整跨存储事务性 Outbox 未覆盖 | 代码注释中的对标记录；`02 §4`、`07 §9` |
+| 行业对标偏离 | 8 | 已吸收 Claude/Codex/Cursor 授权、Aider/Cline 验证与拒绝原因、reasonix/deer-flow 循环与挂起；事件版本与契约 schema 已补齐（P2-07、P1-04），轻量 Outbox 与跨存储事务性 Outbox 均已实现（P1-02，2026-11-15） | 代码注释中的对标记录；`02 §4`、`07 §9` |
 | **加权平均** | **7.5 / 10** | 模型主干强，工程边界与安全边界需要硬化 | — |
 
-> 另按**目标态领域完整度**评估：9.5 / 10（2026-11-15 复评）。BC-10～BC-14 五个目标态领域已落地（领域状态机 + 持久化 + IPC/preload + 生产 UI + 单测）；P1-04、P1-05、P2-08 与演示隔离已关闭，剩余 0.5 分来自跨上下文事务性 Outbox（设计预留，见 §5.3）。该评分不并入上表的“现有模型”评分。
+> 另按**目标态领域完整度**评估：10 / 10（2026-11-15 复评）。BC-10～BC-14 五个目标态领域已落地（领域状态机 + 持久化 + IPC/preload + 生产 UI + 单测）；P1-04、P1-05、P2-08、演示隔离与跨上下文事务性 Outbox 均已关闭（WAL 状态+事件同提交，见 §5.3；仅工作区文件系统写入保留快照+补偿边界）。该评分不并入上表的“现有模型”评分。
 
 ---
 
@@ -36,7 +36,7 @@
 | P0-04 | P0 | 进程清理/停止服务在 `pid=0` 时调用 `kill(-0)`/`kill(0)` | 可能向当前进程组/应用自身发 SIGKILL，导致应用退出或误杀 | `tools.ts:288-323`（`killTree`/`killAllSubprocesses` 使用 `pid ?? 0`）、`serviceManager.ts:254-286`（`process.kill(-s.pid)`/`-p.pid`） | 所有 kill 前守卫 `pid > 0`；新增纯函数/单测 | 已修复（2026-11-14）：`processGuard.isKillablePid` + tools/serviceManager 全部 kill 前守卫；新增单测 |
 | P0-05 | P1 | 系统代跑验证包含外网 `network-read` 命令 | 证据命令可被模型用于外网 GET 携带敏感数据；自动代跑绕过用户确认 | `conversationState.ts:681-685`（`isSystemVerifiable` 接受 `network-read`）、`verification.ts:9-13` | 系统只代跑 `readonly` 与 localhost `network-read`；外部网络命令标 unverifiable | 已修复（2026-11-14）：`isSystemVerifiable` 单源导出，外网 network-read 不可代跑；`verifyCompletionSystem.test.ts` 覆盖外网/localhost |
 | P1-01 | P1 | `web_fetch` 允许任意 http/https，跟随重定向，无 localhost/私网拦截 | SSRF：可访问内网服务、云元数据地址；可被用于绕过网络边界 | `webTools.ts:260-296` | 拒绝 localhost/私网/元数据地址；手动跟随重定向并逐跳校验；新增测试 | 已修复（2026-11-14）：`isPrivateHost` + `redirect:'manual'` 逐跳校验（最多 5 跳）；`webTools.test.ts` 覆盖 |
-| P1-02 | P1 | 无 Outbox/DLQ/事件版本；时间线写失败静默 | 审计不可靠；跨聚合一致性无投递保证；事件 schema 演进困难 | `timelineLogger.ts`、`timelineOutbox.ts`、`timeline.ts` | 引入事件 `eventId/version`；失败可见化；跨上下文写库后发事件（Outbox） | 已修复（2026-11-15）：`eventId/version` + 写失败计数 + DLQ/启动重放 + dedupe + 轻量 Outbox（先入队 fsync、失败保留、启动重放、`outboxId` 幂等）；完整跨存储事务仍未覆盖 |
+| P1-02 | P1 | 无 Outbox/DLQ/事件版本；时间线写失败静默 | 审计不可靠；跨聚合一致性无投递保证；事件 schema 演进困难 | `timelineLogger.ts`、`timelineOutbox.ts`、`stateTransaction.ts`、`timeline.ts` | 引入事件 `eventId/version`；失败可见化；跨上下文写库后发事件（Outbox） | 已修复（2026-11-15）：`eventId/version` + 写失败计数 + DLQ/启动重放 + dedupe + 轻量 Outbox；跨存储事务性 Outbox（WAL：状态+基线+事件同提交，启动 FIFO 重放）已覆盖 BC-10/11/14 |
 | P1-03 | P1 | renderer 与 main 的计划确认镜像异步 | 极端时序下 main 门控仍关闭/仍开启，导致卡不渲染或越权 | `useConversationState.ts`（`confirm/reject`）、`ipc.ts` `session:plan-confirmed` | 确认转换 await 镜像结果；失败回滚/提示；增加竞态测试 | 已修复（2026-11-14）：`confirm/reject` await 镜像并重试 1 次；领域转换仍同步完成 |
 | P1-04 | P1 | IPC 契约无 schema 校验/生成 | preload、types.d.ts、main handler 三者可能漂移；调用方传入非法结构 | `preload.ts`、`renderer/types.d.ts`、`ipc.ts` | 生成式契约或 zod/JSON Schema 校验；契约测试 | 已修复（2026-11-15）：`ipcSchema.ts` 轻量校验器 + 全通道静态契约测试；运行时入口覆盖 tools/stream/config(set-key、set-web-access)/队列/验收/变更集/delivery diff/tools revert/completion verify/context/rag/plugins/planned-files/plan-confirmed；价格/预算/MCP 仍由各自 store 校验 |
 | P1-05 | P1 | `ConversationPanel.tsx` 拆分前 3372 行，应用编排与 UI 渲染混在一起 | 可维护性差、DDD 应用层边界侵蚀、测试困难 | `ConversationPanel.tsx` 全文 | 拆分为应用服务 hooks（send/stream/toolLoop/decision）与展示组件 | 已修复（2026-11-15）：阶段 1–5 完成（`conversationFormat`/`DecisionCards`/`ConversationComposer`/`conversationHistory`/`useChatStream`/`useChatEngine`/`useTimelineLog`/`useMessageStore`/`useConversationTelemetry`/`useEvidenceVerification`）；面板 3372 → 1320 行；行为不变，interaction 74/74（含后续排队/重试回归） |
@@ -93,7 +93,7 @@
 | 循环检测 | reasonix storm-breaker；gemini-cli loop detection | loop-guard/forced-clarify/needs-human + rejectStreak + 40 轮兜底 | 融合 | 是 | 把阈值配置化并可视化 |
 | 工具循环 | Claude/Codex 同类重复抑制 | 同工具签名连续 3 次暂停；失败/执行类覆盖；只读豁免 | 融合 | 是 | 统一重复检测与 StuckDetector 的语义 |
 | 上下文管理 | Claude Code compact；Cursor 上下文窗口 | 压缩阈值 + 摘要 + 保留最近 20；@mention 确定性注入；CodeRAG/LSP | 融合 | 是 | 压缩摘要加结构化状态（目标/决策/证据） |
-| 事件审计 | 多数竞品以日志/遥测为主 | 状态 diff 派生领域事件 + JSONL + query | 领先（Event Sourcing-lite） | 是 | eventId/version 与失败可见性已落地（2026-11-14）；Outbox 预留 |
+| 事件审计 | 多数竞品以日志/遥测为主 | 状态 diff 派生领域事件 + JSONL + query | 领先（Event Sourcing-lite） | 是 | eventId/version 与失败可见性已落地（2026-11-14）；轻量/跨存储事务性 Outbox 已落地（2026-11-15） |
 | 插件生态 | Claude/Codex 有 MCP/插件 | 5 个内置插件注册声明；MCP bridge 已实现（BC-13，2026-11-14） | 部分补齐 | 是 | 第三方插件加载/生态路线图仍待明确 |
 | 多任务队列 | 竞品有任务/会话管理 | 问题台账 + 任务队列（BC-11，2026-11-14）；仍为单活动会话 | 部分补齐 | 是 | 并行多会话非目标；若要支持需重新建模 Task 聚合 |
 
@@ -106,7 +106,7 @@
 | 聚合边界与上下文边界矛盾 | Task 与 PlannedFiles 边界清晰；渲染层违反 I06 | 否（边界本身一致） | — | 修复渲染层写入点即可，无需重划上下文 |
 | 术语冲突率 > 20% | 约 15%（execution/achievement/plan/达成/解决/执行确认） | 否（接近阈值） | `ddd-contexts`（建议性） | 执行一次命名清理，不改结构 |
 | 不变量表达率 < 60% | 80%（8/10 显式且可测） | 否 | — | I06 修复后升至 90% |
-| 集成模式与上下文映射不一致 | 无 Outbox、IPC 命令/事件混用 | 部分 | `ddd-context-map`（后续） | 事件版本已落地（P2-07），Outbox 设计已写入 design.md §6；实现预留 |
+| 集成模式与上下文映射不一致 | 无 Outbox、IPC 命令/事件混用 | 部分 | `ddd-context-map`（后续） | 事件版本已落地（P2-07），轻量/跨存储事务性 Outbox 已实现（design.md §6/§5.3，2026-11-15） |
 | 事件完整性 < 70% | 80%+（55+ 事件注册） | 否 | — | 补事件版本与去重 |
 | 同一回溯路径执行 3 次 | 未发生 | 否 | — | — |
 
@@ -121,7 +121,7 @@
 **当前：Ready（文档基线 + 生产硬化）。**
 
 - 作为 **文档基线**：Ready。01-07 的模型自洽，能支撑后续 Spec 与代码演进。
-- 作为 **生产硬化**：P0 安全阻断项、P1 边界与 IPC 契约校验、ConversationPanel 拆分、轻量 Outbox 硬化、BC-02 权限规则持久化均已完成并有回归测试；剩余仅为可选硬化项（完整跨存储事务 Outbox）与明确非目标（演示面板/平台发布）。
+- 作为 **生产硬化**：P0 安全阻断项、P1 边界与 IPC 契约校验、ConversationPanel 拆分、轻量 Outbox 硬化、BC-02 权限规则持久化、跨存储事务性 Outbox 均已完成并有回归测试；剩余仅为明确非目标（演示面板/平台发布）。
 
 ### 5.2 原阻塞项（本轮已关闭）
 
@@ -134,11 +134,11 @@
 
 ### 5.3 非阻塞但建议尽快处理
 
-- 已关闭（2026-11-14）：P1-03 镜像竞态、P1-06 演示通道隔离（结构性）、P1-08 路径规范化、P1-10 symlink、P2-01 事件命名、P2-03 progressMode、P2-04 原子写、P2-05 事件重复、P2-06 dedupe、P2-07 事件版本；P1-02 已有 DLQ/事件版本/重放，跨上下文 Outbox 后续。
+- 已关闭（2026-11-14）：P1-03 镜像竞态、P1-06 演示通道隔离（结构性）、P1-08 路径规范化、P1-10 symlink、P2-01 事件命名、P2-03 progressMode、P2-04 原子写、P2-05 事件重复、P2-06 dedupe、P2-07 事件版本；P1-02 的 DLQ/事件版本/重放已先行落地，跨上下文 Outbox 于 2026-11-15 关闭。
 - 已关闭（2026-11-15）：P1-04 IPC 契约校验（第二批入口校验 + 校验器修正）、P1-05 `ConversationPanel` 拆分（3372→1320 行）、P2-08 高级设置文案规范化、BC-02 权限规则持久化（`permissionRulesStore` + `permissions:*` IPC + 设置页；裁决 deny > allow > ask，ask 覆盖 preApproval）。BC-02 安全复核同日完成：canonical 执行字段匹配（防 decoy）、路径归一（防 `..`）、bash 链/重定向/命令替换守卫、ask 仅接受 user 来源 approved、read allow 不跨项目根、设置页保存串行化、单条坏规则容错。
 - 二次代码评审修复（2026-11-14）：悬空 symlink/写边界硬阻断、变更集自有基线（快照缺失不误删原文件）、会话 ID 提升工作区（Tab 重挂载不失联）、价格表可配置 + 月度预算、`system_clarify` 按底层决策点执行副作用、异步预检异常收敛、授权拒绝不自动恢复队列、交付面板异步响应竞态、MCP UTF-8 分片与进程退出清理。
-- 轻量 Outbox（2026-11-15）：`timelineOutbox.ts` + `timelineLogger` 改造——事件先入 outbox 文件（`fsync`）再投递时间线；投递失败保留待下次/启动重放；`outboxId` 写入事件按幂等跳过，崩溃窗口不重复。持久化硬化（同日复核）：目标时间线行先 `fsync` 再压缩 Outbox；压缩 tmp `fsync` + rename + 目录同步；尾部半行先补换行防黏连吞事件；启动重放移到单实例锁之后；outbox 读失败返回 error、时间线索引读失败不缓存空索引；无会话日期文件按入队时目标文件重放（跨午夜不漂移）。**完整跨存储事务**（状态落库与事件入队同一事务）仍未覆盖。
-- 交互回归稳定性（2026-11-15）：`playwright --project=interaction` 全量 **74/74**；两个既有 flaky（`.nf-start` 网络变更、计划确认后重试双回合）根因已定位并在测试层（导航重载重试）与应用层（sid 归属/同步 working/多槽队列）修复；新增第二轮重试上下文、排队 FIFO/停止回填回归。
+- 轻量 Outbox（2026-11-15）：`timelineOutbox.ts` + `timelineLogger` 改造——事件先入 outbox 文件（`fsync`）再投递时间线；投递失败保留待下次/启动重放；`outboxId` 写入事件按幂等跳过，崩溃窗口不重复。持久化硬化（同日复核）：目标时间线行先 `fsync` 再压缩 Outbox；压缩 tmp `fsync` + rename + 目录同步；尾部半行先补换行防黏连吞事件；启动重放移到单实例锁之后；outbox 读失败返回 error、时间线索引读失败不缓存空索引；无会话日期文件按入队时目标文件重放（跨午夜不漂移）。**跨存储事务性 Outbox**（同日）：`stateTransaction.ts` WAL 把 BC-10 变更集（状态+自有基线）、BC-11 任务队列、BC-14 验收记录的状态写入与领域事件作为一条记录 fsync 提交；启动 FIFO 重放，事件按 `txId:index` 幂等。工作区文件写入仍以快照+补偿为边界（不纳入跨文件系统事务）。崩溃恢复硬化（同日复核）：未换行半条事务视为未提交并截断/忽略；store 读取优先取 WAL 最新已提交意图，状态写入失败后后续变更不丢更新；提交未完成原因写入 `[state-tx]` 日志。
+- 交互回归稳定性（2026-11-15）：`playwright --project=interaction` 全量 **75/75**（最终复跑；含排队优先与重试回合衔接修复，见 tasks 7.15/7.16）；两个既有 flaky（`.nf-start` 网络变更、计划确认后重试双回合）根因已定位并在测试层（导航重载重试）与应用层（sid 归属/同步 working/多槽队列）修复；新增第二轮重试上下文、排队 FIFO/停止回填回归。
 
 ### 5.4 通过标准（建议）
 
@@ -164,4 +164,4 @@ NeonForge 的领域模型主干是清晰的：**用户决策驱动的任务状�
 
 这些都可以在不改变产品方向的前提下修复。修复完成后，本模型可以从 Conditional Ready 进入 Ready。
 
-但“现有模型可用”不等于“产品领域完整”。按 `00-domain-blueprint.md` 的目标态目录，产品应有 5 个目标态领域（变更集、任务队列、用量成本、扩展集成、验收门禁）；截至 2026-11-14 已全部实现：变更集与验收门禁补齐了“交付是否可信”，任务队列/用量/扩展补齐了工作台承诺。演示面板仍在 UI 中保留，但生产交付路径不再依赖它们（隔离已结构性完成）；BC-02 权限规则持久化（存储 + IPC + 设置页）与轻量 Outbox 硬化（fsync 顺序、半行/跨午夜防护、启动重放在单实例锁后）已于 2026-11-15 完成。剩余仅**完整跨存储事务性 Outbox**（可选，设计见 `09-openspec/design.md §6`）与明确非目标；IPC 契约校验（P1-04）、ConversationPanel 拆分（P1-05）与 P2-08 文案规范已于 2026-11-15 完成。
+但“现有模型可用”不等于“产品领域完整”。按 `00-domain-blueprint.md` 的目标态目录，产品应有 5 个目标态领域（变更集、任务队列、用量成本、扩展集成、验收门禁）；截至 2026-11-14 已全部实现：变更集与验收门禁补齐了“交付是否可信”，任务队列/用量/扩展补齐了工作台承诺。演示面板仍在 UI 中保留，但生产交付路径不再依赖它们（隔离已结构性完成）；BC-02 权限规则持久化（存储 + IPC + 设置页）、轻量 Outbox 硬化（fsync 顺序、半行/跨午夜防护、启动重放在单实例锁后）与跨存储事务性 Outbox（BC-10/11/14 状态+基线+事件 WAL）已于 2026-11-15 完成。剩余仅为明确非目标；IPC 契约校验（P1-04）、ConversationPanel 拆分（P1-05）与 P2-08 文案规范已于 2026-11-15 完成。

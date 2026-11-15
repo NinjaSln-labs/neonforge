@@ -3,6 +3,7 @@ import { app } from 'electron'
 import path from 'node:path'
 import { TaskQueueStore } from './taskQueueStore.js'
 import { logTimeline } from './timelineLogger.js'
+import { commitStateTransaction, getStateTransactionLog } from './stateTransaction.instance.js'
 
 let store: TaskQueueStore | null = null
 
@@ -17,6 +18,8 @@ export function getTaskQueueStore(): TaskQueueStore {
           role: 'system',
           detail: event.detail,
         }),
+      (writes, events) => commitStateTransaction(writes, events),
+      (filePath) => getStateTransactionLog().latestWriteContent(filePath),
     )
   }
   return store

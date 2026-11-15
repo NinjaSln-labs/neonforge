@@ -148,7 +148,7 @@ flowchart TD
 | :--- | :--- | :--- | :--- | :--- |
 | PlannedFiles 追加 | 文件路径集合 | 任务边界内 | `add` 去重；重复文件不重复 | 落盘失败 → 内存态仍工作 |
 | 授权拒绝记忆 | `toolName + subject` | 任务边界内 | 同类动作直接 deny | 任务边界（goal 确认）重置 |
-| 时间线 `card.shown` | `type + JSON(detail)` | 会话内 | `dedupeKey` 只记一次 | 未使用全局去重存储（缺口） |
+| 时间线 `card.shown` | `type + JSON(detail)` | 会话内 | `dedupeKey` 只记一次 | 已落地（P2-06：timelineLogger 全局去重） |
 | 流式重试 | `stream-reset` | 单次请求内 | 丢半截流，重拉 | 3 次后失败；已推 delta 需 reset |
 | 工具调用 | 稳定 `ToolCallMsg.id` | 消息内 | 按 id 更新；旧存档 fallback name+args | id 丢失 → 不 patch，防误伤 |
 | 完成证据 | `command`（结果表 key） | 单次核验 | 同一命令覆盖结果 | 非只读跳过；超时/截断 |
@@ -159,6 +159,7 @@ flowchart TD
 | Diff 应用 | 路径 + diff 内容 | 单次操作 | 应用前快照；逐条状态 | 解析空/文件不存在 → 错误 |
 | 压缩 | 消息数/字符阈值 | 每次 send | 压缩结果写回 messages state | 失败 → 全量发送 |
 | 预热 | 前缀 hash | 缓存历史 20 | hash 相同命中，不重建 | 失败 → 下次再试 |
+| 跨存储事务 | WAL `txId` | 启动重放窗口 | 状态内容原子覆盖（幂等）；事件 outboxId=`txId:index` 去重 | WAL 保留 → 启动 FIFO 重放 |
 
 ---
 
@@ -311,7 +312,7 @@ sequenceDiagram
 
 ## 9. 当前交互层的缺口
 
-1. **轻量 Outbox 已实现（2026-11-15）**：`logTimeline` 先写入 `timeline-outbox.jsonl`（fsync），再投递会话时间线；失败保留、启动重放、`outboxId` 幂等。完整跨存储事务（状态落库与事件入队同一事务）仍待建设（设计预留）。
+1. **事件投递已实现（2026-11-15）**：`logTimeline` 先写入 `timeline-outbox.jsonl`（fsync），再投递会话时间线；失败保留、启动重放、`outboxId` 幂等。**跨存储事务**同日落地：BC-10/11/14 的状态文件（含变更集基线）与领域事件作为同一 WAL 记录提交，启动按 FIFO 重放；工作区文件写入仍以快照+补偿为边界。
 2. **没有事件版本字段**：已修复（P2-07）——`TimelineEvent` 增加 `eventId`/`version`（当前 1）。
 3. **时间线写失败静默**：已修复（P1-02）——失败计数可见 + DLQ 落盘 + 启动重放。
 4. **`dedupeKey` 函数存在但全局去重存储未落地**：已修复（P2-06）——`timelineLogger` 按会话 + 类型 + detail 签名去重。

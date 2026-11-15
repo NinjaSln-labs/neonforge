@@ -273,14 +273,16 @@ export function timelineFile(session?: string): string {
   return path.join(dir, name)
 }
 
-/** 记录事件（轻量 Outbox）：先入队 fsync，再投递；失败保留待下次/启动重放。 */
-export function logTimeline(evt: OutboxEvent): void {
+/** 记录事件（轻量 Outbox）：先入队 fsync，再投递；失败保留待下次/启动重放。
+ * 返回 true = 已进入时间线（含幂等重复）；false = 仍待重放或已落 DLQ。
+ * 跨存储事务传入固定 outboxId，重放时按同一 id 幂等。 */
+export function logTimeline(evt: OutboxEvent, opts: { outboxId?: string } = {}): boolean {
   const spec = TIMELINE_EVENT_SPECS[evt.type as TimelineEventType]
   if (spec?.dedupe) {
     const fullKey = `${evt.session ?? 'default'}:${dedupeKey(evt.type, evt.detail ?? {})}`
-    if (dedupeSeen.has(fullKey)) return
+    if (dedupeSeen.has(fullKey)) return true
   }
-  const outboxId = newOutboxId()
+  const outboxId = opts.outboxId ?? newOutboxId()
   try {
     const queue = getTimelineOutbox()
     // 入队时固定目标文件：无会话 ID 的日期文件跨午夜重放仍写原文件（outboxId 幂等才对得上）
@@ -290,10 +292,14 @@ export function logTimeline(evt: OutboxEvent): void {
       writeFailures += 1
       lastWriteError = result.error
       console.error('[timeline] Outbox 投递失败（已保留待重放）', evt.type, result.error)
-    } else if (result.remaining > 0) {
+      return false
+    }
+    if (result.remaining > 0) {
       writeFailures += 1
       lastWriteError = 'outbox-pending'
+      return false
     }
+    return true
   } catch (e) {
     // Outbox 自身不可用（目录/权限等）——降级直写 + 旧 DLQ（保留既有失败可见性）
     try {
@@ -304,9 +310,10 @@ export function logTimeline(evt: OutboxEvent): void {
       lastWriteError = e2 instanceof Error ? e2.message : String(e2)
       console.error('[timeline] 事件写入失败', evt.type, lastWriteError)
       writeTimelineDlq(evt, lastWriteError)
-      return
+      return false
     }
     console.warn('[timeline] Outbox 不可用，已降级直写', e instanceof Error ? e.message : String(e))
+    return true
   }
 }
 
