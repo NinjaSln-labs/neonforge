@@ -682,6 +682,12 @@ ipcMain.handle('planned-files:add', (_e, files: string[]) => {
   syncPlanApprovedFromStore()
   return data
 })
+// ADR-015：方案确认同步清单——只记录 planConfirmed（委托边界依据），不置 approve-files 的 approved 镜像
+ipcMain.handle('planned-files:sync-plan', (_e, files: string[]) => {
+  const valid = validateIpc(files, IPC_SCHEMAS.fileList)
+  if (!valid.ok) return getPlannedFilesStore().loadPlan()
+  return getPlannedFilesStore().addPlan(files)
+})
 // 2026-08-15 D2：任务边界重置同步 main——新目标确认（clearTrust）时 main filesApprovedRef 必须复位
 // （原只重置 renderer 侧 → main write 规划门控跨任务恒放行——第二道防线失效）
 // #6 真机 2026-08-31（复验轮）：方案确认镜像——renderer confirm('plan') 同步（approve-files 硬序门）

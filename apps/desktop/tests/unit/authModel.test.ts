@@ -78,16 +78,23 @@ describe('authModel 信任模式判定（ADR-015）', () => {
     trusted: false,
   }
 
-  it('isInPlan：相对/绝对/目录尾斜杠兼容（与领域层同语义）', () => {
-    expect(isInPlan('/test/src/a.ts', ['src/a.ts'])).toBe(true)
-    expect(isInPlan('src/a.ts', ['/test/src/a.ts'])).toBe(true)
-    expect(isInPlan('a.ts', ['/test/a.ts'])).toBe(true)
+  it('isInPlan：只做绝对路径精确比较（相对清单必须由调用方绝对化——禁止末段匹配绕过）', () => {
+    expect(isInPlan('/test/src/a.ts', ['/test/src/a.ts'])).toBe(true)
+    expect(isInPlan('/test/src/./a.ts', ['/test/src/a.ts'])).toBe(true)
     expect(isInPlan('/test/b.ts', ['/test/a.ts'])).toBe(false)
+    // 旧实现的 p.endsWith('/'+f) 漏洞：绝对 /tmp/game.js 会被相对 game.js 误判在计划内
+    expect(isInPlan('/tmp/game.js', ['game.js'])).toBe(false)
+    expect(isInPlan('/test/src/a.ts', ['src/a.ts'])).toBe(false)
   })
 
-  it('trusted（允许并记住/单次批准文件）三种模式恒自动', () => {
+  it('trusted（允许并记住/单次批准文件）只对 write/edit 恒自动——bash/MCP 不得借路径搭车', () => {
     for (const mode of ['strict', 'standard', 'delegated'] as const) {
-      expect(shouldAutoApproveTool({ ...base, mode, trusted: true })).toBe(true)
+      expect(shouldAutoApproveTool({ ...base, mode, name: 'write', trusted: true })).toBe(true)
+      expect(shouldAutoApproveTool({ ...base, mode, name: 'edit', trusted: true })).toBe(true)
+      expect(shouldAutoApproveTool({ ...base, mode, name: 'bash', trusted: true })).toBe(false)
+      expect(shouldAutoApproveTool({ ...base, mode, name: 'mcp__danger', trusted: true })).toBe(
+        false,
+      )
     }
   })
 
@@ -121,13 +128,17 @@ describe('authModel 信任模式判定（ADR-015）', () => {
     )
   })
 
-  it('autoApprovalSource：任务信任/标准 write = auto；delegated edit = delegate；拒绝 = null', () => {
+  it('autoApprovalSource：任务信任/标准 write = auto；delegated write/edit = delegate；拒绝 = null', () => {
     expect(autoApprovalSource({ ...base, mode: 'standard', name: 'write' })).toBe('auto')
-    expect(autoApprovalSource({ ...base, mode: 'delegated', name: 'write' })).toBe('auto')
+    // 委托模式下 write/edit 都走 main 执行边界二次校验（审计来源 delegate）
+    expect(autoApprovalSource({ ...base, mode: 'delegated', name: 'write' })).toBe('delegate')
     expect(autoApprovalSource({ ...base, mode: 'delegated', name: 'edit' })).toBe('delegate')
     expect(autoApprovalSource({ ...base, mode: 'strict', name: 'write' })).toBeNull()
     expect(
       autoApprovalSource({ ...base, mode: 'delegated', name: 'write', path: '/test/other.ts' }),
     ).toBeNull()
+    expect(autoApprovalSource({ ...base, mode: 'delegated', name: 'write', trusted: true })).toBe(
+      'auto',
+    )
   })
 })

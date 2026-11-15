@@ -1,7 +1,7 @@
 # 覆盖矩阵（Coverage Matrix）
 
 > 首版：2026-08-16（S2）→ 增补：2026-09-29（Keenable 合规）
-> 当前快照（2026-11-16）：L1 **75 文件 / 875 用例** · 事件注册表 56+ 事件 · 不变量 Inv 1-8 + I17-I21 · L3 interaction **84 场景**
+> 当前快照（2026-11-16）：L1 **75 文件 / 882 用例** · 事件注册表 56+ 事件 · 不变量 Inv 1-8 + I17-I21 · L3 interaction **84 场景**
 > 表 1-表 10 保留各阶段时点的基线记录；当前总数以本快照与 `09-openspec/tasks.md §4` 为准。
 > 维护：阶段末更新（coverage-matrix skill）；缺口入 audit-items
 
@@ -132,7 +132,7 @@
 | main 门控跨重启一致（registerIpc → syncPlanApprovedFromStore——write 不再被规划引导拦） | tools.test.ts::D3 syncPlanApprovedFromStore 恢复 approved → needApproval 判定（L1 新增 1） | ✅ |
 | IPC 契约三件套（planned-files:load/add/reset——preload 类型化/无悬挂引用） | L2 双 tsc 0 错 + L3 D3-1（load 挂载被调/add 批准链单次） | ✅ |
 | 恢复接线（挂载 load → 本地镜像——StrictMode 双挂载 ≥1） | L3 D3-1（load 计数 + 主流程正常） | ✅ |
-| 批准链走 IPC（approvePlan → planned-files:add——与 grantPlan 同清单 trustPath） | L3 D3-1（done 卡 + add 两次（ADR-015 方案确认同步一次 + 批准按钮一次）+ 无授权卡） | ✅ |
+| 批准链走 IPC（approvePlan → planned-files:add——与 grantPlan 同清单 trustPath） | L3 D3-1（done 卡 + add 恰一次（方案确认走独立 sync-plan）+ 无授权卡） | ✅ |
 | 任务边界重置（目标确认 → clearTrust → planned-files:reset 同步 main——批准事实不跨任务） | L3 D3-2（reset 计数 1 + 方案卡流程正常）+ 既有 clearTrust→filesApprovedReset 语义回归 | ✅ |
 | 三基准统一（未修 1——planned/produced/projectFiles 绝对基准一致 + plannedComplete 判定单源） | conversationState.test.ts::plannedComplete 绝对路径既有断言（回归）+ plannedFilesStore.test.ts::相对路径原样保留（变换归调用方） | ✅ |
 | **#8 拦截引导优化（sessionGate 拒绝回填下一步明确动作——对齐 sysPrompt ⑬⑭ 提议格式契约）** | **conversationState.test.ts::#8 目标未确认引导【目标确认】/方案未确认引导【执行方案】（L1 +2 断言——940773e）** | ✅ |
@@ -187,11 +187,12 @@
 | 功能 | 覆盖测试 | 判定 |
 |------|----------|------|
 | 三档 trustMode 持久化（0600/原子写/损坏回退 standard） | `trustPolicyStore.test.ts`（缺失/损坏/非法值回退、三档往返、0600、非法 save 抛出） | ✅ |
+| 计划确认与批量批准分离 | `plannedFilesStore.test.ts`（`addPlan` 置 planConfirmed 不置 approved、跨实例恢复、reset 撤销、落盘失败时进程内缓存立即撤销） | ✅ |
 | IPC 契约 `trust:get`/`trust:set` | `ipcSchema.test.ts`（三档枚举 + mode 必填）、`ipcContractParity.test.ts`（main↔preload 通道静态对齐） | ✅ |
 | renderer 判定单源 | `authModel.test.ts`（trusted 恒自动、strict 全否、standard 清单内 write、delegated 清单内 write/edit、清单外/未确认/bash 拒绝、来源 auto/delegate） | ✅ |
-| main 委托执行边界 | `tools.test.ts`（清单内 edit 放行、清单外/根外/bash 拒绝、ask 只接受 user、清单未批准拒绝） | ✅ |
+| main 委托执行边界 | `tools.test.ts`（清单内 write/edit 放行、清单外/根外/bash/方案未确认拒绝、ask 只接受 user、ENOTDIR 回授权卡不悬挂） | ✅ |
 | 审计事件 | `timelineEvents.test.ts`（`security.trust_delegation_denied` 注册/载荷；`tool.executing` 带 approvalSource） | ✅ |
-| 旧 localStorage 开关迁移 | `useTrustPolicy.test.ts`（'1'→delegated、'0'→standard、无键不覆盖 main、已迁移幂等、存储抛错不阻塞） | ✅ |
+| 旧 localStorage 开关迁移 | `useTrustPolicy.test.ts`（读取不写标记、'1'→delegated、'0'→standard、main 成功后才删键、已迁移幂等、存储抛错不阻塞） | ✅ |
 | 设置页三档切换 + 委托仅计划内放行 | `trustModes.interaction.ts`（设置页切换持久化/旧键迁移删除、delegated 清单内 edit 自动且来源 delegate、strict 清单内 write 仍弹授权卡） | ✅ |
 
 ## L5 视觉基线纪律（K8）

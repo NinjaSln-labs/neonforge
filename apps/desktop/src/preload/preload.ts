@@ -324,6 +324,11 @@ contextBridge.exposeInMainWorld('neonforge', {
     load: () => ipcRenderer.invoke('planned-files:load') as Promise<PlannedFilesPayload>,
     add: (files: string[]) =>
       ipcRenderer.invoke('planned-files:add', files) as Promise<PlannedFilesPayload>,
+    // ADR-015：方案确认同步（planConfirmed——不改变 approve-files 的 approved 事实）
+    addPlan: (files: string[]) =>
+      ipcRenderer.invoke('planned-files:sync-plan', files) as Promise<
+        PlannedFilesPayload & { planConfirmed: boolean }
+      >,
     reset: () => ipcRenderer.invoke('planned-files:reset') as Promise<PlannedFilesPayload>,
   },
   // BC-02 信任模式（ADR-015：三档预设——authority 在 main userData；trustPolicyStore）

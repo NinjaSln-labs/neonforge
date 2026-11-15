@@ -1,6 +1,7 @@
 // BC-02 信任模式 renderer 镜像（ADR-015 / GitHub #12）
 // - main 是权威（trust:get/trust:set）；renderer 只缓存展示与判定用的模式
 // - 旧 L4 localStorage 布尔（nf-delegate-lowrisk）一次性迁移：'1' → delegated，否则 standard
+// - 迁移只在 main 持久化成功后才置标记/删旧键——写失败保留旧键供下次启动重试，不静默丢用户设置
 // - 设置页与对话面板通过 DOM 事件 nf-trust-changed 实时联动（无第二持久化副本）
 import { useCallback, useEffect, useState } from 'react'
 import { DEFAULT_TRUST_MODE, isTrustMode, type TrustMode } from '../domain/trustMode'
@@ -15,25 +16,25 @@ export interface TrustStorageLike {
   removeItem: (key: string) => void
 }
 
-/**
- * 纯迁移函数：首次加载（无 nf-trust-v2 标记）时把旧布尔开关转换成模式。
- * 返回：旧键 '1' → delegated；旧键存在但非 '1' → standard；
- * 无旧键/已迁移过 → null（不写 main——避免用默认值覆盖 main 已有的 strict/delegated）。
- * 迁移后删除旧键并置标记——旧事件/旧读取不会再影响行为。
- */
-export function migrateLegacyTrustMode(storage: TrustStorageLike): TrustMode | null {
+/** 读取尚未迁移的旧开关模式（无旧键/已迁移/存储不可用 → null）。只读，不写标记。 */
+export function readLegacyTrustMode(storage: TrustStorageLike): TrustMode | null {
   try {
-    if (storage.getItem(TRUST_MIGRATION_KEY) === '1') {
-      storage.removeItem(LEGACY_DELEGATE_KEY)
-      return null
-    }
+    if (storage.getItem(TRUST_MIGRATION_KEY) === '1') return null
     const legacy = storage.getItem(LEGACY_DELEGATE_KEY)
-    storage.setItem(TRUST_MIGRATION_KEY, '1')
-    storage.removeItem(LEGACY_DELEGATE_KEY)
     if (legacy === null) return null
     return legacy === '1' ? 'delegated' : DEFAULT_TRUST_MODE
   } catch {
     return null
+  }
+}
+
+/** 标记迁移完成：删除旧键并置标记。仅在 main 持久化成功（或没有 main 通道）后调用。 */
+export function markLegacyTrustMigrated(storage: TrustStorageLike): void {
+  try {
+    storage.setItem(TRUST_MIGRATION_KEY, '1')
+    storage.removeItem(LEGACY_DELEGATE_KEY)
+  } catch {
+    /* 存储不可用——不影响本次会话 */
   }
 }
 
@@ -60,26 +61,42 @@ export function useTrustPolicy(): UseTrustPolicyResult {
   useEffect(() => {
     let alive = true
     const init = async () => {
-      let migrated: TrustMode | null = null
-      try {
-        migrated = migrateLegacyTrustMode(localStorage)
-      } catch {
-        /* 存储不可用——保持默认 */
-      }
       const api = window.neonforge?.trust
-      if (migrated) {
-        if (alive) setModeState(migrated)
-        if (api?.set) {
+      let legacy: TrustMode | null = null
+      try {
+        legacy = readLegacyTrustMode(localStorage)
+      } catch {
+        /* 存储不可用——按 main 当前模式 */
+      }
+      let migratedForSession = false
+      if (legacy) {
+        if (!api?.set) {
+          // demo/测试降级：无 main 通道，按旧值会话生效并完成本地迁移
+          markLegacyTrustMigrated(localStorage)
+          if (alive) setModeState(legacy)
+          migratedForSession = true
+        } else {
           try {
-            await api.set(migrated)
+            const result = await api.set(legacy)
+            if (!alive) return
+            if (result?.ok && isTrustMode(result.mode)) {
+              markLegacyTrustMigrated(localStorage)
+              setModeState(result.mode)
+              broadcastTrustMode(result.mode)
+              migratedForSession = true
+            }
+            // 写失败：保留旧键 + 不置标记 → 下次启动重试；本次按 main 现有模式（fail-closed）
           } catch {
-            /* 迁移写失败——仍按迁移结果展示本次会话；下次启动会重试（旧键已删） */
+            // IPC 异常同上——不丢用户旧设置
           }
         }
+      } else {
+        markLegacyTrustMigrated(localStorage)
       }
       try {
         const stored = await api?.get?.()
-        if (alive && isTrustMode(stored)) setModeState(stored)
+        if (alive && isTrustMode(stored) && !migratedForSession) setModeState(stored)
+        if (alive && !api?.get && legacy && migratedForSession) setModeState(legacy)
       } catch {
         /* 读取失败——使用迁移/默认值 */
       }

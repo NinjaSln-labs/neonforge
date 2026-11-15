@@ -7,29 +7,34 @@ import { test, expect } from '@playwright/test'
 import { installMockBridge, chunk, toolCall } from './mockBridge'
 import { enterWorkspace, sendChat, startFromScratch } from './scenarios'
 
-test('ADR-015：设置页切换三档信任模式 → main 持久化 + 旧开关迁移', async ({ page }) => {
+test('ADR-015：旧 delegate 开关迁移到 delegated + 设置页三档切换/持久化', async ({ page }) => {
+  // 升级前用户的真实旧状态：localStorage 布尔 '1'（必须在应用脚本前种入）
+  await page.addInitScript(() => {
+    localStorage.setItem('nf-delegate-lowrisk', '1')
+  })
   const h = await installMockBridge(page, {
     project: 'open',
     capture: { trustSetCalls: true },
   })
   await enterWorkspace(page)
+  // 旧开关 → main trust:set('delegated')；设置页直接显示真实迁移结果（不是默认 standard）
+  await expect.poll(async () => (await h.trustSetCalls()).at(-1)).toBe('delegated')
   await page.keyboard.press('Meta+,')
   await expect(page.locator('.nf-settings')).toBeVisible()
   const strict = page.getByRole('radio', { name: '谨慎' })
   const standard = page.getByRole('radio', { name: '标准' })
   const delegated = page.getByRole('radio', { name: '低危委托' })
-  await expect(standard).toHaveAttribute('aria-checked', 'true')
-  await delegated.click()
   await expect(delegated).toHaveAttribute('aria-checked', 'true')
-  await expect(standard).toHaveAttribute('aria-checked', 'false')
-  // main 持久化调用（迁移可能先写一次 standard；最终值为 delegated）
-  await expect.poll(async () => (await h.trustSetCalls()).at(-1)).toBe('delegated')
   await strict.click()
   await expect.poll(async () => (await h.trustSetCalls()).at(-1)).toBe('strict')
-  await page.keyboard.press('Meta+,')
-  await page.keyboard.press('Meta+,')
   await expect(strict).toHaveAttribute('aria-checked', 'true')
-  // 旧 localStorage 开关已迁移删除（不再有第二持久化副本）
+  await delegated.click()
+  await expect.poll(async () => (await h.trustSetCalls()).at(-1)).toBe('delegated')
+  await expect(standard).toHaveAttribute('aria-checked', 'false')
+  await page.keyboard.press('Meta+,')
+  await page.keyboard.press('Meta+,')
+  await expect(delegated).toHaveAttribute('aria-checked', 'true')
+  // 迁移成功后才删除旧键并置标记（不再有第二持久化副本）
   const legacy = await page.evaluate(() => ({
     marker: localStorage.getItem('nf-trust-v2'),
     old: localStorage.getItem('nf-delegate-lowrisk'),
@@ -56,7 +61,8 @@ test('ADR-015：delegated——清单内 edit 自动放行（来源 delegate）'
   await h.emit([
     chunk.tool('propose_plan', {
       summary: '单页方案',
-      files: [{ path: '/test/app.ts', reason: '入口' }],
+      // 相对清单路径（模型常见形态）——renderer 必须绝对化后才能与绝对目标精确比较
+      files: [{ path: 'app.ts', reason: '入口' }],
     }),
     chunk.done(),
   ])

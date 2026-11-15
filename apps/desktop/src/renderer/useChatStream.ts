@@ -942,7 +942,7 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
         name: tc.name,
         path: targetPath,
         planConfirmed: stateRef.current.planConfirmed,
-        plannedFiles: [...stateRef.current.plannedFiles],
+        plannedFiles: [...stateRef.current.plannedFiles].map((p) => trustPath(p)),
         trusted: isTrusted(tc.args),
       })
       const autoApproved = autoSource !== null

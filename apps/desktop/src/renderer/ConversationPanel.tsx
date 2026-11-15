@@ -285,11 +285,10 @@ export default function ConversationPanel({
     emit: (type, detail) => tlog(type, detail, 'system'),
     // BC-14：方案确认 → 验收标准从 verificationPlan 派生（权威记录在 main；无来源记录为空）
     onPlanConfirmed: (plan) => {
-      // ADR-015：方案确认即批准清单——同步 main plannedFilesStore（委托边界二次校验的权威数据源）。
-      // 清单只来自已确认方案（不变量 6）；不调用 approve-files 的方案也能让委托/自动放行有根可查。
-      // 注意：不动 renderer filesApproved 镜像（approve-files 仍独立；避免清单外 write 从「引导规划」变成授权卡）。
+      // ADR-015：方案确认即记录清单（planConfirmed）——main 委托边界二次校验的权威数据源。
+      // 注意：不置 approve-files 的 approved（避免把方案确认变成批量批准；恢复时 filesApproved 不被误置）。
       const files = (plan.files ?? []).map((f) => trustPath(f.path))
-      if (files.length > 0) void window.neonforge.plannedFiles?.add(files)
+      if (files.length > 0) void window.neonforge.plannedFiles?.addPlan?.(files)
       void window.neonforge.acceptance?.derive(
         sessionId,
         plan.verificationPlan ?? [],

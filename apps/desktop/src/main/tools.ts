@@ -283,8 +283,9 @@ export async function delegationBoundaryViolation(
     return e instanceof Error ? e.message : String(e)
   }
   if (!(await isInSandboxRealpath(target, rootPath))) return '目标不在项目根内'
-  const planned = getPlannedFilesStore().load()
-  if (!planned.approved) return '方案尚未批准（计划清单未生效）'
+  const planned = getPlannedFilesStore().loadPlan()
+  // approve-files（approved=true）是比方案确认更强的显式批准证据（旧存档无 planConfirmed → 兼容）
+  if (!planned.planConfirmed && !planned.approved) return '方案尚未确认（计划清单未生效）'
   const targetKey = normalizeComparePath(target)
   const listed = planned.files.some((raw) => {
     try {
@@ -412,7 +413,13 @@ class ToolRegistry {
     }
     // ADR-015：低危委托执行边界二次校验——清单外/根外/非文件动作不执行（回授权卡）
     if (opts.approvalSource === 'delegate') {
-      const violation = await delegationBoundaryViolation(name, args, opts.rootPath)
+      let violation: string | null
+      try {
+        violation = await delegationBoundaryViolation(name, args, opts.rootPath)
+      } catch (e) {
+        // realpath 异常（ENOTDIR/EACCES/ELOOP）不得穿透 IPC——否则 renderer 工具卡永久 pending
+        violation = `路径无法校验：${e instanceof Error ? e.message : String(e)}`
+      }
       if (violation) {
         logTimeline({
           session: opts.sessionId ?? opts.rootPath ?? undefined,

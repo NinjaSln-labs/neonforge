@@ -163,6 +163,8 @@ interface Spec {
     sentMsgs: boolean
     forceToolCalls: boolean
     approvedFlags: boolean
+    approvalSources: boolean
+    trustSetCalls: boolean
     titleCalls: boolean
     planConfirmedCalls: boolean
   }
@@ -372,7 +374,7 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
     })(),
     // D3（ADR-005）：PlannedFiles 三件套契约（main 权威 mock——内存态；恢复场景经 plannedFiles 选项预置）
     plannedFiles: (() => {
-      const state = { files: ${json(spec.plannedFiles.files)}, approved: ${json(spec.plannedFiles.approved)} }
+      const state = { files: ${json(spec.plannedFiles.files)}, approved: ${json(spec.plannedFiles.approved)}, planConfirmed: false }
       return {
         load: async () => ({ files: state.files, approved: state.approved }),
         add: async (files) => {
@@ -380,9 +382,16 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
           state.approved = true
           return { files: state.files, approved: state.approved }
         },
+        // ADR-015：方案确认同步——只置 planConfirmed（approve-files 的 approved 独立）
+        addPlan: async (files) => {
+          state.files = [...new Set([...state.files, ...(files || [])])]
+          state.planConfirmed = true
+          return { files: state.files, approved: state.approved, planConfirmed: true }
+        },
         reset: async () => {
           state.files = []
           state.approved = false
+          state.planConfirmed = false
           return { files: state.files, approved: state.approved }
         },
       }

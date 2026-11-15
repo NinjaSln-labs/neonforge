@@ -443,7 +443,7 @@ describe('ToolRegistry 委托边界（ADR-015）', () => {
   it('delegate：根内 + 已批准清单内 edit 放行（自动委托真实执行）', async () => {
     const file = path.join(TMP, 'delegated-edit.txt')
     writeFileSync(file, 'alpha\nbeta\n', 'utf-8')
-    getPlannedFilesStore().add([file])
+    getPlannedFilesStore().addPlan([file])
     const r = await toolRegistry.execute(
       'edit',
       { path: file, old: 'beta', new: 'BETA' },
@@ -453,11 +453,36 @@ describe('ToolRegistry 委托边界（ADR-015）', () => {
     expect(readFileSync(file, 'utf-8')).toBe('alpha\nBETA\n')
   })
 
+  it('delegate：根内 + planConfirmed 清单内 write 放行（write/edit 同一防线）', async () => {
+    const file = path.join(TMP, 'delegated-write.txt')
+    getPlannedFilesStore().addPlan([file])
+    const r = await toolRegistry.execute(
+      'write',
+      { path: file, content: 'x' },
+      { approved: true, approvalSource: 'delegate', rootPath: TMP },
+    )
+    expect(r.ok).toBe(true)
+    expect(readFileSync(file, 'utf-8')).toBe('x')
+  })
+
+  it('delegate：旧存档只有 approve-files approved（无 planConfirmed）也视为有效批准', async () => {
+    const file = path.join(TMP, 'legacy-approved.txt')
+    writeFileSync(file, 'a')
+    getPlannedFilesStore().add([file]) // approved=true，planConfirmed=false（旧版本数据）
+    const r = await toolRegistry.execute(
+      'edit',
+      { path: file, old: 'a', new: 'b' },
+      { approved: true, approvalSource: 'delegate', rootPath: TMP },
+    )
+    expect(r.ok).toBe(true)
+    expect(readFileSync(file, 'utf-8')).toBe('b')
+  })
+
   it('delegate：清单外文件拒绝（needApproval + 不执行）', async () => {
     const file = path.join(TMP, 'out-of-plan.txt')
     const planned = path.join(TMP, 'planned.txt')
     writeFileSync(planned, 'x')
-    getPlannedFilesStore().add([planned])
+    getPlannedFilesStore().addPlan([planned])
     const r = await toolRegistry.execute(
       'write',
       { path: file, content: 'x' },
@@ -473,7 +498,7 @@ describe('ToolRegistry 委托边界（ADR-015）', () => {
     const outside = '/tmp/nf-delegated-outside.txt'
     const file = path.join(TMP, 'root-outside.txt')
     writeFileSync(outside, 'secret')
-    getPlannedFilesStore().add([file])
+    getPlannedFilesStore().addPlan([file])
     try {
       const r = await toolRegistry.execute(
         'write',
@@ -489,7 +514,7 @@ describe('ToolRegistry 委托边界（ADR-015）', () => {
   })
 
   it('delegate：bash / 非文件动作永不委托', async () => {
-    getPlannedFilesStore().add([path.join(TMP, 'x.txt')])
+    getPlannedFilesStore().addPlan([path.join(TMP, 'x.txt')])
     const r = await toolRegistry.execute(
       'bash',
       { command: 'echo hi' },
@@ -503,7 +528,7 @@ describe('ToolRegistry 委托边界（ADR-015）', () => {
   it('delegate 不得借显式 ask 规则绕过（ask 只接受 user 来源）', async () => {
     const file = path.join(TMP, 'ask-delegate.txt')
     writeFileSync(file, 'hello')
-    getPlannedFilesStore().add([file])
+    getPlannedFilesStore().addPlan([file])
     toolRegistry.setRules([{ action: 'ask', tool: 'edit', specifier: TMP }])
     const r = await toolRegistry.execute(
       'edit',
@@ -515,7 +540,7 @@ describe('ToolRegistry 委托边界（ADR-015）', () => {
     expect(readFileSync(file, 'utf-8')).toBe('hello')
   })
 
-  it('delegate：清单未批准 → 拒绝（renderer 不能独立宣告方案已批准）', async () => {
+  it('delegate：方案未确认 → 拒绝（renderer 不能独立宣告方案已确认）', async () => {
     const file = path.join(TMP, 'no-approved-plan.txt')
     writeFileSync(file, 'hello')
     const r = await toolRegistry.execute(
@@ -526,5 +551,19 @@ describe('ToolRegistry 委托边界（ADR-015）', () => {
     expect(r.ok).toBe(false)
     expect(r.needApproval).toBe(true)
     expect(readFileSync(file, 'utf-8')).toBe('hello')
+  })
+  it('delegate：路径解析异常（ENOTDIR）回授权卡而非 IPC 拒绝（工具卡不得永久 pending）', async () => {
+    const blocker = path.join(TMP, 'a-file.txt')
+    writeFileSync(blocker, 'x')
+    getPlannedFilesStore().addPlan([blocker])
+    const bad = path.join(blocker, 'child.txt') // 中间路径是文件 → ENOTDIR
+    const r = await toolRegistry.execute(
+      'edit',
+      { path: bad, old: 'a', new: 'b' },
+      { approved: true, approvalSource: 'delegate', rootPath: TMP },
+    )
+    expect(r.ok).toBe(false)
+    expect(r.needApproval).toBe(true)
+    expect(r.error).toContain('路径无法校验')
   })
 })

@@ -524,6 +524,10 @@ export interface NeonForgeTools {
 interface PlannedFilesApi {
   load: () => Promise<{ files: string[]; approved: boolean }>
   add: (files: string[]) => Promise<{ files: string[]; approved: boolean }>
+  /** ADR-015：方案确认同步清单（planConfirmed；不置 approve-files 的 approved） */
+  addPlan: (
+    files: string[],
+  ) => Promise<{ files: string[]; approved: boolean; planConfirmed: boolean }>
   reset: () => Promise<{ files: string[]; approved: boolean }>
 }
 

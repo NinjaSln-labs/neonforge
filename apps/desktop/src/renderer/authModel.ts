@@ -66,31 +66,33 @@ export interface AutoApproveInput {
   trusted: boolean
 }
 
-/** 计划清单包含判定（与领域层 inPlannedFiles 同语义：相对/绝对/目录尾斜杠兼容）。 */
+/** 计划清单包含判定（调用方必须传入与目标路径同一基准的绝对路径；只做精确规范化比较——
+ * 相对干净路径的末段匹配会把 /tmp/game.js 误认为计划内 game.js，禁止用于授权判定）。 */
 export function isInPlan(path: string, plannedFiles: readonly string[]): boolean {
   const p = normalizeComparePath(path)
   if (!p) return false
-  return plannedFiles.some((raw) => {
-    const f = normalizeComparePath(raw)
-    return f === p || f.endsWith('/' + p) || p.endsWith('/' + f)
-  })
+  return plannedFiles.some((raw) => normalizeComparePath(raw) === p)
 }
 
+const isFileTool = (name: string): boolean => name === 'write' || name === 'edit'
+
 export function shouldAutoApproveTool(input: AutoApproveInput): boolean {
-  if (input.trusted) return true
+  // 任务信任只绑定文件路径（允许并记住/单次批准）——bash/MCP 不得借 args.path 搭车绕过授权
+  if (input.trusted && isFileTool(input.name)) return true
   if (input.mode === 'strict') return false
   const inPlan = input.planConfirmed && isInPlan(input.path, input.plannedFiles)
   if (input.mode === 'standard') return input.name === 'write' && inPlan
   if (input.mode === 'delegated') {
-    return (input.name === 'write' || input.name === 'edit') && inPlan
+    return isFileTool(input.name) && inPlan
   }
   return false
 }
 
-/** 自动批准的来源：任务信任/方案标准放行 = auto；低危委托 = delegate（main 只对 delegate 做边界二次校验）。 */
+/** 自动批准的来源：任务信任/标准方案放行 = auto；低危委托模式的文件自动批准 = delegate
+ *（main 只对 delegate 做执行边界二次校验——委托模式下 write/edit 都走同一防线）。 */
 export function autoApprovalSource(input: AutoApproveInput): 'auto' | 'delegate' | null {
   if (!shouldAutoApproveTool(input)) return null
   if (input.trusted) return 'auto'
-  if (input.mode === 'delegated' && input.name === 'edit') return 'delegate'
+  if (input.mode === 'delegated' && isFileTool(input.name)) return 'delegate'
   return 'auto'
 }
