@@ -345,7 +345,7 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
   'proposal.clarify': {
     domain: 'proposal',
     role: 'assistant',
-    detailKeys: ['question', 'type', '?options'],
+    detailKeys: ['question', 'type', '?options', '?assumptions'],
   },
   // V1.5 S3：文本标记降级命中（模型未走协议工具——done 分支探测到标记 → 打点 + 合成引导）
   'protocol.text_fallback': {

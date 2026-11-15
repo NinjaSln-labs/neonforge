@@ -89,6 +89,29 @@ describe('taskSnapshot（A1 Task 跨重启快照）', () => {
     expect(dc.proposal.assumptions).toEqual([{ text: '旧假设', source: 'model_inference' }])
   })
 
+  it('v1 旧快照仍可读；空字符串假设跳过（一条空串不得丢整个任务状态）', () => {
+    const snapshot = toTaskSnapshot(richState()) as unknown as Record<string, unknown>
+    const restored = fromTaskSnapshot({
+      ...snapshot,
+      version: 1,
+      decisionContent: {
+        kind: 'plan',
+        since: 't',
+        proposal: {
+          summary: '旧方案',
+          files: [{ path: '/test/a.html', reason: '入口' }],
+          assumptions: ['', '旧假设'],
+          verificationPlan: [],
+        },
+      },
+    })
+    expect(restored).not.toBeNull()
+    expect(restored?.planConfirmed).toBe(true)
+    const dc = restored?.decisionContent
+    if (dc?.kind !== 'plan' || !dc.proposal) return
+    expect(dc.proposal.assumptions).toEqual([{ text: '旧假设', source: 'model_inference' }])
+  })
+
   it('结构化假设来源保留；非法来源 → 整快照拒绝（防来源标签丢失/乱标）', () => {
     const snapshot = toTaskSnapshot(richState()) as unknown as Record<string, unknown>
     const structured = {

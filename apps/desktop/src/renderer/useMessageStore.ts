@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
 import { loadSessionSnapshot, saveSession, serializeMessages } from './sessionStore'
-import { toTaskSnapshot } from '../domain/taskSnapshot'
+import { normalizeDecisionContent, toTaskSnapshot } from '../domain/taskSnapshot'
 import type { Msg } from './ConversationPanel'
 import type { useConversationState } from './useConversationState'
 import type { ConversationState } from '../domain/conversationState'
@@ -71,11 +71,14 @@ export function useMessageStore({
     // 旧存档兼容：最新消息携带 decisionContent → 恢复 pending（任务快照已恢复时不重复覆盖）
     if (!taskRestored) {
       for (let i = snapshot.messages.length - 1; i >= 0; i--) {
-        const dc = snapshot.messages[i].decisionContent
+        // ADR-014：旧消息快照也必须经过与任务快照相同的校验/归一化——
+        // 否则字符串/非法 source 会以 Assumption[] 类型进入状态并污染持久化
+        const dc = normalizeDecisionContent(snapshot.messages[i].decisionContent)
         if (dc) {
           setPendingState(dc.kind, {
             since: dc.since,
             ...(dc.proposal ? { proposal: dc.proposal } : {}),
+            ...(dc.approval ? { approval: dc.approval } : {}),
           })
           break
         }

@@ -21,10 +21,18 @@ export function fmtToolResult(r: { ok: boolean; data?: unknown }): string {
 }
 
 // A-008：关键假设/验证计划列表渲染共享（目标卡 + 方案卡共用）
-const ASSUMPTION_SOURCE_LABEL: Record<string, string> = {
-  user_choice: '你的选择',
-  clarification: '你的澄清',
-  model_inference: '模型推断',
+function assumptionSourceLabel(source: string | undefined): string {
+  // 只认三个已知来源；用 switch 避免原型链键（__proto__/constructor）被当成标签渲染成对象
+  switch (source) {
+    case 'user_choice':
+      return '你的选择'
+    case 'clarification':
+      return '你的澄清'
+    case 'model_inference':
+      return '模型推断'
+    default:
+      return ''
+  }
 }
 
 export function AssumptionList({
@@ -41,7 +49,7 @@ export function AssumptionList({
           // ADR-014：结构化假设带来源标签；旧 string[]（旧存档/旧模型输出）防御性兼容
           const text = typeof a === 'string' ? a : a?.text
           if (!text) return null
-          const label = typeof a === 'string' ? '' : ASSUMPTION_SOURCE_LABEL[a.source ?? '']
+          const label = typeof a === 'string' ? '' : assumptionSourceLabel(a.source)
           return (
             <li key={idx}>
               {text}

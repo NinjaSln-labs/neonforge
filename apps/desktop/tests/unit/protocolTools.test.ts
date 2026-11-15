@@ -68,6 +68,9 @@ describe('PROTOCOL_TOOL_DEFS（协议工具 schema 单源——V1.5 Task 1.1）'
     )
     const ask = getDef('ask_user')
     expect(ask.parameters.required).toEqual(expect.arrayContaining(['question', 'type']))
+    // ADR-014：模型可见约束与运行时校验同源（≤6 条非空假设）
+    expect(ask.parameters.properties.assumptions?.maxItems).toBe(6)
+    expect(ask.parameters.properties.assumptions?.items?.type).toBe('string')
   })
 
   it('PROTOCOL_TOOL_NAMES：与 PROTOCOL_TOOL_DEFS 名字一致的 ReadonlySet', () => {

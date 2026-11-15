@@ -15,7 +15,7 @@ D3（ADR-005）已把**批准事实**（plannedFiles + approved）下沉 main �
 **Task 状态机快照随会话消息一起跨重启持久化（renderer 侧 ITaskRepository 语义），不引入 main 侧第二权威：**
 
 1. **领域层单源序列化**（`src/domain/taskSnapshot.ts`）：
-   - `TaskSnapshot` 为纯 JSON 值（Set → 字符串数组），版本号 `version: 1`；
+   - `TaskSnapshot` 为纯 JSON 值（Set → 字符串数组），初始版本 `version: 1`；ADR-014 起假设改为对象数组，版本升级为 `version: 2`（v1 仍接受并归一化）；
    - `toTaskSnapshot(state)` 覆盖全部 A1 字段：三个确认位、`pending`、`plannedFiles`、`producedFiles`、`filesApproved`、`lastToolFailed`、`decisionContent`、`deniedApprovals`、`rejectStreak`、`lastRejectReason`、`pendingRepeatCount`、`unresolvedTextReplies`；
    - `fromTaskSnapshot(raw)` 做运行时校验：版本/字段类型/枚举/数组元素非法 → 返回 `null`（损坏快照不阻断启动）；合法时重建 `Set` 与完整对象。
    - 决策点内容做嵌套校验：`proposal` 的 files（path/reason）/assumptions/verificationPlan、goal/plan/completion/clarify 各分支逐字段验证；非 `approval` 决策点缺少可渲染内容时整快照拒绝（`approval` 允许无内容——工具卡自身携带请求）；不强制确认位层级（领域允许 resolution 确认后 `planConfirmed=false`、目标拒绝后 `planConfirmed=true`）。

@@ -26,7 +26,7 @@
 | 确认意图识别（文本降级） | `D/agentLoop.ts:54-78`（`isConfirmIntent`）、`84-87`（`isApprovalIntent`） |
 | 目标兜底触发 | `D/agentLoop.ts:367-377`（`goalFallbackTrigger`） |
 | 任务状态跨重启快照（ADR-013） | `D/taskSnapshot.ts`（`toTaskSnapshot`/`fromTaskSnapshot` 全字段+校验+聚合不变量）、`R/sessionStore.ts`（V2 消息+任务同记录）、`R/useConversationState.ts`（`restoreTaskState`）、`R/useMessageStore.ts`（恢复/持久化）、`R/MainWorkspace.tsx`（`handleTaskStateRestored` 确认位镜像） |
-| 结构化澄清与假设来源（ADR-014） | `D/conversationState.ts:18-25`（`AssumptionSource`/`Assumption`）、`D/protocolTools.ts:70-220`（`ask_user.assumptions` 与提议假设 schema）、`D/protocolTools.ts:243-292`（`checkAssumptions`/`normalizeAssumptions`）、`R/AssumptionCheckCard.tsx`（假设核对卡）、`R/conversationFormat.tsx`（来源标签）、`R/useChatStream.ts`（文本降级假设来源） |
+| 结构化澄清与假设来源（ADR-014） | `D/conversationState.ts:18-25`（`AssumptionSource`/`Assumption`）、`D/protocolTools.ts:72-226`（`ask_user.assumptions` 与提议假设 schema）、`D/protocolTools.ts:249-299`（`checkAssumptions`/`normalizeAssumptions`）、`D/taskSnapshot.ts:18`（快照 v2，v1 兼容）、`R/AssumptionCheckCard.tsx`（假设核对卡）、`R/clarifyAnswer.ts:19-54`（JSON 回答格式/解析）、`R/assumptionEvidence.ts:14-24`（来源制裁）、`R/conversationFormat.tsx`（来源标签）、`R/useChatStream.ts`（文本降级假设来源） |
 
 ## 2. 门控与动作属性
 
@@ -57,9 +57,9 @@
 
 | 文档断言 | 证据 |
 | :--- | :--- |
-| 协议工具定义（goal/plan/completion/ask_user） | `D/protocolTools.ts:70-220`（`PROTOCOL_TOOL_DEFS`） |
-| 参数校验（一层数组、路径形态） | `D/protocolTools.ts:306-412`（`validate`） |
-| 决策分派（setPending/clarify/reject/invalid） | `D/protocolTools.ts:475-573`（`decide`） |
+| 协议工具定义（goal/plan/completion/ask_user） | `D/protocolTools.ts:72-226`（`PROTOCOL_TOOL_DEFS`） |
+| 参数校验（一层数组、路径形态） | `D/protocolTools.ts:312-421`（`validate`） |
+| 决策分派（setPending/clarify/reject/invalid） | `D/protocolTools.ts:481-579`（`decide`） |
 | 方案解析（summary + files） | `D/planProposalParser.ts`（`parsePlanProposal`） |
 | 完成声明解析（verification 非空） | `D/completionClaimParser.ts`（`parseCompletionClaim`） |
 | 文本完成声明降级解析 | `D/completionClaimParser.ts`（`parseTextCompletionClaim`） |

@@ -26,24 +26,26 @@
    - 新增 `AssumptionSource` 与 `Assumption { text; source }`；`GoalProposal.assumptions` 与 `PlanProposal.assumptions` 改为 `Assumption[]`。
    - 语义：`user_choice` = 用户在候选/选项中选择的结论；`clarification` = 用户对假设核对清单的回答（含修正）；`model_inference` = 模型自行推断、用户未确认。
 3. **渲染（renderer）**：
-   - `ask_user` 带 `assumptions` 时渲染「假设核对卡」：逐条显示假设文本 + 固定选项按钮（`符合`/`不符合`）+ 可选修正输入；用户逐条选择后点「提交回答」，以一条结构化用户消息发送：
+   - `ask_user` 带 `assumptions` 时渲染「假设核对卡」：逐条显示假设文本 + 固定选项按钮（`符合`/`不符合`）+ 可选修正输入；用户逐条选择后点「提交回答」，以一条结构化用户消息发送（JSON 载荷由 `R/clarifyAnswer.ts` 单源格式化/解析，转义换行、冒号与格式标记）：
      ```
      【澄清回答】
-     问题：<question>
-     - <假设文本>：<选择>（补充：<修正文本>）
+     {"question":"<question>","answers":[{"assumption":"<假设文本>","choice":"符合|不符合","correction":"..."}]}
      ```
-     已回应后卡禁用（与既有 ask_user 选项同语义）。
-   - 无 `assumptions` 的 `ask_user` 走既有选项按钮/自由文本路径，不改变行为。
-   - 目标/方案确认卡的假设列表显示来源标签（`你的选择` / `你的澄清` / `模型推断`）；接受旧 `string[]` 渲染（防御性兼容）。
+     已回应后卡禁用（与既有 ask_user 选项同语义）；双击在本地 `submitted` 闸门防重复发送。
+   - `options` 与 `assumptions` 并存时两者都渲染（选项是整题候选，核对卡是逐条假设），不得静默丢弃 options。
+   - 结构化回答走 `send({text, clarification:true})`：不清空输入框草稿，且不触发 pending 文本确认/拒绝分流（避免待决策点被误拒）。
+   - 目标/方案确认卡的假设列表显示来源标签（`你的选择` / `你的澄清` / `模型推断`）；旧 `string[]` 防御性渲染。
+   - **来源制裁（`R/assumptionEvidence.ts`）**：模型自报的 `user_choice`/`clarification` 只有在本会话确有对应该文本的点选/澄清确认证据时才保留，否则在进入 decisionContent 前降级为 `model_inference`——确认卡不得把模型臆断标成「你的选择」。
 4. **提示词（`src/renderer/sysPrompt.ts`）**：
    - 澄清指令补充：目标/方案关键假设不明确时，用 `ask_user.assumptions` 逐条核对（可带 options）；用户提交后 `propose_goal`/`propose_plan` 用 `{ text, source }` 标注来源。
    - 自由度：自由文本仍是主通道；假设核对卡是结构化替代，不是强制流程。
 5. **持久化与兼容**：
-   - `taskSnapshot` 深校验接受新旧两种假设形态，旧字符串归一化为 `model_inference`；快照/时间线中的结构化来源原样保留。
+   - `taskSnapshot` 版本升级为 **2**（v1 仍接受）：v1 字符串假设归一化为 `model_inference`（空字符串条目跳过，不因一条旧空串拒绝整个任务快照）；v2 结构化来源保留。
+   - `nf-session` 的 V2 会话记录外壳不变；`decisionContent` 内的假设形态由任务快照版本区分。
    - 文本降级解析（`parsePlanProposal`、`extractAssumptionsSection`）产出 `model_inference`。
-   - `nf-session` 无需版本升级（同一 JSON 记录内字段结构向后兼容）。
+   - 旧消息快照恢复也经过 `normalizeDecisionContent` 校验/归一化，非法 source 不进入状态。
 
 ## Consequences
-- 积极：目标假设从「用户整段打字」变为「逐条结构化核对」；模型得到的回答可直接映射为工具参数/假设；确认卡可追溯假设来源；旧会话与旧模型输出兼容。
-- 代价：假设结构从字符串数组升级为对象数组（渲染/解析/快照均需归一化）；`ask_user` 参数面扩大，提示词需同步教学；假设核对卡交互状态仅存组件内（刷新后按「已出现用户消息」判定已回应，与现有选项卡一致）。
+- 积极：目标假设从「用户整段打字」变为「逐条结构化核对」；模型得到的回答可直接映射为工具参数/假设；确认卡可追溯假设来源；旧会话与旧模型输出兼容；来源标签有真实交互证据背书。
+- 代价：假设结构从字符串数组升级为对象数组（渲染/解析/快照均需归一化）；`ask_user` 参数面扩大，提示词需同步教学；假设核对卡交互状态仅存组件内（刷新后按「匹配本卡问题的结构化回答/选项标签」判定已回应，兄弟卡不会被误禁用）。
 - 边界：不引入多问题问卷/可编辑计划文件/澄清训练数据；不改变决策点枚举（澄清仍非 DecisionPoint，不置 pending）。

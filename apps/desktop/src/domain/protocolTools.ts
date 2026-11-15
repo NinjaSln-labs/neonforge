@@ -35,6 +35,8 @@ export interface ProtocolParamSchema {
   description: string
   enum?: string[]
   items?: ProtocolItemSchema
+  /** 数组上限（模型可见约束——运行时校验同源） */
+  maxItems?: number
 }
 
 /** 数组条目节点（type 不得为 'array'——扁平约束的类型层承载） */
@@ -209,8 +211,12 @@ export const PROTOCOL_TOOL_DEFS: readonly ProtocolToolDef[] = [
         assumptions: {
           type: 'array',
           description:
-            '待用户逐条核对的假设（可选——给了则渲染核对卡：用户逐条「符合/不符合」并可修正）',
-          items: { type: 'string', description: '一条待核对假设（用肯定句陈述你打算依赖的理解）' },
+            '待用户逐条核对的假设（可选，最多 6 条——给了则渲染核对卡：用户逐条「符合/不符合」并可修正）',
+          items: {
+            type: 'string',
+            description: '一条非空待核对假设（用肯定句陈述你打算依赖的理解）',
+          },
+          maxItems: 6,
         },
       },
       required: ['question', 'type'],

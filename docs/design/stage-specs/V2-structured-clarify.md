@@ -3,9 +3,9 @@
 
 ## DoD（机器可验证断言——stage-gate 逐条执行）
 
-- [x] L1 全量绿：`npx vitest run`（71 文件 / 843 用例；新增 6 条——协议校验/归一化、快照兼容）
+- [x] L1 全量绿：`npx vitest run`（73 文件 / 850 用例；新增 7 条——协议校验/归一化、快照兼容、JSON 回答格式、来源制裁）
 - [x] L2 契约：`npx tsc -p tsconfig.json --noEmit` + `npx tsc -p tsconfig.main.json --noEmit` 0 错
-- [x] L3 交互：`npx playwright test --project=interaction`（全量 80/80；新增假设核对卡提交、来源标签 2 场景；既有 ask_user 选项场景仍绿）
+- [x] L3 交互：`npx playwright test --project=interaction`（全量 81/81；新增假设核对卡提交、来源制裁、待决策点澄清不误拒 3 场景；既有 ask_user 选项场景仍绿）
 - [x] 行为验收：`ask_user(assumptions)` → 逐条选择/修正 → 提交流程可用；`propose_goal` 结构化 assumptions 来源标签可见；旧 `string[]` 提案/快照正常渲染
 - [x] 审计状态：本阶段无 open 审计项
 - [x] 覆盖矩阵已更新（`docs/tests/coverage-matrix.md`）
@@ -21,8 +21,8 @@
 | 领域值对象 | `Assumption {text,source}`；来源枚举三值；卡片/事件/快照均使用对象 | `conversationState.test.ts`/`timelineEvents.test.ts` | `domain/conversationState.ts` | — |
 | 快照兼容 | 旧字符串假设 → `model_inference`；新对象来源保留；非法结构拒绝 | `taskSnapshot.test.ts` | `taskSnapshot` 假设解析器 | — |
 | 文本降级解析 | `【执行方案】关键假设` 行 → `model_inference` | `planProposalParser.test.ts` | `parsePlanProposal`/`extractAssumptionsSection` | — |
-| 假设核对卡 | 逐条「符合/不符合」+ 修正输入；“提交回答”发送结构化消息；已回应禁用 | `structuredClarify.interaction.ts` | `AssumptionCheckCard` + ConversationPanel 接线 | 复用 CandidateButtons 样式 |
-| 来源标签 | 目标/方案卡显示「你的选择/你的澄清/模型推断」；旧字符串防御渲染 | `structuredClarify.interaction.ts` / `cards-from-decision-content.interaction.ts` | `AssumptionList` | 来源标签映射纯函数 |
+| 假设核对卡 | 逐条「符合/不符合」+ 修正输入；JSON 结构化回答；双击/草稿/options 并存/兄弟卡独立性；已回应禁用 | `structuredClarify.interaction.ts` | `AssumptionCheckCard` + `clarifyAnswer` + ConversationPanel 接线 | 复用 CandidateButtons 样式 |
+| 来源标签与制裁 | 目标/方案卡显示「你的选择/你的澄清/模型推断」；无真实交互证据的模型自报来源降级模型推断；旧字符串防御渲染 | `assumptionEvidence.test.ts` / `structuredClarify.interaction.ts` | `assumptionEvidence` + `AssumptionList` | 来源标签映射/证据集合纯函数 |
 
 ## 产出物
 

@@ -36,6 +36,7 @@ import {
 } from '../domain/conversationState'
 // S2 提议解析/历史构建已随 P1-05 阶段 4b 迁入 useChatStream.ts / conversationHistory.ts
 import { resolveSandboxPath } from '../domain/sandboxPath'
+import { validateProtocolArgs } from '../domain/protocolTools'
 // 2026-08-15 Q1a+Q2：状态机转换单点封装（写路径唯一入口）
 import { useConversationState } from './useConversationState'
 // 2026-08-15 Q1b：工具授权 handler 封装（组件瘦身）
@@ -48,6 +49,9 @@ import { parseCandidates, stripCandidates, stripTags } from './candidates'
 import { CandidateButtons, type CandidateOption } from './CandidateButtons'
 // ADR-014（GitHub #13）：ask_user.assumptions → 结构化假设核对卡
 import { AssumptionCheckCard } from './AssumptionCheckCard'
+// ADR-014：结构化澄清回答格式单源 + 模型自报来源制裁（只有真实澄清/点选才保留标签）
+import { parseClarifyAnswer } from './clarifyAnswer'
+import { sanitizeAssumptionSources } from './assumptionEvidence'
 // 2026-08-03 视觉审计 P1-6：内联 SVG 图标（替换 emoji 图标）
 import {
   IconBrain,
@@ -261,7 +265,12 @@ export default function ConversationPanel({
   // 2026-08-04 体验修复（用户实测：启动页输入句预填多余）：initialPrompt 进入工作区自动发送——说了就直接开始
   // （区别于 externalRequest「预填+自动发送」复跑语义；initialPrompt 只用于启动页首句）
   const sendRef = useRef<
-    (opts?: { silent?: boolean; text?: string; queued?: boolean }) => Promise<void>
+    (opts?: {
+      silent?: boolean
+      text?: string
+      queued?: boolean
+      clarification?: boolean
+    }) => Promise<void>
   >(async () => {})
   // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层状态）：连续无进展计数 + 升级次数（不可变 StuckState）+ 已读文件集合
   const stuckStateRef = useRef(initialStuckState)
@@ -487,6 +496,9 @@ export default function ConversationPanel({
   // 2026-08-04 授权架构 v4：任务级信任集合——「允许并记住」的文件（沙箱内 write/edit 自动）；阶段推进（确认推进=新任务）自动清除
   const [taskTrust, setTaskTrust] = useState<string[]>([])
   const taskTrustRef = useRef<string[]>([])
+  // ADR-014：假设来源证据——用户在本会话中确认过的澄清文本/点选过的候选标签
+  const clarifyEvidenceRef = useRef<Set<string>>(new Set())
+  const chosenEvidenceRef = useRef<Set<string>>(new Set())
   const trustPath = (p: unknown): string => {
     const s = String(p ?? '')
     if (!s) return rootPath ? `${rootPath}/` : ''
@@ -517,6 +529,11 @@ export default function ConversationPanel({
     prevReadFilesRef,
     recentFilesExternal,
     researchProposeNudgedRef,
+    sanitizeAssumptions: (assumptions) =>
+      sanitizeAssumptionSources(assumptions, {
+        clarified: clarifyEvidenceRef.current,
+        chosen: chosenEvidenceRef.current,
+      }),
     rootPath,
     sendRef,
     sessionId,
@@ -1019,47 +1036,73 @@ export default function ConversationPanel({
                       {tc.name === 'ask_user' &&
                         tc.status === 'done' &&
                         (() => {
-                          // 2026-11-15 审查修复：此处内层 map 的 i 是 toolCalls 索引（遮蔽消息索引），
-                          // 已回复判定必须按**消息位置**切片——用 m 的引用反查（O(n)，候选卡极少）。
-                          const replied = messages
-                            .slice(messages.indexOf(m) + 1)
-                            .some((mm) => mm.role === 'user')
-                          // ADR-014：假设核对清单优先——逐条选择「符合/不符合」+ 修正，提交结构化回答
+                          // 审查修复：只渲染通过领域校验的请求——非法 args（超限/非字符串）已在
+                          // decideProtocolToolCall 回灌模型修参，UI 不得再让用户回答一张无效卡
+                          if (!validateProtocolArgs('ask_user', tc.args).ok) return null
+                          const question =
+                            typeof tc.args?.question === 'string' ? tc.args.question : ''
                           const assumptions = (
                             Array.isArray(tc.args?.assumptions) ? tc.args.assumptions : []
                           ).filter((a): a is string => typeof a === 'string' && a.trim().length > 0)
-                          if (assumptions.length > 0) {
-                            return (
-                              <AssumptionCheckCard
-                                question={
-                                  typeof tc.args?.question === 'string' ? tc.args.question : ''
-                                }
-                                assumptions={assumptions}
-                                replied={replied}
-                                onSubmit={(answer) => {
-                                  inputRef.current = answer
-                                  void sendRef.current()
-                                }}
-                              />
-                            )
-                          }
-                          // 无假设清单 → 既有单题选项按钮（A-019：CandidateButtons 单源）
                           let opts: CandidateOption[] = []
                           if (Array.isArray(tc.args?.options)) {
                             opts = (tc.args.options as CandidateOption[]).filter(
                               (o) => o && typeof o.label === 'string',
                             )
                           }
-                          if (opts.length === 0) return null
+                          // 已回复按**具体卡片**匹配（同一消息可有多张卡）：结构化回答的问题或点选标签
+                          // 命中才算该卡已回答——不能因一条用户消息把兄弟卡全部禁用
+                          const laterUsers = messages
+                            .slice(messages.indexOf(m) + 1)
+                            .filter((mm) => mm.role === 'user')
+                          const answered = laterUsers.some((mm) => {
+                            const parsed =
+                              assumptions.length > 0 ? parseClarifyAnswer(mm.content) : null
+                            if (parsed && parsed.question === question) return true
+                            return opts.some((o) => mm.content.trim() === o.label)
+                          })
+                          const assumptionCard =
+                            assumptions.length > 0 ? (
+                              <AssumptionCheckCard
+                                question={question}
+                                assumptions={assumptions}
+                                replied={answered}
+                                onSubmit={(answer) => {
+                                  // 证据：用户确认的假设 + 用户修正文本才可标记来源
+                                  const parsed = parseClarifyAnswer(answer)
+                                  if (parsed) {
+                                    for (const row of parsed.answers) {
+                                      if (row.choice === '符合') {
+                                        clarifyEvidenceRef.current.add(row.assumption.trim())
+                                      }
+                                      if (row.correction?.trim()) {
+                                        clarifyEvidenceRef.current.add(row.correction.trim())
+                                      }
+                                    }
+                                  }
+                                  // opts.text 直送：不清空用户在输入框里已打的草稿
+                                  void sendRef.current({ text: answer, clarification: true })
+                                }}
+                              />
+                            ) : null
+                          // options 与 assumptions 可并存：两者都渲染（选项是整题候选，核对卡是逐条假设）
+                          const optionButtons =
+                            opts.length > 0 ? (
+                              <CandidateButtons
+                                options={opts}
+                                replied={answered}
+                                onPick={(label) => {
+                                  chosenEvidenceRef.current.add(label.trim())
+                                  void sendRef.current({ text: label })
+                                }}
+                              />
+                            ) : null
+                          if (!assumptionCard && !optionButtons) return null
                           return (
-                            <CandidateButtons
-                              options={opts}
-                              replied={replied}
-                              onPick={(label) => {
-                                inputRef.current = label
-                                void sendRef.current()
-                              }}
-                            />
+                            <>
+                              {assumptionCard}
+                              {optionButtons}
+                            </>
                           )
                         })()}
                       {/* 2026-08-05 体验反馈：详细输出折叠（默认不展示代码——需要时展开查看） */}

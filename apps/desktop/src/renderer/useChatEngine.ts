@@ -48,7 +48,12 @@ export interface ChatEngineDeps {
   rootPath?: string | null
   /** externalRequest / verifyThenResolve / applyChunk 共享的发送入口引用 */
   sendRef: RefObject<
-    (opts?: { silent?: boolean; text?: string; queued?: boolean }) => Promise<void>
+    (opts?: {
+      silent?: boolean
+      text?: string
+      queued?: boolean
+      clarification?: boolean
+    }) => Promise<void>
   >
   sessionId: string
   sessionRef: RefObject<number>
@@ -77,7 +82,12 @@ export interface ChatEngine {
   maybeContinue: (depth: number, sid: number) => Promise<void>
   retryFailedTurn: () => Promise<void>
   runChat: (msgs: HistoryMessage[], depth: number, sid: number) => Promise<void>
-  send: (opts?: { silent?: boolean; text?: string; queued?: boolean }) => Promise<void>
+  send: (opts?: {
+    silent?: boolean
+    text?: string
+    queued?: boolean
+    clarification?: boolean
+  }) => Promise<void>
   stopGeneration: (source?: 'button' | 'silent') => Promise<void>
 }
 
@@ -583,7 +593,13 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
 
   // 2026-08-06 只说不做第 5 次升级：send 支持 silent（自动续聊——不显示用户气泡）
   // 2026-09-28：系统提示/对账前缀强制 silent；opts.text 直送——不经输入框（防系统文案停在 textarea）
-  const send = async (opts?: { silent?: boolean; text?: string; queued?: boolean }) => {
+  const send = async (opts?: {
+    silent?: boolean
+    text?: string
+    queued?: boolean
+    /** ADR-014：结构化澄清回答——不得触发 pending 文本确认/拒绝分流 */
+    clarification?: boolean
+  }) => {
     const fromBox = opts?.text === undefined
     const fromQueue = Boolean(opts?.queued)
     const text = (fromBox ? inputRef.current : opts.text!).trim()
@@ -627,28 +643,32 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
       console.log('[conversation] 待授权中发送——新指令直接处理（未批准给新指令）')
     }
     if (!silent) {
-      // S7（A0 审校 P1-5 + C2 完善——e2e-0to1 场景 B 暴露）：pending 期用户文本分流——
-      // 确认语义（isConfirmIntent——「行/按这个方案」）→ 自动确认当前决策点（等价点按钮——确认卡时代
-      // 遗漏文本确认——真实用户打字确认）；新意图文本 → 隐式拒绝（C2——reason.direction + text——
-      // 卡消失 + 模型重提议）；approval 期确认文本 → 触发当前授权卡批准（下方 approveToolCall 路径）
-      const pendingKind = stateRef.current.pending
-      if (pendingKind !== 'none' && pendingKind !== 'approval') {
-        if (isConfirmIntent(text)) {
-          confirm(pendingKind)
-        } else {
-          reject(pendingKind, { kind: 'direction', text })
-        }
-      } else if (
-        pendingKind === 'approval' &&
-        // 收紧（T0-3/P2 回归修正）：approval 期只认**明确批准词**（短句精确匹配——「继续」等非批准语义不自动批；
-        // 2026-11-15 审查修复：裸子串「批准/同意」会把「我不同意执行」误判为批准——见 isApprovalIntent）
-        isApprovalIntent(text)
-      ) {
-        // S7（C2 完善——e2e-0to1 场景 B）：approval 期确认文本 → 自动批准当前待批授权卡
-        // （真实用户打字「行/批准」——确认卡时代只处理按钮批准遗漏文本批准）
-        const lastMsg = messagesRef.current[messagesRef.current.length - 1]
-        if (lastMsg?.role === 'assistant' && lastMsg.toolCalls?.length) {
-          getApproveAllToolCalls()(lastMsg.toolCalls)
+      // ADR-014：结构化澄清回答不是「用文字确认/拒绝待决策点」——跳过 pending 文本分流，
+      // 否则待决策点会被误判为 reject（用户只是在回答假设核对卡）
+      if (!opts?.clarification) {
+        // S7（A0 审校 P1-5 + C2 完善——e2e-0to1 场景 B 暴露）：pending 期用户文本分流——
+        // 确认语义（isConfirmIntent——「行/按这个方案」）→ 自动确认当前决策点（等价点按钮——确认卡时代
+        // 遗漏文本确认——真实用户打字确认）；新意图文本 → 隐式拒绝（C2——reason.direction + text——
+        // 卡消失 + 模型重提议）；approval 期确认文本 → 触发当前授权卡批准（下方 approveToolCall 路径）
+        const pendingKind = stateRef.current.pending
+        if (pendingKind !== 'none' && pendingKind !== 'approval') {
+          if (isConfirmIntent(text)) {
+            confirm(pendingKind)
+          } else {
+            reject(pendingKind, { kind: 'direction', text })
+          }
+        } else if (
+          pendingKind === 'approval' &&
+          // 收紧（T0-3/P2 回归修正）：approval 期只认**明确批准词**（短句精确匹配——「继续」等非批准语义不自动批；
+          // 2026-11-15 审查修复：裸子串「批准/同意」会把「我不同意执行」误判为批准——见 isApprovalIntent）
+          isApprovalIntent(text)
+        ) {
+          // S7（C2 完善——e2e-0to1 场景 B）：approval 期确认文本 → 自动批准当前待批授权卡
+          // （真实用户打字「行/批准」——确认卡时代只处理按钮批准遗漏文本批准）
+          const lastMsg = messagesRef.current[messagesRef.current.length - 1]
+          if (lastMsg?.role === 'assistant' && lastMsg.toolCalls?.length) {
+            getApproveAllToolCalls()(lastMsg.toolCalls)
+          }
         }
       }
       // 13 复跑入口：上报用户输入（真实交付包 rerunPrompt 用）
@@ -656,7 +676,8 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
       // 2026-08-04：对话日志（自动记录用户消息——与 assistant done 互补成完整对话）；2026-08-08 会话归属
       tlog('conversation.message_sent', { content: text }, 'user')
       // ADR-010 T2：pending 存在期间的用户文本回复计数（用户在试图用文字确认——A-024 主动检测）
-      stateRef.current = noteUserTextReply(stateRef.current)
+      // ADR-014：结构化澄清回答不计入（它不是对 pending 的文本确认尝试）
+      if (!opts?.clarification) stateRef.current = noteUserTextReply(stateRef.current)
       window.neonforge.chatLog?.log?.({
         ts: new Date().toISOString(),
         role: 'user',

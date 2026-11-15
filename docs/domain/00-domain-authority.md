@@ -179,7 +179,7 @@ ActionAttribute {
 
 1. **决策点 = 状态 × 提议 × 动作属性的确定性函数**——同一输入永远同一决策点；模型措辞不参与判定（原 pendingCardToShow 以模型文本为输入的建模废除）
 2. **提议是值对象**（结构化内容：假设/证据/验证计划）——不是文本标记；解析层（parsePlanProposal/parseCompletionClaim）负责从模型输出结构化，判定层只消费结构
-2b. **假设来源可追溯（ADR-014）**：`Assumption = { text, source }`，`source ∈ model_inference | user_choice | clarification`——`clarification` 来自 `ask_user.assumptions` 核对卡的结构化回答，`user_choice` 来自候选点选，`model_inference` 为模型自行推断；确认卡显示来源标签，旧字符串假设归一化为 `model_inference`
+2b. **假设来源可追溯（ADR-014）**：`Assumption = { text, source }`，`source ∈ model_inference | user_choice | clarification`——`clarification` 来自 `ask_user.assumptions` 核对卡的结构化回答，`user_choice` 来自候选点选，`model_inference` 为模型自行推断；**模型自报来源需有本会话真实交互证据，否则在进入决策内容前降级为 `model_inference`**；确认卡显示来源标签，旧字符串假设归一化为 `model_inference`，任务快照版本 2（v1 兼容）
 3. **决策内容快照**（decisionContent——呈现与审计的唯一来源）：卡弹出时携带完整提议内容，确认/拒绝事件记录快照（「用户确认了什么」可追溯——2026-08-15 run4 实证的追溯缺口）
 4. **用户主动确认通道保留**（goalFallback 语义重定义）：用户可在无提议时主动发起确认（对齐竞品 Plan 门——用户发起 vs 模型触发）——但卡出现的**默认路径**是确定性派生
 

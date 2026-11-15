@@ -2,6 +2,7 @@
 // 用户逐条选择「符合/不符合」并可写修正；点「提交回答」把核对结果作为一条用户消息发送。
 // 与自由文本输入等价（输入框仍是主通道）；已回应后控件禁用（按后续用户消息判定，同 CandidateButtons）。
 import { useState } from 'react'
+import { formatClarifyAnswer, type ClarifyAnswerRow } from './clarifyAnswer'
 
 const CHOICES = ['符合', '不符合'] as const
 type Choice = (typeof CHOICES)[number]
@@ -21,15 +22,20 @@ export function AssumptionCheckCard({
 }: AssumptionCheckCardProps) {
   const [choices, setChoices] = useState<Record<number, Choice>>({})
   const [corrections, setCorrections] = useState<Record<number, string>>({})
+  // 双击防护：replied 要等消息回写后才变 true，本地 submitted 先落闸
+  const [submitted, setSubmitted] = useState(false)
 
   const allChosen = assumptions.every((_, i) => choices[i] !== undefined)
+  const locked = replied || submitted
   const submit = (): void => {
-    const lines = assumptions.map((text, i) => {
+    if (locked) return
+    setSubmitted(true)
+    const answers: ClarifyAnswerRow[] = assumptions.map((text, i) => {
       const choice = choices[i]
       const correction = (corrections[i] ?? '').trim()
-      return `- ${text}：${choice}${correction ? `（补充：${correction}）` : ''}`
+      return { assumption: text, choice, ...(correction ? { correction } : {}) }
     })
-    onSubmit(`【澄清回答】\n问题：${question}\n${lines.join('\n')}`)
+    onSubmit(formatClarifyAnswer({ question, answers }))
   }
 
   return (
@@ -45,8 +51,8 @@ export function AssumptionCheckCard({
                 <button
                   key={choice}
                   type="button"
-                  className={`nf-assumptioncheck__choice${active ? ' nf-assumptioncheck__choice--active' : ''}${replied ? ' nf-assumptioncheck__choice--disabled' : ''}`}
-                  disabled={replied}
+                  className={`nf-assumptioncheck__choice${active ? ' nf-assumptioncheck__choice--active' : ''}${locked ? ' nf-assumptioncheck__choice--disabled' : ''}`}
+                  disabled={locked}
                   aria-pressed={active}
                   onClick={() => setChoices((prev) => ({ ...prev, [i]: choice }))}
                 >
@@ -60,7 +66,7 @@ export function AssumptionCheckCard({
             type="text"
             placeholder="补充或修正（可选）"
             value={corrections[i] ?? ''}
-            disabled={replied}
+            disabled={locked}
             onChange={(e) => setCorrections((prev) => ({ ...prev, [i]: e.target.value }))}
           />
         </div>
@@ -68,10 +74,10 @@ export function AssumptionCheckCard({
       <button
         type="button"
         className="nf-assumptioncheck__submit"
-        disabled={replied || !allChosen}
+        disabled={locked || !allChosen}
         onClick={submit}
       >
-        {replied ? '已提交' : '提交回答'}
+        {locked ? '已提交' : '提交回答'}
       </button>
     </div>
   )

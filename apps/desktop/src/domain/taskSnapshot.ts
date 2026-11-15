@@ -15,7 +15,9 @@ import {
   type RejectReason,
 } from './conversationState.js'
 
-export const TASK_SNAPSHOT_VERSION = 1 as const
+export const TASK_SNAPSHOT_VERSION = 2 as const
+/** 兼容版本：1 = ADR-013 初版（假设为 string[]）；2 = ADR-014（假设为 Assumption[]） */
+const SUPPORTED_SNAPSHOT_VERSIONS = [1, 2] as const
 
 export interface DeniedApproval {
   toolName: string
@@ -23,7 +25,7 @@ export interface DeniedApproval {
 }
 
 export interface TaskSnapshot {
-  version: typeof TASK_SNAPSHOT_VERSION
+  version: (typeof SUPPORTED_SNAPSHOT_VERSIONS)[number]
   goalConfirmed: boolean
   planConfirmed: boolean
   resolutionConfirmed: boolean
@@ -117,6 +119,8 @@ function parseAssumptions(raw: unknown): Assumption[] | null {
   if (!Array.isArray(raw)) return null
   const out: Assumption[] = []
   for (const item of raw) {
+    // 旧 string[] 存档允许空串（旧 schema 只校验 string）——空条目跳过，不能因一条无意义空串拒绝整个任务快照
+    if (typeof item === 'string' && !item.trim()) continue
     const parsed = parseAssumption(item)
     if (!parsed) return null
     out.push(parsed)
@@ -192,7 +196,7 @@ function parseSystemClarify(raw: unknown): boolean {
 
 /** 决策内容深层校验：卡渲染会直接读 proposal.files/assumptions/pendingQuestions——结构不符必须拒绝。
  * 校验同时归一化（旧字符串假设 → Assumption[]——ADR-014），返回可安全渲染的干净对象。 */
-function parseDecisionContent(raw: unknown): DecisionContent | undefined {
+export function normalizeDecisionContent(raw: unknown): DecisionContent | undefined {
   if (!isRecord(raw)) return undefined
   if (typeof raw.kind !== 'string' || !DECISION_KINDS.includes(raw.kind as DecisionKind)) {
     return undefined
@@ -251,7 +255,7 @@ function parseRejectReason(raw: unknown): RejectReason | undefined {
 /** 快照 → 任务状态；版本/类型/枚举非法 → null（调用方回退 initialState，不崩）。 */
 export function fromTaskSnapshot(raw: unknown): ConversationState | null {
   if (!isRecord(raw)) return null
-  if (raw.version !== TASK_SNAPSHOT_VERSION) return null
+  if (!SUPPORTED_SNAPSHOT_VERSIONS.includes(raw.version as 1 | 2)) return null
   if (typeof raw.pending !== 'string' || !PENDING_KINDS.includes(raw.pending as PendingKind)) {
     return null
   }
@@ -279,7 +283,7 @@ export function fromTaskSnapshot(raw: unknown): ConversationState | null {
   ) {
     return null
   }
-  const decisionContent = parseDecisionContent(raw.decisionContent)
+  const decisionContent = normalizeDecisionContent(raw.decisionContent)
   const lastRejectReason = parseRejectReason(raw.lastRejectReason)
   // 非 approval 决策点必须有可渲染内容；approval 卡由消息中的授权工具调用承载（可无 decisionContent）
   if (raw.pending !== 'none' && raw.pending !== 'approval' && !decisionContent) return null

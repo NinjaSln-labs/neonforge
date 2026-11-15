@@ -27,6 +27,7 @@ import { PROTOCOL_TOOL_NAMES, decideProtocolToolCall } from '../domain/protocolT
 import { detectProposed } from '../domain/timeline'
 import { extractAssumptionsSection, parsePlanProposal } from '../domain/planProposalParser'
 import { parseCompletionClaim } from '../domain/completionClaimParser'
+import type { Assumption } from '../domain/conversationState'
 import type { Msg, ToolCallMsg } from './ConversationPanel'
 import type { useConversationState } from './useConversationState'
 import { toolRisk } from './authModel'
@@ -55,9 +56,16 @@ export interface ApplyChunkDeps {
   prevReadFilesRef: RefObject<Set<string>>
   recentFilesExternal?: string[]
   researchProposeNudgedRef: RefObject<boolean>
+  /** ADR-014：模型自报来源不可信——按本会话真实澄清/点选证据降级未命中来源 */
+  sanitizeAssumptions: (assumptions: Assumption[]) => Assumption[]
   rootPath?: string | null
   sendRef: RefObject<
-    (opts?: { silent?: boolean; text?: string; queued?: boolean }) => Promise<void>
+    (opts?: {
+      silent?: boolean
+      text?: string
+      queued?: boolean
+      clarification?: boolean
+    }) => Promise<void>
   >
   sessionId: string
   setMessages: Dispatch<SetStateAction<Msg[]>>
@@ -100,6 +108,7 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
     prevReadFilesRef,
     recentFilesExternal,
     researchProposeNudgedRef,
+    sanitizeAssumptions,
     rootPath,
     sendRef,
     sessionId,
@@ -186,7 +195,11 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
           suspendRoundRef.current = true
           const { kind, content } = d
           if (kind === 'goal') {
-            const p = content.proposal as GoalProposal
+            const raw = content.proposal as GoalProposal
+            const p: GoalProposal = {
+              ...raw,
+              assumptions: sanitizeAssumptions(raw.assumptions),
+            }
             tlog(
               'proposal.goal',
               {
@@ -195,10 +208,14 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
               },
               'assistant',
             )
-            setPendingState('goal', { proposal: content.proposal, since: content.since })
+            setPendingState('goal', { proposal: p, since: content.since })
             protocolResult = '目标提议已提交——等待用户确认'
           } else if (kind === 'plan') {
-            const p = content.proposal as PlanProposal
+            const raw = content.proposal as PlanProposal
+            const p: PlanProposal = {
+              ...raw,
+              assumptions: sanitizeAssumptions(raw.assumptions),
+            }
             tlog(
               'proposal.plan',
               { ok: true, summary: p.summary, files: p.files.map((f) => f.path) },
@@ -206,7 +223,7 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
             )
             // P0-03（不变量 6）：提议阶段不写 plannedFiles——方案只有用户确认后才形成写入边界。
             // 派生唯一入口：userDecided(plan, confirm) → derivePlannedFiles；拒绝不落清单。
-            setPendingState('plan', { proposal: content.proposal, since: content.since })
+            setPendingState('plan', { proposal: p, since: content.since })
             protocolResult = '执行方案提议已提交——等待用户确认执行'
           } else {
             const p = content.proposal as CompletionClaim
@@ -227,10 +244,15 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
           }
         } else if (d.action === 'clarify') {
           // 会话级澄清（Task 1.2b 裁定）：不置 DecisionPoint——模型停轮等用户正文回复
-          const { question, options, type } = d.content
+          const { question, options, assumptions, type } = d.content
           tlog(
             'proposal.clarify',
-            { question, type, ...(options.length > 0 ? { options } : {}) },
+            {
+              question,
+              type,
+              ...(options.length > 0 ? { options } : {}),
+              ...(assumptions.length > 0 ? { assumptions } : {}),
+            },
             'assistant',
           )
           protocolResult =
@@ -428,8 +450,12 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
           )
           setPendingState('goal', {
             proposal: goalProposal ?? {
-              statement: initialPrompt || content.trim(),
-              assumptions: [],
+              statement: goalMark?.[1]?.trim() || initialPrompt || content.trim(),
+              // ADR-014：文本降级通道也要呈现模型写出的关键假设（来源只能是模型推断）
+              assumptions: extractAssumptionsSection(content).map((text) => ({
+                text,
+                source: 'model_inference' as const,
+              })),
             },
             since: new Date().toISOString(),
           })

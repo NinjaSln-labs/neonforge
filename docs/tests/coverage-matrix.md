@@ -1,7 +1,7 @@
 # 覆盖矩阵（Coverage Matrix）
 
 > 首版：2026-08-16（S2）→ 增补：2026-09-29（Keenable 合规）
-> 当前快照（2026-11-16）：L1 **71 文件 / 843 用例** · 事件注册表 55+ 事件 · 不变量 Inv 1-8 + I17-I21 · L3 interaction **80 场景**
+> 当前快照（2026-11-16）：L1 **73 文件 / 850 用例** · 事件注册表 55+ 事件 · 不变量 Inv 1-8 + I17-I21 · L3 interaction **81 场景**
 > 表 1-表 10 保留各阶段时点的基线记录；当前总数以本快照与 `09-openspec/tasks.md §4` 为准。
 > 维护：阶段末更新（coverage-matrix skill）；缺口入 audit-items
 
@@ -174,9 +174,9 @@
 | P1-02 跨存储事务性 Outbox | `stateTransaction.test.ts`（WAL 提交/失败保留/FIFO 重放/确定性 outboxId/损坏 WAL/半行尾丢弃/latestWriteContent）、`acceptanceStore.test.ts`/`taskQueueStore.test.ts`/`changeSetService.test.ts`（commit 回调：状态+基线+事件同事务） | ✅ |
 | 任务状态机跨重启（ADR-013 / GitHub #11） | `taskSnapshot.test.ts`（全字段往返/损坏/版本/嵌套决策内容深校验/合法边界态）、`sessionStore.test.ts`（V2 消息+任务原子记录/旧 V1 兼容/待授权工具卡保留）、`sessionRestore.interaction.ts`（快照恢复 pending 方案卡与决策内容、planConfirmed 主进程镜像、待授权工具卡恢复且启动不伪造决策事件） | ✅ |
 | 审查回归（2026-11-15） | `agentLoop.test.ts::isApprovalIntent`（否定不批准）、`retry.interaction.ts`（第二轮失败重试上下文）、`queue.interaction.ts`（FIFO/停止回填） | ✅ |
-| 结构化澄清与假设来源（ADR-014 / GitHub #13） | `protocolTools.test.ts`（`ask_user.assumptions` ≤6/逐条非空、提议假设 `{text,source}` 校验与归一化、string→`model_inference`）、`taskSnapshot.test.ts`（旧字符串假设归一化/来源保留/非法来源拒绝）、`planProposalParser.test.ts`（文本降级假设 → `model_inference`）、`structuredClarify.interaction.ts`（假设核对卡逐条选择/修正/提交结构化回答、目标卡来源标签） | ✅ |
+| 结构化澄清与假设来源（ADR-014 / GitHub #13） | `protocolTools.test.ts`（`ask_user.assumptions` ≤6/逐条非空、提议假设 `{text,source}` 校验与归一化、string→`model_inference`）、`taskSnapshot.test.ts`（v1 兼容/空串跳过/旧字符串归一化/来源保留/非法来源拒绝）、`clarifyAnswer.test.ts`（JSON 往返/换行冒号注入/损坏拒绝）、`assumptionEvidence.test.ts`（无证据来源降级/证据命中保留）、`planProposalParser.test.ts`（文本降级假设 → `model_inference`）、`structuredClarify.interaction.ts`（核对卡选择/修正/JSON 回答/双击防护/草稿保留、options 与 assumptions 并存、待决策点不被误拒、来源制裁与降级、3 场景） | ✅ |
 | 审查修复批（2026-11-16，`a9f8a84..HEAD`） | `stateTransaction.test.ts`（写失败回退 mtime、非 ASCII 尾部截断、短写循环）、`timelineLogger.test.ts`/`timelineOutbox.test.ts`（DLQ outboxId 重放不重复、同 id 入队幂等）、`changeSetService.test.ts`（基线仍在 WAL 时回滚不误判 conflict）、`taskSnapshot.test.ts`（决策内容深层校验/合法边界态）、`sessionStore.test.ts`（待授权工具卡持久化）、`sessionRestore.interaction.ts`（恢复待授权卡且无伪造决策事件） | ✅ |
-| P1-05 会话/轮次编排拆分 | `conversationHistory.test.ts`、`useConversationState.test.ts` + interaction 全量 80 场景 | ✅ |
+| P1-05 会话/轮次编排拆分 | `conversationHistory.test.ts`、`useConversationState.test.ts` + interaction 全量 81 场景 | ✅ |
 | Web Key 来源与明文副本 | `configStore.test.ts`（env/file/config 来源、opt-in 明文、删除清理） | ✅ |
 
 > 表 11 为 2026-11-15 增补；逐文件用例数不在此重复，避免与页首快照漂移。
