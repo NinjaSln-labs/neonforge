@@ -9,6 +9,10 @@ import {
   resolveFromList,
   pickModelForTier,
   filterDeepSeekModels,
+  normalizeModelId,
+  modelParams,
+  resolveModelProfileId,
+  resolveSelectedModel,
   toDeepSeekParams,
   classifyValidateResponse,
 } from '../../src/main/providers/index.js'
@@ -78,6 +82,46 @@ describe('providers catalog（ADR-010）', () => {
         flash: 'deepseek/deepseek-v4.1-flash',
       }),
     ).toBe('deepseek/deepseek-v4.1-flash')
+  })
+
+  // ADR-017：显式模型优先；非 DeepSeek 族使用 generic profile
+  it('resolveSelectedModel：显式 modelId 优先，无显式选择回退档位', () => {
+    expect(
+      resolveSelectedModel(
+        'commandcode',
+        { modelId: 'gpt-4o', tier: 'flash' },
+        {
+          flash: 'deepseek/deepseek-v4.1-flash',
+        },
+      ),
+    ).toBe('gpt-4o')
+    expect(
+      resolveSelectedModel(
+        'commandcode',
+        { modelId: null, tier: 'pro' },
+        {
+          pro: 'deepseek/deepseek-v4-pro',
+        },
+      ),
+    ).toBe('deepseek/deepseek-v4-pro')
+    expect(resolveSelectedModel('commandcode', { modelId: '  ', tier: 'flash' })).toBe(
+      'deepseek/deepseek-v4.1-flash',
+    )
+  })
+
+  it('modelParams：DeepSeek 保留 thinking；非 DeepSeek 不发专属字段', () => {
+    expect(modelParams('deepseek', 'deepseek-flash', 'high')).toEqual(toDeepSeekParams('high'))
+    expect(modelParams('commandcode', 'gpt-4o', 'high')).toEqual({})
+    expect(resolveModelProfileId('commandcode', 'deepseek/deepseek-v4.1-flash')).toBe('deepseek-v4')
+    expect(resolveModelProfileId('commandcode', 'gpt-4o')).toBe('generic-openai')
+  })
+
+  it('normalizeModelId：拒绝空/控制字符/超长，保留合法 id', () => {
+    expect(normalizeModelId(' gpt-4o ')).toBe('gpt-4o')
+    expect(normalizeModelId('')).toBeNull()
+    expect(normalizeModelId('bad\nmodel')).toBeNull()
+    expect(normalizeModelId('x'.repeat(513))).toBeNull()
+    expect(normalizeModelId(42)).toBeNull()
   })
 })
 

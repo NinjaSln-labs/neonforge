@@ -71,9 +71,14 @@ export class McpManager {
   }
 
   private async doRefresh(): Promise<McpRefreshResult> {
+    const previousServers = new Set(this.statuses.map((s) => s.name))
     this.closeAll()
     const loaded = this.configStore.load()
     if (loaded.error) return { servers: [], configError: loaded.error }
+    const configured = new Set(loaded.servers.map((s) => s.name))
+    for (const name of previousServers) {
+      if (!configured.has(name)) this.registry.unregister(`mcp:${name}`)
+    }
     const servers: McpServerStatus[] = []
     for (const config of loaded.servers) {
       const extName = `mcp:${config.name}`

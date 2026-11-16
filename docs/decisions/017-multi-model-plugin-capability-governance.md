@@ -21,7 +21,7 @@
 1. **模型选择模型（ModelSelection）**：
    - `ModelSelection = { providerId, modelId?, tier: ModelTier }`；`modelId` 为用户显式选择的上游模型（来自 `/models` 列表或手填）。
    - 显式 `modelId` 优先，flash/pro 档位仅在无显式选择时按 `ModelRouter` 规则解析；不再用「手填 id 同时覆盖两档」的隐式语义。
-   - 配置持久化扩展为 `providerId + modelId? + modelTier?`；旧配置（无 modelId）行为不变：默认 flash 档 + `/models`/fallback 解析。
+   - 配置持久化扩展为 `providerId + modelId?`；`tier` 仍由 `ModelRouter` 运行时规则解析（本阶段不持久化档位）。旧配置（无 modelId）行为不变：默认 flash 档 + `/models`/fallback 解析。
 2. **ModelProfile 扩展点**：
    - `ProviderDescriptor` 增加 `profile: ModelProfileId`（`deepseek-v4` | `generic-openai`）；默认 `deepseek-v4` 保持现状。
    - `ModelProfile` 提供 `buildParams(level)` 与 `matches(modelId)`；DeepSeek profile 原样复用 `toDeepSeekParams`，generic profile 只发标准 OpenAI 参数（不发送 DeepSeek thinking 字段）。
@@ -29,7 +29,7 @@
    - Catalog 仍默认优先 DeepSeek 族（现状兼容）；显式选择非 DeepSeek 模型时不再被过滤，改由 profile 决定参数形态。
 3. **IPC / UI**：
    - `gateway:validate` 成功时返回 `{ models: string[], selectedModel: string }`；新增 `gateway:list-models`（使用已保存 Key，失败保留上一次可用列表）与 `gateway:set-model`（校验 provider/模型 id 后持久化）。
-   - ConfigPage 在验证成功后展示可选模型列表（默认收起，`手动填写` 保留）；SettingsPanel 显示当前生效模型并提供切换入口。
+   - SettingsPanel 显示当前生效模型并提供切换入口（自动 flash 档 / 显式模型）；ConfigPage 保持既有「验证 → 进入」流程，首次配置默认自动解析，后续在设置页切换。
    - 运行中的流不因切换模型而中断；下一轮请求使用新模型（provider-gateway spec 既有语义）。
 4. **安全边界**：模型 id 只接受非空、长度受限、无控制字符的字符串；provider id 仍只接受注册表枚举；不发起半配置请求。API Key/凭据管理不变。
 
@@ -46,7 +46,7 @@
 ## Consequences
 
 - 积极：用户可在既有接入方内选择实际模型，非 DeepSeek 模型有合法参数形态；扩展授权与能力集合绑定，刷新 MCP 不会静默扩权；注册表可回收已移除服务器；provider-gateway / extension-integration spec 的缺口有实现路径。
-- 代价：新增一次 `capabilityDigest` 计算与事件；ConfigPage/Settings UI 增加模型选择；显式模型切换需要一次 IPC 往返。旧配置无迁移成本（默认路径不变）。
+- 代价：新增一次 `capabilityDigest` 计算与事件；SettingsPanel 增加模型选择；显式模型切换需要一次 IPC 往返。旧配置无迁移成本（默认路径不变）。
 - 边界（不做）：
   - 不实现运行时自定义 provider / 任意第三方插件代码加载（仍是注册表内 descriptor + MCP stdio）。
   - 不实现 Anthropic/Google 原生协议适配（仅 OpenAI Chat Completions 兼容面）。

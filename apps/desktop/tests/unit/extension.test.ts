@@ -115,4 +115,47 @@ describe('Extension（A16 领域状态机）', () => {
     )
     expect(updated.capabilities.map((c) => c.id)).toEqual(['log'])
   })
+
+  // ADR-017：能力指纹与授权范围绑定——能力集合变化不得静默扩大已授权范围
+  it('capabilityDigest：同 id/risk 集合稳定（顺序无关）；能力/风险变化改变指纹', () => {
+    const caps = [
+      { id: 'read', name: 'read', description: '', risk: 'none' as const },
+      { id: 'write', name: 'write', description: '', risk: 'high' as const },
+    ]
+    const state = createExtension({ name: 'x', version: '1', capabilities: caps }, AT)
+    const reordered = createExtension(
+      { name: 'x', version: '1', capabilities: [...caps].reverse() },
+      AT,
+    )
+    expect(state.capabilityDigest).toBe(reordered.capabilityDigest)
+    const changed = createExtension(
+      {
+        name: 'x',
+        version: '1',
+        capabilities: [{ ...caps[0], risk: 'low' }, caps[1]],
+      },
+      AT,
+    )
+    expect(changed.capabilityDigest).not.toBe(state.capabilityDigest)
+  })
+
+  it('能力变化重审：user-authorized 回退 untrusted；同能力集合保留授权', () => {
+    const original = [{ id: 'read', name: 'read', description: '', risk: 'none' as const }]
+    const third = activateExtension(
+      createExtension({ name: 'mcp:x', version: '1', kind: 'mcp', capabilities: original }, AT),
+      AT,
+    )
+    const authorized = grantTrust(third, AT)
+    const changed = updateCapabilities(
+      authorized,
+      [{ id: 'write', name: 'write', description: '', risk: 'high' }],
+      AT,
+    )
+    expect(changed.trust).toBe('untrusted')
+    expect(changed.authorizedAt).toBeUndefined()
+    expect(changed.capabilityDigest).not.toBe(authorized.capabilityDigest)
+    const unchanged = updateCapabilities(authorized, original, AT)
+    expect(unchanged.trust).toBe('user-authorized')
+    expect(unchanged.capabilityDigest).toBe(authorized.capabilityDigest)
+  })
 })

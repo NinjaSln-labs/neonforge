@@ -270,6 +270,52 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
     void window.neonforge.config.getKeyStatus?.().then((s) => setKeyStatus(s ?? null))
   }, [])
 
+  // ADR-017：当前接入方模型选择（显式模型优先；空 = 自动 flash 档）
+  const [activeModel, setActiveModel] = useState<{
+    providerId: string
+    providerLabel: string
+    upstream: string
+    shortName: string
+  } | null>(null)
+  const [modelOptions, setModelOptions] = useState<string[]>([])
+  const [modelBusy, setModelBusy] = useState(false)
+  const [modelMsg, setModelMsg] = useState<string | null>(null)
+  const loadModels = () => {
+    setModelBusy(true)
+    void window.neonforge.gateway
+      ?.listModels?.()
+      .then((r) => {
+        if (r?.ok) {
+          setModelOptions(r.models ?? [])
+          setModelMsg(null)
+        } else {
+          setModelMsg(r?.error === 'no-key' ? '未配置 Key，无法拉取模型列表' : '模型列表获取失败')
+        }
+      })
+      .finally(() => setModelBusy(false))
+  }
+  useEffect(() => {
+    void window.neonforge.gateway?.activeModel?.().then((m) => setActiveModel(m ?? null))
+    loadModels()
+  }, [])
+  const changeModel = (modelId: string) => {
+    setModelBusy(true)
+    void window.neonforge.gateway
+      ?.setModel?.(modelId || null)
+      .then((r) => {
+        if (r?.ok) {
+          setActiveModel(r.active ?? null)
+          setModelMsg(null)
+        } else {
+          setModelMsg(r?.error ?? '模型切换失败')
+        }
+      })
+      .finally(() => setModelBusy(false))
+  }
+  const modelChoices = Array.from(
+    new Set([...modelOptions, ...(activeModel?.upstream ? [activeModel.upstream] : [])]),
+  )
+
   // 外网检索（web_search / web_fetch）
   const [webEnabled, setWebEnabled] = useState(false)
   const [webProbeOk, setWebProbeOk] = useState(false)
@@ -418,6 +464,40 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
       </div>
 
       <div className="nf-settings__plugins">
+        <span className="nf-settings__plugins-title">模型</span>
+        <p className="nf-settings__key-status">
+          {activeModel
+            ? `当前：${activeModel.providerLabel} · ${activeModel.upstream}`
+            : '未获取到当前模型'}
+        </p>
+        <div className="nf-settings__row">
+          <select
+            className="nf-settings__select"
+            aria-label="选择模型"
+            value={activeModel?.upstream ?? ''}
+            disabled={modelBusy || !activeModel}
+            onChange={(e) => changeModel(e.target.value)}
+          >
+            <option value="">自动（flash 档）</option>
+            {modelChoices.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="nf-settings__plugin-toggle"
+            onClick={loadModels}
+            disabled={modelBusy}
+          >
+            刷新列表
+          </button>
+        </div>
+        {modelMsg ? <p className="nf-settings__export-msg">{modelMsg}</p> : null}
+      </div>
+
+      <div className="nf-settings__plugins">
         <span className="nf-settings__plugins-title">外网检索（web_search / web_fetch）</span>
         <div className="nf-settings__row">
           <span>
@@ -548,7 +628,11 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
                     ? ` · ${ext.trust === 'builtin' ? '内置信任' : ext.trust === 'user-authorized' ? '已授权' : '未授权'}`
                     : ''}
                   {ext.failureReason ? ` · 失败：${ext.failureReason}` : ''}
-                  {ext.capabilities.length > 0 ? ` · ${ext.capabilities.length} 项能力` : ''}
+                  {ext.capabilities.length > 0
+                    ? ` · 能力：${ext.capabilities
+                        .map((c) => `${c.name || c.id}(${c.risk})`)
+                        .join('、')}`
+                    : ''}
                   <button
                     type="button"
                     className="nf-settings__plugin-toggle"

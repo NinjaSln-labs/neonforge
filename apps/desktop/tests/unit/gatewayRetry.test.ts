@@ -275,7 +275,12 @@ describe('gateway validate 无 models 列表', () => {
     vi.stubGlobal('fetch', fetchMock)
     const gw = new DeepSeekGateway()
     const res = await gw.validateKey('sk-x', 'commandcode', 'deepseek/custom-flash')
-    expect(res).toEqual({ ok: true, modelSource: 'manual' })
+    expect(res).toMatchObject({
+      ok: true,
+      modelSource: 'manual',
+      selectedModel: 'deepseek/custom-flash',
+      models: [],
+    })
     const chatBody = JSON.parse(String(fetchMock.mock.calls[1][1].body))
     expect(chatBody.model).toBe('deepseek/custom-flash')
   })

@@ -4,6 +4,7 @@
 // 外部能力不得绕过 BC-02 ToolRegistry 的授权/沙箱。
 import {
   activateExtension,
+  computeCapabilityDigest,
   createExtension,
   decideInvocation,
   deactivateExtension,
@@ -70,6 +71,7 @@ function failedState(p: Omit<Plugin, 'active'>, reason: string, at: string): Ext
     status: 'failed',
     trust: p.trust ?? (kind === 'builtin' ? 'builtin' : 'untrusted'),
     capabilities: p.capabilities ?? [],
+    capabilityDigest: computeCapabilityDigest(p.capabilities ?? []),
     createdAt: at,
     updatedAt: at,
     failureReason: reason,
@@ -87,13 +89,31 @@ export class PluginRegistry {
     const at = nowIso()
     const existing = this.plugins.get(p.name)
     if (existing && existing.state.status !== 'failed') {
+      const previousDigest = existing.state.capabilityDigest
       const state = updateCapabilities(existing.state, p.capabilities ?? [], at)
+      const digestChanged = state.capabilityDigest !== previousDigest
       const plugin: Plugin = {
         ...existing.plugin,
         ...p,
         active: existing.plugin.active,
       }
       this.plugins.set(p.name, { plugin, state })
+      if (digestChanged) {
+        const oldIds = new Set(existing.state.capabilities.map((c) => c.id))
+        const newIds = new Set(state.capabilities.map((c) => c.id))
+        eventSink({
+          type: 'extension.capabilities_changed',
+          role: 'system',
+          detail: {
+            extensionId: state.id,
+            oldDigest: previousDigest,
+            newDigest: state.capabilityDigest,
+            added: [...newIds].filter((id) => !oldIds.has(id)),
+            removed: [...oldIds].filter((id) => !newIds.has(id)),
+            ...(state.trust === 'untrusted' ? { reauthorize: true } : {}),
+          },
+        })
+      }
       return plugin
     }
 
@@ -234,6 +254,24 @@ export class PluginRegistry {
     const entry = this.plugins.get(name)
     if (!entry) return false
     entry.state = grantTrust(entry.state, nowIso())
+    return true
+  }
+
+  /** 移除扩展（MCP 配置删除后回收）；生命周期失败不阻断移除。 */
+  unregister(name: string): boolean {
+    const entry = this.plugins.get(name)
+    if (!entry) return false
+    try {
+      entry.plugin.deactivate?.()
+    } catch {
+      /* 停用失败不影响注册表回收 */
+    }
+    this.plugins.delete(name)
+    eventSink({
+      type: 'extension.unregistered',
+      role: 'system',
+      detail: { extensionId: entry.state.id, kind: entry.state.kind },
+    })
     return true
   }
 

@@ -108,6 +108,8 @@ export type TimelineEventType =
   | 'extension.activated' // 激活
   | 'extension.deactivated' // 停用
   | 'extension.invocation_denied' // 未注册/未激活/未授权调用
+  | 'extension.capabilities_changed' // 能力集合变化（授权范围重审）
+  | 'extension.unregistered' // 扩展移除（MCP 配置删除等）
   // —— Acceptance（BC-14）——
   | 'acceptance.criteria_derived' // 从方案/DoD 派生验收项
   | 'acceptance.item_passed' // 验收项通过
@@ -301,6 +303,16 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
     domain: 'extension',
     role: 'system',
     detailKeys: ['extensionId', 'capability', 'reason'],
+  },
+  'extension.capabilities_changed': {
+    domain: 'extension',
+    role: 'system',
+    detailKeys: ['extensionId', 'oldDigest', 'newDigest', 'added', 'removed'],
+  },
+  'extension.unregistered': {
+    domain: 'extension',
+    role: 'system',
+    detailKeys: ['extensionId', 'kind'],
   },
   'acceptance.criteria_derived': {
     domain: 'acceptance',

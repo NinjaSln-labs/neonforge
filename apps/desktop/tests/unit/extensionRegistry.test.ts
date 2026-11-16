@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { PluginRegistry, BUILTIN_EXTENSIONS } from '../../src/main/pluginSystem'
+import {
+  PluginRegistry,
+  BUILTIN_EXTENSIONS,
+  setPluginTimelineSink,
+} from '../../src/main/pluginSystem'
 
 describe('PluginRegistry（BC-13 扩展注册/生命周期/信任）', () => {
   it('内置扩展：只读能力可直接调用，高风险能力需授权', () => {
@@ -77,5 +81,68 @@ describe('PluginRegistry（BC-13 扩展注册/生命周期/信任）', () => {
     expect(r.canInvoke('g', 'status')).toMatchObject({ allowed: false, reason: /未激活/ })
     expect(r.setActive('g', true)).toBe(true)
     expect(r.canInvoke('g', 'status').allowed).toBe(true)
+  })
+
+  // ADR-017：重复注册能力集合变化 → 已授权范围重审，新增能力不自动可用
+  it('能力变化：user-authorized 回退 untrusted 并发 capabilities_changed 事件', () => {
+    const events: Array<{ type: string; detail: Record<string, unknown> }> = []
+    setPluginTimelineSink((e) => events.push(e))
+    try {
+      const r = new PluginRegistry()
+      r.register({
+        name: 'mcp:fs',
+        version: '1.0',
+        kind: 'mcp',
+        capabilities: [{ id: 'read_file', name: 'read', description: '', risk: 'high' }],
+      })
+      r.authorize('mcp:fs')
+      expect(r.canInvoke('mcp:fs', 'read_file')).toMatchObject({ allowed: true })
+      r.register({
+        name: 'mcp:fs',
+        version: '1.0',
+        kind: 'mcp',
+        capabilities: [
+          { id: 'read_file', name: 'read', description: '', risk: 'high' },
+          { id: 'write_file', name: 'write', description: '', risk: 'high' },
+        ],
+      })
+      const ext = r.getExtension('mcp:fs')
+      expect(ext?.trust).toBe('untrusted')
+      expect(r.canInvoke('mcp:fs', 'write_file')).toMatchObject({
+        allowed: false,
+        requiresApproval: true,
+      })
+      const event = events.find((e) => e.type === 'extension.capabilities_changed')
+      expect(event?.detail).toMatchObject({ extensionId: 'mcp:fs', added: ['write_file'] })
+      // 同能力集合重注册保留用户授权
+      r.authorize('mcp:fs')
+      r.register({
+        name: 'mcp:fs',
+        version: '1.0',
+        kind: 'mcp',
+        capabilities: [
+          { id: 'read_file', name: 'read', description: '', risk: 'high' },
+          { id: 'write_file', name: 'write', description: '', risk: 'high' },
+        ],
+      })
+      expect(r.getExtension('mcp:fs')?.trust).toBe('user-authorized')
+    } finally {
+      setPluginTimelineSink(() => {})
+    }
+  })
+
+  it('unregister：移除注册表并发 extension.unregistered', () => {
+    const events: Array<{ type: string; detail: Record<string, unknown> }> = []
+    setPluginTimelineSink((e) => events.push(e))
+    try {
+      const r = new PluginRegistry()
+      r.register({ name: 'mcp:gone', version: '1', kind: 'mcp' })
+      expect(r.unregister('mcp:gone')).toBe(true)
+      expect(r.getExtension('mcp:gone')).toBeNull()
+      expect(r.unregister('mcp:gone')).toBe(false)
+      expect(events.some((e) => e.type === 'extension.unregistered')).toBe(true)
+    } finally {
+      setPluginTimelineSink(() => {})
+    }
   })
 })

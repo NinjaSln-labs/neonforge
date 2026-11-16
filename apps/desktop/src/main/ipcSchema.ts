@@ -352,6 +352,20 @@ export const IPC_SCHEMAS = {
     },
     required: ['apiKey'],
   },
+  gatewayListModels: {
+    type: 'object',
+    properties: {
+      providerId: { type: 'string', maxLength: 100 },
+    },
+  },
+  gatewaySetModel: {
+    type: 'object',
+    properties: {
+      providerId: { type: 'string', maxLength: 100 },
+      modelId: { type: 'string', maxLength: 500, nullable: true },
+    },
+    required: ['modelId'],
+  },
   workspacePath: { type: 'string', minLength: 1, maxLength: 4000 },
   // init-project/update-title 的 title 来自用户首条需求（可能较长）——上限与路径同级，避免长需求被误拒
   workspaceTitle: { type: 'string', minLength: 1, maxLength: 4000 },

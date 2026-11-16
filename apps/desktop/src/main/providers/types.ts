@@ -4,6 +4,9 @@
 
 export type ProviderId = 'deepseek' | 'commandcode' | 'opencode-zen' | 'opencode-go'
 
+/** 模型族参数配置（Provider 内可混用模型族） */
+export type ModelProfileId = 'deepseek-v4' | 'generic-openai'
+
 /** 产品档位——上游具体 id 由 /models 列表 + 挑选策略解析 */
 export type ModelTier = 'flash' | 'pro'
 
@@ -32,4 +35,13 @@ export interface ProviderDescriptor {
   docsUrl?: string
   /** 是否支持流式 usage（stream_options.include_usage）；不支持的接入方不发送该字段 */
   streamUsage?: boolean
+  /** 该接入方的默认模型族参数（显式选中的 modelId 仍按模型匹配优先） */
+  profile?: ModelProfileId
+}
+
+/** 显式模型选择：modelId 优先，档位仅用于无显式选择时的解析 */
+export interface ModelSelection {
+  providerId: ProviderId
+  modelId: string | null
+  tier: ModelTier
 }
