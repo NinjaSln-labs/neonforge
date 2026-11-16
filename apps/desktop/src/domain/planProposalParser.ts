@@ -13,7 +13,7 @@
 //   ok=false → 不产生决策点（卡不弹）+ 打诊断事件（parse-error: reason）
 // 纯逻辑无 React 依赖——L1 可测。
 
-import type { PlanProposal } from './conversationState.js'
+import type { Assumption, PlanProposal } from './conversationState.js'
 
 /** 路径形态判定（坑 102 共享——与 agentLoop.parseExecutionPlan 同源；旧函数 S3 移除后此处为唯一实现）：
  * 无空白字符 = 合法路径（相对/绝对/目录）；含空白必须带文件扩展名（中文文件名容错——如「docs/我的 文件.md」）
@@ -70,7 +70,7 @@ export function parsePlanProposal(
 
   // 分节：文件清单（- 行）/ 关键假设 / 验证计划
   const files: Array<{ path: string; reason: string }> = []
-  const assumptions: string[] = []
+  const assumptions: Assumption[] = []
   const verificationPlan: string[] = []
   let section: 'files' | 'assumptions' | 'verification' = 'files'
   let summary = ''
@@ -96,7 +96,7 @@ export function parsePlanProposal(
       const { path, reason } = splitPathReason(item[1].trim())
       if (path && isLikelyPath(path)) files.push({ path, reason })
     } else if (section === 'assumptions') {
-      if (item) assumptions.push(item[1].trim())
+      if (item) assumptions.push({ text: item[1].trim(), source: 'model_inference' })
     } else if (section === 'verification') {
       if (item) verificationPlan.push(item[1].trim())
     }

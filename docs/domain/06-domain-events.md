@@ -187,4 +187,6 @@
 | `completion.evidence_missing` | 完成声明被拒（missing 清单——回填引导补证据）| verifyCompletion 失败 |
 | `gate.denied` | ActionGate deny（高风险动作被机制拦——非 ask）| 动作属性判定 |
 
+> 2026-11-17 落地（ADR-016 / GitHub #16）：`canExecute` 返回结构化拒绝来源 `deniedBy`（session-gate / rejection-memory / action-gate）；`gate.denied` 仅在 `rejection-memory` / `action-gate` 时发送，载荷含 `name/gate/reason/attribute/risk`。`ask` 与 `session-gate` 拒绝不产生该事件（仍由 `tool.blocked` 记录）；两事件分层共存，不改门控顺序。
+
 现有事件保持（task.*_proposed 兼容保留——proposal.* 为结构化替代；card.shown/resolved 与 decision.requested/resolved **两层并存、语义对齐**（card.* = UI 卡生命周期视图事件——保留——消费方/dedupe 依赖；decision.* = 领域决策点事件——2026-08-16 第 13 轮审计 #8 措辞修正：非「并入」非合并——设计 §3.5 注记）；session.pending_set/cleared、tool.blocked 不变）。

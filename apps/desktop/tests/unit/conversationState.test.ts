@@ -45,7 +45,7 @@ import {
 // —— 测试夹具（值对象——§9.2 测试对象 1：构造即校验） ——
 const goal = (statement: string, assumptions: string[] = []): GoalProposal => ({
   statement,
-  assumptions,
+  assumptions: assumptions.map((text) => ({ text, source: 'model_inference' })),
 })
 const plan = (
   files: Array<{ path: string; reason: string }>,
@@ -350,7 +350,10 @@ describe('Inv 3 门控顺序——sessionGate × actionGate 双维正交', () =>
   })
 
   it('canExecute 组合：SessionGate 优先（pending 冻结先于属性判定）；ask 放行给执行层（S6 前现状授权卡机制）', () => {
-    expect(canExecute(setPending(initialState(), 'goal'), { name: 'read' }, false).ok).toBe(false)
+    const frozen = canExecute(setPending(initialState(), 'goal'), { name: 'read' }, false)
+    expect(frozen.ok).toBe(false)
+    // ADR-016：拒绝来源结构化——session-gate 不属于 gate.denied 发送范围
+    expect(frozen.deniedBy).toBe('session-gate')
     expect(canExecute(confirmed(), { name: 'write', path: '/test/a.js' }, true).ok).toBe(true)
     const withPlan = approvalGranted(confirmed(), ['/test/a.js'])
     expect(canExecute(withPlan, { name: 'write', path: '/test/a.js' }, true).ok).toBe(true)
@@ -358,6 +361,7 @@ describe('Inv 3 门控顺序——sessionGate × actionGate 双维正交', () =>
     const r = canExecute(withPlan, { name: 'write', path: '/test/outside.js' }, false)
     expect(r.ok).toBe(false)
     expect(r.reason).toContain('a.js')
+    expect(r.deniedBy).toBe('session-gate')
     // ask（高危 bash）→ 放行——授权卡由执行层机制处理（main needApproval——P2 授权卡场景）
     expect(canExecute(confirmed(), { name: 'bash', command: 'npm install' }, false).ok).toBe(true)
     // deny 策略 → 拦截（S6 机制拦截入口）
@@ -366,6 +370,10 @@ describe('Inv 3 门控顺序——sessionGate × actionGate 双维正交', () =>
     })
     expect(d.ok).toBe(false)
     expect(d.reason).toContain('策略拦截')
+    // ADR-016：actionGate deny 带拒绝来源/动作属性/风险（gate.denied 载荷来源）
+    expect(d.deniedBy).toBe('action-gate')
+    expect(d.attribute).toEqual({ kind: 'hazardous', basis: 'command-chain' })
+    expect(d.risk).toBe('high')
   })
 
   it('actionNeedsApproval：out-of-plan/hazardous 需授权；其余放行', () => {
@@ -786,11 +794,11 @@ describe('值对象——结构契约与快照', () => {
   it('PlanProposal：summary + files（含理由）+ assumptions + verificationPlan（拍板 1 只读呈现的数据基础）', () => {
     const p = plan([{ path: '/test/a.js', reason: '入口' }], {
       summary: '用 Vite 搭',
-      assumptions: ['Node 20'],
+      assumptions: [{ text: 'Node 20', source: 'model_inference' }],
       verificationPlan: ['npm run build'],
     })
     expect(p.files[0].reason).toBe('入口')
-    expect(p.assumptions).toContain('Node 20')
+    expect(p.assumptions.map((a) => a.text)).toContain('Node 20')
     expect(p.verificationPlan).toContain('npm run build')
   })
 
@@ -885,7 +893,7 @@ describe('继承锁定——classifyReadonly/classifyAction（缝隙 4 单一权
     expect(classifyReadonly('bash', 'curl -s http://localhost:6696')).toBe('network-read')
     expect(classifyReadonly('bash', 'curl -s -X HEAD https://example.com')).toBe('network-read')
     expect(classifyReadonly('bash', 'curl -X POST -d x http://localhost')).toBe('hazardous')
-    expect(classifyReadonly('bash', 'wget -q https://example.com')).toBe('network-read')
+    expect(classifyReadonly('bash', 'wget --spider https://example.com')).toBe('network-read')
   })
 
   it('空命令/重定向 → hazardous（fail-closed）', () => {
@@ -1220,6 +1228,10 @@ describe('拒绝记忆（S7 P1-2——C6 同轮同类短封接线）', () => {
     const r = canExecute(s, { name: 'bash', command: 'rm -rf /tmp/x' }, false)
     expect(r.ok).toBe(false)
     expect(r.reason).toContain('拒绝记忆')
+    // ADR-016：拒绝记忆短封分类 + 动作属性（gate.denied 结构化载荷来源；不算 ask）
+    expect(r.deniedBy).toBe('rejection-memory')
+    expect(r.attribute).toEqual({ kind: 'hazardous', basis: 'command-chain' })
+    expect(r.risk).toBe('high')
   })
 
   it('canExecute：不同命令类（拒绝 rm——ls 不受影响）→ 放行（短封只封同类）', () => {
@@ -1388,5 +1400,60 @@ describe('system_clarify 决策点（ADR-010）', () => {
     s = userDecided(s, 'goal', { confirm: false, reason: { kind: 'direction' } }) // streak 2
     s = setPending(s, 'goal')
     expect(detectUnproductiveDialogue(s)).toBe('forced-clarify')
+  })
+})
+
+// ============================================================================
+// 安全修正（P0-02——只读判定的危险参数形态，fail-closed）
+// ============================================================================
+describe('安全修正——危险参数形态判为 hazardous', () => {
+  it('sed 原地写 → hazardous；只读脚本仍 readonly', () => {
+    expect(classifyReadonly('bash', 'sed -i s/a/b/ a.txt')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'sed --in-place s/a/b/ a.txt')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'sed -i.bak s/a/b/ a.txt')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'sed -n 1,5p a.txt')).toBe('readonly')
+  })
+
+  it('find 执行/删除/输出 → hazardous；纯查找仍 readonly', () => {
+    expect(classifyReadonly('bash', 'find . -name "*.tmp" -delete')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'find . -name "*.md" -exec rm {} \\;')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'find . -name "*.md" -fprint out.txt')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'find . -name "*.md"')).toBe('readonly')
+  })
+
+  it('awk system/print 重定向 → hazardous；纯打印仍 readonly', () => {
+    expect(classifyReadonly('bash', 'awk \'BEGIN{system("rm -rf /")}\'')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'awk \'{print > "out"}\' a.txt')).toBe('hazardous')
+    expect(classifyReadonly('bash', "awk '{print $1}' a.txt")).toBe('readonly')
+  })
+
+  it('sort -o / rg --pre → hazardous', () => {
+    expect(classifyReadonly('bash', 'sort -o out.txt a.txt')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'sort --output=out.txt a.txt')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'rg --pre "sh -c" pattern')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'sort a.txt')).toBe('readonly')
+  })
+
+  it('git branch/remote 写形态 → hazardous；只读形态仍放行', () => {
+    expect(classifyReadonly('bash', 'git branch -D feature')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'git branch -m old new')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'git remote add origin https://x')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'git remote set-url origin https://x')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'git branch')).toBe('readonly')
+    expect(classifyReadonly('bash', 'git branch --list')).toBe('readonly')
+    expect(classifyReadonly('bash', 'git remote -v')).toBe('readonly')
+  })
+
+  it('wget 默认下载 → hazardous；spider/stdout → network-read', () => {
+    expect(classifyReadonly('bash', 'wget https://example.com/a.zip')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'wget -q https://example.com')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'wget --spider https://example.com')).toBe('network-read')
+    expect(classifyReadonly('bash', 'wget -qO- https://example.com')).toBe('network-read')
+  })
+
+  it('链中任一段危险参数形态 → 整条 hazardous', () => {
+    expect(classifyReadonly('bash', 'ls && sed -i s/a/b/ a.txt')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'cat a.txt | sort -o out.txt')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'ls && cat a.txt')).toBe('readonly')
   })
 })

@@ -20,9 +20,18 @@ import {
 // 2026-08-06 能力模型（坑 83）：check-env 返回能力视图（平台原生 + 外部扩展 Status——模型按需求选能力）
 import { detectCapabilities, attributeCommandFailure } from './envManager.js'
 import { logTimeline } from './timelineLogger.js'
-import { classifyReadonly, isLocalhostCommand } from '../domain/conversationState.js'
+import {
+  classifyReadonly,
+  isLocalhostCommand,
+  normalizeComparePath,
+} from '../domain/conversationState.js'
 import { configStore } from './configStore.js'
 import { webSearch, webFetch } from './webTools.js'
+import { isKillablePid } from './processGuard.js'
+import { getChangeSetService } from './changeSetService.instance.js'
+import { gitRead } from './gitBridge.js'
+import { getMcpManager } from './mcpManager.instance.js'
+import { pluginRegistry } from './pluginSystem.js'
 
 // ToolRegistry（ticket 10 / A0 §2）：工具注册与执行分发
 // 边界判定：ToolRegistry=目录与分发；ShellAgent=bash 执行；Gateway=工具调用修复（02 已实现）
@@ -30,7 +39,6 @@ import { webSearch, webFetch } from './webTools.js'
 // risk 等级：none=L1 观察（read/search/LSP 无需授权）；low=L3 文件操作（write/edit 写前快照可回滚）；high=L3 命令执行（bash 高危——永远单独确认）
 
 export type ToolRisk = 'none' | 'low' | 'high'
-
 // 2026-08-04 授权架构 v4（竞品多源交叉验证共识——Claude/Codex/Cursor 统一 Tool(specifier) 格式）：
 // 规则引擎 deny > allow > ask；未匹配默认 ask（fail-closed）+ preApproval 只读自动
 export type RuleAction = 'allow' | 'deny' | 'ask'
@@ -40,49 +48,271 @@ export interface PermissionRule {
   specifier: string // 参数前缀（路径/命令）——空 = 该工具全部
 }
 
-// 规则匹配参数：优先取路径类参数（path/filePath/file），命令类取 command/pattern
-function ruleArg(args: Record<string, unknown>): string {
-  return String(args.path ?? args.filePath ?? args.file ?? args.command ?? args.pattern ?? '')
+// 规则匹配参数：按工具的**真实执行字段**取（防 decoy 参数绕过——bash 只认 command，read/write/edit 只认 path）
+// deny 例外：任一候选字段命中即拒绝（宁可多拦，不可漏拦）
+const PATH_RULE_TOOLS = new Set([
+  'read',
+  'write',
+  'edit',
+  'check-capability',
+  'start-server',
+  'check-server',
+  'stop-server',
+  'find_definition',
+  'find_references',
+  'get_imports',
+  'get_call_chain',
+  'get_type_info',
+  'get_diagnostics',
+])
+const GENERIC_RULE_ARG_KEYS = [
+  'command',
+  'path',
+  'filePath',
+  'file',
+  'url',
+  'target',
+  'query',
+  'pattern',
+  'dir',
+  'server',
+  'tool',
+  'action',
+] as const
+
+function canonicalRuleArg(tool: string, args: Record<string, unknown>): string | null {
+  const str = (v: unknown): string => String(v ?? '')
+  switch (tool) {
+    case 'read':
+    case 'write':
+    case 'edit':
+    case 'find_definition':
+    case 'find_references':
+    case 'get_imports':
+    case 'get_call_chain':
+    case 'get_type_info':
+    case 'get_diagnostics':
+      return str(args.path)
+    case 'bash':
+      return str(args.command)
+    case 'open':
+      // openExecutor 的实际优先级：url ?? target ?? path
+      return str(args.url ?? args.target ?? args.path)
+    case 'search':
+    case 'web_search':
+      return str(args.query)
+    case 'web_fetch':
+      return str(args.url)
+    case 'check-capability':
+      return str(args.dir ?? args.rootPath)
+    case 'start-server':
+    case 'check-server':
+    case 'stop-server':
+      return str(args.dir)
+    case 'git':
+      return str(args.action ?? 'status')
+    case 'mcp':
+      return str(args.server)
+    default:
+      return null
+  }
 }
+
+function ruleMatchValues(
+  tool: string,
+  args: Record<string, unknown>,
+  action: RuleAction,
+): string[] {
+  const canonical = canonicalRuleArg(tool, args)
+  if (action !== 'deny') return canonical ? [canonical] : []
+  const values = [canonical ?? '', ...GENERIC_RULE_ARG_KEYS.map((key) => String(args[key] ?? ''))]
+  return [...new Set(values.filter(Boolean))]
+}
+
+/** bash allow：前缀 + 仅当每一段命令都以同一前缀开头且无重定向/命令替换（防 `prefix; curl` 绕过）。 */
+function bashAllowMatches(command: string, specifier: string): boolean {
+  if (!command.startsWith(specifier)) return false
+  // 2>&1 / 2>/dev/null 不是写重定向；先移除再检查其余重定向与命令替换
+  const withoutStderr = command.replace(/2>&1|2>>1|2>>?\/dev\/null/g, '')
+  if (/[<>`]|\$\(/.test(withoutStderr)) return false
+  const protectedCmd = command.replace(/2>&1|2>>1|2>>?\/dev\/null/g, '§§§')
+  const segments = protectedCmd
+    .split(/[;&|\n]/)
+    .map((seg) => seg.trim().replace(/§§§/g, '2>&1'))
+    .filter(Boolean)
+  return segments.length > 0 && segments.every((seg) => seg.startsWith(specifier))
+}
+
 export function matchesRule(
   tool: string,
   args: Record<string, unknown>,
   rule: PermissionRule,
+  rootPath?: string,
 ): boolean {
   if (rule.tool !== tool) return false
   if (!rule.specifier) return true
-  return ruleArg(args).startsWith(rule.specifier)
+  const pathTool = PATH_RULE_TOOLS.has(tool)
+  // 路径类规则做 resolve 归一（防 `src/../../etc/passwd` 借前缀逃逸；相对 specifier 以项目根为基准）
+  const base = rootPath || process.cwd()
+  const specifier = pathTool ? path.resolve(base, rule.specifier) : rule.specifier
+  for (const value of ruleMatchValues(tool, args, rule.action)) {
+    if (pathTool) {
+      const resolved = path.resolve(base, value)
+      if (resolved === specifier || resolved.startsWith(specifier)) return true
+    } else if (tool === 'bash' && rule.action === 'allow') {
+      if (bashAllowMatches(value, rule.specifier)) return true
+    } else if (value.startsWith(rule.specifier)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** 规则裁决：deny > allow > ask（同优先级取列表最前）；无匹配返回 undefined（fail-closed）。 */
+export function selectRule(
+  rules: PermissionRule[],
+  tool: string,
+  args: Record<string, unknown>,
+  rootPath?: string,
+): PermissionRule | undefined {
+  const matched = rules.filter((rule) => matchesRule(tool, args, rule, rootPath))
+  return (
+    matched.find((rule) => rule.action === 'deny') ??
+    matched.find((rule) => rule.action === 'allow') ??
+    matched.find((rule) => rule.action === 'ask')
+  )
 }
 
 // 沙箱判定：项目根内（0-1 创建的项目根 / 打开的项目根）——沙箱内外区分（Codex workspace-write 概念，软沙箱）
+function lexicalSandboxTarget(p: string, rootPath: string): string {
+  const rp = path.resolve(rootPath)
+  // 与 readExecutor resolvePath 语义一致：真绝对路径（多段）直接用；相对/类绝对（单段 /package.json = 项目根下）join rootPath
+  const segments = p.split('/').filter(Boolean)
+  return path.isAbsolute(p) && segments.length > 1
+    ? path.resolve(p)
+    : path.resolve(rp, p.replace(/^\/+/, ''))
+}
+
 export function isInSandbox(p: unknown, rootPath?: string): boolean {
   const pStr = String(p ?? '')
   if (!rootPath || !pStr) return false
   const rp = path.resolve(rootPath)
-  // 与 readExecutor resolvePath 语义一致：真绝对路径（多段）直接用；相对/类绝对（单段 /package.json = 项目根下）join rootPath
-  const segments = pStr.split('/').filter(Boolean)
-  const target =
-    path.isAbsolute(pStr) && segments.length > 1
-      ? path.resolve(pStr)
-      : path.resolve(rp, pStr.replace(/^\/+/, ''))
+  const target = lexicalSandboxTarget(pStr, rootPath)
   return target === rp || target.startsWith(rp + path.sep)
+}
+
+/** realpath 解析（目标/目录可能尚不存在——取最近存在的祖先再拼回后缀）
+ * P0 修复：悬空符号链接（目标尚不存在）也必须解析链接目标，不能退化为词法路径。 */
+async function realpathNearest(target: string, depth = 0): Promise<string> {
+  if (depth > 40) throw new Error('symbolic link loop')
+  let current = path.resolve(target)
+  const suffix: string[] = []
+  for (;;) {
+    try {
+      return path.resolve(await fs.realpath(current), ...suffix.reverse())
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e
+      // ENOENT：可能是路径不存在，也可能是悬空 symlink——lstat 区分
+      try {
+        const stat = await fs.lstat(current)
+        if (stat.isSymbolicLink()) {
+          const linkTarget = await fs.readlink(current)
+          const resolvedLink = path.resolve(path.dirname(current), linkTarget)
+          const realTarget = await realpathNearest(resolvedLink, depth + 1)
+          return path.resolve(realTarget, ...suffix.reverse())
+        }
+      } catch (lstatError) {
+        if ((lstatError as NodeJS.ErrnoException).code !== 'ENOENT') throw lstatError
+      }
+      const parent = path.dirname(current)
+      if (parent === current) return path.resolve(target)
+      suffix.push(path.basename(current))
+      current = parent
+    }
+  }
+}
+
+/** P1-10：沙箱判定必须解析符号链接——根内 symlink 指向根外视为根外 */
+export async function isInSandboxRealpath(p: unknown, rootPath?: string): Promise<boolean> {
+  const pStr = String(p ?? '')
+  if (!rootPath || !pStr) return false
+  const rp = path.resolve(rootPath)
+  const target = lexicalSandboxTarget(pStr, rootPath)
+  const realRoot = await fs.realpath(rp).catch(() => rp)
+  const realTarget = await realpathNearest(target)
+  return realTarget === realRoot || realTarget.startsWith(realRoot + path.sep)
+}
+
+/**
+ * 写边界硬校验：路径字符串在根内、但 realpath 逃逸到根外 → 拒绝（不依赖用户是否已批准）。
+ * 字符串本身就在根外的显式外部路径由逐次授权承担。
+ */
+async function assertNoSymlinkEscape(
+  target: string,
+  rootPath?: string,
+  sessionId?: string,
+): Promise<void> {
+  if (!rootPath || !isInSandbox(target, rootPath)) return
+  if (await isInSandboxRealpath(target, rootPath)) return
+  logTimeline({
+    session: sessionId ?? rootPath,
+    type: 'security.symlink_escape_blocked',
+    role: 'system',
+    detail: { path: target, rootPath },
+  })
+  throw new Error('路径经符号链接指向项目外——已阻止。请改用项目内真实路径')
+}
+
+/**
+ * ADR-015：低危委托的执行边界二次校验（renderer 判定不可越过 main）。
+ * 仅允许 write/edit；必须有 rootPath、realpath 在项目根内、main 持久化的计划清单已批准且包含该绝对路径。
+ * 返回 null = 通过；否则返回拒绝原因。
+ */
+export async function delegationBoundaryViolation(
+  name: string,
+  args: Record<string, unknown>,
+  rootPath?: string,
+): Promise<string | null> {
+  if (name !== 'write' && name !== 'edit')
+    return '委托只适用于写入/修改文件（bash 等高危动作永不委托）'
+  if (!rootPath) return '缺少项目根——委托只适用于项目内文件'
+  let target: string
+  try {
+    target = resolvePath(args.path, { rootPath })
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e)
+  }
+  if (!(await isInSandboxRealpath(target, rootPath))) return '目标不在项目根内'
+  const planned = getPlannedFilesStore().loadPlan()
+  // approve-files（approved=true）是比方案确认更强的显式批准证据（旧存档无 planConfirmed → 兼容）
+  if (!planned.planConfirmed && !planned.approved) return '方案尚未确认（计划清单未生效）'
+  const targetKey = normalizeComparePath(target)
+  const listed = planned.files.some((raw) => {
+    try {
+      return normalizeComparePath(resolvePath(raw, { rootPath })) === targetKey
+    } catch {
+      return normalizeComparePath(raw) === targetKey
+    }
+  })
+  return listed ? null : '目标不在已批准方案清单内'
 }
 
 export interface Tool {
   name: string
-  source: 'core' | 'lsp'
+  source: 'core' | 'lsp' | 'extension'
   requiresApproval: boolean
   risk: ToolRisk
   execute: (
     args: Record<string, unknown>,
-    ctx: { rootPath?: string; sessionId?: string },
+    ctx: { rootPath?: string; sessionId?: string; approved?: boolean },
   ) => Promise<unknown>
   // 2026-08-04 授权架构重构（用户授权疲劳）：执行前裁决——requiresApproval 工具若 preApproval 判定 auto=true → 免授权直接执行
   // （main 进程裁决——bash 只读命令自动；renderer 不判断，防绕过）
+  // P1-10：支持异步（read 需 realpath 解析符号链接后再裁决）
   preApproval?: (
     args: Record<string, unknown>,
     ctx?: { rootPath?: string; sessionId?: string },
-  ) => { auto: boolean; reason?: string }
+  ) => { auto: boolean; reason?: string } | Promise<{ auto: boolean; reason?: string }>
 }
 
 export interface ToolResult {
@@ -110,6 +340,11 @@ class ToolRegistry {
     this.rules = rules
   }
 
+  /** 当前生效规则（permissions:list 返回执行侧快照，避免磁盘与内存不一致）。 */
+  getRules(): PermissionRule[] {
+    return [...this.rules]
+  }
+
   list(): Array<{
     name: string
     source: Tool['source']
@@ -127,16 +362,22 @@ class ToolRegistry {
   async execute(
     name: string,
     args: Record<string, unknown>,
-    opts: { approved?: boolean; rootPath?: string; sessionId?: string } = {},
+    opts: {
+      approved?: boolean
+      approvalSource?: 'user' | 'auto' | 'delegate'
+      rootPath?: string
+      sessionId?: string
+    } = {},
   ): Promise<ToolResult> {
     console.log('[tools] execute', name, 'rootPath=' + (opts.rootPath ?? 'NONE'))
     // 2026-08-07 会话时间线（Session Timeline BC——main 侧工具执行记录兜底：renderer 崩溃也有工具时间线）
     // 2026-08-08 会话归属：sessionId（会话 UUID）优先——工具执行写入对应会话文件
+    // ADR-015：approvalSource 入审计（自动批准来源可回溯）
     logTimeline({
       session: opts.sessionId ?? opts.rootPath ?? undefined,
       type: 'tool.executing',
       role: 'tool',
-      detail: { name, args, approved: opts.approved },
+      detail: { name, args, approved: opts.approved, approvalSource: opts.approvalSource },
     })
     const tool = this.tools.get(name)
     if (!tool) return { ok: false, error: `未知工具：${name}` }
@@ -153,7 +394,7 @@ class ToolRegistry {
       }
     }
     // 2026-08-04 授权架构 v4：规则裁决 deny > allow > ask（fail-closed）——对齐 Claude/Codex/Cursor 共识
-    const rule = this.rules.find((r) => matchesRule(name, args, r))
+    const rule = selectRule(this.rules, name, args, opts.rootPath)
     if (rule?.action === 'deny') {
       return {
         ok: false,
@@ -161,10 +402,60 @@ class ToolRegistry {
         error: `已阻止：${name}（deny 规则 ${rule.specifier || '全部'}）——如需执行请先调整授权规则`,
       }
     }
-    const ruleAllows = rule?.action === 'allow'
+    // 显式 ask 规则：即使调用方自动批准（delegate/信任路径）也必须回到用户 —— 仅 user 来源的 approved 放行
+    // ADR-015：delegate 也属于自动来源，不得借 ask 规则绕过；旧调用无 approvalSource 视为非用户
+    if (rule?.action === 'ask' && !(opts.approved && opts.approvalSource === 'user')) {
+      return {
+        ok: false,
+        needApproval: true,
+        error: `「${name}」按权限规则需要逐次授权——approved=true 后执行`,
+      }
+    }
+    // ADR-015：低危委托执行边界二次校验——清单外/根外/非文件动作不执行（回授权卡）
+    if (opts.approvalSource === 'delegate') {
+      let violation: string | null
+      try {
+        violation = await delegationBoundaryViolation(name, args, opts.rootPath)
+      } catch (e) {
+        // realpath 异常（ENOTDIR/EACCES/ELOOP）不得穿透 IPC——否则 renderer 工具卡永久 pending
+        violation = `路径无法校验：${e instanceof Error ? e.message : String(e)}`
+      }
+      if (violation) {
+        logTimeline({
+          session: opts.sessionId ?? opts.rootPath ?? undefined,
+          type: 'security.trust_delegation_denied',
+          role: 'system',
+          detail: { name, path: String(args.path ?? ''), reason: violation },
+        })
+        return {
+          ok: false,
+          needApproval: true,
+          error: `低危委托越界：${violation}——请逐次授权后执行`,
+        }
+      }
+    }
+    let ruleAllows = rule?.action === 'allow'
+    // read allow 不越过项目根（含 symlink realpath 逃逸）：根外读取仍需逐次授权；显式根外 specifier 除外
+    if (ruleAllows && name === 'read') {
+      const inside = await isInSandboxRealpath(args.path, opts.rootPath)
+      const specifier = String(rule?.specifier ?? '')
+      const specifierOutsideRoot =
+        !!opts.rootPath && !!specifier && !isInSandbox(specifier, opts.rootPath)
+      if (!inside && !specifierOutsideRoot) ruleAllows = false
+    }
     if (!ruleAllows && tool.requiresApproval && !opts.approved) {
       // 2026-08-04 授权架构重构：preApproval 裁决（如 bash 只读命令自动执行）——原一律 need-approval（授权疲劳根因：ls/cat 也弹卡）
-      const pre = tool.preApproval?.(args, opts)
+      // 显式 ask 规则优先于 preApproval（用户要求「此类调用每次都问」不能被只读自动放行绕过）
+      let pre: { auto: boolean; reason?: string } | undefined
+      try {
+        if (rule?.action !== 'ask') pre = await tool.preApproval?.(args, opts)
+      } catch (e) {
+        // P1 修复：realpath 异常（ENOTDIR/EACCES/ELOOP）不能穿透 IPC（否则工具卡永久 pending）
+        return {
+          ok: false,
+          error: `预检失败：${e instanceof Error ? e.message : String(e)}`,
+        }
+      }
       if (!pre?.auto) {
         // 2026-08-07 T2（regex-todo）：needApproval 结构化标记——renderer 读字段判定授权卡（不再 includes('授权') 文本匹配）
         return {
@@ -175,7 +466,11 @@ class ToolRegistry {
       }
     }
     try {
-      const data = await tool.execute(args, { rootPath: opts.rootPath, sessionId: opts.sessionId })
+      const data = await tool.execute(args, {
+        rootPath: opts.rootPath,
+        sessionId: opts.sessionId,
+        approved: opts.approved,
+      })
       // ADR-011：内层 {ok:false} 透传为外层失败（原恒 ok:true 吞掉工具命题失败）
       if (data !== null && typeof data === 'object' && (data as { ok?: unknown }).ok === false) {
         const err = (data as { error?: unknown }).error
@@ -222,6 +517,10 @@ function readExecutor(args: Record<string, unknown>, ctx: { rootPath?: string })
       // 2026-08-06 用户反馈「读取工具先读不存在（盲读）——任何时候都应该先确认有没有文件」：文件不存在时列出父目录内容——
       // 模型知道目录里有什么（不再盲读试探浪费轮次）；0-1 空目录 read package.json（未创建）→ 提示目录内容 + 引导
       if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
+        // P0-01：目录提示只在项目根内——根外不列目录内容（读取边界与信息泄漏面同源）
+        if (!isInSandbox(filePath, ctx.rootPath)) {
+          return `找不到文件：${filePath}——项目外路径不列出目录内容`
+        }
         try {
           const entries = await fs.readdir(path.dirname(filePath))
           return `找不到文件：${filePath}——这个目录里有：${entries.slice(0, 20).join('、') || '（空目录——项目还没创建文件，先确认要读什么再读，或用 bash ls 看完整列表）'}`
@@ -233,23 +532,51 @@ function readExecutor(args: Record<string, unknown>, ctx: { rootPath?: string })
     })
 }
 
+// BC-10：记录真实文件变更（失败不阻断工具执行）
+function recordChange(
+  ctx: { rootPath?: string; sessionId?: string },
+  filePath: string,
+  preWrite?: { content: string | null },
+): void {
+  try {
+    getChangeSetService().recordMutation(
+      ctx.sessionId ?? ctx.rootPath ?? 'default',
+      filePath,
+      preWrite,
+    )
+  } catch {
+    /* 变更集记录失败不影响写入本身 */
+  }
+}
+
 async function writeExecutor(
   args: Record<string, unknown>,
-  ctx: { rootPath?: string },
+  ctx: { rootPath?: string; sessionId?: string },
 ): Promise<unknown> {
   const filePath = resolvePath(args.path, ctx)
+  await assertNoSymlinkEscape(filePath, ctx.rootPath, ctx.sessionId)
   await fs.mkdir(path.dirname(filePath), { recursive: true })
+  // 写前捕获原内容（快照失败也不能把已存在文件误判为新建）；非 ENOENT 读取失败直接中止
+  let preWrite: { content: string | null }
+  try {
+    preWrite = { content: await fs.readFile(filePath, 'utf-8') }
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e
+    preWrite = { content: null }
+  }
   // 先备份后写（基线 §11）：已存在文件写前快照 .nf-bak（新文件无旧内容——回滚语义为无快照）
   takeSnapshot(filePath)
   await fs.writeFile(filePath, String(args.content ?? ''), 'utf-8')
+  recordChange(ctx, filePath, preWrite)
   return { file: filePath, bytes: String(args.content ?? '').length, snapshot: true }
 }
 
 async function editExecutor(
   args: Record<string, unknown>,
-  ctx: { rootPath?: string },
+  ctx: { rootPath?: string; sessionId?: string },
 ): Promise<unknown> {
   const filePath = resolvePath(args.path, ctx)
+  await assertNoSymlinkEscape(filePath, ctx.rootPath, ctx.sessionId)
   const oldText = String(args.old ?? '')
   const newText = String(args.new ?? '')
   const content = await fs.readFile(filePath, 'utf-8')
@@ -257,6 +584,7 @@ async function editExecutor(
   // 先备份后写：替换前快照（回滚恢复原样）
   takeSnapshot(filePath)
   await fs.writeFile(filePath, content.replace(oldText, newText), 'utf-8')
+  recordChange(ctx, filePath, { content })
   return { file: filePath, snapshot: true }
 }
 
@@ -277,6 +605,7 @@ function subprocFile(): string {
   return `${process.env.HOME ?? ''}/Library/Application Support/neonforge-desktop/neonforge-subprocs.jsonl`
 }
 function recordPid(pid: number): void {
+  if (!isKillablePid(pid)) return // P0-04：无效 pid 不记录（清理时同样跳过）
   try {
     appendFileSync(subprocFile(), `${pid}\n`)
   } catch {
@@ -286,6 +615,7 @@ function recordPid(pid: number): void {
 
 // 递归杀进程树（进程组 + 后代）——nohup 后台进程 setsid 脱离进程组，仅杀组不够
 function killTree(pid: number): void {
+  if (!isKillablePid(pid)) return // P0-04：pid<=0 会变成 kill(0)/kill(-0)——向当前进程组发信号
   try {
     const kids = execSync(`pgrep -P ${pid}`)
       .toString()
@@ -309,13 +639,13 @@ function killTree(pid: number): void {
 }
 // 清 NeonForge 自己起的全部子进程（含异常退出残留——读 PID 文件；只杀自己记录的，不碰用户进程）
 export function killAllSubprocesses(): void {
-  for (const p of subprocs) killTree(p.pid ?? 0)
+  for (const p of subprocs) if (isKillablePid(p.pid)) killTree(p.pid)
   subprocs.clear()
   activeProc = null
   try {
     const file = subprocFile()
     const pids = readFileSync(file, 'utf8').split('\n').filter(Boolean).map(Number)
-    for (const pid of pids) killTree(pid)
+    for (const pid of pids) if (isKillablePid(pid)) killTree(pid)
     writeFileSync(file, '')
   } catch {
     /* 无记录文件 */
@@ -560,13 +890,17 @@ export function syncPlanApprovedFromStore(): void {
 // 注册 4 核心工具 + search（Layer2 CodeRAG——2026-08-02 接入模型；6 LSP 随 12 ContextEngine 注册）
 export function initTools(): void {
   // risk（ticket 14）：none=L1 观察无需授权；low=L3 文件操作（写前快照可回滚）；high=L3 命令执行（高危单独确认）
-  // 2026-08-04 v4：read 一律自动（读是低风险——Cursor/Codex 共识「读文件默认不需批准」）；沙箱内外区分核心在 write/edit（沙箱外永不信任）
+  // P0-01：读取边界——项目根内自动（preApproval），根外/无 rootPath 必须用户逐次授权。
+  // risk 仍为 none（读取本身是观察动作；授权边界是上下文相关的，由 preApproval 判定）。
   toolRegistry.register({
     name: 'read',
     source: 'core',
-    requiresApproval: false,
+    requiresApproval: true,
     risk: 'none',
     execute: readExecutor,
+    preApproval: async (args, opts) => ({
+      auto: await isInSandboxRealpath(args.path, opts?.rootPath),
+    }),
   })
   toolRegistry.register({
     name: 'write',
@@ -727,6 +1061,63 @@ export function initTools(): void {
       const dir = String(args.dir ?? '')
       if (!dir) return { ok: false, error: 'stop-server: 缺少 dir（项目目录绝对路径）' }
       return stopServer(dir)
+    },
+  })
+  // BC-13 Git 只读桥（status/log/diff/branches）——固定 argv；写操作不在工具面（走 bash 授权）
+  toolRegistry.register({
+    name: 'git',
+    source: 'extension',
+    requiresApproval: false,
+    risk: 'none',
+    execute: async (args, ctx) => {
+      const action = String(args.action ?? 'status')
+      if (!ctx?.rootPath) return { ok: false, error: 'git: 缺少项目 rootPath' }
+      const decision = pluginRegistry.canInvoke('git', action)
+      if (!decision.allowed) return { ok: false, error: decision.reason }
+      try {
+        return {
+          ok: true,
+          data: await gitRead(action, ctx.rootPath, {
+            path: args.path,
+            limit: args.limit,
+          }),
+        }
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : String(e) }
+      }
+    },
+  })
+  // BC-13 MCP 外部工具——high 风险：每次调用必须经 BC-02 授权卡；第三方扩展首次授权后记录信任
+  toolRegistry.register({
+    name: 'mcp',
+    source: 'extension',
+    requiresApproval: true,
+    risk: 'high',
+    execute: async (args, ctx) => {
+      const action = String(args.action ?? 'call')
+      if (action === 'list') {
+        const result = await getMcpManager().refresh()
+        return { ok: true, data: result }
+      }
+      if (action !== 'call') {
+        return { ok: false, error: `mcp: 未知 action（list/call）：${action}` }
+      }
+      const server = String(args.server ?? '').trim()
+      const tool = String(args.tool ?? '').trim()
+      if (!server || !tool) return { ok: false, error: 'mcp: 缺少 server/tool' }
+      const extName = `mcp:${server}`
+      let decision = pluginRegistry.canInvoke(extName, tool)
+      if (!decision.allowed) {
+        // 用户在授权卡上批准（approved=true）= 首次调用授权——记录信任后重判
+        if (decision.requiresApproval && ctx?.approved) {
+          pluginRegistry.authorize(extName)
+          decision = pluginRegistry.canInvoke(extName, tool)
+        }
+        if (!decision.allowed) return { ok: false, error: decision.reason }
+      }
+      const toolArgs =
+        args.args && typeof args.args === 'object' ? (args.args as Record<string, unknown>) : {}
+      return getMcpManager().callTool(server, tool, toolArgs)
     },
   })
 }

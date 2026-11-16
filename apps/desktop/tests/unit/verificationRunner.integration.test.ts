@@ -149,4 +149,13 @@ describe('A-021 deriveDiffs 路径形态对账', () => {
     expect(matchesPlannedPath('style.css', produced)).toBe(false)
     expect(matchesPlannedPath('', produced)).toBe(false)
   })
+  it('P1-08：路径规范化（./、反斜杠、尾斜杠）与裸文件名歧义 fail-closed', () => {
+    const produced = new Set(['/Users/sin/x/task/index.html'])
+    expect(matchesPlannedPath('./index.html', produced)).toBe(true)
+    expect(matchesPlannedPath('index.html/', produced)).toBe(true)
+    expect(matchesPlannedPath('task\\index.html', produced)).toBe(true)
+    const ambiguous = new Set(['/a/index.html', '/b/index.html'])
+    expect(matchesPlannedPath('index.html', ambiguous)).toBe(false)
+    expect(matchesPlannedPath('/a/index.html', ambiguous)).toBe(true)
+  })
 })

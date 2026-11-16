@@ -30,17 +30,17 @@ describe('deriveStateEvents（转换 diff → 领域事件）', () => {
     )
   })
 
-  it('执行/达成确认/拒绝 → task.execution_*/task.achievement_*', () => {
+  it('方案/解决确认/拒绝 → task.plan_*/task.resolution_*（规范名）', () => {
     let s = userConfirmed(initialState(), 'goal')
     const exec = userConfirmed(s, 'plan')
     const t1 = deriveStateEvents(s, exec).map((e) => e.type)
-    expect(t1).toContain('task.execution_confirmed')
+    expect(t1).toContain('task.plan_confirmed')
     s = exec
     const ach = userConfirmed(s, 'resolution')
-    expect(deriveStateEvents(s, ach).map((e) => e.type)).toContain('task.achievement_confirmed')
+    expect(deriveStateEvents(s, ach).map((e) => e.type)).toContain('task.resolution_confirmed')
     expect(
       deriveStateEvents(ach, userRejected(ach, 'resolution', { kind: 'scope' })).map((e) => e.type),
-    ).toContain('task.achievement_rejected')
+    ).toContain('task.resolution_rejected')
   })
 
   it('pending 置位/清除 → session.pending_set/cleared（含 kind）', () => {
@@ -74,13 +74,14 @@ describe('deriveStateEvents（转换 diff → 领域事件）', () => {
     expect(approved2?.detail.files).toEqual(['/test/c.js'])
   })
 
-  it('产出新增 → tool.executed（files 载荷）', () => {
+  it('产出新增 → task.files_produced（files 载荷；不与 tool.executed 重复）', () => {
     const s = userConfirmed(userConfirmed(initialState(), 'goal'), 'plan')
     const next = applyToolResult(s, { name: 'write', ok: true, file: '/test/a.js' })
     const evts = deriveStateEvents(s, next)
     expect(evts).toContainEqual(
-      expect.objectContaining({ type: 'tool.executed', detail: { files: ['/test/a.js'] } }),
+      expect.objectContaining({ type: 'task.files_produced', detail: { files: ['/test/a.js'] } }),
     )
+    expect(evts.some((e) => e.type === 'tool.executed')).toBe(false)
   })
 
   it('无状态变化 → 无事件（幂等）', () => {
@@ -121,11 +122,11 @@ describe('dedupeKey / detectProposed（2026-08-15 补齐）', () => {
       detail: { goalText: '做一个游戏' },
     })
     expect(detectProposed('【执行方案】\n- a.js')).toContainEqual({
-      type: 'task.execution_proposed',
+      type: 'task.plan_proposed',
       detail: expect.objectContaining({}),
     })
     expect(detectProposed('完成【已达成】')).toContainEqual({
-      type: 'task.achievement_proposed',
+      type: 'task.resolution_proposed',
       detail: expect.objectContaining({}),
     })
   })
@@ -211,7 +212,7 @@ describe('proposal.goal 事件（S7——A0 审校 P1-3 补登）', () => {
   it('validateTimelineEvent：目标提议载荷（statement + assumptions）通过校验', () => {
     const warns = validateTimelineEvent('proposal.goal', {
       statement: '做一个待办应用',
-      assumptions: ['使用 React 19'],
+      assumptions: [{ text: '使用 React 19', source: 'model_inference' }],
     })
     expect(warns).toEqual([])
   })
@@ -304,5 +305,75 @@ describe('execution.forced/released（S5——mode/reason 事件语义）', () =
   it('validateTimelineEvent：缺 reason（必选）→ warn（schema 有校验价值）', () => {
     const warns = validateTimelineEvent('execution.forced', { mode: 'require-action' })
     expect(warns.some((w) => w.includes('reason'))).toBe(true)
+  })
+})
+
+// ADR-015：委托越界事件 + tool.executing 带来源审计
+describe('security.trust_delegation_denied / tool.executing（ADR-015）', () => {
+  it('注册表：委托拒绝 = domain security + name/path/reason', () => {
+    const spec = TIMELINE_EVENT_SPECS['security.trust_delegation_denied']
+    expect(spec.domain).toBe('security')
+    expect(spec.role).toBe('system')
+    expect(spec.detailKeys).toEqual(['name', 'path', 'reason'])
+  })
+
+  it('validateTimelineEvent：委托拒绝载荷通过；缺 reason → warn', () => {
+    expect(
+      validateTimelineEvent('security.trust_delegation_denied', {
+        name: 'write',
+        path: '/x/out.txt',
+        reason: '目标不在已批准方案清单内',
+      }),
+    ).toEqual([])
+    expect(
+      validateTimelineEvent('security.trust_delegation_denied', { name: 'write', path: '/x' }).some(
+        (w) => w.includes('reason'),
+      ),
+    ).toBe(true)
+  })
+
+  it('tool.executing：approvalSource 可选载荷（自动/用户/委托可回放）', () => {
+    expect(TIMELINE_EVENT_SPECS['tool.executing'].detailKeys).toEqual([
+      'name',
+      'approved',
+      '?approvalSource',
+    ])
+    expect(
+      validateTimelineEvent('tool.executing', {
+        name: 'edit',
+        approved: true,
+        approvalSource: 'delegate',
+      }),
+    ).toEqual([])
+    expect(validateTimelineEvent('tool.executing', { name: 'edit', approved: false })).toEqual([])
+  })
+})
+
+// ADR-016（GitHub #16）：机制拒绝事件 gate.denied
+describe('gate.denied（ADR-016——机制拒绝结构化）', () => {
+  it('注册表：domain gate + name/gate/reason/attribute/risk', () => {
+    const spec = TIMELINE_EVENT_SPECS['gate.denied']
+    expect(spec.domain).toBe('gate')
+    expect(spec.role).toBe('system')
+    expect(spec.detailKeys).toEqual(['name', 'gate', 'reason', 'attribute', 'risk'])
+  })
+
+  it('validateTimelineEvent：完整载荷通过；缺 attribute/risk → warn', () => {
+    expect(
+      validateTimelineEvent('gate.denied', {
+        name: 'bash',
+        gate: 'rejection-memory',
+        reason: '动作已被你拒绝（拒绝记忆——同轮同类短封）',
+        attribute: { kind: 'hazardous', basis: 'command-chain' },
+        risk: 'high',
+      }),
+    ).toEqual([])
+    const warns = validateTimelineEvent('gate.denied', {
+      name: 'bash',
+      gate: 'rejection-memory',
+      reason: 'x',
+    })
+    expect(warns.some((w) => w.includes('attribute'))).toBe(true)
+    expect(warns.some((w) => w.includes('risk'))).toBe(true)
   })
 })

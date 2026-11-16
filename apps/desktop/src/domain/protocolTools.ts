@@ -14,6 +14,8 @@
 
 import { isLikelyPath, splitPathReason } from './planProposalParser.js'
 import type {
+  Assumption,
+  AssumptionSource,
   ConversationState,
   DecisionContent,
   DecisionKind,
@@ -33,6 +35,8 @@ export interface ProtocolParamSchema {
   description: string
   enum?: string[]
   items?: ProtocolItemSchema
+  /** 数组上限（模型可见约束——运行时校验同源） */
+  maxItems?: number
 }
 
 /** 数组条目节点（type 不得为 'array'——扁平约束的类型层承载） */
@@ -78,8 +82,21 @@ export const PROTOCOL_TOOL_DEFS: readonly ProtocolToolDef[] = [
         },
         assumptions: {
           type: 'array',
-          description: '关键假设（用户从未确认过的细节——必须显式列出）',
-          items: { type: 'string', description: '一条假设' },
+          description: '关键假设（用户从未确认过的细节——必须显式列出；每条标注来源）',
+          items: {
+            type: 'object',
+            description: '一条假设 {text, source?}',
+            properties: {
+              text: { type: 'string', description: '一条假设' },
+              source: {
+                type: 'string',
+                description:
+                  '来源：clarification=用户澄清回答/user_choice=用户点选/model_inference=模型推断',
+                enum: ['model_inference', 'user_choice', 'clarification'],
+              },
+            },
+            required: ['text'],
+          },
         },
       },
       required: ['statement'],
@@ -109,8 +126,21 @@ export const PROTOCOL_TOOL_DEFS: readonly ProtocolToolDef[] = [
         },
         assumptions: {
           type: 'array',
-          description: '方案假设（技术选型/行为细节/文件定位策略——用户审阅点）',
-          items: { type: 'string', description: '一条假设' },
+          description: '方案假设（技术选型/行为细节/文件定位策略——用户审阅点；每条标注来源）',
+          items: {
+            type: 'object',
+            description: '一条假设 {text, source?}',
+            properties: {
+              text: { type: 'string', description: '一条假设' },
+              source: {
+                type: 'string',
+                description:
+                  '来源：clarification=用户澄清回答/user_choice=用户点选/model_inference=模型推断',
+                enum: ['model_inference', 'user_choice', 'clarification'],
+              },
+            },
+            required: ['text'],
+          },
         },
         verification_plan: {
           type: 'array',
@@ -178,6 +208,16 @@ export const PROTOCOL_TOOL_DEFS: readonly ProtocolToolDef[] = [
             required: ['label'],
           },
         },
+        assumptions: {
+          type: 'array',
+          description:
+            '待用户逐条核对的假设（可选，最多 6 条——给了则渲染核对卡：用户逐条「符合/不符合」并可修正）',
+          items: {
+            type: 'string',
+            description: '一条非空待核对假设（用肯定句陈述你打算依赖的理解）',
+          },
+          maxItems: 6,
+        },
       },
       required: ['question', 'type'],
       additionalProperties: false,
@@ -209,6 +249,53 @@ function checkStringArray(args: Record<string, unknown>, key: string, errors: st
   }
 }
 
+const ASSUMPTION_SOURCES: ReadonlySet<string> = new Set([
+  'model_inference',
+  'user_choice',
+  'clarification',
+])
+
+/** 提议假设校验：兼容旧 string[] 与结构化 {text, source?}（ADR-014） */
+function checkAssumptions(v: unknown, errors: string[], key: string): void {
+  if (v === undefined) return
+  if (!Array.isArray(v)) {
+    errors.push(`${key}: 期望数组（字符串或 {text, source?} 条目）`)
+    return
+  }
+  v.forEach((item, i) => {
+    if (typeof item === 'string') {
+      if (!item.trim()) errors.push(`${key}[${i}]: 假设文本不能为空`)
+      return
+    }
+    if (!isPlainObject(item)) {
+      errors.push(`${key}[${i}]: 必须是字符串或对象 {text, source?}`)
+      return
+    }
+    if (typeof item.text !== 'string' || !item.text.trim()) {
+      errors.push(`${key}[${i}].text: 必填非空字符串（一条假设）`)
+    }
+    if (item.source !== undefined) {
+      if (typeof item.source !== 'string' || !ASSUMPTION_SOURCES.has(item.source)) {
+        errors.push(`${key}[${i}].source: 必须是 model_inference/user_choice/clarification 之一`)
+      }
+    }
+  })
+}
+
+/** 提议假设归一化：string → {text, source:'model_inference'}；对象来源缺省 model_inference */
+function normalizeAssumptions(v: unknown): Assumption[] {
+  if (!Array.isArray(v)) return []
+  return v.map((item) => {
+    if (typeof item === 'string') return { text: item, source: 'model_inference' }
+    const raw = item as { text?: unknown; source?: unknown }
+    const source =
+      typeof raw.source === 'string' && ASSUMPTION_SOURCES.has(raw.source)
+        ? (raw.source as AssumptionSource)
+        : 'model_inference'
+    return { text: typeof raw.text === 'string' ? raw.text : '', source }
+  })
+}
+
 /** files[].path 校验（Spike-2b：先 splitPathReason 候选拆分再 isLikelyPath） */
 function checkPlanFilePath(rawPath: unknown, index: number, errors: string[]): void {
   if (typeof rawPath !== 'string' || !rawPath.trim()) {
@@ -235,7 +322,7 @@ export function validateProtocolArgs(tool: string, args: unknown): ProtocolArgsV
     if (typeof args.statement !== 'string' || !args.statement.trim()) {
       errors.push('statement: 必填字符串（一句话准确目标）')
     }
-    checkStringArray(args, 'assumptions', errors)
+    checkAssumptions(args.assumptions, errors, 'assumptions')
   }
 
   if (tool === 'propose_plan') {
@@ -256,7 +343,7 @@ export function validateProtocolArgs(tool: string, args: unknown): ProtocolArgsV
         }
       })
     }
-    checkStringArray(args, 'assumptions', errors)
+    checkAssumptions(args.assumptions, errors, 'assumptions')
     checkStringArray(args, 'verification_plan', errors)
   }
 
@@ -313,6 +400,18 @@ export function validateProtocolArgs(tool: string, args: unknown): ProtocolArgsV
         })
       }
     }
+    if (args.assumptions !== undefined) {
+      if (!Array.isArray(args.assumptions)) {
+        errors.push('assumptions: 可选，但必须为字符串数组（逐条待核对假设）')
+      } else {
+        if (args.assumptions.length > 6) errors.push('assumptions: 最多 6 条（一次核对不宜过多）')
+        args.assumptions.forEach((a, i) => {
+          if (typeof a !== 'string' || !a.trim()) {
+            errors.push(`assumptions[${i}]: 必须是非空字符串（一条待核对假设）`)
+          }
+        })
+      }
+    }
   }
 
   return errors.length === 0 ? { ok: true } : { ok: false, errors }
@@ -336,6 +435,7 @@ export type ProtocolToolCallDecision =
       content: {
         question: string
         options: Array<{ label: string; description: string }>
+        assumptions: string[]
         type: string
       }
     }
@@ -400,7 +500,7 @@ export function decideProtocolToolCall(
       'goal',
       {
         statement: a.statement as string,
-        assumptions: stringArrayOf(a.assumptions),
+        assumptions: normalizeAssumptions(a.assumptions),
       },
       ts,
     )
@@ -420,7 +520,7 @@ export function decideProtocolToolCall(
           path: f.path,
           reason: f.reason,
         })),
-        assumptions: stringArrayOf(a.assumptions),
+        assumptions: normalizeAssumptions(a.assumptions),
         verificationPlan: stringArrayOf(a.verification_plan),
       },
       ts,
@@ -469,6 +569,7 @@ export function decideProtocolToolCall(
           label: o.label,
           description: typeof o.description === 'string' ? o.description : '',
         })),
+        assumptions: Array.isArray(a.assumptions) ? (a.assumptions as string[]) : [],
       },
     }
   }

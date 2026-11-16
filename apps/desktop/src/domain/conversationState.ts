@@ -14,10 +14,19 @@
 // 值对象（设计 §3.2）
 // ============================================================================
 
+/** 假设来源（ADR-014）——确认卡可追溯「用户确认过」与「模型自行假定」 */
+export type AssumptionSource = 'model_inference' | 'user_choice' | 'clarification'
+
+/** 一条提议假设（文本 + 来源） */
+export interface Assumption {
+  text: string
+  source: AssumptionSource
+}
+
 /** 目标提议（模型产出） */
 export interface GoalProposal {
   statement: string // 一句话目标（原【目标确认】文本）
-  assumptions: string[] // 模型的关键假设（用户从未确认过的细节——必须显式呈现）
+  assumptions: Assumption[] // 模型的关键假设（用户从未确认过的细节——必须显式呈现）
 }
 
 /** 方案文件条目 */
@@ -30,7 +39,7 @@ export interface PlanFileEntry {
 export interface PlanProposal {
   summary: string // 一句话方案
   files: Array<{ path: string; reason: string }> // 文件清单（含理由——A0 §5 派生源）
-  assumptions: string[] // 方案假设（技术选型/行为细节——用户审阅点）
+  assumptions: Assumption[] // 方案假设（技术选型/行为细节——用户审阅点）
   verificationPlan: string[] // 验证计划（怎么证明做成了——「已解决」的证据承诺）
 }
 
@@ -124,6 +133,9 @@ export interface ConversationState {
   pendingRepeatCount: number // ADR-010 T1：同 kind 决策点连续 pending_set 次数（换 kind/决策清零）
   unresolvedTextReplies: number // ADR-010 T2：pending 存在期间用户连续文本回复数（决策清零）
 }
+
+/** P2-02：聚合根语义名 Task 的别名（历史文件名为 conversationState——避免新人误读聚合是 Conversation） */
+export type TaskState = ConversationState
 
 export const initialState = (): ConversationState => ({
   goalConfirmed: false,
@@ -405,6 +417,67 @@ const GIT_READONLY_SUBCOMMANDS: ReadonlySet<string> = new Set([
   'remote',
 ])
 
+// P0-02：危险参数形态（参数级判定——只读命令头不等于只读）。
+// 背景：sed/find/awk/sort/rg/git 的写能力在参数里，仅看命令头会把 `sed -i`、`find -delete`
+// 判成只读而免授权（fail-open）。以下命中任一即 hazardous。
+function segmentTokens(seg: string): { head: string; args: string[] } {
+  const tokens = seg.trim().split(/\s+/).filter(Boolean)
+  if (tokens[0] === 'sudo') tokens.shift()
+  return { head: tokens[0] ?? '', args: tokens.slice(1) }
+}
+
+function hasDangerousArgumentShape(seg: string): boolean {
+  const { head, args } = segmentTokens(seg)
+  const joined = args.join(' ')
+  switch (head) {
+    case 'sed': {
+      // -i / --in-place / 组合短标志（-ni）/ BSD 备份后缀（-i.bak）；脚本内 w 写文件命令
+      const inPlace = args.some(
+        (t) => /^--in-place(?:=.*)?$/.test(t) || /^-([a-zA-Z.]*)i([a-zA-Z.]*)$/.test(t),
+      )
+      const writesFile = /(?:^|;)\s*w\s+\S+/.test(joined)
+      return inPlace || writesFile
+    }
+    case 'find':
+      // -exec/-execdir 执行命令；-delete 删除；-fprint/-fprintf/-fls 写文件；-ok/-okdir 执行
+      return args.some((t) => /^(-exec|-execdir|-delete|-fprint|-fprintf|-fls|-ok|-okdir)$/.test(t))
+    case 'awk':
+      // system() 执行命令；print/printf 重定向到文件或管道到命令
+      return /system\s*\(|\bprint(?:f)?\s*(?:>|\|)/.test(joined)
+    case 'sort':
+      return args.some((t) => t === '-o' || /^--output(?:=.*)?$/.test(t))
+    case 'rg':
+      return args.some((t) => /^--pre(?:=.*)?$/.test(t)) // --pre 执行外部命令
+    case 'git': {
+      const sub = args[0] ?? ''
+      if (sub === 'branch') {
+        // 创建/删除/重命名/复制/强制移动引用
+        return args
+          .slice(1)
+          .some((t) =>
+            /^(-d|-D|-m|-M|-c|-C|-f|--delete|--move|--copy|--force|--set-upstream-to)(?:=.*)?$/.test(
+              t,
+            ),
+          )
+      }
+      if (sub === 'remote') {
+        // 仅列出/查询只读；add/remove/rename/set-url/prune/set-head 均为写
+        const rest = args.slice(1).filter((t) => t !== '-v' && t !== '--verbose')
+        if (rest.length === 0) return false
+        return !(
+          rest[0] === 'show' ||
+          rest[0] === 'get-url' ||
+          rest[0] === '-h' ||
+          rest[0] === '--help'
+        )
+      }
+      return false
+    }
+    default:
+      return false
+  }
+}
+
 /** 动作只读判定（升级版——设计 §3.3）：readonly / network-read / hazardous（fail-closed） */
 export function classifyReadonly(name: string, command?: string): ActionKind {
   if (name === 'write' || name === 'edit') return 'hazardous'
@@ -414,14 +487,21 @@ export function classifyReadonly(name: string, command?: string): ActionKind {
   // 网络只读（curl/wget GET/HEAD 无写副作用 → network-read；拍板 3：localhost 自动放行，外网 ask——S6 策略落地在 actionGate）
   const netMatch = c.match(/^(curl|wget)\s+/)
   if (netMatch) {
+    const tool = netMatch[1]
+    if (tool === 'wget') {
+      // P0-02：wget 默认下载落盘 → hazardous；只有 --spider / 输出到 stdout 才是网络只读
+      if (/(?:^|\s)(?:--help|-h|--version|-V)(?:\s|$)/.test(c)) return 'readonly'
+      const stdoutOnly = /(?:^|\s)(?:--spider|-O-|-qO-|--output-document=-)(?:\s|$)/.test(c)
+      return stdoutOnly ? 'network-read' : 'hazardous'
+    }
     const method = c.match(/-X\s+(GET|HEAD)\b|--request\s+(GET|HEAD)\b/)
     // 写副作用标志（S6 复审补全——curl -o/-O/-T/-a/-C/-J 与 wget -O 大小写敏感漏网→localhost 自动放行下成洞）：
     // -o/--output 输出文件；-O/--remote-name/-J 落盘 CWD；-T/--upload-file 上传（写远端）；-a/--append 追加；-C/--continue-at 续传
     // #6 真机 2026-08-30（P2-5）：`-o /dev/null` 例外——健康检查惯用法（不落盘），不计写副作用
     const hasBodyFlag =
-      /-d\b|--data\b|--data-raw\b|-F\b|--form\b|-X\s+(POST|PUT|PATCH|DELETE)\b|-o(?!\s*\/dev\/null\b)|--output(?!\s*\/dev\/null\b)|--remote-name\b|-J\b|-T\b|--upload-file\b|-a\b|--append\b|-C\b|--continue-at\b|-O\b/.test(
+      /-d\b|--data\b|--data-raw\b|-F\b|--form\b|-X\s+(POST|PUT|PATCH|DELETE)\b|-o(?!\s*\/dev\/null\b)|--output(?!\s*\/dev\/null\b)|--output-document\b|--remote-name\b|-J\b|-T\b|--upload-file\b|-a\b|--append\b|-C\b|--continue-at\b|-O\b|-K\b|--config\b|--cookie-jar\b|--trace(?:-ascii)?\b|--hsts\b/.test(
         c,
-      ) // -O 大写（wget -O file——大小写敏感补全）
+      ) // -O 大写（wget -O file——大小写敏感补全）；-K/--config/--cookie-jar/--trace/--hsts 均为写副作用
     if (!hasBodyFlag && (!method || method[1] === 'GET' || method[1] === 'HEAD'))
       return 'network-read'
     return 'hazardous'
@@ -437,6 +517,10 @@ export function classifyReadonly(name: string, command?: string): ActionKind {
   // 链分隔：`2>&1` 中的 `&` 是 stderr 重定向不是链分隔——先保护再分割（原 `[;&|]` 把 2>&1 误拆成 2> 和 1）
   const protectedCmd = c.replace(/2>&1|2>>1|2>>?\/dev\/null/g, '§§§') // 保护 stderr 重定向（§ 非链分隔符）
   const segments = protectedCmd.split(/[;&|]/).map((seg) => seg.trim().replace(/§§§/g, '2>&1'))
+  // P0-02：参数级危险形态——链中任一段命中即 hazardous（如 `ls && sed -i ...`）。
+  // awk 引号内的 `print | "cmd"` 会被链分割误拆，先对整条命令做一次保守判定。
+  if (/\bawk\b.*(?:system\s*\(|\bprint(?:f)?\s*\|)/.test(c)) return 'hazardous'
+  if (segments.some((seg) => hasDangerousArgumentShape(seg))) return 'hazardous'
   if (
     segments.length > 1 &&
     segments.some(
@@ -533,10 +617,34 @@ export function sessionGate(
   return { ok: true, reason: '' }
 }
 
+// P1-08：路径规范化（比较用）——统一分隔符、去 ./ 与前导尾斜杠、折叠重复分隔符
+export function normalizeComparePath(p: unknown): string {
+  const raw = String(p ?? '')
+    .trim()
+    .replace(/\\/g, '/')
+  if (!raw) return ''
+  const absolute = raw.startsWith('/')
+  const segments: string[] = []
+  for (const part of raw.split('/')) {
+    if (!part || part === '.') continue
+    if (part === '..') {
+      if (segments.length > 0 && segments[segments.length - 1] !== '..') segments.pop()
+      else if (!absolute) segments.push('..')
+      continue
+    }
+    segments.push(part)
+  }
+  return (absolute ? '/' : '') + segments.join('/')
+}
+
 // 清单匹配判定（Q5 单源——S3 统一：renderer 引用本函数，消除双实现；相对/绝对/目录尾斜杠兼容）
 export function inPlannedFiles(s: ConversationState, action: ExecAction): boolean {
-  const p = String(action.path ?? '')
-  return [...s.plannedFiles].some((f) => f === p || f.endsWith('/' + p) || p.endsWith('/' + f))
+  const p = normalizeComparePath(action.path)
+  if (!p) return false
+  return [...s.plannedFiles].some((raw) => {
+    const f = normalizeComparePath(raw)
+    return f === p || f.endsWith('/' + p) || p.endsWith('/' + f)
+  })
 }
 
 export interface ActionGatePolicy {
@@ -601,15 +709,33 @@ export function actionGate(
 
 /** 唯一门控入口（不变量 3：SessionGate 优先，通过后 ActionGate）
  * 注意：ask 不在此拒绝——授权卡机制在执行层（main 返回 needApproval——现状授权闭环）；
- * actionGate 的 ask/deny 全量接线在 S6（只读自动/越界 ask/高危 deny 进执行流）。S1 只拦 deny（策略级拦截）。 */
+ * actionGate 的 ask/deny 全量接线在 S6（只读自动/越界 ask/高危 deny 进执行流）。S1 只拦 deny（策略级拦截）。
+ * ADR-016：`deniedBy` 为结构化拒绝来源——`session-gate`（冻结/确认点/清单边界）、
+ * `rejection-memory`（拒绝记忆短封）、`action-gate`（策略 deny）；后两者带动作属性/风险，
+ * 供应用层发送 `gate.denied` 领域事件（ask 不产生该事件）。 */
+export interface ExecuteGateResult {
+  ok: boolean
+  reason: string
+  deniedBy?: 'session-gate' | 'rejection-memory' | 'action-gate'
+  attribute?: ActionAttribute
+  risk?: 'low' | 'medium' | 'high'
+}
+
 export function canExecute(
   s: ConversationState,
   action: ExecAction,
   inPlanned: boolean,
   policy?: ActionGatePolicy,
-): { ok: boolean; reason: string } {
+): ExecuteGateResult {
   const gate = sessionGate(s, action)
-  if (!gate.ok) return gate
+  if (!gate.ok) return { ...gate, deniedBy: 'session-gate' }
+  // 清单为空（无计划）→ 无文件边界（写放行由确认点把关——继承现状语义）
+  const effectiveInPlanned =
+    (action.name === 'write' || action.name === 'edit') && s.plannedFiles.size === 0
+      ? true
+      : inPlanned
+  // 先算动作属性（纯函数）——拒绝记忆/策略 deny 的事件载荷复用同一判定（不重复 classify）
+  const verdict = actionGate(action, effectiveInPlanned, policy)
   // S7（A0 审校 P1-2 接线——§3.4 C6 短封）：拒绝记忆——同任务内被拒绝的同类动作直接 deny
   // （「不要绕过」机制层落地——拒绝的 toolName+命令类匹配；任务边界重置（goal 确认清 deniedApprovals））
   const denied = s.deniedApprovals.some(
@@ -622,15 +748,22 @@ export function canExecute(
           d.subject.length > 0 &&
           String(action.command).startsWith(d.subject.split(/\s+/)[0] ?? ''))),
   )
-  if (denied) return { ok: false, reason: '动作已被你拒绝（拒绝记忆——同轮同类短封）' }
-  // 清单为空（无计划）→ 无文件边界（写放行由确认点把关——继承现状语义）
-  const effectiveInPlanned =
-    (action.name === 'write' || action.name === 'edit') && s.plannedFiles.size === 0
-      ? true
-      : inPlanned
-  const verdict = actionGate(action, effectiveInPlanned, policy)
+  if (denied)
+    return {
+      ok: false,
+      reason: '动作已被你拒绝（拒绝记忆——同轮同类短封）',
+      deniedBy: 'rejection-memory',
+      attribute: verdict.attribute,
+      risk: verdict.risk,
+    }
   if (verdict.verdict === 'deny')
-    return { ok: false, reason: `动作被策略拦截（${verdict.attribute.kind}）` }
+    return {
+      ok: false,
+      reason: `动作被策略拦截（${verdict.attribute.kind}）`,
+      deniedBy: 'action-gate',
+      attribute: verdict.attribute,
+      risk: verdict.risk,
+    }
   return { ok: true, reason: '' }
 }
 
@@ -678,10 +811,12 @@ export function deriveDecisionPoint(
 
 // —— 完成对账（不变量 4：无证据不进入对账——verifyCompletion 纯逻辑部分 + V1a/V1b 系统核验 S2 扩展） ——
 
-/** 验证命令是否系统可代跑（只读——V1a 核验范围；network-read 同为可代跑核验） */
-function isSystemVerifiable(command: string): boolean {
+/** 验证命令是否系统可代跑：只读命令；网络只读仅限 localhost（P0-05——外网证据不自动代跑）。
+ * 单源导出，main 侧 verification.ts 直接复用（避免两份判定漂移）。 */
+export function isSystemVerifiable(command: string): boolean {
   const kind = classifyReadonly('bash', command)
-  return kind === 'readonly' || kind === 'network-read'
+  if (kind === 'readonly') return true
+  return kind === 'network-read' && isLocalhostCommand(command)
 }
 
 /** 证据可核验性（不变量 4 单源——completionEvidenceComplete 与 verifyCompletion.ok 共用）：
@@ -782,19 +917,29 @@ export function verifyCompletion(
  * 修正：精确匹配外加路径末段边界匹配（'/…/index.html' 以 '/index.html' 结尾 = 同一文件）。 */
 export function deriveDiffs(planned: Set<string>, produced: Set<string>): Array<{ path: string }> {
   return [...produced]
-    .filter((p) => [...planned].some((q) => q === p || p.endsWith('/' + q)))
+    .filter((raw) => {
+      const p = normalizeComparePath(raw)
+      return [...planned].some((qRaw) => {
+        const q = normalizeComparePath(qRaw)
+        return q !== '' && (q === p || p.endsWith('/' + q))
+      })
+    })
     .map((path) => ({ path }))
 }
 
 /** A-021：planned 清单项 q 是否已被 produced 产出覆盖——精确相等或 produced 末段边界匹配
- *（q 相对 'index.html'，produced '/…/index.html' → 同一文件；q 需非空——trustPath 空 fallback 不算已产出） */
+ *（q 相对 'index.html'，produced '/…/index.html' → 同一文件；q 需非空——trustPath 空 fallback 不算已产出）
+ * P1-08：比较前规范化路径（./、反斜杠、尾斜杠）；裸文件名（无目录）在多个候选时视为歧义 → 不通过（fail-closed） */
 export function matchesPlannedPath(q: string, produced: ReadonlySet<string>): boolean {
-  if (!q) return false
-  if (produced.has(q)) return true
-  for (const p of produced) {
-    if (p.endsWith('/' + q)) return true
-  }
-  return false
+  const nq = normalizeComparePath(q)
+  if (!nq) return false
+  const matches = [...produced].filter((pRaw) => {
+    const p = normalizeComparePath(pRaw)
+    return p === nq || p.endsWith('/' + nq)
+  })
+  if (matches.length === 0) return false
+  if (!nq.includes('/') && matches.length > 1) return false
+  return true
 }
 
 // —— 证据不足回填引导（S4——§6 S4 + §3.3：完成声明被拒 → 引导文本注入模型重新输出带证据声明） ——

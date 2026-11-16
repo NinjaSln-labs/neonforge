@@ -3,12 +3,14 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync, appendFileSync } from 'node:fs'
 import { registerIpc } from './ipc.js'
+import { getMcpManager } from './mcpManager.instance.js'
 import { killAllSubprocesses } from './tools.js'
 // 2026-08-06 设计层升级（服务生命周期独立）：服务进程退出清理（与 bash 子进程同路径）
 import { stopAllServices } from './serviceManager.js'
 import { TEST_HOOKS } from './testHooks.js'
 import { configStore } from './configStore.js'
-import { setTimelineUserData } from './timelineLogger.js'
+import { setTimelineUserData, drainTimelineDlq, drainTimelineOutbox } from './timelineLogger.js'
+import { drainStateTransactions } from './stateTransaction.instance.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -39,6 +41,35 @@ const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
   app.quit()
 } else {
+  // P1-02：重放必须在拿到单实例锁之后——第二个实例不得改写/删除共享日志文件
+  // ① 跨存储事务 WAL：先补状态写入与领域事件（事件进入 timeline outbox）
+  try {
+    const result = drainStateTransactions()
+    if (result.error) {
+      console.error('[state-tx] 启动重放未完成', result.error, 'remaining=' + result.remaining)
+    }
+  } catch (e) {
+    console.error('[state-tx] 启动重放失败', e)
+  }
+  // ② 旧 DLQ（轻量 Outbox 之前的失败事件）
+  try {
+    drainTimelineDlq()
+  } catch (e) {
+    console.error('[timeline] DLQ 启动重放失败', e)
+  }
+  // ③ timeline outbox 最后重放（吸收 ①② 新入队事件）
+  try {
+    const result = drainTimelineOutbox()
+    if (result.error) {
+      console.error(
+        '[timeline] Outbox 启动重放未完成',
+        result.error,
+        'remaining=' + result.remaining,
+      )
+    }
+  } catch (e) {
+    console.error('[timeline] Outbox 启动重放失败', e)
+  }
   app.on('second-instance', () => {
     const win = BrowserWindow.getAllWindows()[0]
     if (win) {
@@ -113,6 +144,7 @@ if (!gotTheLock) {
     // 2026-08-05 用户反馈 1：关窗也清理子进程（单窗口应用——关窗即退出语义；macOS 不 quit 但清理残留）
     killAllSubprocesses()
     stopAllServices() // 2026-08-06 服务生命周期独立：关窗清理服务进程
+    getMcpManager().closeAll() // BC-13：MCP 外部进程随应用关闭清理
     if (process.platform !== 'darwin') app.quit()
   })
 
@@ -121,12 +153,14 @@ if (!gotTheLock) {
   app.on('before-quit', () => {
     killAllSubprocesses()
     stopAllServices() // 2026-08-06 服务生命周期独立
+    getMcpManager().closeAll() // BC-13：MCP 外部进程随应用关闭清理
   })
 
   // 2026-08-05：外部终止（SIGTERM——playwright close/系统关闭）不走 before-quit——兜底清理
   process.on('SIGTERM', () => {
     killAllSubprocesses()
     stopAllServices() // 2026-08-06 服务生命周期独立
+    getMcpManager().closeAll()
     process.exit(0)
   })
 }

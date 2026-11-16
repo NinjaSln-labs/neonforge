@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { toolRisk, toolLevel, buildAuthHint, canMergeApprove } from '../../src/renderer/authModel'
+import {
+  toolRisk,
+  toolLevel,
+  buildAuthHint,
+  canMergeApprove,
+  shouldAutoApproveTool,
+  autoApprovalSource,
+  isInPlan,
+} from '../../src/renderer/authModel'
 
 // ticket 14 信任阶梯 · 授权执行模型（renderer 纯函数）：
 // L1 观察无需授权 / L3 操作逐项授权（low 文件操作 + high 命令执行）/ 疲劳防护合并判定
@@ -58,5 +66,79 @@ describe('authModel 授权执行模型（ticket 14）', () => {
     expect(canMergeApprove([{ name: 'bash' }])).toBe(false)
     expect(canMergeApprove([{ name: 'write' }])).toBe(false)
     expect(canMergeApprove([])).toBe(false)
+  })
+})
+
+// ADR-015：三档信任模式自动授权判定（renderer 单源——strict/standard/delegated）
+describe('authModel 信任模式判定（ADR-015）', () => {
+  const base = {
+    path: '/test/app.ts',
+    planConfirmed: true,
+    plannedFiles: ['/test/app.ts'],
+    trusted: false,
+  }
+
+  it('isInPlan：只做绝对路径精确比较（相对清单必须由调用方绝对化——禁止末段匹配绕过）', () => {
+    expect(isInPlan('/test/src/a.ts', ['/test/src/a.ts'])).toBe(true)
+    expect(isInPlan('/test/src/./a.ts', ['/test/src/a.ts'])).toBe(true)
+    expect(isInPlan('/test/b.ts', ['/test/a.ts'])).toBe(false)
+    // 旧实现的 p.endsWith('/'+f) 漏洞：绝对 /tmp/game.js 会被相对 game.js 误判在计划内
+    expect(isInPlan('/tmp/game.js', ['game.js'])).toBe(false)
+    expect(isInPlan('/test/src/a.ts', ['src/a.ts'])).toBe(false)
+  })
+
+  it('trusted（允许并记住/单次批准文件）只对 write/edit 恒自动——bash/MCP 不得借路径搭车', () => {
+    for (const mode of ['strict', 'standard', 'delegated'] as const) {
+      expect(shouldAutoApproveTool({ ...base, mode, name: 'write', trusted: true })).toBe(true)
+      expect(shouldAutoApproveTool({ ...base, mode, name: 'edit', trusted: true })).toBe(true)
+      expect(shouldAutoApproveTool({ ...base, mode, name: 'bash', trusted: true })).toBe(false)
+      expect(shouldAutoApproveTool({ ...base, mode, name: 'mcp__danger', trusted: true })).toBe(
+        false,
+      )
+    }
+  })
+
+  it('strict：方案确认不自动放行任何文件操作（write/edit 都需授权）', () => {
+    expect(shouldAutoApproveTool({ ...base, mode: 'strict', name: 'write' })).toBe(false)
+    expect(shouldAutoApproveTool({ ...base, mode: 'strict', name: 'edit' })).toBe(false)
+  })
+
+  it('standard：清单内 write 自动；edit 仍需授权；清单外/未确认 plan 不自动', () => {
+    expect(shouldAutoApproveTool({ ...base, mode: 'standard', name: 'write' })).toBe(true)
+    expect(shouldAutoApproveTool({ ...base, mode: 'standard', name: 'edit' })).toBe(false)
+    expect(
+      shouldAutoApproveTool({ ...base, mode: 'standard', name: 'write', path: '/test/other.ts' }),
+    ).toBe(false)
+    expect(
+      shouldAutoApproveTool({ ...base, mode: 'standard', name: 'write', planConfirmed: false }),
+    ).toBe(false)
+  })
+
+  it('delegated：清单内 write/edit 自动；清单外/未确认/bash 永不自动', () => {
+    expect(shouldAutoApproveTool({ ...base, mode: 'delegated', name: 'write' })).toBe(true)
+    expect(shouldAutoApproveTool({ ...base, mode: 'delegated', name: 'edit' })).toBe(true)
+    expect(
+      shouldAutoApproveTool({ ...base, mode: 'delegated', name: 'edit', path: '/test/other.ts' }),
+    ).toBe(false)
+    expect(
+      shouldAutoApproveTool({ ...base, mode: 'delegated', name: 'edit', planConfirmed: false }),
+    ).toBe(false)
+    expect(shouldAutoApproveTool({ ...base, mode: 'delegated', name: 'bash', path: '' })).toBe(
+      false,
+    )
+  })
+
+  it('autoApprovalSource：任务信任/标准 write = auto；delegated write/edit = delegate；拒绝 = null', () => {
+    expect(autoApprovalSource({ ...base, mode: 'standard', name: 'write' })).toBe('auto')
+    // 委托模式下 write/edit 都走 main 执行边界二次校验（审计来源 delegate）
+    expect(autoApprovalSource({ ...base, mode: 'delegated', name: 'write' })).toBe('delegate')
+    expect(autoApprovalSource({ ...base, mode: 'delegated', name: 'edit' })).toBe('delegate')
+    expect(autoApprovalSource({ ...base, mode: 'strict', name: 'write' })).toBeNull()
+    expect(
+      autoApprovalSource({ ...base, mode: 'delegated', name: 'write', path: '/test/other.ts' }),
+    ).toBeNull()
+    expect(autoApprovalSource({ ...base, mode: 'delegated', name: 'write', trusted: true })).toBe(
+      'auto',
+    )
   })
 })

@@ -6,12 +6,26 @@ interface PlannedFilesPayload {
   approved: boolean
 }
 
+// BC-02 权限规则载荷（main permissionRulesStore；空 specifier = 该工具全部参数）
+interface PermissionRuleView {
+  action: 'allow' | 'deny' | 'ask'
+  tool: string
+  specifier: string
+}
+
 // bridge：gateway + config + workspace（IPC 收敛，renderer 不直接碰 node/electron）
 contextBridge.exposeInMainWorld('neonforge', {
   version: process.env.npm_package_version ?? '0.1.0',
   config: {
     hasKey: () => ipcRenderer.invoke('config:has-key'),
     getKey: () => ipcRenderer.invoke('config:get-key'),
+    getKeyStatus: () =>
+      ipcRenderer.invoke('config:key-status') as Promise<{
+        source: 'env' | 'file' | 'encrypted' | 'plaintext' | 'none'
+        storedAt: string | null
+        plaintextCopy: boolean
+        rotateRecommended: boolean
+      }>,
     getProvider: () => ipcRenderer.invoke('config:get-provider'),
     setKey: (key: string, providerId?: string, modelId?: string | null) =>
       ipcRenderer.invoke('config:set-key', key, providerId, modelId),
@@ -43,6 +57,8 @@ contextBridge.exposeInMainWorld('neonforge', {
       level?: string
       tools?: boolean
       forceTool?: boolean
+      progressMode?: 'auto' | 'require-action' | 'require-advance'
+      sessionId?: string
       messages: Array<{
         role: string
         content: string | null
@@ -70,15 +86,122 @@ contextBridge.exposeInMainWorld('neonforge', {
       return () => ipcRenderer.removeListener('gateway:stream-chunk', listener)
     },
   },
+  usage: {
+    summary: (sessionId?: string) => ipcRenderer.invoke('usage:summary', sessionId),
+    export: () =>
+      ipcRenderer.invoke('usage:export') as Promise<{
+        ok: boolean
+        path?: string
+        error?: string
+      }>,
+  },
+  budget: {
+    get: () =>
+      ipcRenderer.invoke('budget:get') as Promise<{
+        settings: { limitUsd: number | null; pauseOnReach: boolean }
+        summary: {
+          entries: number
+          promptTokens: number
+          completionTokens: number
+          reasoningTokens: number
+          totalTokens: number
+          cost: number
+          unknownCostEntries: number
+          cacheHitRate: number | null
+        }
+        state: { limit: number | null; spent: number; reached: boolean }
+      }>,
+    set: (settings: unknown) =>
+      ipcRenderer.invoke('budget:set', settings) as Promise<{
+        ok: boolean
+        error?: string
+        settings?: { limitUsd: number | null; pauseOnReach: boolean }
+        state?: { limit: number | null; spent: number; reached: boolean }
+      }>,
+  },
+  pricing: {
+    get: () =>
+      ipcRenderer.invoke('pricing:get') as Promise<{
+        version: string
+        models: Record<
+          string,
+          { promptPerMillion: number; completionPerMillion: number; cacheHitPerMillion?: number }
+        >
+      }>,
+    set: (table: unknown) =>
+      ipcRenderer.invoke('pricing:set', table) as Promise<{
+        ok: boolean
+        error?: string
+        table?: {
+          version: string
+          models: Record<string, { promptPerMillion: number; completionPerMillion: number }>
+        }
+      }>,
+  },
+  acceptance: {
+    derive: (
+      sessionId: string,
+      verificationPlan: string[],
+      source?: 'plan-verification' | 'user-dod' | 'manual',
+    ) => ipcRenderer.invoke('acceptance:derive', { sessionId, verificationPlan, source }),
+    list: (sessionId: string) => ipcRenderer.invoke('acceptance:list', sessionId),
+    mark: (
+      sessionId: string,
+      itemId: string,
+      status: 'passed' | 'failed' | 'waived',
+      opts?: { evidenceRef?: string; manualReason?: string; reason?: string },
+    ) => ipcRenderer.invoke('acceptance:mark', { sessionId, itemId, status, ...opts }),
+    waive: (sessionId: string, itemId: string, reason: string) =>
+      ipcRenderer.invoke('acceptance:waive', { sessionId, itemId, reason }),
+    applyEvidence: (sessionId: string, evidenceRefs: string[]) =>
+      ipcRenderer.invoke('acceptance:apply-evidence', { sessionId, evidenceRefs }),
+    evaluate: (sessionId: string) => ipcRenderer.invoke('acceptance:evaluate', sessionId),
+    acceptEmpty: (sessionId: string) => ipcRenderer.invoke('acceptance:accept-empty', sessionId),
+    clear: (sessionId: string) => ipcRenderer.invoke('acceptance:clear', sessionId),
+  },
+  changeset: {
+    list: (sessionId: string) => ipcRenderer.invoke('changeset:list', sessionId),
+    revert: (sessionId: string) =>
+      ipcRenderer.invoke('changeset:revert', sessionId) as Promise<{
+        ok: boolean
+        reverted: string[]
+        conflicted: string[]
+        error?: string
+      }>,
+    clear: (sessionId: string) => ipcRenderer.invoke('changeset:clear', sessionId),
+  },
+  queue: {
+    list: (sessionId: string) => ipcRenderer.invoke('queue:list', sessionId),
+    enqueue: (sessionId: string, title: string) =>
+      ipcRenderer.invoke('queue:enqueue', { sessionId, title }),
+    start: (sessionId: string, entryId: string) =>
+      ipcRenderer.invoke('queue:start', { sessionId, entryId }),
+    block: (sessionId: string, entryId: string, reason: string) =>
+      ipcRenderer.invoke('queue:block', { sessionId, entryId, reason }),
+    resume: (sessionId: string, entryId: string) =>
+      ipcRenderer.invoke('queue:resume', { sessionId, entryId }),
+    pause: (sessionId: string, entryId: string) =>
+      ipcRenderer.invoke('queue:pause', { sessionId, entryId }),
+    complete: (sessionId: string, entryId: string) =>
+      ipcRenderer.invoke('queue:complete', { sessionId, entryId }),
+    fail: (sessionId: string, entryId: string, reason: string) =>
+      ipcRenderer.invoke('queue:fail', { sessionId, entryId, reason }),
+    cancel: (sessionId: string, entryId: string) =>
+      ipcRenderer.invoke('queue:cancel', { sessionId, entryId }),
+    reorder: (sessionId: string, entryId: string, position: number) =>
+      ipcRenderer.invoke('queue:reorder', { sessionId, entryId, position }),
+    clear: (sessionId: string) => ipcRenderer.invoke('queue:clear', sessionId),
+  },
   delivery: {
-    applyDiff: (path: string, diff: string, approved?: boolean) =>
+    applyDiff: (path: string, diff: string, approved?: boolean, sessionId?: string) =>
       ipcRenderer.invoke('delivery:apply-diff', {
         path,
         diff,
         approved: approved ?? false,
+        sessionId,
       }) as Promise<{ ok: boolean; file?: string; error?: string }>,
-    revertDiff: (path: string) =>
-      ipcRenderer.invoke('delivery:revert-diff', { path }) as Promise<{
+    revertDiff: (path: string, sessionId?: string) =>
+      ipcRenderer.invoke('delivery:revert-diff', { path, sessionId }) as Promise<{
         ok: boolean
         error?: string
       }>,
@@ -159,7 +282,7 @@ contextBridge.exposeInMainWorld('neonforge', {
       ipcRenderer.invoke('tools:list') as Promise<
         Array<{
           name: string
-          source: 'core' | 'lsp'
+          source: 'core' | 'lsp' | 'extension'
           requiresApproval: boolean
           risk: 'none' | 'low' | 'high'
         }>
@@ -167,12 +290,18 @@ contextBridge.exposeInMainWorld('neonforge', {
     execute: (
       name: string,
       args: Record<string, unknown>,
-      opts?: { approved?: boolean; rootPath?: string; sessionId?: string },
+      opts?: {
+        approved?: boolean
+        approvalSource?: 'user' | 'auto' | 'delegate'
+        rootPath?: string
+        sessionId?: string
+      },
     ) =>
       ipcRenderer.invoke('tools:execute', {
         name,
         args,
         approved: opts?.approved ?? false,
+        approvalSource: opts?.approvalSource,
         rootPath: opts?.rootPath,
         sessionId: opts?.sessionId,
       }) as Promise<{
@@ -182,8 +311,8 @@ contextBridge.exposeInMainWorld('neonforge', {
         needApproval?: boolean
         policy?: boolean
       }>,
-    revert: (filePath: string) =>
-      ipcRenderer.invoke('tools:revert', { path: filePath }) as Promise<{
+    revert: (filePath: string, sessionId?: string) =>
+      ipcRenderer.invoke('tools:revert', { path: filePath, sessionId }) as Promise<{
         ok: boolean
         error?: string
       }>,
@@ -195,7 +324,32 @@ contextBridge.exposeInMainWorld('neonforge', {
     load: () => ipcRenderer.invoke('planned-files:load') as Promise<PlannedFilesPayload>,
     add: (files: string[]) =>
       ipcRenderer.invoke('planned-files:add', files) as Promise<PlannedFilesPayload>,
+    // ADR-015：方案确认同步（planConfirmed——不改变 approve-files 的 approved 事实）
+    addPlan: (files: string[]) =>
+      ipcRenderer.invoke('planned-files:sync-plan', files) as Promise<
+        PlannedFilesPayload & { planConfirmed: boolean }
+      >,
     reset: () => ipcRenderer.invoke('planned-files:reset') as Promise<PlannedFilesPayload>,
+  },
+  // BC-02 信任模式（ADR-015：三档预设——authority 在 main userData；trustPolicyStore）
+  trust: {
+    get: () => ipcRenderer.invoke('trust:get') as Promise<'strict' | 'standard' | 'delegated'>,
+    set: (mode: 'strict' | 'standard' | 'delegated') =>
+      ipcRenderer.invoke('trust:set', { mode }) as Promise<{
+        ok: boolean
+        mode: 'strict' | 'standard' | 'delegated'
+        error?: string
+      }>,
+  },
+  // BC-02 权限规则（authority 在 main userData；deny > allow > ask）
+  permissions: {
+    list: () => ipcRenderer.invoke('permissions:list') as Promise<PermissionRuleView[]>,
+    set: (rules: PermissionRuleView[]) =>
+      ipcRenderer.invoke('permissions:set', { rules }) as Promise<{
+        ok: boolean
+        rules: PermissionRuleView[]
+        error?: string
+      }>,
   },
   // #6 真机 2026-08-31（复验轮）：方案确认布尔镜像——approve-files 硬序门（main 侧 planConfirmedRef）
   session: {
@@ -222,6 +376,64 @@ contextBridge.exposeInMainWorld('neonforge', {
       >,
     toggle: (name: string, active: boolean) =>
       ipcRenderer.invoke('plugins:toggle', { name, active }) as Promise<boolean>,
+  },
+  extensions: {
+    list: () =>
+      ipcRenderer.invoke('extensions:list') as Promise<
+        Array<{
+          id: string
+          name: string
+          version: string
+          kind: 'builtin' | 'mcp' | 'git'
+          status: 'registered' | 'active' | 'inactive' | 'failed'
+          trust: 'builtin' | 'user-authorized' | 'untrusted'
+          capabilities: Array<{
+            id: string
+            name: string
+            description: string
+            risk: 'none' | 'low' | 'high'
+          }>
+          active: boolean
+          failureReason?: string
+        }>
+      >,
+    toggle: (name: string, active: boolean) =>
+      ipcRenderer.invoke('extensions:toggle', { name, active }),
+    authorize: (name: string) => ipcRenderer.invoke('extensions:authorize', name),
+  },
+  mcp: {
+    config: () =>
+      ipcRenderer.invoke('mcp:config') as Promise<{
+        path: string
+        servers: Array<{ name: string; command: string; args?: string[]; cwd?: string }>
+      }>,
+    save: (servers: unknown) => ipcRenderer.invoke('mcp:save', servers),
+    refresh: () =>
+      ipcRenderer.invoke('mcp:refresh') as Promise<{
+        servers: Array<{
+          name: string
+          ok: boolean
+          tools: Array<{ name: string; description?: string }>
+          error?: string
+        }>
+        configError?: string
+      }>,
+    status: () =>
+      ipcRenderer.invoke('mcp:status') as Promise<
+        Array<{ name: string; ok: boolean; tools: Array<{ name: string }>; error?: string }>
+      >,
+  },
+  git: {
+    read: (
+      action: 'status' | 'log' | 'diff' | 'branches',
+      rootPath?: string,
+      opts?: { path?: string; limit?: number },
+    ) =>
+      ipcRenderer.invoke('git:read', { action, rootPath, ...opts }) as Promise<{
+        ok: boolean
+        data?: unknown
+        error?: string
+      }>,
   },
   preheat: {
     status: () =>

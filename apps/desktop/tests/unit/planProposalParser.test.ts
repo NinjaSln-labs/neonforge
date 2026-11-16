@@ -32,7 +32,10 @@ describe('parsePlanProposal（方案提议解析——S2）', () => {
       { path: 'src/main.ts', reason: '核心逻辑——替换现有实现' },
       { path: 'src/utils.ts', reason: '新增工具函数' },
     ])
-    expect(r.proposal.assumptions).toEqual(['使用 Node 22 的 ESM 语法', '不引入新依赖'])
+    expect(r.proposal.assumptions).toEqual([
+      { text: '使用 Node 22 的 ESM 语法', source: 'model_inference' },
+      { text: '不引入新依赖', source: 'model_inference' },
+    ])
     expect(r.proposal.verificationPlan).toEqual(['npx tsc --noEmit', 'npx vitest run'])
   })
 

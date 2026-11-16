@@ -13,7 +13,7 @@ test('设置面板（打开 + 插件列表 + 快捷键表）', async ({ page }) 
   // 打开设置
   await page.getByRole('button', { name: '设置' }).click()
   await expect(page.locator('.nf-settings')).toBeVisible()
-  await expect(page.locator('.nf-settings')).toContainText('内置插件')
+  await expect(page.locator('.nf-settings')).toContainText('扩展（内置')
   await expect(page.locator('.nf-settings')).toContainText('快捷键')
   await expect(page.locator('.nf-settings')).toHaveScreenshot('settings-open.png')
 })

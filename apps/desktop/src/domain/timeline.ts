@@ -14,6 +14,12 @@ export interface TimelineEvent {
   type: TimelineEventType
   role?: 'user' | 'assistant' | 'system' | 'tool'
   detail: Record<string, unknown>
+  /** P2-07：事件唯一标识（session + 会话内 seq）——消费方去重/幂等 */
+  eventId?: string
+  /** P1-02：轻量 Outbox 投递键——重启重放时按此幂等跳过（普通直写事件可缺省） */
+  outboxId?: string
+  /** P2-07：事件 schema 版本（当前 1；破坏性载荷变更时递增） */
+  version?: number
 }
 
 // === 事件目录（领域事件穷举——新增事件必须在此登记，06 文档同步） ===
@@ -28,12 +34,19 @@ export type TimelineEventType =
   | 'task.goal_proposed' // 模型提议目标（【目标确认】标记）
   | 'task.goal_confirmed' // 用户确认目标
   | 'task.goal_rejected' // 用户重新描述
-  | 'task.execution_proposed' // 模型给出执行方案
-  | 'task.execution_confirmed' // 用户确认执行
-  | 'task.execution_rejected' // 用户修改方案
-  | 'task.achievement_proposed' // 模型汇报达成
-  | 'task.achievement_confirmed' // 用户确认解决
-  | 'task.achievement_rejected' // 用户还要改
+  | 'task.execution_proposed' // @deprecated 旧读窗口（新事件 task.plan_proposed）
+  | 'task.execution_confirmed' // @deprecated 旧读窗口（新事件 task.plan_confirmed）
+  | 'task.execution_rejected' // @deprecated 旧读窗口（新事件 task.plan_rejected）
+  | 'task.achievement_proposed' // @deprecated 旧读窗口（新事件 task.resolution_proposed）
+  | 'task.achievement_confirmed' // @deprecated 旧读窗口（新事件 task.resolution_confirmed）
+  | 'task.achievement_rejected' // @deprecated 旧读窗口（新事件 task.resolution_rejected）
+  | 'task.plan_proposed' // P2-01：方案提议（规范名）
+  | 'task.plan_confirmed' // 用户确认方案
+  | 'task.plan_rejected' // 用户修改方案
+  | 'task.resolution_proposed' // 模型汇报解决（规范名）
+  | 'task.resolution_confirmed' // 用户确认解决
+  | 'task.resolution_rejected' // 用户还要改
+  | 'task.files_produced' // 产出文件增量（与 tool.executed 分离——P2-05 去重）
   // —— Conversation 聚合：会话级单一 PENDING（06 §3.2 核心）——
   | 'session.pending_set' // 卡弹出 → 会话进入 PENDING（载荷：kind）
   | 'session.pending_cleared' // 用户决策 → PENDING 解除
@@ -47,12 +60,14 @@ export type TimelineEventType =
   // —— ToolRegistry：工具（06 §1.3）——
   | 'tool.requested' // 模型请求工具（载荷：name/args）
   | 'tool.blocked' // 工具被拦（载荷：gate——pending/confirm/out-of-plan/policy + reason）
-  | 'tool.executing' // 开始执行（载荷：name/approved）
+  | 'tool.executing' // 开始执行（载荷：name/approved/?approvalSource）
   | 'tool.executed' // 成功（载荷：name/file?）
   | 'tool.failed' // 失败（载荷：name/error）
   | 'tool.approved' // 授权批准
   | 'tool.rejected' // 授权拒绝
   | 'tool.remembered' // 允许并记住（任务信任）
+  // —— 授权安全（ADR-015）——
+  | 'security.trust_delegation_denied' // 低危委托越界被 main 二次校验拒绝（载荷：name/path/reason）
   // —— Capability/Environment（06 §1.4）——
   | 'capability.checked' // 能力检查（载荷：capabilities/missing）
   | 'capability.ledger_updated' // Ledger 回填（载荷：capabilityId/ok——bash 失败归因降级）
@@ -69,6 +84,36 @@ export type TimelineEventType =
   | 'problem.rerun' // closed 复开 → 复跑（新 Task 关联同一 Problem）
   | 'problem.snapshot_updated' // 快照回写（goal/authorized/pending）
   | 'problem.closed' // 确认关闭（终态）
+  // —— 用量与成本（BC-12）——
+  | 'usage.recorded' // Provider 真实 usage 已入账（tokens/cost）
+  | 'usage.budget_threshold_reached' // 周期预算达阈值（默认提醒一次；不硬中断）
+  | 'usage.period_closed' // 周期结算（预留）
+  // —— ChangeSet（BC-10）——
+  | 'changeset.proposed' // 变更集产生（真实变更记录）
+  | 'changeset.reviewed' // 用户审核变更项
+  | 'changeset.applied' // 变更应用成功
+  | 'changeset.reverted' // 变更回滚成功
+  | 'changeset.conflict_detected' // 基线不一致，拒绝覆盖
+  // —— TaskQueue（BC-11）——
+  | 'queue.entry_enqueued' // 任务入队
+  | 'queue.entry_started' // 调度启动
+  | 'queue.entry_blocked' // 等待用户决策/授权
+  | 'queue.entry_resumed' // 阻塞恢复
+  | 'queue.entry_paused' // 暂停
+  | 'queue.entry_completed' // 完成/失败/取消终态（outcome）
+  | 'queue.entry_cancelled'
+  | 'queue.entry_reordered'
+  // —— Extension（BC-13）——
+  | 'extension.registered' // 扩展注册
+  | 'extension.activated' // 激活
+  | 'extension.deactivated' // 停用
+  | 'extension.invocation_denied' // 未注册/未激活/未授权调用
+  // —— Acceptance（BC-14）——
+  | 'acceptance.criteria_derived' // 从方案/DoD 派生验收项
+  | 'acceptance.item_passed' // 验收项通过
+  | 'acceptance.item_failed' // 验收项失败
+  | 'acceptance.item_waived' // 验收项豁免
+  | 'quality_gate.evaluated' // 门禁判定
   // —— Card：确认/授权卡 UI 生命周期（用户交互路径可观测——2026-08-15 补全）——
   | 'card.shown' // 卡弹出（载荷：card/name?/args?）
   | 'card.resolved' // 卡被确认/批准（载荷：card/action）
@@ -86,6 +131,8 @@ export type TimelineEventType =
   | 'protocol.text_fallback' // 文本标记降级命中（载荷：marker/goal|plan|completion + content_snip——S3 打点）
   // —— Completion：完成对账（S4 登记——§3.5；证据不足诊断事件）——
   | 'completion.evidence_missing' // 完成声明被拒原因（载荷：ok/missing/unverifiable 清单——S4 打点）
+  // —— Gate：机制拒绝（ADR-016 / GitHub #16——§3.5）——
+  | 'gate.denied' // ActionGate/rejection-memory 机制拒绝（非 ask；载荷：name/gate/reason/attribute/risk）
   // —— 元事件（运行时可观测——诊断/状态）——
   | 'conversation.status_change' // working/ready/approval-pending 变化
   | 'conversation.error' // 错误链路（errorType/message）
@@ -99,14 +146,21 @@ export interface TimelineEventSpec {
     | 'session'
     | 'plan'
     | 'tool'
+    | 'security'
     | 'capability'
     | 'execution'
     | 'stuck'
     | 'problem'
+    | 'usage'
+    | 'changeset'
+    | 'queue'
+    | 'extension'
+    | 'acceptance'
     | 'card'
     | 'decision'
     | 'proposal'
     | 'completion'
+    | 'gate'
     | 'protocol'
   role?: 'user' | 'assistant' | 'system' | 'tool'
   detailKeys?: string[] // 期望载荷字段（宽松约定——不强制全有，用于 dev 校验提示）
@@ -140,6 +194,13 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
   'task.achievement_proposed': { domain: 'task', role: 'assistant', detailKeys: ['summary'] },
   'task.achievement_confirmed': { domain: 'task', role: 'system', detailKeys: ['point'] },
   'task.achievement_rejected': { domain: 'task', role: 'system', detailKeys: ['point'] },
+  'task.plan_proposed': { domain: 'task', role: 'assistant', detailKeys: ['plan', 'files'] },
+  'task.plan_confirmed': { domain: 'task', role: 'system', detailKeys: ['point'] },
+  'task.plan_rejected': { domain: 'task', role: 'system', detailKeys: ['point'] },
+  'task.resolution_proposed': { domain: 'task', role: 'assistant', detailKeys: ['summary'] },
+  'task.resolution_confirmed': { domain: 'task', role: 'system', detailKeys: ['point'] },
+  'task.resolution_rejected': { domain: 'task', role: 'system', detailKeys: ['point'] },
+  'task.files_produced': { domain: 'task', role: 'tool', detailKeys: ['files'] },
   'session.pending_set': { domain: 'session', role: 'system', detailKeys: ['kind'] },
   'session.pending_cleared': { domain: 'session', role: 'system', detailKeys: ['kind'] },
   'dialogue.loop_guard': { domain: 'session', role: 'system', detailKeys: ['rounds'] },
@@ -149,12 +210,22 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
   'plan.rejected': { domain: 'plan', role: 'tool', detailKeys: ['file'] },
   'tool.requested': { domain: 'tool', role: 'tool', detailKeys: ['name', 'args'] },
   'tool.blocked': { domain: 'tool', role: 'tool', detailKeys: ['name', 'gate', 'reason'] },
-  'tool.executing': { domain: 'tool', role: 'tool', detailKeys: ['name', 'approved'] },
+  'tool.executing': {
+    domain: 'tool',
+    role: 'tool',
+    detailKeys: ['name', 'approved', '?approvalSource'],
+  },
   'tool.executed': { domain: 'tool', role: 'tool', detailKeys: ['name', 'file'] },
   'tool.failed': { domain: 'tool', role: 'tool', detailKeys: ['name', 'error'] },
   'tool.approved': { domain: 'tool', role: 'system', detailKeys: ['name'] },
   'tool.rejected': { domain: 'tool', role: 'system', detailKeys: ['name'] },
   'tool.remembered': { domain: 'tool', role: 'system', detailKeys: ['name', 'file'] },
+  // ADR-015：委托越界拒绝（main 第二道防线审计——渲染端委托判定不能被绕过）
+  'security.trust_delegation_denied': {
+    domain: 'security',
+    role: 'system',
+    detailKeys: ['name', 'path', 'reason'],
+  },
   'capability.checked': {
     domain: 'capability',
     role: 'tool',
@@ -175,6 +246,87 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
   'problem.rerun': { domain: 'problem', role: 'system', detailKeys: ['problemId', 'title'] },
   'problem.snapshot_updated': { domain: 'problem', role: 'system', detailKeys: ['problemId'] },
   'problem.closed': { domain: 'problem', role: 'system', detailKeys: ['problemId'] },
+  'usage.recorded': {
+    domain: 'usage',
+    role: 'system',
+    detailKeys: ['provider', 'model', 'tokens', 'cost'],
+  },
+  'usage.budget_threshold_reached': {
+    domain: 'usage',
+    role: 'system',
+    detailKeys: ['limit', 'spent'],
+  },
+  'usage.period_closed': { domain: 'usage', role: 'system', detailKeys: ['period', 'total'] },
+  'changeset.proposed': { domain: 'changeset', role: 'system', detailKeys: ['changeId', 'files'] },
+  'changeset.reviewed': {
+    domain: 'changeset',
+    role: 'system',
+    detailKeys: ['changeId', 'itemId', 'decision'],
+  },
+  'changeset.applied': { domain: 'changeset', role: 'system', detailKeys: ['changeId', 'files'] },
+  'changeset.reverted': { domain: 'changeset', role: 'system', detailKeys: ['changeId', 'files'] },
+  'changeset.conflict_detected': {
+    domain: 'changeset',
+    role: 'system',
+    detailKeys: ['changeId', 'file'],
+  },
+  'queue.entry_enqueued': {
+    domain: 'queue',
+    role: 'system',
+    detailKeys: ['entryId', 'taskRef', 'position'],
+  },
+  'queue.entry_started': { domain: 'queue', role: 'system', detailKeys: ['entryId', 'taskRef'] },
+  'queue.entry_blocked': { domain: 'queue', role: 'system', detailKeys: ['entryId', 'reason'] },
+  'queue.entry_resumed': { domain: 'queue', role: 'system', detailKeys: ['entryId'] },
+  'queue.entry_paused': { domain: 'queue', role: 'system', detailKeys: ['entryId'] },
+  'queue.entry_completed': {
+    domain: 'queue',
+    role: 'system',
+    detailKeys: ['entryId', 'outcome'],
+  },
+  'queue.entry_cancelled': { domain: 'queue', role: 'system', detailKeys: ['entryId'] },
+  'queue.entry_reordered': {
+    domain: 'queue',
+    role: 'system',
+    detailKeys: ['entryId', 'position'],
+  },
+  'extension.registered': {
+    domain: 'extension',
+    role: 'system',
+    detailKeys: ['extensionId', 'kind', 'version'],
+  },
+  'extension.activated': { domain: 'extension', role: 'system', detailKeys: ['extensionId'] },
+  'extension.deactivated': { domain: 'extension', role: 'system', detailKeys: ['extensionId'] },
+  'extension.invocation_denied': {
+    domain: 'extension',
+    role: 'system',
+    detailKeys: ['extensionId', 'capability', 'reason'],
+  },
+  'acceptance.criteria_derived': {
+    domain: 'acceptance',
+    role: 'system',
+    detailKeys: ['recordId', 'source', 'items'],
+  },
+  'acceptance.item_passed': {
+    domain: 'acceptance',
+    role: 'system',
+    detailKeys: ['recordId', 'itemId', 'evidenceRef'],
+  },
+  'acceptance.item_failed': {
+    domain: 'acceptance',
+    role: 'system',
+    detailKeys: ['recordId', 'itemId', 'reason'],
+  },
+  'acceptance.item_waived': {
+    domain: 'acceptance',
+    role: 'system',
+    detailKeys: ['recordId', 'itemId', 'reason'],
+  },
+  'quality_gate.evaluated': {
+    domain: 'acceptance',
+    role: 'system',
+    detailKeys: ['verdict', 'blocking', 'waived'],
+  },
   'card.shown': { domain: 'card', role: 'system', detailKeys: ['card'], dedupe: true },
   'card.resolved': { domain: 'card', role: 'system', detailKeys: ['card', 'action'] },
   'card.rejected': { domain: 'card', role: 'system', detailKeys: ['card', 'action'] },
@@ -209,7 +361,7 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
   'proposal.clarify': {
     domain: 'proposal',
     role: 'assistant',
-    detailKeys: ['question', 'type', '?options'],
+    detailKeys: ['question', 'type', '?options', '?assumptions'],
   },
   // V1.5 S3：文本标记降级命中（模型未走协议工具——done 分支探测到标记 → 打点 + 合成引导）
   'protocol.text_fallback': {
@@ -222,6 +374,12 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
     role: 'system',
     // S4：ok 必选（false——被拒）+ missing/unverifiable 清单（两形态可缺省）
     detailKeys: ['ok', '?missing', '?unverifiable'],
+  },
+  // ADR-016：机制拒绝（与 tool.blocked 分层——gate=领域机制拒绝，tool.blocked=工具执行层拦截）
+  'gate.denied': {
+    domain: 'gate',
+    role: 'system',
+    detailKeys: ['name', 'gate', 'reason', 'attribute', 'risk'],
   },
   'conversation.status_change': { domain: 'conversation', role: 'system', detailKeys: ['status'] },
   'conversation.error': { domain: 'conversation', role: 'system', detailKeys: ['errorType'] },
@@ -268,13 +426,13 @@ export function deriveStateEvents(
   if (prev.goalConfirmed && !next.goalConfirmed)
     events.push({ type: 'task.goal_rejected', detail: { point: 'goal' } })
   if (!prev.planConfirmed && next.planConfirmed)
-    events.push({ type: 'task.execution_confirmed', detail: { point: 'plan' } })
+    events.push({ type: 'task.plan_confirmed', detail: { point: 'plan' } })
   if (prev.planConfirmed && !next.planConfirmed)
-    events.push({ type: 'task.execution_rejected', detail: { point: 'plan' } })
+    events.push({ type: 'task.plan_rejected', detail: { point: 'plan' } })
   if (!prev.resolutionConfirmed && next.resolutionConfirmed)
-    events.push({ type: 'task.achievement_confirmed', detail: { point: 'resolution' } })
+    events.push({ type: 'task.resolution_confirmed', detail: { point: 'resolution' } })
   if (prev.resolutionConfirmed && !next.resolutionConfirmed)
-    events.push({ type: 'task.achievement_rejected', detail: { point: 'resolution' } })
+    events.push({ type: 'task.resolution_rejected', detail: { point: 'resolution' } })
   // —— 决策点（领域视图——设计 §3.5；与 card.* 并存：card=UI 卡生命周期，decision=领域决策点）——
   if (prev.pending === 'none' && next.pending !== 'none') {
     events.push({ type: 'session.pending_set', detail: { kind: next.pending } })
@@ -327,10 +485,10 @@ export function deriveStateEvents(
   // —— PlannedFiles：批准清单追加（plan.approved）——
   const addedFiles = [...next.plannedFiles].filter((f) => !prev.plannedFiles.has(f))
   if (addedFiles.length > 0) events.push({ type: 'plan.approved', detail: { files: addedFiles } })
-  // —— 产出进度（producedFiles 新增——配合 tool.executed 的 file 载荷，此处记增量）——
+  // —— 产出进度（producedFiles 新增——P2-05：独立事件，不与 tool.executed（工具执行事实）重复）——
   const addedProduced = [...next.producedFiles].filter((f) => !prev.producedFiles.has(f))
   if (addedProduced.length > 0)
-    events.push({ type: 'tool.executed', detail: { files: addedProduced } })
+    events.push({ type: 'task.files_produced', detail: { files: addedProduced } })
   return events
 }
 
@@ -353,14 +511,14 @@ export function dedupeKey(type: string, detail: Record<string, unknown>): string
 }
 
 // === 模型提议检测（task.*_proposed——assistant_done content 标记 → 提议事件；纯函数 L1 可测） ===
-// 06 §1.1：task.goal_proposed（【目标确认】标记）/ task.execution_proposed（【执行方案】）/ task.achievement_proposed（【已达成】）
-// 与渲染层 pendingCardToShow 同源判定（标记检测——但独立函数，避免 UI 依赖）
+// 06 §1.1：task.goal_proposed（【目标确认】标记）/ task.plan_proposed（【执行方案】）/ task.resolution_proposed（【已达成】）
+// P2-01：新事件名（plan/resolution）；旧 task.execution_*/achievement_* 仅保留读取窗口
 export function detectProposed(content: string): Array<{
-  type: 'task.goal_proposed' | 'task.execution_proposed' | 'task.achievement_proposed'
+  type: 'task.goal_proposed' | 'task.plan_proposed' | 'task.resolution_proposed'
   detail: Record<string, unknown>
 }> {
   const out: Array<{
-    type: 'task.goal_proposed' | 'task.execution_proposed' | 'task.achievement_proposed'
+    type: 'task.goal_proposed' | 'task.plan_proposed' | 'task.resolution_proposed'
     detail: Record<string, unknown>
   }> = []
   const t = String(content ?? '')
@@ -369,8 +527,7 @@ export function detectProposed(content: string): Array<{
       type: 'task.goal_proposed',
       detail: { goalText: t.match(/【目标确认[:：]\s*([^】]+)/)?.[1]?.trim() ?? '' },
     })
-  if (t.includes('【执行方案')) out.push({ type: 'task.execution_proposed', detail: { plan: t } })
-  if (t.includes('【已达成'))
-    out.push({ type: 'task.achievement_proposed', detail: { summary: t } })
+  if (t.includes('【执行方案')) out.push({ type: 'task.plan_proposed', detail: { plan: t } })
+  if (t.includes('【已达成')) out.push({ type: 'task.resolution_proposed', detail: { summary: t } })
   return out
 }

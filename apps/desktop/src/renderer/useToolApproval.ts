@@ -21,6 +21,8 @@ export interface UseToolApprovalDeps {
   rootPath?: string | null
   sessionId: string
   onToolResult?: (r: { name: string; file?: string; ok: boolean }) => void
+  // P1 修复：授权结果（approved/rejected）——队列恢复不能只看 pendingApproval 变 false
+  onApprovalResolved?: (result: 'approved' | 'rejected') => void
   // 状态机转换（useConversationState）
   applyTool: (r: {
     name: string
@@ -37,6 +39,8 @@ export interface UseToolApprovalDeps {
   // 续聊链
   acquireChain: () => Promise<() => void>
   maybeContinue: (depth: number, sid: number) => Promise<void>
+  // ADR-013/审查修复：授权/批准直连续聊路径结束后衔接排队消息（原只有 send/retry finally 会 flush）
+  flushPendingSend: () => void
   chatRef: { current: { depth: number } | null }
   sessionRef: { current: number }
   // 流式 ref（stopToolCall 中止链用）
@@ -57,12 +61,14 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
     rootPath,
     sessionId,
     onToolResult,
+    onApprovalResolved,
     applyTool,
     grantPlan,
     rejectApproval,
     addTrust,
     acquireChain,
     maybeContinue,
+    flushPendingSend,
     chatRef,
     sessionRef,
     streamingSidRef,
@@ -115,6 +121,7 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
   const approveToolCall = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg): void => {
     tlog('tool.approved', { name: tc.name }, 'system')
     tlog('card.resolved', { card: 'approval', action: 'approve', name: tc.name }, 'system')
+    onApprovalResolved?.('approved')
     // #6 真机 2026-08-30（P1-5——用户点名设计违背）：write/edit 批准即文件级绑定（任务边界内同文件免重复授权）——
     // 原实现仅「允许并记住」按钮绑文件，普通批准只绑单次调用 → 同文件每次修改都弹卡（真机连弹 3 张）。
     // 沙箱内有界（addTrust 内建检查）+ 任务边界清空（clearTrust）——安全底线不变。
@@ -122,7 +129,12 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
     if (tc.name === 'write' || tc.name === 'edit') addTrust(tc.args)
     patchToolCall(idx, (c) => ({ ...c, status: 'pending' as const }), tc)
     void window.neonforge.tools
-      ?.execute?.(tc.name, tc.args, { approved: true, rootPath: rootPath ?? undefined, sessionId })
+      ?.execute?.(tc.name, tc.args, {
+        approved: true,
+        approvalSource: 'user',
+        rootPath: rootPath ?? undefined,
+        sessionId,
+      })
       .then((r) => {
         const data = r.data as { file?: string; snapshot?: boolean } | undefined
         if (r.ok && data?.file) onToolResult?.({ name: tc.name, file: data.file, ok: true })
@@ -158,11 +170,13 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
         )
         // 流式链互斥：授权续聊也占锁排队（chunk 交错防护）
         setTimeout(async () => {
+          const sid = sessionRef.current
           const release = await acquireChain()
           try {
-            await maybeContinue(chatRef.current?.depth ?? 0, sessionRef.current)
+            await maybeContinue(chatRef.current?.depth ?? 0, sid)
           } finally {
             release()
+            if (sessionRef.current === sid) flushPendingSend()
           }
         }, 150)
       })
@@ -187,6 +201,7 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
     // 2026-08-15 DDD 重建：授权拒绝事件（G2 缺口——原无打点，卡生命周期不可回放）
     tlog('tool.rejected', { name: tc?.name, args: tc?.args }, 'system')
     tlog('card.rejected', { card: 'approval', action: 'reject', name: tc?.name }, 'system')
+    onApprovalResolved?.('rejected')
     setMessages((prev) => {
       const last = prev[prev.length - 1]
       if (!last || last.role !== 'assistant') return prev
@@ -243,13 +258,18 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
       }),
       tc,
     )
-    setTimeout(() => void maybeContinue(chatRef.current?.depth ?? 0, sessionRef.current), 150)
+    setTimeout(() => {
+      const sid = sessionRef.current
+      void maybeContinue(chatRef.current?.depth ?? 0, sid).finally(() => {
+        if (sessionRef.current === sid) flushPendingSend()
+      })
+    }, 150)
   }
 
   // 快照回滚（write/edit 写前已快照——按 file 匹配更新）
   const revertToolCall = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg): void => {
     if (!tc.file) return
-    void window.neonforge.tools?.revert?.(tc.file).then((r) => {
+    void window.neonforge.tools?.revert?.(tc.file, sessionId).then((r) => {
       setMessages((prev) =>
         prev.map((m) => {
           if (m.role !== 'assistant' || !m.toolCalls) return m

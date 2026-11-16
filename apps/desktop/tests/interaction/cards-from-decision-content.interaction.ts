@@ -638,7 +638,7 @@ test('D3-1：启动恢复接线——挂载时 planned-files:load 被调（main 
   await expectText(page.locator('.nf-chat__list'), '已批准 1 个文件', 10000)
   await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(0)
   // 恢复接线 + 批准链走 IPC：load 挂载时被调（main 权威→镜像——StrictMode 双挂载 ≥1）；
-  // add 恰好一次（批准按钮单次点击 → 单次 add——main 权威同步）
+  // ADR-015：方案确认走独立 planned-files:sync-plan（不触发 add）；add 恰好一次（批准按钮单点）
   const counts = await page.evaluate(() => ({
     load: (window as unknown as { __nfPlannedLoadCalls?: number }).__nfPlannedLoadCalls ?? 0,
     add: (window as unknown as { __nfPlannedAddCalls?: number }).__nfPlannedAddCalls ?? 0,

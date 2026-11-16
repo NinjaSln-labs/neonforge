@@ -25,6 +25,7 @@ export default function OutputPanel({
   activePath,
   content,
   deliveryPkg,
+  sessionId,
   onOpenFile,
   onCloseProblem,
   onAdjustProblem,
@@ -36,6 +37,7 @@ export default function OutputPanel({
   activePath: string | null
   content: string
   deliveryPkg: DeliveryPackage | null
+  sessionId?: string
   onOpenFile: (path: string) => void
   onCloseProblem: () => void
   onAdjustProblem: () => void
@@ -98,6 +100,7 @@ export default function OutputPanel({
         {deliveryPkg ? (
           <DeliveryPanel
             pkg={deliveryPkg}
+            sessionId={sessionId}
             onClose={onCloseProblem}
             onAdjust={onAdjustProblem}
             onRerun={onRerun}
@@ -115,6 +118,7 @@ export default function OutputPanel({
         ) : (
           <DeliveryPanel
             pkg={null}
+            sessionId={sessionId}
             onClose={onCloseProblem}
             onAdjust={onAdjustProblem}
             onRerun={onRerun}

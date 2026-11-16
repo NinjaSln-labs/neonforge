@@ -152,10 +152,82 @@ export function deliveredPackage(pkg: Partial<DeliveryFixture> = {}): DeliveryFi
 import type { Page } from '@playwright/test'
 import { expectVisible } from '../helpers/assertions'
 
+/**
+ * 启动页等待 + 失败诊断 + 一次重载重试。
+ *
+ * 根因（2026-11-15 trace 实证）：WSL/Chromium 偶发 `net::ERR_NETWORK_CHANGED`，网络栈变更事件
+ * 取消进行中的模块请求（main.tsx/依赖图全部失败）→ 页面只剩 `<div id="root">`，React 从未挂载。
+ * 这不是应用启动逻辑问题；重载一次即可重新拉取模块。第二次仍失败才判真实故障。
+ */
+async function expectStartPage(page: Page): Promise<void> {
+  let lastErr: unknown
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const consoleErrors: string[] = []
+    const onConsole = (m: { type: () => string; text: () => string }) => {
+      if (m.type() === 'error') consoleErrors.push(m.text())
+    }
+    page.on('console', onConsole)
+    try {
+      await expectVisible(page.locator('.nf-start'), 20_000)
+      page.off('console', onConsole)
+      return
+    } catch (e) {
+      lastErr = e
+      page.off('console', onConsole)
+      const diag = await page
+        .evaluate(() => {
+          const b = (window as unknown as { neonforge?: { config?: { hasKey?: unknown } } })
+            .neonforge
+          const app = document.querySelector('.nf-app')
+          return {
+            href: location.href,
+            title: document.title,
+            appClass: app?.className ?? null,
+            bodyLen: document.body.innerHTML.length,
+            bodyHead: document.body.innerHTML.slice(0, 400),
+            neonforge: typeof b,
+            hasKey: typeof b?.config?.hasKey,
+          }
+        })
+        .catch((err) => ({ evalError: String(err) }))
+      console.warn(
+        `[boot] 启动页未出现（attempt ${attempt}/2）：${JSON.stringify({
+          ...diag,
+          consoleErrors: consoleErrors.slice(0, 6),
+        })}`,
+      )
+      if (attempt === 2) break
+      // ERR_NETWORK_CHANGED 是瞬时网络栈事件——重载重新拉取模块（不改变应用启动语义）
+      await page.waitForTimeout(300)
+      await page.reload({ waitUntil: 'load', timeout: 30_000 }).catch(() => {})
+    }
+  }
+  throw new Error('启动页未出现（重载后仍失败）', { cause: lastErr })
+}
+
+/** 导航到启动页（含 ERR_NETWORK_CHANGED 重载重试——所有 interaction 入口统一走这里）
+ * 2026-11-15 审查修复：导航本身也可能被瞬时网络变更中断（page.goto reject）——原实现只覆盖
+ * 「导航成功但页面未挂载」；现在 goto 失败也会重试一次，再进入启动页等待/重载诊断。 */
+export async function gotoStart(page: Page): Promise<void> {
+  let navErr: unknown
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      await page.goto('http://localhost:5175/')
+      navErr = undefined
+      break
+    } catch (e) {
+      navErr = e
+      console.warn(`[boot] 导航到启动页失败（attempt ${attempt}/2）：${String(e)}`)
+      if (attempt === 1) await page.waitForTimeout(300)
+    }
+  }
+  if (navErr) throw new Error('导航到启动页失败（重试后仍失败）', { cause: navErr })
+  await expectStartPage(page)
+}
+
 /** 打开已有项目（配合 project: 'open'） */
 export async function enterWorkspace(page: Page): Promise<void> {
-  await page.goto('http://localhost:5175/')
-  await expectVisible(page.locator('.nf-start'))
+  await gotoStart(page)
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.waitForSelector('.nf-chat__input textarea', { timeout: 8000 })
 }
@@ -164,8 +236,7 @@ export async function enterWorkspace(page: Page): Promise<void> {
  * 注意：用按钮而非 Enter——Enter 与应用内 50ms 自动发送存在竞态（目标卡可能先于首轮流式出现，
  * 导致点击确认目标时首轮尚未完成——forceTool 断言错位；按钮路径与旧测试（根因3）一致，确定性稳定） */
 export async function startFromScratch(page: Page, text?: string): Promise<void> {
-  await page.goto('http://localhost:5175/')
-  await expectVisible(page.locator('.nf-start'))
+  await gotoStart(page)
   if (text !== undefined) {
     await page.locator('.nf-start__input').fill(text)
     await page.getByRole('button', { name: '从零开始' }).click()

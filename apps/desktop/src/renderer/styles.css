@@ -586,6 +586,37 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-tabs__item:focus-visible { outline: 1px solid var(--nf-accent); }
 
 .nf-task { display: flex; flex-direction: column; gap: var(--nf-space-2); }
+.nf-queue__add { display: flex; gap: var(--nf-space-1); }
+.nf-queue__add input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--nf-border);
+  border-radius: 4px;
+  background: var(--nf-bg-elevated);
+  color: var(--nf-text);
+}
+.nf-queue__add input:focus-visible { outline: 1px solid var(--nf-accent); }
+.nf-queue { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--nf-space-1); }
+.nf-queue__item {
+  padding: 6px 8px;
+  border: 1px solid var(--nf-border);
+  border-radius: 4px;
+  background: var(--nf-bg-elevated);
+}
+.nf-queue__title { font-size: 13px; color: var(--nf-text); overflow-wrap: anywhere; }
+.nf-queue__actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.nf-queue__actions button {
+  padding: 2px 8px;
+  font-size: 12px;
+  border: 1px solid var(--nf-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--nf-text-muted);
+  cursor: pointer;
+}
+.nf-queue__actions button:hover:not(:disabled) { border-color: var(--nf-accent); color: var(--nf-text); }
+.nf-queue__actions button:disabled { opacity: 0.5; cursor: default; }
 
 /* 思考中：边框呼吸（用户反馈：光晕太大，边框亮即可） */
 @keyframes nf-thinking-pulse {
@@ -786,6 +817,7 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-trust__logs ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .nf-trust__logs li { font-size: 12px; color: var(--nf-text); }
 .nf-trust__logs em { color: var(--nf-text-dim); font-style: normal; }
+.nf-trust__empty { margin: 0; font-size: 12px; color: var(--nf-text-dim); }
 .nf-trust__ok { color: #22C55E; }
 .nf-trust__controls { display: flex; flex-direction: column; gap: var(--nf-space-2); }
 .nf-trust__delegate { display: flex; align-items: center; gap: var(--nf-space-2); font-size: 12px; color: var(--nf-text-dim); cursor: pointer; }
@@ -808,6 +840,7 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-settings__export { background: none; border: 1px solid var(--nf-border); color: var(--nf-accent); border-radius: var(--nf-radius-sm); padding: 2px var(--nf-space-3); font-size: 12px; cursor: pointer; flex-shrink: 0; }
 .nf-settings__export:hover { border-color: var(--nf-accent); }
 .nf-settings__export-msg { margin: var(--nf-space-1) 0 0; font-size: 12px; color: var(--nf-text-dim); word-break: break-all; }
+.nf-settings__key-status { margin: var(--nf-space-1) 0 0; font-size: 12px; color: var(--nf-text-dim); word-break: break-all; }
 .nf-settings__seg { display: flex; gap: 4px; }
 .nf-settings__seg-btn { background: none; border: 1px solid var(--nf-border); color: var(--nf-text-dim); border-radius: var(--nf-radius-sm); padding: 2px var(--nf-space-3); font-size: 12px; cursor: pointer; }
 .nf-settings__seg-btn--on { background: var(--nf-accent-soft); border-color: var(--nf-accent); color: var(--nf-accent); }
@@ -829,6 +862,19 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-settings__plugins-list { display: flex; flex-wrap: wrap; gap: 4px; }
 .nf-settings__plugin { font-size: 11px; color: var(--nf-text-dim); background: var(--nf-bg-panel); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-sm); padding: 2px 6px; }
 .nf-settings__plugin em { color: #22C55E; font-style: normal; display: inline-flex; vertical-align: -2px; }
+.nf-settings__mcp-editor {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font-family: var(--nf-font-mono, monospace);
+  font-size: 12px;
+  padding: var(--nf-space-2);
+  background: var(--nf-bg-panel);
+  color: var(--nf-text);
+  border: 1px solid var(--nf-border);
+  border-radius: var(--nf-radius-sm);
+}
+.nf-settings__mcp-actions { display: flex; gap: var(--nf-space-2); }
 .nf-compact { font-size: 12px; color: var(--nf-text-dim); background: var(--nf-bg-elevated); border: 1px dashed var(--nf-border); border-radius: var(--nf-radius-sm); padding: 4px var(--nf-space-3); }
 
 /* 0-1 交付流 v2：当前步骤聚焦卡 */
@@ -1014,6 +1060,35 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 }
 .nf-confirmcard__head { font-size: var(--nf-font-sm); font-weight: 600; color: var(--nf-accent); }
 .nf-confirmcard__goal { font-size: 12px; color: var(--nf-text); line-height: 1.5; }
+/* ADR-014：假设来源标签（你的选择/你的澄清/模型推断） */
+.nf-assumption__source { margin-left: 6px; font-size: 10px; color: var(--nf-text-dim); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-sm); padding: 0 4px; white-space: nowrap; }
+
+/* ADR-014：假设核对卡（ask_user.assumptions——逐条选择 + 修正） */
+.nf-assumptioncheck {
+  margin-top: 8px; padding: var(--nf-space-2) var(--nf-space-3);
+  border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md);
+  background: var(--nf-bg-elevated); display: flex; flex-direction: column; gap: var(--nf-space-2);
+  max-width: 480px;
+}
+.nf-assumptioncheck__question { font-size: 12px; font-weight: 600; color: var(--nf-accent); }
+.nf-assumptioncheck__row { display: flex; flex-direction: column; gap: 4px; padding: 4px 0; border-top: 1px solid var(--nf-border); }
+.nf-assumptioncheck__text { font-size: 12px; color: var(--nf-text); line-height: 1.45; }
+.nf-assumptioncheck__choices { display: flex; gap: 6px; }
+.nf-assumptioncheck__choice {
+  background: none; border: 1px solid var(--nf-border); color: var(--nf-text);
+  border-radius: var(--nf-radius-sm); padding: 3px 10px; font-size: 12px; cursor: pointer;
+}
+.nf-assumptioncheck__choice--active { border-color: var(--nf-accent); color: var(--nf-accent); background: var(--nf-accent-soft); }
+.nf-assumptioncheck__choice--disabled { opacity: 0.55; cursor: default; }
+.nf-assumptioncheck__input {
+  background: var(--nf-bg); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-sm);
+  color: var(--nf-text); font-size: 12px; padding: 3px 8px;
+}
+.nf-assumptioncheck__submit {
+  align-self: flex-start; background: none; border: 1px solid var(--nf-accent); color: var(--nf-accent);
+  border-radius: var(--nf-radius-sm); padding: 4px 12px; font-size: 12px; cursor: pointer;
+}
+.nf-assumptioncheck__submit:disabled { opacity: 0.45; cursor: default; }
 .nf-confirmcard__actions { display: flex; gap: 6px; }
 .nf-confirmcard__btn {
   flex: 1; background: none; border: 1px solid var(--nf-border); color: var(--nf-text);

@@ -10,6 +10,7 @@ export const deepseekDescriptor: ProviderDescriptor = {
     pro: 'deepseek-v4-pro',
   },
   docsUrl: 'https://platform.deepseek.com/api_keys',
+  streamUsage: true, // DeepSeek OpenAI 兼容流支持 stream_options.include_usage
   howToGetKey: {
     zh: '① 打开 platform.deepseek.com 注册/登录 → ② 进入 API Keys → ③ 创建并复制 Key。',
     en: '① Open platform.deepseek.com → ② API Keys → ③ Create and copy the key.',

@@ -29,13 +29,12 @@ e2e / UAT 过程中「Fail 一档立刻打补丁再跑下一档」会：破坏�
 
 ### 落地指针（非第二正文）
 
-- 全 agent 入口：AGENTS.md 通用规则第 5 条引用本 ADR（CLAUDE.md → @AGENTS.md）。
-- 工具私货：只指针到 AGENTS.md（见该文件第 6 条）；全文目录见内容落位第 5 条。
+- 全 agent 入口：AGENTS.md 通用规则第 4 条引用本 ADR（CLAUDE.md → @AGENTS.md）。
+- 工具私货：只指针到 AGENTS.md（见该文件第 5 条）；全文目录见内容落位第 5 条。
 - 测试说明：docs/tests/uat-tier-baseline.md 等只写「硬闸 ADR-012」。
-- handoff：p000127 的 src 指向本文件；不在 pitfall 另写完整规则。
 
 ## Consequences
 
 - 正面：取证完整；处置前有用户裁决；与关单口径同构。
 - 负面：汇总到开修之间多一轮等待——有意。
-- 违规处置：停止临修或停修；补汇总并汇报用户；交接记一笔（引用本 ADR），不另起平行规则。
+- 违规处置：停止临修或停修；补汇总并汇报用户；处置记录一笔（引用本 ADR），不另起平行规则。

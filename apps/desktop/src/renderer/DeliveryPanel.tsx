@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import type { DeliveryPackage } from './types'
+import { useEffect, useRef, useState } from 'react'
+import type { AcceptanceRecord, DeliveryPackage, GateResult } from './types'
 import { parseDiffLines, type DiffLine } from './diffRender'
 import { IconCheck, IconClock, IconFile, IconRotateCcw, IconX } from './icons'
 
@@ -7,12 +7,14 @@ import { IconCheck, IconClock, IconFile, IconRotateCcw, IconX } from './icons'
 // 视觉：深紫浮面 + 靛紫 accent；验收打勾交互；「确认关闭」= 问题终态（交付 ≠ 解决）
 export default function DeliveryPanel({
   pkg,
+  sessionId,
   onClose: _onClose,
   onAdjust,
   onRerun,
   onConfirmed,
 }: {
   pkg: DeliveryPackage | null
+  sessionId?: string
   onClose: () => void
   onAdjust: () => void
   onRerun: (prompt: string) => void
@@ -22,8 +24,95 @@ export default function DeliveryPanel({
   const [status, setStatus] = useState<'delivered' | 'closed'>(
     pkg?.status === 'closed' ? 'closed' : 'delivered',
   )
+  // BC-14：main 权威验收记录 + 门禁结论
+  const [record, setRecord] = useState<AcceptanceRecord | null>(null)
+  const [gate, setGate] = useState<GateResult | null>(null)
+  const [acceptEmpty, setAcceptEmpty] = useState(false)
+  // BC-10：变更集（真实变更的基线/状态/整集回滚）
+  const [changeSet, setChangeSet] = useState<{
+    status: string
+    items: Array<{ id: string; path: string; status: string }>
+  } | null>(null)
   // 2026-08-03 A3 审计修复：操作失败内联错误条（替代原生 alert——深色 UI 割裂 + 阻断式）
   const [error, setError] = useState<string | null>(null)
+  const refreshChangeSet = async (sid?: string) => {
+    if (!sid) return
+    try {
+      const c = await window.neonforge.changeset?.list(sid)
+      if (sessionIdRef.current !== sid) return
+      setChangeSet(c ? { status: c.status, items: c.items } : null)
+    } catch (e) {
+      if (sessionIdRef.current === sid) setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+  const revertChangeSetAll = async () => {
+    if (!sessionId) return
+    setError(null)
+    try {
+      const r = await window.neonforge.changeset?.revert(sessionId)
+      if (!r) return
+      if (!r.ok) setError(r.error ?? '回滚失败')
+      // P1 修复：只移除成功回滚的文件；失败/冲突文件仍保持 applied，避免重新作为待审核 diff 被二次应用
+      setApplied((prev) => {
+        const next = new Set(prev)
+        for (const p of r.reverted) next.delete(p)
+        return next
+      })
+      setReverted(new Set(r.reverted))
+      await refreshChangeSet(sessionId)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+  // P1 修复：异步响应必须属于当前会话（旧会话迟到响应不得覆盖新会话状态）
+  const sessionIdRef = useRef(sessionId)
+  useEffect(() => {
+    sessionIdRef.current = sessionId
+  }, [sessionId])
+  const refreshAcceptance = async (sid?: string) => {
+    if (!sid) return
+    try {
+      const r = await window.neonforge.acceptance?.list(sid)
+      if (sessionIdRef.current !== sid) return
+      setRecord(r ?? null)
+      const g = await window.neonforge.acceptance?.evaluate(sid)
+      if (sessionIdRef.current !== sid) return
+      setGate(g ?? null)
+    } catch (e) {
+      if (sessionIdRef.current === sid) setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+  const markAcceptance = async (itemId: string) => {
+    if (!sessionId) return
+    try {
+      const r = await window.neonforge.acceptance?.mark(sessionId, itemId, 'passed', {
+        manualReason: '用户在交付面板手工确认',
+      })
+      if (sessionIdRef.current !== sessionId) return
+      if (r) {
+        setRecord(r)
+        const g = await window.neonforge.acceptance?.evaluate(sessionId)
+        if (sessionIdRef.current !== sessionId) return
+        setGate(g ?? null)
+      }
+    } catch (e) {
+      if (sessionIdRef.current === sessionId) {
+        setError(e instanceof Error ? e.message : String(e))
+      }
+    }
+  }
+  const acceptNoAcceptance = async () => {
+    if (!sessionId) {
+      setAcceptEmpty(true)
+      return
+    }
+    const r = await window.neonforge.acceptance?.acceptEmpty(sessionId)
+    if (r) {
+      setRecord(r)
+      const g = await window.neonforge.acceptance?.evaluate(sessionId)
+      setGate(g ?? null)
+    }
+  }
   // 双渲染保活：pkg 延迟更新（如 07 阶段推进/真实执行后）→ 同步 items/status（useState 不随 prop 变）
   useEffect(() => {
     if (pkg) {
@@ -31,6 +120,10 @@ export default function DeliveryPanel({
       if (pkg.status === 'closed') setStatus('closed')
     }
   }, [pkg])
+  useEffect(() => {
+    void refreshAcceptance(sessionId) // BC-14：会话切换/交付包变化时重取验收记录与门禁
+    void refreshChangeSet(sessionId) // BC-10：重取变更集
+  }, [sessionId, pkg])
   // 05 执行层 A：diff 审核状态（applied: Set<路径>——已应用；reverted: Set<路径>）
   const [applied, setApplied] = useState<Set<string>>(new Set())
   const [reverted, setReverted] = useState<Set<string>>(new Set())
@@ -38,10 +131,11 @@ export default function DeliveryPanel({
 
   const applyDiff = async (d: { path: string; diff: string }) => {
     setError(null)
-    const res = await window.neonforge.delivery.applyDiff(d.path, d.diff, true)
+    const res = await window.neonforge.delivery.applyDiff(d.path, d.diff, true, sessionId)
     if (res.ok) {
       setApplied((s) => new Set(s).add(d.path))
       setConfirming(null)
+      void refreshChangeSet(sessionId)
     } else {
       setConfirming(null)
       setError(`应用失败：${res.error ?? '未知错误'}`)
@@ -49,7 +143,7 @@ export default function DeliveryPanel({
   }
   const revertDiff = async (d: { path: string }) => {
     setError(null)
-    const res = await window.neonforge.delivery.revertDiff(d.path)
+    const res = await window.neonforge.delivery.revertDiff(d.path, sessionId)
     if (res.ok) {
       setReverted((s) => new Set(s).add(d.path))
       setApplied((s) => {
@@ -57,6 +151,7 @@ export default function DeliveryPanel({
         n.delete(d.path)
         return n
       })
+      void refreshChangeSet(sessionId)
     } else {
       setError(`回滚失败：${res.error ?? '未知错误'}`)
     }
@@ -72,7 +167,7 @@ export default function DeliveryPanel({
     const ok: string[] = []
     const fail: Array<{ path: string; error: string }> = []
     for (const d of pending) {
-      const res = await window.neonforge.delivery.applyDiff(d.path, d.diff, true)
+      const res = await window.neonforge.delivery.applyDiff(d.path, d.diff, true, sessionId)
       if (res.ok) ok.push(d.path)
       else fail.push({ path: d.path, error: res.error ?? '未知错误' })
     }
@@ -82,6 +177,7 @@ export default function DeliveryPanel({
       return n
     })
     setAcceptAllBusy(false)
+    void refreshChangeSet(sessionId)
     if (fail.length > 0)
       setError(
         `有 ${fail.length} 个改动未应用：${fail.map((f) => `${f.path}（${f.error}）`).join('；')}`,
@@ -124,7 +220,37 @@ export default function DeliveryPanel({
     return <p className="nf-placeholder">还没有交付包——说出你的问题，解决后这里会显示结果</p>
   }
 
-  const allDone = items.length > 0 && items.every((i) => i.done)
+  const recordItems = record?.items ?? []
+  const hasRecord = recordItems.length > 0
+  const gatePassed = gate
+    ? gate.verdict === 'passed' || gate.verdict === 'passed-with-waivers'
+    : false
+  const allDone = hasRecord
+    ? gatePassed
+    : items.length === 0
+      ? acceptEmpty
+      : items.every((i) => i.done)
+  const gateLabel = gate
+    ? {
+        passed: '验收通过',
+        'passed-with-waivers': '验收通过（含豁免）',
+        failed: '验收未通过',
+        incomplete: '验收未完成',
+      }[gate.verdict]
+    : null
+  const blockingLabels = (gate?.blocking ?? [])
+    .map((id) => recordItems.find((i) => i.id === id)?.label ?? id)
+    .filter(Boolean)
+  const changeSetLabel = changeSet
+    ? ({
+        proposed: '待审核',
+        reviewed: '已审核',
+        applied: '已应用',
+        reverted: '已回滚',
+        conflicted: '有冲突',
+        superseded: '已替代',
+      }[changeSet.status as 'proposed'] ?? changeSet.status)
+    : null
 
   const toggle = (idx: number) => {
     setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, done: !it.done } : it)))
@@ -167,24 +293,101 @@ export default function DeliveryPanel({
         </section>
       )}
 
-      {items.length > 0 && (
+      {(hasRecord || items.length > 0) && (
         <section className="nf-delivery__block">
-          <h4>验收对照</h4>
-          <ul className="nf-delivery__acceptance">
-            {items.map((it, i) => (
-              <li key={i}>
-                <button
-                  type="button"
-                  className={`nf-check${it.done ? ' nf-check--done' : ''}`}
-                  aria-label={it.done ? `取消勾选：${it.label}` : `勾选：${it.label}`}
-                  onClick={() => toggle(i)}
-                >
-                  {it.done ? <IconCheck size={13} /> : <span className="nf-check__empty" />}
-                </button>
-                <span>{it.label}</span>
+          <h4>
+            验收对照
+            {gateLabel && <span className="nf-meta"> · {gateLabel}</span>}
+          </h4>
+          {hasRecord ? (
+            <ul className="nf-delivery__acceptance">
+              {recordItems.map((it) => (
+                <li key={it.id}>
+                  <button
+                    type="button"
+                    className={`nf-check${it.status === 'passed' ? ' nf-check--done' : ''}`}
+                    aria-label={it.label}
+                    disabled={it.status === 'passed'}
+                    onClick={() => void markAcceptance(it.id)}
+                  >
+                    {it.status === 'passed' ? (
+                      <IconCheck size={13} />
+                    ) : (
+                      <span className="nf-check__empty" />
+                    )}
+                  </button>
+                  <span>{it.label}</span>
+                  <span className="nf-meta">
+                    {it.status === 'passed'
+                      ? '已通过'
+                      : it.status === 'failed'
+                        ? '未通过'
+                        : it.status === 'waived'
+                          ? `已豁免：${it.waivedReason ?? ''}`
+                          : '待确认'}
+                    {it.evidenceRef ? ` · ${it.evidenceRef}` : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <ul className="nf-delivery__acceptance">
+              {items.map((it, i) => (
+                <li key={i}>
+                  <button
+                    type="button"
+                    className={`nf-check${it.done ? ' nf-check--done' : ''}`}
+                    aria-label={it.done ? `取消勾选：${it.label}` : `勾选：${it.label}`}
+                    onClick={() => toggle(i)}
+                  >
+                    {it.done ? <IconCheck size={13} /> : <span className="nf-check__empty" />}
+                  </button>
+                  <span>{it.label}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {blockingLabels.length > 0 && (
+            <p className="nf-delivery__hint">阻塞项：{blockingLabels.join('、')}</p>
+          )}
+        </section>
+      )}
+
+      {!hasRecord && items.length === 0 && status !== 'closed' && (
+        <label className="nf-delivery__hint">
+          <input
+            type="checkbox"
+            checked={acceptEmpty}
+            onChange={(e) => {
+              const v = e.target.checked
+              setAcceptEmpty(v)
+              if (v) void acceptNoAcceptance()
+            }}
+          />{' '}
+          我确认本次没有验收来源，按交付结果关闭
+        </label>
+      )}
+
+      {changeSet && changeSet.items.length > 0 && (
+        <section className="nf-delivery__block">
+          <h4>变更集 · {changeSetLabel}</h4>
+          <ul className="nf-delivery__artifacts">
+            {changeSet.items.map((it) => (
+              <li key={it.id}>
+                <IconFile size={12} /> {it.path}
+                <span className="nf-meta"> · {it.status}</span>
               </li>
             ))}
           </ul>
+          {changeSet.status !== 'reverted' && (
+            <button
+              type="button"
+              className="nf-diffcard__revert"
+              onClick={() => void revertChangeSetAll()}
+            >
+              <IconRotateCcw size={12} /> 回滚整个变更集
+            </button>
+          )}
         </section>
       )}
 
@@ -330,13 +533,19 @@ export default function DeliveryPanel({
       )}
 
       <div className="nf-delivery__actions">
-        {status !== 'closed' && items.length > 0 && (
+        {status !== 'closed' && (
           <>
             <button
               type="button"
               className="nf-delivery__primary"
               disabled={!allDone}
-              title={allDone ? '验收全部通过，问题关闭' : '请先勾选全部验收项'}
+              title={
+                allDone
+                  ? '验收通过，问题关闭'
+                  : hasRecord
+                    ? '请先完成全部验收项'
+                    : '请先勾选上方“无验收来源”确认'
+              }
               onClick={() => {
                 setStatus('closed')
                 onConfirmed?.()
@@ -344,7 +553,11 @@ export default function DeliveryPanel({
             >
               确认问题关闭
             </button>
-            {!allDone && <span className="nf-delivery__hint">请先勾选全部验收项</span>}
+            {!allDone && (
+              <span className="nf-delivery__hint">
+                {hasRecord ? '请先完成全部验收项' : '请先确认无验收来源'}
+              </span>
+            )}
           </>
         )}
         {status !== 'closed' && (

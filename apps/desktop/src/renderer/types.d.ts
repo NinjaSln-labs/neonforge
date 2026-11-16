@@ -5,11 +5,19 @@ export interface DirEntry {
   kind: 'file' | 'dir'
 }
 
+export interface ApiKeyStatusView {
+  source: 'env' | 'file' | 'encrypted' | 'plaintext' | 'none'
+  storedAt: string | null
+  plaintextCopy: boolean
+  rotateRecommended: boolean
+}
+
 export interface NeonForgeBridge {
   version: string
   config: {
     hasKey: () => Promise<boolean>
     getKey: () => Promise<string | null>
+    getKeyStatus?: () => Promise<ApiKeyStatusView>
     getProvider: () => Promise<string>
     setKey: (key: string, providerId?: string, modelId?: string | null) => Promise<void>
     clearKey: () => Promise<void>
@@ -21,8 +29,11 @@ export interface NeonForgeBridge {
       searchUrl: string | null
       hasSearchKey: boolean
       searchKey: string | null
+      /** env/file 来源时 searchKey 为脱敏 null（应用内保存不覆盖） */
+      searchKeySource?: 'env' | 'file' | 'config' | 'none'
       keenableApiKey: string | null
       hasKeenableKey: boolean
+      keenableApiKeySource?: 'env' | 'file' | 'config' | 'none'
       keenablePublicTrial: boolean
     }>
     setWebAccess?: (patch: {
@@ -42,8 +53,10 @@ export interface NeonForgeBridge {
         searchUrl: string | null
         hasSearchKey: boolean
         searchKey: string | null
+        searchKeySource?: 'env' | 'file' | 'config' | 'none'
         keenableApiKey: string | null
         hasKeenableKey: boolean
+        keenableApiKeySource?: 'env' | 'file' | 'config' | 'none'
         keenablePublicTrial: boolean
       }
     }>
@@ -78,6 +91,8 @@ export interface NeonForgeBridge {
       level?: string
       tools?: boolean
       forceTool?: boolean
+      progressMode?: 'auto' | 'require-action' | 'require-advance'
+      sessionId?: string
       messages: Array<{
         role: string
         content: string | null
@@ -98,13 +113,112 @@ export interface NeonForgeBridge {
       }) => void,
     ) => () => void
   }
+  usage: {
+    summary: (sessionId?: string) => Promise<{
+      entries: number
+      promptTokens: number
+      completionTokens: number
+      reasoningTokens: number
+      totalTokens: number
+      cost: number
+      unknownCostEntries: number
+      cacheHitRate: number | null
+    }>
+    export: () => Promise<{ ok: boolean; path?: string; error?: string }>
+  }
+  budget: {
+    get: () => Promise<{
+      settings: BudgetSettings
+      summary: {
+        entries: number
+        promptTokens: number
+        completionTokens: number
+        reasoningTokens: number
+        totalTokens: number
+        cost: number
+        unknownCostEntries: number
+        cacheHitRate: number | null
+      }
+      state: { limit: number | null; spent: number; reached: boolean }
+    }>
+    set: (settings: BudgetSettings) => Promise<{
+      ok: boolean
+      error?: string
+      settings?: BudgetSettings
+      state?: { limit: number | null; spent: number; reached: boolean }
+    }>
+  }
+  pricing: {
+    get: () => Promise<PriceTableView>
+    set: (table: PriceTableView) => Promise<{
+      ok: boolean
+      error?: string
+      table?: PriceTableView
+    }>
+  }
+  acceptance: {
+    derive: (
+      sessionId: string,
+      verificationPlan: string[],
+      source?: 'plan-verification' | 'user-dod' | 'manual',
+    ) => Promise<AcceptanceRecord | null>
+    list: (sessionId: string) => Promise<AcceptanceRecord | null>
+    mark: (
+      sessionId: string,
+      itemId: string,
+      status: 'passed' | 'failed' | 'waived',
+      opts?: { evidenceRef?: string; manualReason?: string; reason?: string },
+    ) => Promise<AcceptanceRecord | null>
+    waive: (sessionId: string, itemId: string, reason: string) => Promise<AcceptanceRecord | null>
+    applyEvidence: (sessionId: string, evidenceRefs: string[]) => Promise<AcceptanceRecord | null>
+    evaluate: (sessionId: string) => Promise<GateResult | null>
+    acceptEmpty: (sessionId: string) => Promise<AcceptanceRecord | null>
+    clear: (sessionId: string) => Promise<void>
+  }
+  changeset: {
+    list: (sessionId: string) => Promise<{
+      id: string
+      status: 'proposed' | 'reviewed' | 'applied' | 'reverted' | 'conflicted' | 'superseded'
+      items: Array<{
+        id: string
+        path: string
+        status: 'pending' | 'approved' | 'rejected' | 'applied' | 'reverted' | 'conflicted'
+        baseHash: string | null
+        afterHash: string | null
+        snapshotRef: string | null
+      }>
+      createdAt: string
+      updatedAt: string
+    } | null>
+    revert: (sessionId: string) => Promise<{
+      ok: boolean
+      reverted: string[]
+      conflicted: string[]
+      error?: string
+    }>
+    clear: (sessionId: string) => Promise<void>
+  }
+  queue: {
+    list: (sessionId: string) => Promise<QueueState>
+    enqueue: (sessionId: string, title: string) => Promise<QueueResult>
+    start: (sessionId: string, entryId: string) => Promise<QueueResult>
+    block: (sessionId: string, entryId: string, reason: string) => Promise<QueueResult>
+    resume: (sessionId: string, entryId: string) => Promise<QueueResult>
+    pause: (sessionId: string, entryId: string) => Promise<QueueResult>
+    complete: (sessionId: string, entryId: string) => Promise<QueueResult>
+    fail: (sessionId: string, entryId: string, reason: string) => Promise<QueueResult>
+    cancel: (sessionId: string, entryId: string) => Promise<QueueResult>
+    reorder: (sessionId: string, entryId: string, position: number) => Promise<QueueResult>
+    clear: (sessionId: string) => Promise<void>
+  }
   delivery: {
     applyDiff: (
       path: string,
       diff: string,
       approved?: boolean,
+      sessionId?: string,
     ) => Promise<{ ok: boolean; file?: string; error?: string }>
-    revertDiff: (path: string) => Promise<{ ok: boolean; error?: string }>
+    revertDiff: (path: string, sessionId?: string) => Promise<{ ok: boolean; error?: string }>
   }
   // S4 完成对账 V1a：系统代跑只读验证命令（可选——旧 mock/降级环境无则走纯逻辑判定）
   completion?: {
@@ -149,6 +263,18 @@ export interface NeonForgeBridge {
   }
   tools: NeonForgeTools
   plannedFiles: PlannedFilesApi // D3（ADR-005）：PlannedFiles 契约——权威在 main
+  // BC-02 信任模式（ADR-015：三档预设——权威在 main；renderer 只读镜像 + 用户切换）
+  trust: {
+    get: () => Promise<TrustMode>
+    set: (mode: TrustMode) => Promise<{ ok: boolean; mode: TrustMode; error?: string }>
+  }
+  // BC-02 权限规则（权威在 main userData；deny > allow > ask）
+  permissions: {
+    list: () => Promise<PermissionRuleView[]>
+    set: (
+      rules: PermissionRuleView[],
+    ) => Promise<{ ok: boolean; rules: PermissionRuleView[]; error?: string }>
+  }
   // #6 真机 2026-08-31（复验轮）：方案确认镜像——approve-files 硬序门
   session: {
     setPlanConfirmed: (v: boolean) => Promise<void>
@@ -166,6 +292,34 @@ export interface NeonForgeBridge {
   plugins: {
     list: () => Promise<Array<{ name: string; version: string; active: boolean }>>
     toggle: (name: string, active: boolean) => Promise<boolean>
+  }
+  extensions: {
+    list: () => Promise<ExtensionInfo[]>
+    toggle: (
+      name: string,
+      active: boolean,
+    ) => Promise<{
+      ok: boolean
+      extension: ExtensionInfo | null
+    }>
+    authorize: (name: string) => Promise<{ ok: boolean; extension: ExtensionInfo | null }>
+  }
+  mcp: {
+    config: () => Promise<{ path: string; servers: McpServerConfigView[] }>
+    save: (servers: unknown) => Promise<{
+      ok: boolean
+      servers?: McpServerConfigView[]
+      error?: string
+    }>
+    refresh: () => Promise<{ servers: McpServerStatus[]; configError?: string }>
+    status: () => Promise<McpServerStatus[]>
+  }
+  git: {
+    read: (
+      action: 'status' | 'log' | 'diff' | 'branches',
+      rootPath?: string,
+      opts?: { path?: string; limit?: number },
+    ) => Promise<{ ok: boolean; data?: unknown; error?: string }>
   }
   preheat: {
     status: () => Promise<{
@@ -203,6 +357,89 @@ export {}
 export interface AcceptanceItem {
   label: string
   done: boolean
+}
+/** BC-14 验收记录（与 domain/acceptance.ts 保持结构一致） */
+export interface AcceptanceRecord {
+  id: string
+  items: Array<{
+    id: string
+    label: string
+    source: 'plan-verification' | 'user-dod' | 'manual'
+    status: 'pending' | 'passed' | 'failed' | 'waived'
+    evidenceRef?: string
+    manualReason?: string
+    waivedReason?: string
+  }>
+  createdAt: string
+  updatedAt: string
+}
+export interface GateResult {
+  verdict: 'passed' | 'failed' | 'incomplete' | 'passed-with-waivers'
+  blocking: string[]
+  waived: string[]
+}
+/** BC-11 队列条目（与 domain/taskQueue.ts 保持结构一致） */
+export interface QueueEntry {
+  id: string
+  taskRef: string
+  title: string
+  status: 'queued' | 'running' | 'blocked' | 'paused' | 'completed' | 'failed' | 'cancelled'
+  createdAt: string
+  updatedAt: string
+  blockReason?: string
+  failReason?: string
+}
+export interface QueueState {
+  entries: QueueEntry[]
+}
+export interface QueueResult {
+  ok: boolean
+  queue?: QueueState
+  error?: string
+}
+/** BC-13 扩展视图（与 domain/extension.ts 保持结构一致） */
+export interface ExtensionCapability {
+  id: string
+  name: string
+  description: string
+  risk: 'none' | 'low' | 'high'
+}
+export interface ExtensionInfo {
+  id: string
+  name: string
+  version: string
+  kind: 'builtin' | 'mcp' | 'git'
+  status: 'registered' | 'active' | 'inactive' | 'failed'
+  trust: 'builtin' | 'user-authorized' | 'untrusted'
+  capabilities: ExtensionCapability[]
+  active: boolean
+  failureReason?: string
+  authorizedAt?: string
+}
+export interface McpServerConfigView {
+  name: string
+  command: string
+  args?: string[]
+  cwd?: string
+}
+export interface McpServerStatus {
+  name: string
+  ok: boolean
+  tools: Array<{ name: string; description?: string }>
+  error?: string
+}
+/** BC-12 预算设置 */
+export interface BudgetSettings {
+  limitUsd: number | null
+  pauseOnReach: boolean
+}
+/** BC-12 价格表（provider:model → 每百万 token 单价） */
+export interface PriceTableView {
+  version: string
+  models: Record<
+    string,
+    { promptPerMillion: number; completionPerMillion: number; cacheHitPerMillion?: number }
+  >
 }
 export interface DeliveryPackage {
   status: 'draft' | 'delivered' | 'closed'
@@ -256,7 +493,7 @@ export interface NeonForgeTools {
   list: () => Promise<
     Array<{
       name: string
-      source: 'core' | 'lsp'
+      source: 'core' | 'lsp' | 'extension'
       requiresApproval: boolean
       risk: 'none' | 'low' | 'high'
     }>
@@ -264,7 +501,12 @@ export interface NeonForgeTools {
   execute: (
     name: string,
     args: Record<string, unknown>,
-    opts?: { approved?: boolean; rootPath?: string; sessionId?: string },
+    opts?: {
+      approved?: boolean
+      approvalSource?: 'user' | 'auto' | 'delegate'
+      rootPath?: string
+      sessionId?: string
+    },
   ) => Promise<{
     ok: boolean
     data?: { file?: string; snapshot?: boolean } | unknown
@@ -272,7 +514,7 @@ export interface NeonForgeTools {
     needApproval?: boolean
     policy?: boolean
   }>
-  revert: (filePath: string) => Promise<{ ok: boolean; error?: string }>
+  revert: (filePath: string, sessionId?: string) => Promise<{ ok: boolean; error?: string }>
   // ticket 14 可撤销：停止当前活动命令（bash 高危——任何时刻可停，不卡死）
   cancel: () => Promise<{ ok: boolean; error?: string }>
 }
@@ -282,5 +524,19 @@ export interface NeonForgeTools {
 interface PlannedFilesApi {
   load: () => Promise<{ files: string[]; approved: boolean }>
   add: (files: string[]) => Promise<{ files: string[]; approved: boolean }>
+  /** ADR-015：方案确认同步清单（planConfirmed；不置 approve-files 的 approved） */
+  addPlan: (
+    files: string[],
+  ) => Promise<{ files: string[]; approved: boolean; planConfirmed: boolean }>
   reset: () => Promise<{ files: string[]; approved: boolean }>
 }
+
+/** BC-02 权限规则视图（与 main tools.ts PermissionRule 保持结构一致） */
+export interface PermissionRuleView {
+  action: 'allow' | 'deny' | 'ask'
+  tool: string
+  specifier: string
+}
+
+/** BC-02 信任模式（与 domain/trustMode.ts 保持结构一致——ADR-015） */
+export type TrustMode = 'strict' | 'standard' | 'delegated'

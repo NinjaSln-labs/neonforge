@@ -1,7 +1,8 @@
 # 覆盖矩阵（Coverage Matrix）
 
-> 生成：2026-08-16（S2 首版）→ **更新：D3 完成（2026-08-16）**
-> 数据源版本：L1 测试 35 文件 / 435 用例 · 事件注册表 48 事件 · 不变量 Inv 1-8 · S2/S3 DoD · L3 49 场景（interaction）
+> 首版：2026-08-16（S2）→ 增补：2026-09-29（Keenable 合规）
+> 当前快照（2026-11-17）：L1 **75 文件 / 884 用例** · 事件注册表 56+ 事件 · 不变量 Inv 1-8 + I17-I21 · L3 interaction **85 场景**
+> 表 1-表 10 保留各阶段时点的基线记录；当前总数以本快照与 `09-openspec/tasks.md §4` 为准。
 > 维护：阶段末更新（coverage-matrix skill）；缺口入 audit-items
 
 ## 表 1：不变量 ↔ L1 测试
@@ -39,7 +40,9 @@
 | plan.rejected | 清单外被拒 | timelineEvents.test.ts | ✅ |
 | tool.requested / executing / executed / failed | 工具生命周期 | timelineEvents.test.ts | ✅ |
 | tool.blocked | 拦截 gate | timelineEvents.test.ts | ✅ |
+| gate.denied | 机制拒绝（拒绝记忆/策略 deny，非 ask） | timelineEvents.test.ts::gate.denied（注册/载荷/缺必选）+ gateDenied.interaction.ts | ✅ |
 | tool.approved / rejected / remembered | 授权三态 | timelineEvents.test.ts | ✅ |
+| security.trust_delegation_denied | 低危委托越界被 main 二次校验拒绝 | timelineEvents.test.ts（注册/载荷/缺 reason） | ✅ |
 | capability.checked / ledger_updated | 能力检查/回填 | timelineEvents.test.ts | ✅ |
 | environment.injected | 环境快照 | timelineEvents.test.ts | ✅ |
 | conversation.created | 会话创建 | timelineEvents.test.ts | ✅ |
@@ -52,6 +55,8 @@
 | **proposal.plan / proposal.completion** | **提议解析事件（S2 登记 + S3 接线）** | **timelineEvents.test.ts::proposal.*（schema/成功/失败/缺必选 4 断言）** | ✅（A-003 关闭 + A-007 两形态 schema） |
 | **completion.evidence_missing** | **完成声明被拒诊断（S4 登记 + 接线打点）** | **timelineEvents.test.ts::completion.evidence_missing（schema/载荷/缺必选 3 断言）+ L3 S4-1a/S4-3 打点断言** | ✅（S4——A-010 关闭） |
 | conversation.status_change / error | 状态/错误 | timelineEvents.test.ts | ✅ |
+
+> 表 3-表 8 中的用例/场景数是各阶段 DoD 的时点记录，不是当前总数；当前总数见页首快照。
 
 ## 表 3：DoD ↔ 门禁（S2 spec）
 
@@ -128,7 +133,7 @@
 | main 门控跨重启一致（registerIpc → syncPlanApprovedFromStore——write 不再被规划引导拦） | tools.test.ts::D3 syncPlanApprovedFromStore 恢复 approved → needApproval 判定（L1 新增 1） | ✅ |
 | IPC 契约三件套（planned-files:load/add/reset——preload 类型化/无悬挂引用） | L2 双 tsc 0 错 + L3 D3-1（load 挂载被调/add 批准链单次） | ✅ |
 | 恢复接线（挂载 load → 本地镜像——StrictMode 双挂载 ≥1） | L3 D3-1（load 计数 + 主流程正常） | ✅ |
-| 批准链走 IPC（approvePlan → planned-files:add——与 grantPlan 同清单 trustPath） | L3 D3-1（done 卡 + add 恰一次 + 无授权卡） | ✅ |
+| 批准链走 IPC（approvePlan → planned-files:add——与 grantPlan 同清单 trustPath） | L3 D3-1（done 卡 + add 恰一次（方案确认走独立 sync-plan）+ 无授权卡） | ✅ |
 | 任务边界重置（目标确认 → clearTrust → planned-files:reset 同步 main——批准事实不跨任务） | L3 D3-2（reset 计数 1 + 方案卡流程正常）+ 既有 clearTrust→filesApprovedReset 语义回归 | ✅ |
 | 三基准统一（未修 1——planned/produced/projectFiles 绝对基准一致 + plannedComplete 判定单源） | conversationState.test.ts::plannedComplete 绝对路径既有断言（回归）+ plannedFilesStore.test.ts::相对路径原样保留（变换归调用方） | ✅ |
 | **#8 拦截引导优化（sessionGate 拒绝回填下一步明确动作——对齐 sysPrompt ⑬⑭ 提议格式契约）** | **conversationState.test.ts::#8 目标未确认引导【目标确认】/方案未确认引导【执行方案】（L1 +2 断言——940773e）** | ✅ |
@@ -156,7 +161,53 @@
 | probe：DDG→keyed search / health；从不打 public | webTools.test.ts | ✅ |
 | UAT 显式试用或 `NF_UAT_KEENABLE_KEY`（T3/G-web） | uat-lib `ensureWebAccessEnabled` + `docs/tests/uat-tier-baseline.md` | ✅ harness |
 
+## 表 11：BC-10～BC-14 目标态领域 ↔ 测试（2026-11-14 落地，2026-11-15 复核）
+
+| 领域 / 硬化项 | 覆盖测试 | 判定 |
+|---------------|----------|------|
+| BC-10 变更与版本 | `changeSet.test.ts`（状态机/不变量 I17）、`changeSetService.test.ts`（快照/应用/回滚）、`applyDiff.test.ts`（diff 审核） | ✅ |
+| BC-02 权限规则持久化 | `permissionRulesStore.test.ts`（校验/去重/原子写/边界/单条坏规则容错）、`permissionRules.test.ts`（selectRule 优先级、canonical 参数防 decoy、路径归一、bash 链守卫）、`tools.test.ts`（allow/deny/ask 执行路径、auto/user 来源）、interaction「设置：权限规则添加/删除（双击串行化）」 | ✅ |
+| BC-11 任务编排 | `taskQueue.test.ts`、`taskQueueStore.test.ts`、`queue.interaction.ts`（连续排队 FIFO、停止回填输入框） | ✅ |
+| BC-12 用量与成本 | `usageLedger.test.ts`、`usageStore.test.ts`、`budgetStore.test.ts`、`priceStore.test.ts`、`gatewayUsage.test.ts` | ✅ |
+| BC-13 扩展与集成 | `extension.test.ts`、`extensionRegistry.test.ts`、`mcpClient.test.ts`、`mcpConfig.test.ts`、`mcpManager.test.ts`、`gitBridge.test.ts`、`pluginSystem.test.ts` | ✅ |
+| BC-14 验收与质量门禁 | `acceptance.test.ts`、`acceptanceStore.test.ts`、`applyDiff.test.ts`（交付 diff 与门禁联动） | ✅ |
+| P1-04 IPC 契约校验 | `ipcSchema.test.ts`（结构/必填/nullable）、`ipcContractParity.test.ts`（main ↔ preload 静态对齐） | ✅ |
+| P1-02 轻量 Outbox | `timelineOutbox.test.ts`（FIFO 投递/失败保留重放/outboxId 幂等/损坏条目跳过/尾部半行/读取失败可见/目标文件固定）、`timelineLogger.test.ts`（投递失败留 Outbox/启动重放/重启 seq 续接/崩溃窗口幂等/跨午夜重放/索引读失败重试/旧 DLQ 兼容） | ✅ |
+| P1-02 跨存储事务性 Outbox | `stateTransaction.test.ts`（WAL 提交/失败保留/FIFO 重放/确定性 outboxId/损坏 WAL/半行尾丢弃/latestWriteContent）、`acceptanceStore.test.ts`/`taskQueueStore.test.ts`/`changeSetService.test.ts`（commit 回调：状态+基线+事件同事务） | ✅ |
+| 任务状态机跨重启（ADR-013 / GitHub #11） | `taskSnapshot.test.ts`（全字段往返/损坏/版本/嵌套决策内容深校验/合法边界态）、`sessionStore.test.ts`（V2 消息+任务原子记录/旧 V1 兼容/待授权工具卡保留）、`sessionRestore.interaction.ts`（快照恢复 pending 方案卡与决策内容、planConfirmed 主进程镜像、待授权工具卡恢复且启动不伪造决策事件） | ✅ |
+| 审查回归（2026-11-15） | `agentLoop.test.ts::isApprovalIntent`（否定不批准）、`retry.interaction.ts`（第二轮失败重试上下文）、`queue.interaction.ts`（FIFO/停止回填） | ✅ |
+| 结构化澄清与假设来源（ADR-014 / GitHub #13） | `protocolTools.test.ts`（`ask_user.assumptions` ≤6/逐条非空、提议假设 `{text,source}` 校验与归一化、string→`model_inference`）、`taskSnapshot.test.ts`（v1 兼容/空串跳过/旧字符串归一化/来源保留/非法来源拒绝）、`clarifyAnswer.test.ts`（JSON 往返/换行冒号注入/损坏拒绝）、`assumptionEvidence.test.ts`（无证据来源降级/证据命中保留）、`planProposalParser.test.ts`（文本降级假设 → `model_inference`）、`structuredClarify.interaction.ts`（核对卡选择/修正/JSON 回答/双击防护/草稿保留、options 与 assumptions 并存、待决策点不被误拒、来源制裁与降级、3 场景） | ✅ |
+| 审查修复批（2026-11-16，`a9f8a84..HEAD`） | `stateTransaction.test.ts`（写失败回退 mtime、非 ASCII 尾部截断、短写循环）、`timelineLogger.test.ts`/`timelineOutbox.test.ts`（DLQ outboxId 重放不重复、同 id 入队幂等）、`changeSetService.test.ts`（基线仍在 WAL 时回滚不误判 conflict）、`taskSnapshot.test.ts`（决策内容深层校验/合法边界态）、`sessionStore.test.ts`（待授权工具卡持久化）、`sessionRestore.interaction.ts`（恢复待授权卡且无伪造决策事件） | ✅ |
+| P1-05 会话/轮次编排拆分 | `conversationHistory.test.ts`、`useConversationState.test.ts` + interaction 全量 84 场景 | ✅ |
+| Web Key 来源与明文副本 | `configStore.test.ts`（env/file/config 来源、opt-in 明文、删除清理） | ✅ |
+
+> 表 11 为 2026-11-15 增补；逐文件用例数不在此重复，避免与页首快照漂移。
+
+## 表 12：信任模式预设 ↔ 测试（ADR-015 / GitHub #12，2026-11-16）
+
+| 功能 | 覆盖测试 | 判定 |
+|------|----------|------|
+| 三档 trustMode 持久化（0600/原子写/损坏回退 standard） | `trustPolicyStore.test.ts`（缺失/损坏/非法值回退、三档往返、0600、非法 save 抛出） | ✅ |
+| 计划确认与批量批准分离 | `plannedFilesStore.test.ts`（`addPlan` 置 planConfirmed 不置 approved、跨实例恢复、reset 撤销、落盘失败时进程内缓存立即撤销） | ✅ |
+| IPC 契约 `trust:get`/`trust:set` | `ipcSchema.test.ts`（三档枚举 + mode 必填）、`ipcContractParity.test.ts`（main↔preload 通道静态对齐） | ✅ |
+| renderer 判定单源 | `authModel.test.ts`（trusted 恒自动、strict 全否、standard 清单内 write、delegated 清单内 write/edit、清单外/未确认/bash 拒绝、来源 auto/delegate） | ✅ |
+| main 委托执行边界 | `tools.test.ts`（清单内 write/edit 放行、清单外/根外/bash/方案未确认拒绝、ask 只接受 user、ENOTDIR 回授权卡不悬挂） | ✅ |
+| 审计事件 | `timelineEvents.test.ts`（`security.trust_delegation_denied` 注册/载荷；`tool.executing` 带 approvalSource） | ✅ |
+| 旧 localStorage 开关迁移 | `useTrustPolicy.test.ts`（读取不写标记、'1'→delegated、'0'→standard、main 成功后才删键、已迁移幂等、存储抛错不阻塞） | ✅ |
+| 设置页三档切换 + 委托仅计划内放行 | `trustModes.interaction.ts`（设置页切换持久化/旧键迁移删除、delegated 清单内 edit 自动且来源 delegate、strict 清单内 write 仍弹授权卡） | ✅ |
+
+## 表 13：机制拒绝事件 gate.denied ↔ 测试（ADR-016 / GitHub #16，2026-11-17）
+
+| 功能 | 覆盖测试 | 判定 |
+|------|----------|------|
+| canExecute 结构化拒绝来源 | `conversationState.test.ts`（拒绝记忆 → `deniedBy=rejection-memory` + attribute/risk；策略 deny → `action-gate`；pending/清单边界 → `session-gate`） | ✅ |
+| gate.denied 事件注册 | `timelineEvents.test.ts`（domain gate、role system、name/gate/reason/attribute/risk、缺必选 warn） | ✅ |
+| 发送点与边界 | `gateDenied.interaction.ts`（首次授权 ask 不记；拒绝后同命令重试 → 不弹卡不执行 + 一条 gate.denied 且属性 hazardous/risk high） | ✅ |
+
 ## L5 视觉基线纪律（K8）
+
+- 2026-11-17 macOS 宿主全量 **37/37** 通过并更新基线（trust-ladder、settings、delivery、toolcalls 7 张）；WSL/Linux 不复现像素，不更新基线。
+
 
 - 基线权威宿主 = **macOS**；仅在 Mac 上 `--update-snapshots` 后入库（见 `apps/desktop/playwright.config.ts`）。
 - WSL/Linux 渲染 ≠ 基线宿主——禁止在非 Mac 上 update 后入库。

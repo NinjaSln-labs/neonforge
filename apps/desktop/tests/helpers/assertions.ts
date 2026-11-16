@@ -7,8 +7,8 @@ import { expect, type Locator, type Page } from '@playwright/test'
 
 // ── 可见性 ────────────────────────────────────────────────────────────────
 
-/** 元素可见（默认超时 8s——交互测试通用节奏） */
-export async function expectVisible(locator: Locator, timeout = 8000): Promise<void> {
+/** 元素可见（默认超时 30s——Vite 按需编译冷模块 + WSL 负载下 15s 仍偶发不足） */
+export async function expectVisible(locator: Locator, timeout = 30000): Promise<void> {
   await expect(locator).toBeVisible({ timeout })
 }
 

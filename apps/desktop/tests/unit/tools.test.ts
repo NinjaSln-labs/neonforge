@@ -12,6 +12,7 @@ import {
   isValidOpenUrl,
   isReadOnlyBash,
 } from '../../src/main/tools'
+import { isKillablePid } from '../../src/main/processGuard'
 import { getPlannedFilesStore } from '../../src/main/plannedFilesStore.instance'
 
 // 2026-08-06 open 工具（用户「帮我打开」）：mock electron shell——vitest node 环境无 electron
@@ -28,8 +29,10 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     markPlanApproved() // 2026-08-04 规划强制适配：write/edit 测试默认已规划（规划机制本身有独立行为）
     if (!existsSync(TMP)) mkdirSync(TMP, { recursive: true })
     initTools()
+    toolRegistry.setRules([]) // BC-02：规则测试不得泄漏到其它用例
   })
   afterEach(() => {
+    toolRegistry.setRules([])
     rmSync(TMP, { recursive: true, force: true })
   })
 
@@ -41,6 +44,84 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     expect(r.needApproval).toBe(true)
     expect(r.error).toContain('授权')
     expect(existsSync(file)).toBe(false)
+  })
+
+  // BC-02 权限规则持久化配套：规则引擎在真实执行路径生效
+  it('allow 规则命中 → edit 无需逐次授权', async () => {
+    const file = path.join(TMP, 'rule-allow.txt')
+    writeFileSync(file, 'hello')
+    toolRegistry.setRules([{ action: 'allow', tool: 'edit', specifier: TMP }])
+    const r = await toolRegistry.execute(
+      'edit',
+      { path: file, old: 'hello', new: 'world' },
+      { rootPath: TMP },
+    )
+    expect(r.ok).toBe(true)
+    expect(readFileSync(file, 'utf-8')).toBe('world')
+  })
+
+  it('deny 规则优先于同参数 allow（规则顺序不改变裁决）', async () => {
+    const file = path.join(TMP, 'rule-deny.txt')
+    writeFileSync(file, 'hello')
+    toolRegistry.setRules([
+      { action: 'allow', tool: 'edit', specifier: TMP },
+      { action: 'deny', tool: 'edit', specifier: TMP },
+    ])
+    const r = await toolRegistry.execute(
+      'edit',
+      { path: file, old: 'hello', new: 'world' },
+      { rootPath: TMP, approved: true },
+    )
+    expect(r.ok).toBe(false)
+    expect(r.error).toContain('已阻止')
+    expect(readFileSync(file, 'utf-8')).toBe('hello')
+  })
+
+  it('ask 规则不被只读 preApproval 自动放行绕过', async () => {
+    toolRegistry.setRules([{ action: 'ask', tool: 'bash', specifier: 'ls' }])
+    const r = await toolRegistry.execute('bash', { command: 'ls' }, { rootPath: TMP })
+    expect(r.ok).toBe(false)
+    expect(r.needApproval).toBe(true)
+  })
+
+  it('ask 规则：自动批准来源仍要求用户授权，user 来源放行', async () => {
+    const file = path.join(TMP, 'ask-read.txt')
+    writeFileSync(file, 'x')
+    toolRegistry.setRules([{ action: 'ask', tool: 'read', specifier: TMP }])
+    const auto = await toolRegistry.execute(
+      'read',
+      { path: file },
+      { approved: true, approvalSource: 'auto', rootPath: TMP },
+    )
+    expect(auto.ok).toBe(false)
+    expect(auto.needApproval).toBe(true)
+    const user = await toolRegistry.execute(
+      'read',
+      { path: file },
+      { approved: true, approvalSource: 'user', rootPath: TMP },
+    )
+    expect(user.ok).toBe(true)
+  })
+
+  it('ask 规则对无需授权的工具也生效', async () => {
+    toolRegistry.setRules([{ action: 'ask', tool: 'search', specifier: 'x' }])
+    const r = await toolRegistry.execute('search', { query: 'x' }, { rootPath: TMP })
+    expect(r.ok).toBe(false)
+    expect(r.needApproval).toBe(true)
+  })
+
+  it('allow read 前缀不能借 .. 逃出项目根（回到逐次授权）', async () => {
+    const outside = '/tmp/nf-unit-outside-read.txt'
+    writeFileSync(outside, 'secret')
+    try {
+      toolRegistry.setRules([{ action: 'allow', tool: 'read', specifier: path.join(TMP, 'src') }])
+      const escape = path.join(TMP, 'src', '../../nf-unit-outside-read.txt')
+      const r = await toolRegistry.execute('read', { path: escape }, { rootPath: TMP })
+      expect(r.ok).toBe(false)
+      expect(r.needApproval).toBe(true)
+    } finally {
+      rmSync(outside, { force: true })
+    }
   })
 
   it('非授权错误不带 needApproval 字段（未知工具——T2 协议边界）', async () => {
@@ -154,7 +235,11 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     const outside = '/tmp/nf-unit-tools-outside.json'
     writeFileSync(outside, '{"k":"outside"}\n', 'utf-8')
     try {
-      const r3 = await toolRegistry.execute('read', { path: outside }, { rootPath: TMP })
+      const r3 = await toolRegistry.execute(
+        'read',
+        { path: outside },
+        { rootPath: TMP, approved: true },
+      )
       expect(r3.ok).toBe(true)
       expect(String(r3.data)).toContain('outside')
     } finally {
@@ -165,11 +250,49 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     const r4 = await toolRegistry.execute(
       'read',
       { path: '/Users/nobody/NeonForge/package.json' },
-      { rootPath: TMP },
+      { rootPath: TMP, approved: true },
     )
     expect(r4.ok).toBe(true)
     expect(String(r4.data)).not.toContain(`${TMP}/Users`)
     expect(String(r4.data)).toContain('找不到文件')
+  })
+
+  // P0-01：读取边界——项目根内自动；根外必须授权；无 rootPath 也必须授权
+  it('read：项目外路径需授权（根内自动/根外授权）', async () => {
+    const outside = '/tmp/nf-unit-tools-outside-auth.txt'
+    writeFileSync(outside, 'secret-outside', 'utf-8')
+    try {
+      const denied = await toolRegistry.execute('read', { path: outside }, { rootPath: TMP })
+      expect(denied.ok).toBe(false)
+      expect(denied.needApproval).toBe(true)
+      expect(denied.data).toBeUndefined()
+
+      const granted = await toolRegistry.execute(
+        'read',
+        { path: outside },
+        { rootPath: TMP, approved: true },
+      )
+      expect(granted.ok).toBe(true)
+      expect(granted.data).toBe('secret-outside')
+
+      const noRoot = await toolRegistry.execute('read', { path: outside }, {})
+      expect(noRoot.ok).toBe(false)
+      expect(noRoot.needApproval).toBe(true)
+    } finally {
+      rmSync(outside, { force: true })
+    }
+  })
+
+  // P0-04：进程清理守卫——无效 pid 不得进入 kill(-pid)（-0 会向当前进程组发信号）
+  it('isKillablePid：只接受正整数', () => {
+    expect(isKillablePid(1234)).toBe(true)
+    expect(isKillablePid(0)).toBe(false)
+    expect(isKillablePid(-1)).toBe(false)
+    expect(isKillablePid(-1234)).toBe(false)
+    expect(isKillablePid(1.5)).toBe(false)
+    expect(isKillablePid(Number.NaN)).toBe(false)
+    expect(isKillablePid(undefined)).toBe(false)
+    expect(isKillablePid(null)).toBe(false)
   })
 
   it('search：关键词检索（Layer2 CodeRAG——agentic grep 模式）返回命中+行号+片段', async () => {
@@ -299,5 +422,148 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     // 旧名 check-env 不再注册（改名后旧名应 404——防双名双源）
     const old = await toolRegistry.execute('check-env', {}, {})
     expect(old.needApproval).toBeUndefined()
+  })
+})
+
+// ADR-015（GitHub #12）：低危委托的 main 执行边界二次校验
+describe('ToolRegistry 委托边界（ADR-015）', () => {
+  beforeEach(() => {
+    markPlanApproved()
+    getPlannedFilesStore().reset()
+    initTools()
+    toolRegistry.setRules([])
+    if (!existsSync(TMP)) mkdirSync(TMP, { recursive: true })
+  })
+  afterEach(() => {
+    getPlannedFilesStore().reset()
+    toolRegistry.setRules([])
+    rmSync(TMP, { recursive: true, force: true })
+  })
+
+  it('delegate：根内 + 已批准清单内 edit 放行（自动委托真实执行）', async () => {
+    const file = path.join(TMP, 'delegated-edit.txt')
+    writeFileSync(file, 'alpha\nbeta\n', 'utf-8')
+    getPlannedFilesStore().addPlan([file])
+    const r = await toolRegistry.execute(
+      'edit',
+      { path: file, old: 'beta', new: 'BETA' },
+      { approved: true, approvalSource: 'delegate', rootPath: TMP },
+    )
+    expect(r.ok).toBe(true)
+    expect(readFileSync(file, 'utf-8')).toBe('alpha\nBETA\n')
+  })
+
+  it('delegate：根内 + planConfirmed 清单内 write 放行（write/edit 同一防线）', async () => {
+    const file = path.join(TMP, 'delegated-write.txt')
+    getPlannedFilesStore().addPlan([file])
+    const r = await toolRegistry.execute(
+      'write',
+      { path: file, content: 'x' },
+      { approved: true, approvalSource: 'delegate', rootPath: TMP },
+    )
+    expect(r.ok).toBe(true)
+    expect(readFileSync(file, 'utf-8')).toBe('x')
+  })
+
+  it('delegate：旧存档只有 approve-files approved（无 planConfirmed）也视为有效批准', async () => {
+    const file = path.join(TMP, 'legacy-approved.txt')
+    writeFileSync(file, 'a')
+    getPlannedFilesStore().add([file]) // approved=true，planConfirmed=false（旧版本数据）
+    const r = await toolRegistry.execute(
+      'edit',
+      { path: file, old: 'a', new: 'b' },
+      { approved: true, approvalSource: 'delegate', rootPath: TMP },
+    )
+    expect(r.ok).toBe(true)
+    expect(readFileSync(file, 'utf-8')).toBe('b')
+  })
+
+  it('delegate：清单外文件拒绝（needApproval + 不执行）', async () => {
+    const file = path.join(TMP, 'out-of-plan.txt')
+    const planned = path.join(TMP, 'planned.txt')
+    writeFileSync(planned, 'x')
+    getPlannedFilesStore().addPlan([planned])
+    const r = await toolRegistry.execute(
+      'write',
+      { path: file, content: 'x' },
+      { approved: true, approvalSource: 'delegate', rootPath: TMP },
+    )
+    expect(r.ok).toBe(false)
+    expect(r.needApproval).toBe(true)
+    expect(r.error).toContain('委托越界')
+    expect(existsSync(file)).toBe(false)
+  })
+
+  it('delegate：项目根外文件拒绝（即使已列入清单）', async () => {
+    const outside = '/tmp/nf-delegated-outside.txt'
+    const file = path.join(TMP, 'root-outside.txt')
+    writeFileSync(outside, 'secret')
+    getPlannedFilesStore().addPlan([file])
+    try {
+      const r = await toolRegistry.execute(
+        'write',
+        { path: file, content: 'x' },
+        { approved: true, approvalSource: 'delegate', rootPath: '/tmp/nf-other-root' },
+      )
+      expect(r.ok).toBe(false)
+      expect(r.needApproval).toBe(true)
+      expect(existsSync(file)).toBe(false)
+    } finally {
+      rmSync(outside, { force: true })
+    }
+  })
+
+  it('delegate：bash / 非文件动作永不委托', async () => {
+    getPlannedFilesStore().addPlan([path.join(TMP, 'x.txt')])
+    const r = await toolRegistry.execute(
+      'bash',
+      { command: 'echo hi' },
+      { approved: true, approvalSource: 'delegate', rootPath: TMP },
+    )
+    expect(r.ok).toBe(false)
+    expect(r.needApproval).toBe(true)
+    expect(r.error).toContain('委托越界')
+  })
+
+  it('delegate 不得借显式 ask 规则绕过（ask 只接受 user 来源）', async () => {
+    const file = path.join(TMP, 'ask-delegate.txt')
+    writeFileSync(file, 'hello')
+    getPlannedFilesStore().addPlan([file])
+    toolRegistry.setRules([{ action: 'ask', tool: 'edit', specifier: TMP }])
+    const r = await toolRegistry.execute(
+      'edit',
+      { path: file, old: 'hello', new: 'world' },
+      { approved: true, approvalSource: 'delegate', rootPath: TMP },
+    )
+    expect(r.ok).toBe(false)
+    expect(r.needApproval).toBe(true)
+    expect(readFileSync(file, 'utf-8')).toBe('hello')
+  })
+
+  it('delegate：方案未确认 → 拒绝（renderer 不能独立宣告方案已确认）', async () => {
+    const file = path.join(TMP, 'no-approved-plan.txt')
+    writeFileSync(file, 'hello')
+    const r = await toolRegistry.execute(
+      'edit',
+      { path: file, old: 'hello', new: 'world' },
+      { approved: true, approvalSource: 'delegate', rootPath: TMP },
+    )
+    expect(r.ok).toBe(false)
+    expect(r.needApproval).toBe(true)
+    expect(readFileSync(file, 'utf-8')).toBe('hello')
+  })
+  it('delegate：路径解析异常（ENOTDIR）回授权卡而非 IPC 拒绝（工具卡不得永久 pending）', async () => {
+    const blocker = path.join(TMP, 'a-file.txt')
+    writeFileSync(blocker, 'x')
+    getPlannedFilesStore().addPlan([blocker])
+    const bad = path.join(blocker, 'child.txt') // 中间路径是文件 → ENOTDIR
+    const r = await toolRegistry.execute(
+      'edit',
+      { path: bad, old: 'a', new: 'b' },
+      { approved: true, approvalSource: 'delegate', rootPath: TMP },
+    )
+    expect(r.ok).toBe(false)
+    expect(r.needApproval).toBe(true)
+    expect(r.error).toContain('路径无法校验')
   })
 })

@@ -109,4 +109,49 @@ describe('PlannedFilesStore（D3——计划清单持久化仓库）', () => {
     expect(raw.files).toEqual(['/proj/src/app.ts'])
     expect(raw.approved).toBe(true)
   })
+  // ADR-015：方案确认清单与 approve-files 批准是两件事——委托边界只看 planConfirmed
+  it('addPlan：并入清单 + planConfirmed=true，不置 approved（不冒充批量批准）', () => {
+    const store = new PlannedFilesStore(filePath)
+    const data = store.addPlan(['/proj/src/app.ts'])
+    expect(data.files).toEqual(['/proj/src/app.ts'])
+    expect(data.approved).toBe(false)
+    expect(data.planConfirmed).toBe(true)
+    expect(store.loadPlan()).toEqual({
+      files: ['/proj/src/app.ts'],
+      approved: false,
+      planConfirmed: true,
+    })
+    // 已有 approval 不被 addPlan 改变
+    store.add(['/proj/src/app.ts'])
+    store.addPlan(['/proj/src/lib.ts'])
+    expect(store.loadPlan()).toEqual({
+      files: ['/proj/src/app.ts', '/proj/src/lib.ts'],
+      approved: true,
+      planConfirmed: true,
+    })
+  })
+
+  it('loadPlan 跨实例恢复 planConfirmed；reset 同时清除 planConfirmed', () => {
+    const s1 = new PlannedFilesStore(filePath)
+    s1.addPlan(['/proj/src/app.ts'])
+    const s2 = new PlannedFilesStore(filePath)
+    expect(s2.loadPlan().planConfirmed).toBe(true)
+    s2.reset()
+    expect(s2.loadPlan()).toEqual({ files: [], approved: false, planConfirmed: false })
+    expect(new PlannedFilesStore(filePath).loadPlan().planConfirmed).toBe(false)
+  })
+
+  it('reset 写盘失败仍立即撤销进程内授权（不读回旧 approved/planConfirmed）', () => {
+    const store = new PlannedFilesStore(filePath)
+    store.addPlan(['/proj/src/app.ts'])
+    store.add(['/proj/src/app.ts'])
+    store.reset()
+    // 模拟 reset 落盘失败后磁盘仍是旧批准事实
+    writeFileSync(
+      filePath,
+      JSON.stringify({ files: ['/proj/src/app.ts'], approved: true, planConfirmed: true }),
+      'utf-8',
+    )
+    expect(store.loadPlan()).toEqual({ files: [], approved: false, planConfirmed: false })
+  })
 })

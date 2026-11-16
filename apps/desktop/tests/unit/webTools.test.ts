@@ -216,3 +216,66 @@ describe('webTools 门控', () => {
     )
   })
 })
+
+// P1-01：SSRF 边界——本机/私网/云元数据地址拒绝；重定向手动逐跳校验
+describe('web_fetch SSRF 边界', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('localhost/私网/元数据地址 → 拒绝且不发起请求', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const r1 = await webFetch('http://localhost:3000/x', cfg({ enabled: true }))
+    expect(r1).toMatchObject({ ok: false })
+    expect(String((r1 as { error: string }).error)).toMatch(/本机|私网/)
+    const r2 = await webFetch('http://169.254.169.254/latest/meta-data', cfg({ enabled: true }))
+    expect(r2).toMatchObject({ ok: false })
+    const r3 = await webFetch('http://10.0.0.5/admin', cfg({ enabled: true }))
+    expect(r3).toMatchObject({ ok: false })
+    const r4 = await webFetch('http://192.168.1.1/', cfg({ enabled: true }))
+    expect(r4).toMatchObject({ ok: false })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('重定向到私网 → 阻断（只发起第一跳）', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response('', { status: 302, headers: { Location: 'http://127.0.0.1/admin' } }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+    const r = await webFetch('https://example.com/redirect', cfg({ enabled: true }))
+    expect(r).toMatchObject({ ok: false })
+    expect(String((r as { error: string }).error)).toMatch(/重定向|本机|私网/)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('重定向到合法地址 → 跟随并返回内容', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response('', { status: 302, headers: { Location: 'https://example.com/final' } }),
+      )
+      .mockResolvedValueOnce(
+        new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+    const r = await webFetch('https://example.com/start', cfg({ enabled: true }))
+    expect(r.ok).toBe(true)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('重定向协议非 http(s) → 拒绝', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response('', { status: 302, headers: { Location: 'file:///etc/passwd' } }),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+    const r = await webFetch('https://example.com/x', cfg({ enabled: true }))
+    expect(r).toMatchObject({ ok: false })
+    expect(String((r as { error: string }).error)).toMatch(/重定向|http/)
+  })
+})

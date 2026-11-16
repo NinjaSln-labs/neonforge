@@ -61,11 +61,13 @@ export const toolCall = {
     question: string,
     type: string,
     options: Array<{ label: string; description?: string }> = [],
+    assumptions: string[] = [],
   ): StreamChunk =>
     chunk.tool('ask_user', {
       question,
       type,
       ...(options.length ? { options } : {}),
+      ...(assumptions.length ? { assumptions } : {}),
     }),
 }
 
@@ -87,6 +89,8 @@ export interface MockBridgeOptions {
   demo?: Record<string, unknown>
   /** D3：plannedFiles 初始状态（main 权威 mock——load 返回；默认空清单未批准） */
   plannedFiles?: { files: string[]; approved: boolean }
+  /** ADR-015：信任模式初始状态（main trust:get mock；默认 standard） */
+  trustMode?: 'strict' | 'standard' | 'delegated'
   /** 模型行为脚本：按 chat 轮次（1-based）出 chunk 的轮次表 */
   script?: StreamChunk[][]
   /** 轮次表之外的轮次回复（默认静默） */
@@ -105,6 +109,8 @@ export interface MockBridgeOptions {
     sentMsgs?: boolean // window.__nfSentMsgs（每次 streamChat 的 messages）
     forceToolCalls?: boolean // window.__nfForceToolCalls（每次 streamChat 的 forceTool）
     approvedFlags?: boolean // window.__nfApprovedFlags（write/edit 的 approved 标记）
+    approvalSources?: boolean // window.__nfApprovalSources（write/edit 的 approvalSource 调用记录——ADR-015）
+    trustSetCalls?: boolean // window.__nfTrustSetCalls（trust:set 调用记录）
     titleCalls?: boolean // window.__nfTitleCalls（updateProjectTitle 调用记录）
     planConfirmedCalls?: boolean // window.__nfPlanConfirmedCalls（session.setPlanConfirmed 镜像记录——A-016 硬序门）
   }
@@ -125,6 +131,10 @@ export interface MockBridgeHandle {
   sentMessages(): Promise<Array<{ role: string; content: string }>>
   forceToolCalls(): Promise<boolean[]>
   approvedFlags(): Promise<boolean[]>
+  /** ADR-015：write/edit 的 approvalSource 调用记录（需 capture.approvalSources） */
+  approvalSources(): Promise<Array<string | undefined>>
+  /** ADR-015：trust:set 调用记录（需 capture.trustSetCalls） */
+  trustSetCalls(): Promise<string[]>
   titleCalls(): Promise<Array<{ p: string; title: string }>>
   /** A-016：session.setPlanConfirmed 镜像调用记录（需 capture.planConfirmedCalls） */
   planConfirmedCalls(): Promise<boolean[]>
@@ -141,6 +151,7 @@ interface Spec {
   fileContents: Record<string, string>
   demo: Record<string, unknown> | null
   plannedFiles: { files: string[]; approved: boolean }
+  trustMode: 'strict' | 'standard' | 'delegated'
   rounds: StreamChunk[][]
   defaultRound: StreamChunk[]
   streamDelay: number
@@ -152,6 +163,8 @@ interface Spec {
     sentMsgs: boolean
     forceToolCalls: boolean
     approvedFlags: boolean
+    approvalSources: boolean
+    trustSetCalls: boolean
     titleCalls: boolean
     planConfirmedCalls: boolean
   }
@@ -168,6 +181,7 @@ export async function installMockBridge(
     fileContents: opts.fileContents ?? {},
     demo: opts.demo ?? null,
     plannedFiles: opts.plannedFiles ?? { files: [], approved: false },
+    trustMode: opts.trustMode ?? 'standard',
     rounds: opts.script ?? [],
     defaultRound: opts.defaultRound ?? [],
     streamDelay: opts.streamDelay ?? 50,
@@ -179,6 +193,8 @@ export async function installMockBridge(
       sentMsgs: opts.capture?.sentMsgs ?? false,
       forceToolCalls: opts.capture?.forceToolCalls ?? false,
       approvedFlags: opts.capture?.approvedFlags ?? false,
+      approvalSources: opts.capture?.approvalSources ?? false,
+      trustSetCalls: opts.capture?.trustSetCalls ?? false,
       titleCalls: opts.capture?.titleCalls ?? false,
       planConfirmedCalls: opts.capture?.planConfirmedCalls ?? false,
     },
@@ -199,6 +215,9 @@ export async function installMockBridge(
     sentMessages: () => read<Array<{ role: string; content: string }>>('__nfSentMsgs', page),
     forceToolCalls: () => read<boolean[]>('__nfForceToolCalls', page),
     approvedFlags: () => read<boolean[]>('__nfApprovedFlags', page),
+    approvalSources: () =>
+      read<Array<string | undefined>>('__nfApprovalSources', page).then((v) => v ?? []),
+    trustSetCalls: () => read<string[]>('__nfTrustSetCalls', page).then((v) => v ?? []),
     titleCalls: () => read<Array<{ p: string; title: string }>>('__nfTitleCalls', page),
     planConfirmedCalls: () => read<boolean[]>('__nfPlanConfirmedCalls', page),
     readCapture: <T>(name: string) => read<T>(name, page),
@@ -228,6 +247,8 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
   const sentMsgs = []
   const forceToolCalls = []
   const approvedFlags = []
+  const approvalSources = []
+  const trustSetCalls = []
   const titleCalls = []
   const planConfirmedCalls = []
   const cbRef = { cb: null }
@@ -240,6 +261,7 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
         return { ok: false, needApproval: true, error: '「' + name + '」需要授权（L3）——approved=true 后执行' }
       }
       if ((name === 'write' || name === 'edit') && ${json(spec.capture.approvedFlags)}) approvedFlags.push(!!(opts && opts.approved))
+      if ((name === 'write' || name === 'edit') && ${json(spec.capture.approvalSources)}) approvalSources.push(opts && opts.approvalSource)
       const result = ${json(spec.executeResults)}[name]
       if (result !== undefined) return result
       if (name === 'write' || name === 'edit') return { ok: true, data: { file: '/test/' + String((args && args.path) || '').split('/').pop(), snapshot: true } }
@@ -338,9 +360,21 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
         return { ok: true }
       },
     },
+    // ADR-015：信任模式（main trust:get/trust:set mock——内存态）
+    trust: (() => {
+      const state = { mode: ${json(spec.trustMode)} }
+      return {
+        get: async () => state.mode,
+        set: async (mode) => {
+          state.mode = mode
+          if (${json(spec.capture.trustSetCalls)}) trustSetCalls.push(mode)
+          return { ok: true, mode }
+        },
+      }
+    })(),
     // D3（ADR-005）：PlannedFiles 三件套契约（main 权威 mock——内存态；恢复场景经 plannedFiles 选项预置）
     plannedFiles: (() => {
-      const state = { files: ${json(spec.plannedFiles.files)}, approved: ${json(spec.plannedFiles.approved)} }
+      const state = { files: ${json(spec.plannedFiles.files)}, approved: ${json(spec.plannedFiles.approved)}, planConfirmed: false }
       return {
         load: async () => ({ files: state.files, approved: state.approved }),
         add: async (files) => {
@@ -348,9 +382,16 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
           state.approved = true
           return { files: state.files, approved: state.approved }
         },
+        // ADR-015：方案确认同步——只置 planConfirmed（approve-files 的 approved 独立）
+        addPlan: async (files) => {
+          state.files = [...new Set([...state.files, ...(files || [])])]
+          state.planConfirmed = true
+          return { files: state.files, approved: state.approved, planConfirmed: true }
+        },
         reset: async () => {
           state.files = []
           state.approved = false
+          state.planConfirmed = false
           return { files: state.files, approved: state.approved }
         },
       }
@@ -373,6 +414,8 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
   if (${json(spec.capture.sentMsgs)}) window.__nfSentMsgs = sentMsgs
   if (${json(spec.capture.forceToolCalls)}) window.__nfForceToolCalls = forceToolCalls
   if (${json(spec.capture.approvedFlags)}) window.__nfApprovedFlags = approvedFlags
+  if (${json(spec.capture.approvalSources)}) window.__nfApprovalSources = approvalSources
+  if (${json(spec.capture.trustSetCalls)}) window.__nfTrustSetCalls = trustSetCalls
   if (${json(spec.capture.titleCalls)}) window.__nfTitleCalls = titleCalls
   if (${json(spec.capture.planConfirmedCalls)}) window.__nfPlanConfirmedCalls = planConfirmedCalls
 })()

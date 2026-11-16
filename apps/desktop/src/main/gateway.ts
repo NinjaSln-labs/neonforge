@@ -34,6 +34,46 @@ export { toDeepSeekParams, extractReasoningText, REASONING_FIELDS }
 // （分类结果 errorType 字段给 renderer——同 validateKey 'key-invalid'/'service-error' 结构化先例）
 export type GatewayErrorType = 'key-invalid' | 'service' | 'unknown'
 
+/** BC-12：Provider 真实流式 usage（仅 Provider 返回时产生） */
+export interface GatewayUsage {
+  providerId: ProviderId
+  model: string
+  promptTokens: number
+  completionTokens: number
+  reasoningTokens: number
+  cacheHitTokens: number | null
+  cacheMissTokens: number | null
+}
+
+/** BC-12：把 Provider usage 载荷归一为计量字段；缺失/畸形返回 null（调用方不记录）。 */
+export function normalizeGatewayUsage(
+  raw: Record<string, unknown> | null,
+  providerId: ProviderId,
+  model: string,
+): GatewayUsage | null {
+  if (!raw || typeof raw !== 'object') return null
+  const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+  const promptDetails = (raw.prompt_tokens_details ?? {}) as Record<string, unknown>
+  const completionDetails = (raw.completion_tokens_details ?? {}) as Record<string, unknown>
+  const cacheHit =
+    typeof raw.prompt_cache_hit_tokens === 'number'
+      ? raw.prompt_cache_hit_tokens
+      : typeof promptDetails.cached_tokens === 'number'
+        ? promptDetails.cached_tokens
+        : null
+  const cacheMiss =
+    typeof raw.prompt_cache_miss_tokens === 'number' ? raw.prompt_cache_miss_tokens : null
+  return {
+    providerId,
+    model,
+    promptTokens: num(raw.prompt_tokens),
+    completionTokens: num(raw.completion_tokens),
+    reasoningTokens: num(completionDetails.reasoning_tokens),
+    cacheHitTokens: cacheHit,
+    cacheMissTokens: cacheMiss,
+  }
+}
+
 export class GatewayHttpError extends Error {
   constructor(public readonly status: number) {
     super(`gateway: http-${status}`) // 文本 message 保留——展示/日志兼容
@@ -415,6 +455,45 @@ export const TOOL_DEFS = [
       },
     },
   },
+  // BC-13 扩展与集成：Git 只读桥 + MCP 外部工具（MCP 每次调用需 L3 授权）
+  {
+    type: 'function',
+    function: {
+      name: 'git',
+      description:
+        'Git 只读查询（status/log/diff/branches）——不会修改仓库；写操作（add/commit/push 等）请用 bash 并等待用户授权',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            description: 'status | log | diff | branches',
+          },
+          path: { type: 'string', description: 'diff 时可选：项目内相对路径' },
+          limit: { type: 'number', description: 'log 条数（默认 10，最多 50）' },
+        },
+        required: ['action'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'mcp',
+      description:
+        'MCP 外部工具（需 L3 授权）：action=list 刷新并列出已配置服务器与工具；action=call 调用指定服务器的工具。首次调用第三方扩展会在授权卡上确认信任',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', description: 'list | call' },
+          server: { type: 'string', description: 'MCP 服务器名称（action=call）' },
+          tool: { type: 'string', description: 'MCP 工具名称（action=call）' },
+          args: { type: 'object', description: '传给 MCP 工具的参数对象' },
+        },
+        required: ['action'],
+      },
+    },
+  },
   // V1.5 S1 Task 1.3：协议工具（propose_goal/propose_plan/report_completion/ask_user——ADR-009
   // 模型主动产出决策内容的通道）。形状适配：domain ProtocolToolDef {name,description,parameters}
   // → OpenAI function tool {type:'function',function:{…}}（适配留在本文件——domain 层保持纯净）
@@ -610,11 +689,15 @@ export class DeepSeekGateway {
       tools?: boolean
       // tool_choice 恒 auto（DeepSeek Profile）；forceTool 仅 timeline 取证，不进 API
       forceTool?: boolean
+      // P2-03：推进语义规范名（forceTool 为兼容字段；timeline 消费）
+      progressMode?: 'auto' | 'require-action' | 'require-advance'
       onDelta: (chunk: {
         type: 'reasoning' | 'content' | 'tool-call' | 'done' | 'stream-reset'
         text?: string
         toolCall?: { name: string; args: Record<string, unknown> }
       }) => void
+      /** BC-12：流结束时的真实 usage（仅 Provider 返回时触发；不返回则调用方记 unknown） */
+      onUsage?: (usage: GatewayUsage) => void
     },
   ): Promise<void> {
     const tier = opts.model ?? this.router.route({ thinking: opts.level ?? 'basic' })
@@ -622,7 +705,8 @@ export class DeepSeekGateway {
       await this.refreshModels(opts.providerId, apiKey, opts.manualModelId)
     }
     const upstream = this.upstream(opts.providerId, tier)
-    const { baseURL } = getProvider(opts.providerId)
+    const provider = getProvider(opts.providerId)
+    const { baseURL } = provider
     console.log(
       '[gateway] stream start provider=' +
         opts.providerId +
@@ -644,6 +728,8 @@ export class DeepSeekGateway {
         messages: opts.messages,
         stream: true,
         ...(opts.tools ? { tools: TOOL_DEFS, tool_choice: DEEPSEEK_TOOL_CHOICE } : {}),
+        // BC-12：仅声明支持的接入方请求流式 usage；不支持的接入方不发送，避免 400
+        ...(provider.streamUsage ? { stream_options: { include_usage: true } } : {}),
       },
       // 流式整段共用 AbortSignal——含读 body；批准后写产物常 >45s，过短会误报「服务暂时不可用」
       180000,
@@ -661,6 +747,7 @@ export class DeepSeekGateway {
     let buffer = ''
     const toolAcc: Array<{ name: string; arguments: string }> = []
     let toolStart = 0
+    let usageRaw: Record<string, unknown> | null = null
 
     while (true) {
       const { done, value } = await reader.read()
@@ -678,6 +765,10 @@ export class DeepSeekGateway {
         }
         try {
           const json = JSON.parse(payload)
+          // BC-12：记录 Provider 真实 usage（流式通常在末个 chunk；无则保持 null）
+          if (json.usage && typeof json.usage === 'object') {
+            usageRaw = json.usage as Record<string, unknown>
+          }
           const delta = json.choices?.[0]?.delta ?? {}
           const reasoningText = extractReasoningText(delta)
           if (reasoningText) opts.onDelta({ type: 'reasoning', text: reasoningText })
@@ -743,6 +834,8 @@ export class DeepSeekGateway {
       emitToolCall(acc.name, repaired, false)
     }
     console.log('[gateway] stream done')
+    const usage = normalizeGatewayUsage(usageRaw, opts.providerId, upstream)
+    if (usage) opts.onUsage?.(usage)
     opts.onDelta({ type: 'done' })
   }
 
