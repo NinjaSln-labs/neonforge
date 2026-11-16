@@ -1,7 +1,7 @@
 # 覆盖矩阵（Coverage Matrix）
 
 > 首版：2026-08-16（S2）→ 增补：2026-09-29（Keenable 合规）
-> 当前快照（2026-11-16）：L1 **75 文件 / 882 用例** · 事件注册表 56+ 事件 · 不变量 Inv 1-8 + I17-I21 · L3 interaction **84 场景**
+> 当前快照（2026-11-17）：L1 **75 文件 / 884 用例** · 事件注册表 56+ 事件 · 不变量 Inv 1-8 + I17-I21 · L3 interaction **85 场景**
 > 表 1-表 10 保留各阶段时点的基线记录；当前总数以本快照与 `09-openspec/tasks.md §4` 为准。
 > 维护：阶段末更新（coverage-matrix skill）；缺口入 audit-items
 
@@ -40,6 +40,7 @@
 | plan.rejected | 清单外被拒 | timelineEvents.test.ts | ✅ |
 | tool.requested / executing / executed / failed | 工具生命周期 | timelineEvents.test.ts | ✅ |
 | tool.blocked | 拦截 gate | timelineEvents.test.ts | ✅ |
+| gate.denied | 机制拒绝（拒绝记忆/策略 deny，非 ask） | timelineEvents.test.ts::gate.denied（注册/载荷/缺必选）+ gateDenied.interaction.ts | ✅ |
 | tool.approved / rejected / remembered | 授权三态 | timelineEvents.test.ts | ✅ |
 | security.trust_delegation_denied | 低危委托越界被 main 二次校验拒绝 | timelineEvents.test.ts（注册/载荷/缺 reason） | ✅ |
 | capability.checked / ledger_updated | 能力检查/回填 | timelineEvents.test.ts | ✅ |
@@ -194,6 +195,14 @@
 | 审计事件 | `timelineEvents.test.ts`（`security.trust_delegation_denied` 注册/载荷；`tool.executing` 带 approvalSource） | ✅ |
 | 旧 localStorage 开关迁移 | `useTrustPolicy.test.ts`（读取不写标记、'1'→delegated、'0'→standard、main 成功后才删键、已迁移幂等、存储抛错不阻塞） | ✅ |
 | 设置页三档切换 + 委托仅计划内放行 | `trustModes.interaction.ts`（设置页切换持久化/旧键迁移删除、delegated 清单内 edit 自动且来源 delegate、strict 清单内 write 仍弹授权卡） | ✅ |
+
+## 表 13：机制拒绝事件 gate.denied ↔ 测试（ADR-016 / GitHub #16，2026-11-17）
+
+| 功能 | 覆盖测试 | 判定 |
+|------|----------|------|
+| canExecute 结构化拒绝来源 | `conversationState.test.ts`（拒绝记忆 → `deniedBy=rejection-memory` + attribute/risk；策略 deny → `action-gate`；pending/清单边界 → `session-gate`） | ✅ |
+| gate.denied 事件注册 | `timelineEvents.test.ts`（domain gate、role system、name/gate/reason/attribute/risk、缺必选 warn） | ✅ |
+| 发送点与边界 | `gateDenied.interaction.ts`（首次授权 ask 不记；拒绝后同命令重试 → 不弹卡不执行 + 一条 gate.denied 且属性 hazardous/risk high） | ✅ |
 
 ## L5 视觉基线纪律（K8）
 

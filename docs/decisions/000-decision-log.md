@@ -24,3 +24,4 @@
 | 013 | 任务状态机跨重启（Task 快照完整化——renderer ITaskRepository 语义）             | accepted | 2026-11-15 |
 | 014 | 结构化澄清与假设来源（AskToAct 式目标假设采集——ask_user 假设清单）             | accepted | 2026-11-16 |
 | 015 | 信任模式预设与低危委托边界（三档模式，main 持久化 + 执行边界二次校验）           | accepted | 2026-11-16 |
+| 016 | 机制拒绝事件 gate.denied（canExecute 结构化拒绝来源 + timeline 领域事件）          | accepted | 2026-11-17 |

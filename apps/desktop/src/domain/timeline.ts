@@ -131,6 +131,8 @@ export type TimelineEventType =
   | 'protocol.text_fallback' // 文本标记降级命中（载荷：marker/goal|plan|completion + content_snip——S3 打点）
   // —— Completion：完成对账（S4 登记——§3.5；证据不足诊断事件）——
   | 'completion.evidence_missing' // 完成声明被拒原因（载荷：ok/missing/unverifiable 清单——S4 打点）
+  // —— Gate：机制拒绝（ADR-016 / GitHub #16——§3.5）——
+  | 'gate.denied' // ActionGate/rejection-memory 机制拒绝（非 ask；载荷：name/gate/reason/attribute/risk）
   // —— 元事件（运行时可观测——诊断/状态）——
   | 'conversation.status_change' // working/ready/approval-pending 变化
   | 'conversation.error' // 错误链路（errorType/message）
@@ -158,6 +160,7 @@ export interface TimelineEventSpec {
     | 'decision'
     | 'proposal'
     | 'completion'
+    | 'gate'
     | 'protocol'
   role?: 'user' | 'assistant' | 'system' | 'tool'
   detailKeys?: string[] // 期望载荷字段（宽松约定——不强制全有，用于 dev 校验提示）
@@ -371,6 +374,12 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
     role: 'system',
     // S4：ok 必选（false——被拒）+ missing/unverifiable 清单（两形态可缺省）
     detailKeys: ['ok', '?missing', '?unverifiable'],
+  },
+  // ADR-016：机制拒绝（与 tool.blocked 分层——gate=领域机制拒绝，tool.blocked=工具执行层拦截）
+  'gate.denied': {
+    domain: 'gate',
+    role: 'system',
+    detailKeys: ['name', 'gate', 'reason', 'attribute', 'risk'],
   },
   'conversation.status_change': { domain: 'conversation', role: 'system', detailKeys: ['status'] },
   'conversation.error': { domain: 'conversation', role: 'system', detailKeys: ['errorType'] },

@@ -350,7 +350,10 @@ describe('Inv 3 门控顺序——sessionGate × actionGate 双维正交', () =>
   })
 
   it('canExecute 组合：SessionGate 优先（pending 冻结先于属性判定）；ask 放行给执行层（S6 前现状授权卡机制）', () => {
-    expect(canExecute(setPending(initialState(), 'goal'), { name: 'read' }, false).ok).toBe(false)
+    const frozen = canExecute(setPending(initialState(), 'goal'), { name: 'read' }, false)
+    expect(frozen.ok).toBe(false)
+    // ADR-016：拒绝来源结构化——session-gate 不属于 gate.denied 发送范围
+    expect(frozen.deniedBy).toBe('session-gate')
     expect(canExecute(confirmed(), { name: 'write', path: '/test/a.js' }, true).ok).toBe(true)
     const withPlan = approvalGranted(confirmed(), ['/test/a.js'])
     expect(canExecute(withPlan, { name: 'write', path: '/test/a.js' }, true).ok).toBe(true)
@@ -358,6 +361,7 @@ describe('Inv 3 门控顺序——sessionGate × actionGate 双维正交', () =>
     const r = canExecute(withPlan, { name: 'write', path: '/test/outside.js' }, false)
     expect(r.ok).toBe(false)
     expect(r.reason).toContain('a.js')
+    expect(r.deniedBy).toBe('session-gate')
     // ask（高危 bash）→ 放行——授权卡由执行层机制处理（main needApproval——P2 授权卡场景）
     expect(canExecute(confirmed(), { name: 'bash', command: 'npm install' }, false).ok).toBe(true)
     // deny 策略 → 拦截（S6 机制拦截入口）
@@ -366,6 +370,10 @@ describe('Inv 3 门控顺序——sessionGate × actionGate 双维正交', () =>
     })
     expect(d.ok).toBe(false)
     expect(d.reason).toContain('策略拦截')
+    // ADR-016：actionGate deny 带拒绝来源/动作属性/风险（gate.denied 载荷来源）
+    expect(d.deniedBy).toBe('action-gate')
+    expect(d.attribute).toEqual({ kind: 'hazardous', basis: 'command-chain' })
+    expect(d.risk).toBe('high')
   })
 
   it('actionNeedsApproval：out-of-plan/hazardous 需授权；其余放行', () => {
@@ -1220,6 +1228,10 @@ describe('拒绝记忆（S7 P1-2——C6 同轮同类短封接线）', () => {
     const r = canExecute(s, { name: 'bash', command: 'rm -rf /tmp/x' }, false)
     expect(r.ok).toBe(false)
     expect(r.reason).toContain('拒绝记忆')
+    // ADR-016：拒绝记忆短封分类 + 动作属性（gate.denied 结构化载荷来源；不算 ask）
+    expect(r.deniedBy).toBe('rejection-memory')
+    expect(r.attribute).toEqual({ kind: 'hazardous', basis: 'command-chain' })
+    expect(r.risk).toBe('high')
   })
 
   it('canExecute：不同命令类（拒绝 rm——ls 不受影响）→ 放行（短封只封同类）', () => {

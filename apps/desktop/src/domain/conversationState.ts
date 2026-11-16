@@ -709,15 +709,33 @@ export function actionGate(
 
 /** 唯一门控入口（不变量 3：SessionGate 优先，通过后 ActionGate）
  * 注意：ask 不在此拒绝——授权卡机制在执行层（main 返回 needApproval——现状授权闭环）；
- * actionGate 的 ask/deny 全量接线在 S6（只读自动/越界 ask/高危 deny 进执行流）。S1 只拦 deny（策略级拦截）。 */
+ * actionGate 的 ask/deny 全量接线在 S6（只读自动/越界 ask/高危 deny 进执行流）。S1 只拦 deny（策略级拦截）。
+ * ADR-016：`deniedBy` 为结构化拒绝来源——`session-gate`（冻结/确认点/清单边界）、
+ * `rejection-memory`（拒绝记忆短封）、`action-gate`（策略 deny）；后两者带动作属性/风险，
+ * 供应用层发送 `gate.denied` 领域事件（ask 不产生该事件）。 */
+export interface ExecuteGateResult {
+  ok: boolean
+  reason: string
+  deniedBy?: 'session-gate' | 'rejection-memory' | 'action-gate'
+  attribute?: ActionAttribute
+  risk?: 'low' | 'medium' | 'high'
+}
+
 export function canExecute(
   s: ConversationState,
   action: ExecAction,
   inPlanned: boolean,
   policy?: ActionGatePolicy,
-): { ok: boolean; reason: string } {
+): ExecuteGateResult {
   const gate = sessionGate(s, action)
-  if (!gate.ok) return gate
+  if (!gate.ok) return { ...gate, deniedBy: 'session-gate' }
+  // 清单为空（无计划）→ 无文件边界（写放行由确认点把关——继承现状语义）
+  const effectiveInPlanned =
+    (action.name === 'write' || action.name === 'edit') && s.plannedFiles.size === 0
+      ? true
+      : inPlanned
+  // 先算动作属性（纯函数）——拒绝记忆/策略 deny 的事件载荷复用同一判定（不重复 classify）
+  const verdict = actionGate(action, effectiveInPlanned, policy)
   // S7（A0 审校 P1-2 接线——§3.4 C6 短封）：拒绝记忆——同任务内被拒绝的同类动作直接 deny
   // （「不要绕过」机制层落地——拒绝的 toolName+命令类匹配；任务边界重置（goal 确认清 deniedApprovals））
   const denied = s.deniedApprovals.some(
@@ -730,15 +748,22 @@ export function canExecute(
           d.subject.length > 0 &&
           String(action.command).startsWith(d.subject.split(/\s+/)[0] ?? ''))),
   )
-  if (denied) return { ok: false, reason: '动作已被你拒绝（拒绝记忆——同轮同类短封）' }
-  // 清单为空（无计划）→ 无文件边界（写放行由确认点把关——继承现状语义）
-  const effectiveInPlanned =
-    (action.name === 'write' || action.name === 'edit') && s.plannedFiles.size === 0
-      ? true
-      : inPlanned
-  const verdict = actionGate(action, effectiveInPlanned, policy)
+  if (denied)
+    return {
+      ok: false,
+      reason: '动作已被你拒绝（拒绝记忆——同轮同类短封）',
+      deniedBy: 'rejection-memory',
+      attribute: verdict.attribute,
+      risk: verdict.risk,
+    }
   if (verdict.verdict === 'deny')
-    return { ok: false, reason: `动作被策略拦截（${verdict.attribute.kind}）` }
+    return {
+      ok: false,
+      reason: `动作被策略拦截（${verdict.attribute.kind}）`,
+      deniedBy: 'action-gate',
+      attribute: verdict.attribute,
+      risk: verdict.risk,
+    }
   return { ok: true, reason: '' }
 }
 

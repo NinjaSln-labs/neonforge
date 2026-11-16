@@ -871,6 +871,25 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
           },
           'tool',
         )
+        // ADR-016：机制拒绝领域事件（拒绝记忆/策略 deny——非 ask；pending/confirm 抢先时不记）
+        if (
+          !pendingBlocked &&
+          !confirmGate &&
+          !toolGate.ok &&
+          (toolGate.deniedBy === 'rejection-memory' || toolGate.deniedBy === 'action-gate')
+        ) {
+          tlog(
+            'gate.denied',
+            {
+              name: tc.name,
+              gate: toolGate.deniedBy,
+              reason: gateReason,
+              attribute: toolGate.attribute,
+              risk: toolGate.risk,
+            },
+            'system',
+          )
+        }
         setMessages((prev) => {
           const last = prev[prev.length - 1]
           if (!last || last.role !== 'assistant') return prev

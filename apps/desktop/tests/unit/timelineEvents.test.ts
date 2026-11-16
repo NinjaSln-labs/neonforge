@@ -348,3 +348,32 @@ describe('security.trust_delegation_denied / tool.executing（ADR-015）', () =>
     expect(validateTimelineEvent('tool.executing', { name: 'edit', approved: false })).toEqual([])
   })
 })
+
+// ADR-016（GitHub #16）：机制拒绝事件 gate.denied
+describe('gate.denied（ADR-016——机制拒绝结构化）', () => {
+  it('注册表：domain gate + name/gate/reason/attribute/risk', () => {
+    const spec = TIMELINE_EVENT_SPECS['gate.denied']
+    expect(spec.domain).toBe('gate')
+    expect(spec.role).toBe('system')
+    expect(spec.detailKeys).toEqual(['name', 'gate', 'reason', 'attribute', 'risk'])
+  })
+
+  it('validateTimelineEvent：完整载荷通过；缺 attribute/risk → warn', () => {
+    expect(
+      validateTimelineEvent('gate.denied', {
+        name: 'bash',
+        gate: 'rejection-memory',
+        reason: '动作已被你拒绝（拒绝记忆——同轮同类短封）',
+        attribute: { kind: 'hazardous', basis: 'command-chain' },
+        risk: 'high',
+      }),
+    ).toEqual([])
+    const warns = validateTimelineEvent('gate.denied', {
+      name: 'bash',
+      gate: 'rejection-memory',
+      reason: 'x',
+    })
+    expect(warns.some((w) => w.includes('attribute'))).toBe(true)
+    expect(warns.some((w) => w.includes('risk'))).toBe(true)
+  })
+})
