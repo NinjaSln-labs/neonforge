@@ -6,7 +6,7 @@ import OutputPanel from './OutputPanel'
 import ConversationPanel from './ConversationPanel'
 import type { DeliveryPackage, ProblemInstance, QueueEntry, QueueResult, QueueState } from './types'
 import { createProblem, loadProblems, saveProblems, updateProblemSnapshot } from './problemStore'
-import { clearSession } from './sessionStore'
+import { clearSession, loadWorkspaceSessionId, saveWorkspaceSessionId } from './sessionStore'
 import { IconSettings } from './icons'
 // 2026-08-15 Q10：demo 注入通道类型化单例
 import { getDemoBridge } from './demoBridge'
@@ -391,7 +391,10 @@ export default function MainWorkspace({
 }) {
   const [chatTab, setChatTab] = useState<'chat' | 'tasks'>('chat')
   // P1 修复：会话 ID 由工作区持有（Tab 切换会卸载对话面板——不得每次重挂载生成新会话导致台账/验收/变更集失联）
-  const [sessionId, setSessionId] = useState<string>(() => createSessionId())
+  // 2026-11-17 审查修复：会话 ID 跨重启保留（队列/验收/变更集以它为键；原每次启动新 UUID 导致重启后记录不可达）
+  const [sessionId, setSessionId] = useState<string>(
+    () => loadWorkspaceSessionId(rootPath) ?? createSessionId(),
+  )
   const [activePath, setActivePath] = useState<string | null>(null)
   const [content, setContent] = useState<string>('')
   const [working, setWorking] = useState(false)
@@ -419,9 +422,35 @@ export default function MainWorkspace({
     setSessionId(nextSession)
     sessionIdRef.current = nextSession
     setActiveProblem(null)
+    // 2026-11-17 审查修复：新任务必须清空旧任务确认位/主进程计划清单/交付镜像——
+    // 原仅换 sessionId + 清消息，新面板继承 goalConfirmed/planConfirmed，方案卡不弹、写入门提前放行。
+    setGoalConfirmed(false)
+    setPlanConfirmed(false)
+    setGoalSeq((s) => s + 1)
+    goalTextRef.current = ''
+    lastPromptRef.current = null
+    setActivePath(null)
+    setContent('')
+    setDeliveryPkg(null)
+    setRealChanges([])
+    setActionHint(null)
+    setPendingApproval(false)
+    setWorking(false)
+    setChatTab('chat')
+    setRerunRequest(null)
+    try {
+      void window.neonforge.plannedFiles?.reset()
+      void window.neonforge.session?.setPlanConfirmed?.(false)
+    } catch {
+      /* 主进程复位失败——renderer 新面板仍从空状态开始 */
+    }
     clearSession()
     setChatKey((k) => k + 1)
   }
+  // 会话 ID 持久化（per rootPath）——重启后 queue/acceptance/changeset 仍可定位
+  useEffect(() => {
+    saveWorkspaceSessionId(rootPath, sessionId)
+  }, [rootPath, sessionId])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === ',') {

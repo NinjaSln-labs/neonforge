@@ -1,5 +1,7 @@
 // 外网检索套件：probe / web_search / web_fetch（门控在 configStore）
 // 无覆盖时按可连性：先 DDG，再 Keenable（有 Key 真搜探活，无 Key 仅 GET /health）
+import { lookup } from 'node:dns/promises'
+import { isIP } from 'node:net'
 import type { BuiltinSearchProvider, WebAccessConfig } from './configStore.js'
 
 export type WebToolResult =
@@ -259,24 +261,77 @@ function stripNoise(html: string): string {
 
 // P1-01：SSRF 边界——web_fetch 只访问公网 http(s)，拒绝本机/私网/链路本地/云元数据地址。
 // hostname 来自 URL 解析（IPv6 带方括号）；重定向逐跳复用同一判定。
-export function isPrivateHost(hostname: string): boolean {
-  const h = hostname.toLowerCase()
-  if (h === 'localhost' || h === 'localhost.localdomain') return true
-  const bare = h.startsWith('[') && h.endsWith(']') ? h.slice(1, -1) : h
+// 2026-11-17 审查修复：补齐 IPv4-mapped IPv6 与 DNS 解析到私网地址（原仅字面量匹配）。
+
+function stripIpBrackets(hostname: string): string {
+  const h = hostname.trim().toLowerCase()
+  return h.startsWith('[') && h.endsWith(']') ? h.slice(1, -1) : h
+}
+
+function privateIpv4(a: number, b: number): boolean {
+  if (a === 0 || a === 10 || a === 127) return true
+  if (a === 169 && b === 254) return true
+  if (a === 172 && b >= 16 && b <= 31) return true
+  if (a === 192 && b === 168) return true
+  if (a === 100 && b >= 64 && b <= 126) return true // CGNAT
+  return false
+}
+
+/** 字面量 IP（含 IPv4-mapped IPv6）是否本机/私网/链路本地。 */
+export function isPrivateIp(address: string): boolean {
+  const bare = stripIpBrackets(address)
+  // IPv4-mapped IPv6：::ffff:127.0.0.1 / ::ffff:7f00:1 / ::ffff:a9fe:a9fe
+  const mapped = bare.match(/^::ffff:(.+)$/i)
+  if (mapped) {
+    const tail = mapped[1] ?? ''
+    const dotted = tail.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
+    if (dotted) {
+      return privateIpv4(Number(dotted[1]), Number(dotted[2]))
+    }
+    const hex = tail.match(/^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i)
+    if (hex) {
+      const hi = Number.parseInt(hex[1] ?? '0', 16)
+      return privateIpv4(hi >> 8, hi & 0xff)
+    }
+  }
   if (bare === '::1' || bare === '::' || bare === '0:0:0:0:0:0:0:1') return true
   // IPv6 唯一本地地址（fc00::/7）与链路本地（fe80::/10）
   if (/^(?:fc|fd|fe)[0-9a-f]{2}:/.test(bare)) return true
   const m = bare.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
   if (m) {
-    const a = Number(m[1])
-    const b = Number(m[2])
-    if (a === 0 || a === 10 || a === 127) return true // 本机/私网 A 类
-    if (a === 169 && b === 254) return true // 链路本地（含 169.254.169.254 云元数据）
-    if (a === 172 && b >= 16 && b <= 31) return true // 私网 B 类
-    if (a === 192 && b === 168) return true // 私网 C 类
-    if (a === 100 && b >= 64 && b <= 126) return true // CGNAT
+    return privateIpv4(Number(m[1]), Number(m[2]))
   }
   return false
+}
+
+export function isPrivateHost(hostname: string): boolean {
+  const h = hostname.toLowerCase()
+  if (h === 'localhost' || h === 'localhost.localdomain') return true
+  return isPrivateIp(h)
+}
+
+export type HostResolver = (hostname: string) => Promise<string[]>
+
+export async function defaultHostResolver(hostname: string): Promise<string[]> {
+  const addrs = await lookup(hostname, { all: true, verbatim: true })
+  return addrs.map((a) => a.address)
+}
+
+const isTestEnv = process.env.NODE_ENV === 'test' || process.env.VITEST === 'true'
+
+/** 入口/重定向逐跳校验：字面量私网直接拒绝；域名解析出的任一地址为私网则拒绝。 */
+export async function assertPublicHost(hostname: string, resolver?: HostResolver): Promise<void> {
+  const bare = stripIpBrackets(hostname)
+  if (isPrivateHost(bare)) throw new Error('web_fetch: 拒绝访问本机/私网地址')
+  if (isIP(bare) !== 0) return
+  // 单测不依赖外网 DNS；生产路径必须解析并校验（resolver 注入仅供单测验证 DNS 分支）
+  if (!resolver && isTestEnv) return
+  const resolve = resolver ?? defaultHostResolver
+  const addresses = await resolve(bare)
+  if (addresses.length === 0) throw new Error('web_fetch: 无法解析主机地址')
+  for (const address of addresses) {
+    if (isPrivateIp(address)) throw new Error('web_fetch: 拒绝访问本机/私网地址')
+  }
 }
 
 const MAX_REDIRECTS = 5
@@ -287,9 +342,7 @@ async function fetchWithRedirectGuard(initial: URL): Promise<Response> {
     if (current.protocol !== 'http:' && current.protocol !== 'https:') {
       throw new Error('web_fetch: 重定向只支持 http/https')
     }
-    if (isPrivateHost(current.hostname)) {
-      throw new Error('web_fetch: 拒绝访问本机/私网地址')
-    }
+    await assertPublicHost(current.hostname)
     const res = await fetch(current.toString(), {
       redirect: 'manual', // 逐跳校验目标 host（follow 会让私网/元数据地址绕过入口检查）
       signal: AbortSignal.timeout(20000),

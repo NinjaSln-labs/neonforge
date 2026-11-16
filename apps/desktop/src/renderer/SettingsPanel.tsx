@@ -586,7 +586,8 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
 
       <div className="nf-settings__plugins">
         <span className="nf-settings__plugins-title">
-          外部工具服务器（MCP）——配置只存命令/参数，不存凭据；凭据请用环境变量
+          外部工具服务器（MCP）——配置只存命令/参数/环境变量名，不存凭据值；子进程默认只继承安全基础变量，需要额外凭据时用
+          envFrom: ["NAME"]（只列名称，值由宿主环境提供）
         </span>
         {mcpPath ? <p className="nf-settings__export-msg">配置：{mcpPath}</p> : null}
         <textarea

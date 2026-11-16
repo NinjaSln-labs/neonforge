@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { McpClient, type McpTransport } from '../../src/main/mcpClient'
+import { McpClient, buildMcpEnv, type McpTransport } from '../../src/main/mcpClient'
 
 interface SentMessage {
   jsonrpc: string
@@ -95,5 +95,22 @@ describe('MCP 客户端（BC-13）', () => {
 
     const timeoutClient = new McpClient(new FakeTransport(), { timeoutMs: 10 })
     await expect(timeoutClient.initialize()).rejects.toThrow(/超时/)
+  })
+
+  // 2026-11-17 审查修复：MCP 子进程只继承安全基础环境 + 显式 envFrom，不泄露宿主凭据
+  it('buildMcpEnv：不传宿主凭据；只传安全基础变量与显式 envFrom', () => {
+    const env = buildMcpEnv(['GITHUB_TOKEN', 'BAD NAME'], {
+      PATH: '/bin',
+      HOME: '/home/u',
+      NEONFORGE_API_KEY: 'app-key-should-not-leak',
+      AWS_SECRET_ACCESS_KEY: 'aws-should-not-leak',
+      GITHUB_TOKEN: 'explicit-env-from-value',
+    })
+    expect(env.PATH).toBe('/bin')
+    expect(env.HOME).toBe('/home/u')
+    expect(env.GITHUB_TOKEN).toBe('explicit-env-from-value')
+    expect(env.NEONFORGE_API_KEY).toBeUndefined()
+    expect(env.AWS_SECRET_ACCESS_KEY).toBeUndefined()
+    expect(env['BAD NAME']).toBeUndefined()
   })
 })

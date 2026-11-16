@@ -27,7 +27,21 @@ export function validateMcpServer(input: unknown): McpServerConfig {
     throw new Error(`MCP 服务器 ${name} 的 cwd 必须是字符串`)
   }
   const cwd = typeof raw.cwd === 'string' ? raw.cwd.trim() : undefined
-  return { name, command, args, ...(cwd ? { cwd } : {}) }
+  // 2026-11-17 审查修复：只允许显式列出要继承的环境变量名（不存值）；子进程默认不继承宿主全量 env
+  let envFrom: string[] | undefined
+  if (raw.envFrom != null) {
+    if (!Array.isArray(raw.envFrom))
+      throw new Error(`MCP 服务器 ${name} 的 envFrom 必须是字符串数组`)
+    const names = (raw.envFrom as unknown[]).map((v) => String(v).trim())
+    if (names.length > 32) throw new Error(`MCP 服务器 ${name} 的 envFrom 最多 32 项`)
+    for (const key of names) {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+        throw new Error(`MCP 服务器 ${name} 的 envFrom 名称非法：${key}`)
+      }
+    }
+    envFrom = [...new Set(names)]
+  }
+  return { name, command, args, ...(cwd ? { cwd } : {}), ...(envFrom?.length ? { envFrom } : {}) }
 }
 
 export function validateMcpServers(input: unknown): McpServerConfig[] {

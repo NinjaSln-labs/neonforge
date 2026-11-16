@@ -14,6 +14,8 @@ export interface McpServerConfig {
   command: string
   args?: string[]
   cwd?: string
+  /** 显式允许从父进程继承的环境变量名（其余宿主环境不传给 MCP 子进程）。 */
+  envFrom?: string[]
 }
 
 export interface McpTransport {
@@ -112,6 +114,49 @@ export class JsonRpcPeer {
   }
 }
 
+/** 子进程基础环境（不含任何凭据）：路径/家目录/区域/临时目录/Windows 系统变量。 */
+const MCP_SAFE_ENV_KEYS = [
+  'PATH',
+  'HOME',
+  'USER',
+  'LOGNAME',
+  'SHELL',
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
+  'TMPDIR',
+  'TMP',
+  'TEMP',
+  'TERM',
+  'SystemRoot',
+  'ComSpec',
+  'PATHEXT',
+  'WINDIR',
+  'APPDATA',
+  'LOCALAPPDATA',
+  'XDG_CONFIG_HOME',
+  'XDG_CACHE_HOME',
+] as const
+
+/** 2026-11-17 审查修复：MCP 子进程不再全量继承 process.env（防第三方可执行文件读取宿主凭据）。
+ * 只传安全基础变量 + 用户在配置中显式列出的 envFrom 名称。 */
+export function buildMcpEnv(
+  envFrom: readonly string[] = [],
+  source: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {}
+  for (const key of MCP_SAFE_ENV_KEYS) {
+    const value = source[key]
+    if (value !== undefined) out[key] = value
+  }
+  for (const key of envFrom) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue
+    const value = source[key]
+    if (value !== undefined) out[key] = value
+  }
+  return out
+}
+
 /** stdio 传输：按行解析 JSON；stderr 只保留尾部用于错误提示 */
 export function createStdioTransport(config: McpServerConfig): McpTransport {
   const command = String(config.command ?? '').trim()
@@ -119,7 +164,7 @@ export function createStdioTransport(config: McpServerConfig): McpTransport {
   const args = (config.args ?? []).map((a) => String(a))
   const child: ChildProcessWithoutNullStreams = spawn(command, args, {
     cwd: config.cwd,
-    env: process.env,
+    env: buildMcpEnv(config.envFrom),
     stdio: ['pipe', 'pipe', 'pipe'],
     windowsHide: true,
   })

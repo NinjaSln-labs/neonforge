@@ -249,6 +249,8 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
     grantPlan(files.map((f) => trustPath(f.path)))
     // D3（ADR-005）：PlannedFiles 权威在 main——批准清单同步落盘（取代 tools.filesApproved）
     void window.neonforge.plannedFiles?.add(files.map((f) => trustPath(f.path)))
+    // 2026-11-17 审查修复：file-approval 也是授权结果——必须通知队列恢复（原只在 approveToolCall/reject 回调）
+    onApprovalResolved?.('approved')
     patchToolCall(
       idx,
       (c) => ({

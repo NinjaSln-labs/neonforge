@@ -33,6 +33,15 @@ describe('AcceptanceStore（BC-14 持久化）', () => {
     expect(gate?.waived).toContain('item-1')
   })
 
+  it('已有验收项 → acceptEmpty 不得覆盖原记录（防竞态把真实验收洗成豁免）', () => {
+    const store = new AcceptanceStore(path.join(TMP, 'acceptance.json'))
+    const original = store.derive('s3', ['npm test 通过', '页面可打开'], 'plan-verification')
+    const after = store.acceptEmpty('s3')
+    expect(after.id).toBe(original.id)
+    expect(after.items.map((i) => i.label)).toEqual(['npm test 通过', '页面可打开'])
+    expect(store.evaluate('s3')?.verdict).not.toBe('passed-with-waivers')
+  })
+
   it('损坏文件 → 空记录，不阻断', () => {
     const file = path.join(TMP, 'acceptance.json')
     writeFileSync(file, 'not-json')

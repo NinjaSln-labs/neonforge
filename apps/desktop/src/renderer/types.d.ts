@@ -217,8 +217,13 @@ export interface NeonForgeBridge {
       diff: string,
       approved?: boolean,
       sessionId?: string,
+      rootPath?: string,
     ) => Promise<{ ok: boolean; file?: string; error?: string }>
-    revertDiff: (path: string, sessionId?: string) => Promise<{ ok: boolean; error?: string }>
+    revertDiff: (
+      path: string,
+      sessionId?: string,
+      rootPath?: string,
+    ) => Promise<{ ok: boolean; error?: string }>
   }
   // S4 完成对账 V1a：系统代跑只读验证命令（可选——旧 mock/降级环境无则走纯逻辑判定）
   completion?: {

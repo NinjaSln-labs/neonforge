@@ -5,6 +5,9 @@ import {
   loadSession,
   loadSessionSnapshot,
   clearSession,
+  loadWorkspaceSessionId,
+  saveWorkspaceSessionId,
+  workspaceSessionIdKey,
   SESSION_KEY,
   SESSION_MAX,
   SESSION_VERSION,
@@ -101,6 +104,19 @@ describe('sessionStore（断点续做——会话持久化）', () => {
     saveSession([{ role: 'user', content: 'x' }])
     clearSession()
     expect(loadSession()).toBeNull()
+  })
+
+  it('工作区会话 ID：跨重启保留且按 rootPath 隔离；空/超长值不读取', () => {
+    expect(loadWorkspaceSessionId('/proj/a')).toBeNull()
+    saveWorkspaceSessionId('/proj/a', 'sid-a')
+    expect(loadWorkspaceSessionId('/proj/a')).toBe('sid-a')
+    expect(loadWorkspaceSessionId('/proj/b')).toBeNull()
+    expect(workspaceSessionIdKey('/proj/a')).toBe('nf-session-id:/proj/a')
+    expect(loadWorkspaceSessionId()).toBeNull()
+    saveWorkspaceSessionId(undefined, 'sid-default')
+    expect(loadWorkspaceSessionId()).toBe('sid-default')
+    saveWorkspaceSessionId('/proj/a', '')
+    expect(loadWorkspaceSessionId('/proj/a')).toBe('sid-a') // 空值不覆盖
   })
 
   it('V2：消息 + 任务快照同一记录原子写入；loadSessionSnapshot 同时返回两者', () => {

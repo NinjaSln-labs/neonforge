@@ -8,6 +8,7 @@ import { IconCheck, IconClock, IconFile, IconRotateCcw, IconX } from './icons'
 export default function DeliveryPanel({
   pkg,
   sessionId,
+  rootPath,
   onClose: _onClose,
   onAdjust,
   onRerun,
@@ -15,6 +16,7 @@ export default function DeliveryPanel({
 }: {
   pkg: DeliveryPackage | null
   sessionId?: string
+  rootPath?: string
   onClose: () => void
   onAdjust: () => void
   onRerun: (prompt: string) => void
@@ -28,6 +30,8 @@ export default function DeliveryPanel({
   const [record, setRecord] = useState<AcceptanceRecord | null>(null)
   const [gate, setGate] = useState<GateResult | null>(null)
   const [acceptEmpty, setAcceptEmpty] = useState(false)
+  // 2026-11-17 审查修复：只有 acceptance:list 成功且确认无记录后，才允许勾选「无验收来源」
+  const [acceptanceReady, setAcceptanceReady] = useState(false)
   // BC-10：变更集（真实变更的基线/状态/整集回滚）
   const [changeSet, setChangeSet] = useState<{
     status: string
@@ -70,16 +74,26 @@ export default function DeliveryPanel({
     sessionIdRef.current = sessionId
   }, [sessionId])
   const refreshAcceptance = async (sid?: string) => {
-    if (!sid) return
+    if (!sid) {
+      setAcceptanceReady(false)
+      return
+    }
+    setAcceptanceReady(false)
     try {
-      const r = await window.neonforge.acceptance?.list(sid)
+      const api = window.neonforge.acceptance
+      if (!api?.list) return
+      const r = await api.list(sid)
       if (sessionIdRef.current !== sid) return
       setRecord(r ?? null)
-      const g = await window.neonforge.acceptance?.evaluate(sid)
+      const g = await api.evaluate?.(sid)
       if (sessionIdRef.current !== sid) return
       setGate(g ?? null)
+      setAcceptanceReady(true)
     } catch (e) {
-      if (sessionIdRef.current === sid) setError(e instanceof Error ? e.message : String(e))
+      if (sessionIdRef.current === sid) {
+        setError(e instanceof Error ? e.message : String(e))
+        setAcceptanceReady(false)
+      }
     }
   }
   const markAcceptance = async (itemId: string) => {
@@ -103,14 +117,22 @@ export default function DeliveryPanel({
   }
   const acceptNoAcceptance = async () => {
     if (!sessionId) {
-      setAcceptEmpty(true)
+      setAcceptEmpty(false)
       return
     }
-    const r = await window.neonforge.acceptance?.acceptEmpty(sessionId)
-    if (r) {
+    try {
+      const r = await window.neonforge.acceptance?.acceptEmpty?.(sessionId)
+      if (!r) {
+        setAcceptEmpty(false)
+        setError('无法确认无验收来源（验收记录读取失败或已有记录）——请稍后重试')
+        return
+      }
       setRecord(r)
-      const g = await window.neonforge.acceptance?.evaluate(sessionId)
+      const g = await window.neonforge.acceptance?.evaluate?.(sessionId)
       setGate(g ?? null)
+    } catch (e) {
+      setAcceptEmpty(false)
+      setError(e instanceof Error ? e.message : String(e))
     }
   }
   // 双渲染保活：pkg 延迟更新（如 07 阶段推进/真实执行后）→ 同步 items/status（useState 不随 prop 变）
@@ -131,7 +153,7 @@ export default function DeliveryPanel({
 
   const applyDiff = async (d: { path: string; diff: string }) => {
     setError(null)
-    const res = await window.neonforge.delivery.applyDiff(d.path, d.diff, true, sessionId)
+    const res = await window.neonforge.delivery.applyDiff(d.path, d.diff, true, sessionId, rootPath)
     if (res.ok) {
       setApplied((s) => new Set(s).add(d.path))
       setConfirming(null)
@@ -143,7 +165,7 @@ export default function DeliveryPanel({
   }
   const revertDiff = async (d: { path: string }) => {
     setError(null)
-    const res = await window.neonforge.delivery.revertDiff(d.path, sessionId)
+    const res = await window.neonforge.delivery.revertDiff(d.path, sessionId, rootPath)
     if (res.ok) {
       setReverted((s) => new Set(s).add(d.path))
       setApplied((s) => {
@@ -167,7 +189,13 @@ export default function DeliveryPanel({
     const ok: string[] = []
     const fail: Array<{ path: string; error: string }> = []
     for (const d of pending) {
-      const res = await window.neonforge.delivery.applyDiff(d.path, d.diff, true, sessionId)
+      const res = await window.neonforge.delivery.applyDiff(
+        d.path,
+        d.diff,
+        true,
+        sessionId,
+        rootPath,
+      )
       if (res.ok) ok.push(d.path)
       else fail.push({ path: d.path, error: res.error ?? '未知错误' })
     }
@@ -353,7 +381,7 @@ export default function DeliveryPanel({
         </section>
       )}
 
-      {!hasRecord && items.length === 0 && status !== 'closed' && (
+      {acceptanceReady && !hasRecord && items.length === 0 && status !== 'closed' && (
         <label className="nf-delivery__hint">
           <input
             type="checkbox"

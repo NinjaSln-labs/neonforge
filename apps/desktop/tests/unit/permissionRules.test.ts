@@ -109,6 +109,48 @@ describe('matchesRule（Tool(specifier) 匹配）', () => {
       ),
     ).toBe(true)
   })
+
+  // 2026-11-17 审查修复：路径/URL 前缀必须有边界——`src` 不能放行 `src-evil`，host 不能放行 lookalike 域
+  it('路径前缀边界：目录 specifier 不匹配同前缀兄弟路径', () => {
+    expect(
+      matchesRule(
+        'write',
+        { path: '/proj/src-evil/secret.js' },
+        { action: 'allow', tool: 'write', specifier: '/proj/src' },
+      ),
+    ).toBe(false)
+    expect(
+      matchesRule(
+        'write',
+        { path: '/proj/src/main.js' },
+        { action: 'allow', tool: 'write', specifier: '/proj/src' },
+      ),
+    ).toBe(true)
+    expect(
+      matchesRule(
+        'write',
+        { path: '/proj/src/main.js' },
+        { action: 'allow', tool: 'write', specifier: '/proj/src/' },
+      ),
+    ).toBe(true)
+  })
+
+  it('URL 前缀边界：host 必须精确匹配（防 lookalike 域）', () => {
+    const allowTrusted = {
+      action: 'allow' as const,
+      tool: 'web_fetch',
+      specifier: 'https://trusted.example',
+    }
+    expect(matchesRule('web_fetch', { url: 'https://trusted.example/path' }, allowTrusted)).toBe(
+      true,
+    )
+    expect(
+      matchesRule('web_fetch', { url: 'https://trusted.example.attacker.net/x' }, allowTrusted),
+    ).toBe(false)
+    expect(
+      matchesRule('web_fetch', { url: 'https://trusted.example.evil.io/x' }, allowTrusted),
+    ).toBe(false)
+  })
 })
 
 describe('selectRule（裁决优先级 deny > allow > ask）', () => {

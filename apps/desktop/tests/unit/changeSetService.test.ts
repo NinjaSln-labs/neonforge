@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { ChangeSetService } from '../../src/main/changeSetService'
 
@@ -80,6 +80,27 @@ describe('ChangeSetService（BC-10 持久化 + 基线校验）', () => {
     expect(r.ok).toBe(true)
     expect(readFileSync(file, 'utf-8')).toBe('before')
     expect(svc.get('s1')?.status).toBe('reverted')
+  })
+
+  // 2026-11-17 审查修复：旧 `.nf-restore` 可预测临时名不再使用——预置 symlink 不得把基线写到项目外
+  it('revert：预置 .nf-restore symlink 不影响回滚（不跟随到项目外）', () => {
+    const file = path.join(proj, 'symlink-base.txt')
+    const outside = path.join(TMP, 'outside-target.txt')
+    writeFileSync(outside, 'outside-original', 'utf-8')
+    writeFileSync(file, 'before', 'utf-8')
+    writeFileSync(`${file}.nf-bak`, 'before', 'utf-8')
+    writeFileSync(file, 'after', 'utf-8')
+    svc.recordMutation('s1', file)
+    try {
+      rmSync(`${file}.nf-restore`, { force: true })
+    } catch {
+      /* ignore */
+    }
+    symlinkSync(outside, `${file}.nf-restore`)
+    const r = svc.revert('s1')
+    expect(r.ok).toBe(true)
+    expect(readFileSync(file, 'utf-8')).toBe('before')
+    expect(readFileSync(outside, 'utf-8')).toBe('outside-original')
   })
 
   it('revert：外部修改后拒绝覆盖（conflicted）', () => {
@@ -167,6 +188,10 @@ describe('ChangeSetService（BC-10 持久化 + 基线校验）', () => {
       () => {},
       (w) => {
         writes = w
+        // 模拟事务层：应用状态/恢复写入；但基线写入保持“待重放”（由 pendingRead 提供）
+        for (const x of w) {
+          if (!x.filePath.includes('changeset-baselines')) writeFileSync(x.filePath, x.content)
+        }
       },
       (target) => pending.get(target) ?? null,
     )

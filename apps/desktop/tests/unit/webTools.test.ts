@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { probeWebAccess, webSearch, webFetch, type SearchHit } from '../../src/main/webTools.js'
+import {
+  assertPublicHost,
+  isPrivateIp,
+  probeWebAccess,
+  webSearch,
+  webFetch,
+  type SearchHit,
+} from '../../src/main/webTools.js'
 import type { WebAccessConfig } from '../../src/main/configStore.js'
 
 function cfg(p: Partial<WebAccessConfig> = {}): WebAccessConfig {
@@ -237,6 +244,34 @@ describe('web_fetch SSRF 边界', () => {
     const r4 = await webFetch('http://192.168.1.1/', cfg({ enabled: true }))
     expect(r4).toMatchObject({ ok: false })
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  // 2026-11-17 审查修复：IPv4-mapped IPv6 与 DNS 解析到私网均不得绕过 SSRF 边界
+  it('IPv4-mapped IPv6 字面量 → 拒绝且不发起请求', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    expect(isPrivateIp('::ffff:127.0.0.1')).toBe(true)
+    expect(isPrivateIp('::ffff:7f00:1')).toBe(true)
+    expect(isPrivateIp('::ffff:a9fe:a9fe')).toBe(true)
+    expect(isPrivateIp('8.0.10.0')).toBe(false)
+    expect(isPrivateIp('93.184.216.34')).toBe(false)
+    const r1 = await webFetch('http://[::ffff:127.0.0.1]:8080/', cfg({ enabled: true }))
+    expect(r1).toMatchObject({ ok: false })
+    const r2 = await webFetch('http://[::ffff:a9fe:a9fe]/', cfg({ enabled: true }))
+    expect(r2).toMatchObject({ ok: false })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('DNS 解析到私网/回环 → 拒绝；公网地址放行', async () => {
+    await expect(assertPublicHost('localtest.me', async () => ['127.0.0.1'])).rejects.toThrow(
+      /本机|私网/,
+    )
+    await expect(
+      assertPublicHost('localtest.me', async () => ['::ffff:127.0.0.1']),
+    ).rejects.toThrow(/本机|私网/)
+    await expect(
+      assertPublicHost('example.com', async () => ['93.184.216.34']),
+    ).resolves.toBeUndefined()
   })
 
   it('重定向到私网 → 阻断（只发起第一跳）', async () => {
