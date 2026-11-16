@@ -197,6 +197,9 @@
 
 ## L5 视觉基线纪律（K8）
 
+- 2026-11-17 macOS 宿主全量 **37/37** 通过并更新基线（trust-ladder、settings、delivery、toolcalls 7 张）；WSL/Linux 不复现像素，不更新基线。
+
+
 - 基线权威宿主 = **macOS**；仅在 Mac 上 `--update-snapshots` 后入库（见 `apps/desktop/playwright.config.ts`）。
 - WSL/Linux 渲染 ≠ 基线宿主——禁止在非 Mac 上 update 后入库。
 - 勿与 eslint / UAT 等重任务并行跑 L5（资源竞争假失败——p000114 / K8）。

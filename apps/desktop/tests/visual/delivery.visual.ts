@@ -94,12 +94,11 @@ test('真实执行 → 产物区交付包联动（write 授权后）', async ({ 
   await expect(page.locator('.nf-delivery__summary')).toContainText('写入/修改 1 个文件')
   await expect(page.locator('.nf-delivery__artifacts')).toContainText('/test/notes.txt')
   await expect(page.locator('.nf-delivery__acceptance')).toHaveCount(0)
-  await expect(page.getByRole('button', { name: '确认问题关闭' })).toHaveCount(0)
+  // 无验收来源时关闭按钮始终渲染但禁用（需先勾选「没有验收来源」——按钮存在≠可关闭）
+  await expect(page.getByRole('button', { name: '确认问题关闭' })).toBeVisible()
+  await expect(page.getByRole('button', { name: '确认问题关闭' })).toBeDisabled()
   await expect(page.locator('.nf-output')).toHaveScreenshot('delivery-real-execution.png')
   await expect(page.locator('.nf-statusbar')).toContainText('就绪')
+  // 复跑触发链由 `rerun.visual.ts` 专门覆盖（此处只验证真实执行 → 产物区联动与交付包内容）
   await expect(page.locator('.nf-delivery__rerun')).toContainText('再跑一遍')
-  await page.locator('.nf-delivery__rerun').click()
-  await expect(page.locator('.nf-msg--user')).toHaveCount(3, { timeout: 8000 })
-  // 复跑 = lastPromptRef 兜底的原始任务（确认卡按钮消息未必都记入 lastPrompt）
-  await expect(page.locator('.nf-msg--user').last()).toContainText('帮我写一个 notes 文件')
 })

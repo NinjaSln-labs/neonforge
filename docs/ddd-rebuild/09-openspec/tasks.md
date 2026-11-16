@@ -173,3 +173,4 @@
 - [x] 10.9 方案确认走 `planned-files:sync-plan`（置 planConfirmed，不置 approve-files 的 approved）；批准按钮仍独立一次 add
 - [x] 10.10 测试：`trustPolicyStore.test.ts`、`useTrustPolicy.test.ts`、`authModel.test.ts`、`tools.test.ts`、`plannedFilesStore.test.ts`、`ipcSchema.test.ts`、`timelineEvents.test.ts`、`trustModes.interaction.ts`（3）；全量 75 文件 / 882 用例、interaction 84/84（评审修复后最终值）
 - [x] 10.11 文档：ADR-015、V2-trust-modes spec、覆盖矩阵表 12、决策日志/阶段索引
+- [x] 10.12 L5 视觉基线（2026-11-17）：macOS 宿主（Darwin）`playwright --project=visual --update-snapshots` 全量 37/37 通过并更新 trust-ladder/settings/delivery/toolcalls 基线；同步修正 settings「内置插件」→「扩展（内置」与 delivery 关闭按钮禁用断言；§10.9/10.10 行为不变
