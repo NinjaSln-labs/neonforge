@@ -123,9 +123,9 @@
   - 第三方扩展第一次调用外部能力必须经过用户授权；内置扩展按 BC-02 风险分级。
   - 扩展不得绕过 BC-02 的沙箱/授权直接访问文件系统或进程。
 - 关键命令：`RegisterExtension`、`ActivateExtension`、`DeactivateExtension`、`InvokeCapability`
-- 关键事件：`extension.registered`、`extension.activated`、`extension.deactivated`、`extension.invocation_denied`
+- 关键事件：`extension.registered`、`extension.activated`、`extension.deactivated`、`extension.invocation_denied`、`extension.capabilities_changed`、`extension.unregistered`
 - 代码落点：`pluginSystem.ts`、`ipc.ts` `plugins:*`
-- 现状：已落地。注册表返回 kind/trust/status/capabilities；MCP stdio 客户端拉取工具清单并按 `high` 风险映射；Git 只读桥固定 argv（status/log/diff/branches）；第三方扩展首次调用需授权。
+- 现状：已落地。注册表返回 kind/trust/status/capabilities/capabilityDigest；MCP stdio 客户端拉取工具清单并按 `high` 风险映射；Git 只读桥固定 argv（status/log/diff/branches）；第三方扩展首次调用需授权；能力集合变化回退已授权信任，MCP 配置删除后回收扩展（ADR-017）。
 
 ### 3.5 BC-14 验收与质量门禁（Acceptance & Quality Gate）
 
