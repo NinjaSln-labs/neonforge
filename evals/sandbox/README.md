@@ -53,6 +53,21 @@ bash evals/sandbox/run-magpie-baseline.sh
 - **v0 边界**：适配器覆盖产品系统提示、provider 传输语义、工具参数修复；策略门 v1 已在下节接入 AgentDojo 执行点，但完整审批 UI/持久化规则仍未接入。能力卡不得把结果称为“完整产品级安全认证”。
 - 不写入仓库：适配器 bundle 在 `evals/adapter/dist/`（gitignore），原始日志在 `.scratch/evals/`。
 
+## BFCL 类别全量
+
+```bash
+# 默认四个单轮类别：simple_python,multiple,parallel,irrelevance（共 1040 题，非 partial-eval）
+bash evals/sandbox/run-bfcl-categories.sh
+
+# 单类别（例如先跑 400 题 simple_python）
+NF_EVAL_TARGET=magpie NF_EVAL_BFCL_CATEGORIES=simple_python \
+  bash evals/sandbox/run-bfcl-categories.sh .scratch/evals/bfcl-simple-python-full
+```
+
+- 使用 `bfcl generate --test-category ...` + `bfcl evaluate`，不带 `--run-ids` / `--partial-eval`；结果是类别全量分数，但仍不能与官方总榜直接横比。
+- 全量 BFCL v4 共 20 类 4706 题（含 live、multi-turn、web_search、memory 等）；默认只跑与现有子集相同的四个单轮类别，长类别需单独评估时间与依赖。
+- `format_sensitivity` 仅对非 FC 模型生效；通用 FC handler 会被跳过。
+
 ## 策略门 v2（AgentDojo）
 
 ```bash

@@ -7,5 +7,6 @@
 - [2026-11-17 Magpie 策略门 v1](baselines/2026-11-17-magpie-policy-gate-v1.md)
 - [2026-11-18 Magpie 策略门 v2](baselines/2026-11-18-magpie-policy-gate-v2.md)
 - [2026-11-18 Magpie 策略门 v2 审批回调](baselines/2026-11-18-magpie-policy-gate-v2-approval.md)
+- [2026-11-18 Magpie BFCL 四类单轮全量](baselines/2026-11-18-magpie-bfcl-category-full.md)
 
 运行脚本与沙箱定义在 `evals/sandbox/`。所有外部基准必须在一次性容器中运行；不要在本机直接执行。

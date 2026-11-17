@@ -1,7 +1,7 @@
 # 外部基准评估方案（NeonForge Agent 工作台）
 
 - 生效日期：2026-11-17
-- 状态：v1.4（模型级基线 + 适配器 v0 + 策略门 v2 + 审批回调基准；完整审批 UI 待接入）
+- 状态：v1.5（模型级基线 + 适配器 v0 + 策略门 v2 + 审批回调基准 + BFCL 四类全量；完整审批 UI / 其余 BFCL 类别待接入）
 - 关联：`docs/evals/capability-card-template.md`、`evals/sandbox/`、ADR-012（测完再修）
 
 ## 1. 目标与非目标
@@ -19,7 +19,7 @@
 
 | 维度 | 基准 | 本期采用 | 说明 |
 |------|------|----------|------|
-| 工具调用 | BFCL v4（UC Berkeley） | ✅ 子集 | 官方 `bfcl-eval`，DeepSeek 官方 handler；子集使用 `--run-ids` + `--partial-eval` |
+| 工具调用 | BFCL v4（UC Berkeley） | ✅ 子集 + 四类全量 | 官方 `bfcl-eval`，DeepSeek 官方 handler；子集使用 `--run-ids` + `--partial-eval`；四类单轮全量 1040 题 |
 | 提示注入韧性 | AgentDojo（ETH Zurich） | ✅ 子集 | 官方 `agentdojo`，`workspace` suite + `important_instructions` 攻击；仅作模型级安全信号 |
 | 产品级适配 | NeonForge 无头适配器 v0 | ✅ 子集 | 产品系统提示（可选）+ provider 传输语义 + `toolCallRepair` |
 | 产品级执行门 | NeonForge 策略门 v2 | ✅ 子集 | AgentDojo `FunctionsRuntime.run_function` 执行门；`deny > ask > allow`，`PermissionRule(specifier)`，信任阶梯，`ask` fail-closed；`gate.decided` JSONL |
@@ -45,6 +45,7 @@
 ## 4. 本期基线范围（成本可控）
 
 - BFCL v4：`simple_python` 10 题 + `multiple` 4 题 + `parallel` 5 题 + `irrelevance` 5 题，共 24 题；单线程。首发 50 题版本在 `multiple_4` 出现长时间等待，基线改用 24 题子集并记录该限制。
+- BFCL 类别全量：`simple_python` 400 + `multiple` 200 + `parallel` 200 + `irrelevance` 240 = 1040 题，非 partial-eval；结果见 `baselines/2026-11-18-magpie-bfcl-category-full.md`。
 - AgentDojo：`workspace` suite，`user_task_0/1/2`，`injection_task_0/1`，攻击 `important_instructions`；分别跑无防御与 `tool_filter` 两组。
 - 本地模型链路：`NF_EVAL_TARGET=magpie` 经 `evals/adapter/`（NeonForge 无头适配器 v0）调用本机 Magpie 的 `opendesign/deepseek-v4.1-flash`；`NF_EVAL_PROMPT=product|none` 对照产品系统提示的影响。
 - 策略门：`NF_GATE_MODE=strict|standard|delegated` 在 AgentDojo 工具执行点按 `deny > ask > allow` 裁决；基准无人类审批，`ask` 按 fail-closed 拒绝；可选 `NF_GATE_APPROVAL_URL` HTTP 审批回调。结果写入 `neonforge-gate.jsonl`。
@@ -80,6 +81,6 @@ bash evals/sandbox/run-agentdojo-subset.sh
 3. **策略门 v2（已完成，扩展子集）**：加入本地创建/编辑/日历任务区分 strict/standard/delegated；`PermissionRule(specifier)` 与 HTTP 审批回调已实现；基线见 `baselines/2026-11-18-magpie-policy-gate-v2.md`。
 4. **审批回调基准（已完成，扩展子集）**：容器内模拟 `approve-local`/`deny-all`/`approve-all`，10 个用户任务 × 2 注入，`approve-local` 3 次；基线见 `baselines/2026-11-18-magpie-policy-gate-v2-approval.md`。
 5. **策略门 v2 补强（已完成基线）**：`PermissionRule(specifier)` 路径/URL 规范化已实现；`approve-local`/`deny-all`/`approve-all` 各 3 次重复；剩余真实审批 UI / 人类审批链路接入。
-6. **全量 BFCL**：子集稳定后再决定是否跑全量。
+6. **BFCL 类别全量（已完成四类单轮）**：1040 题非 partial-eval，四类合计 86.25%；剩余 `parallel_multiple`、Java/JavaScript、live 系列、multi-turn、web_search、memory 等需单独评估，完整 4706 题暂不跑。
 7. **Terminal-Bench / SWE-bench**：独立 VM + Docker-in-Docker；固定数据集与镜像摘要。
 8. **用户体验与治理**：ISO/IEC 25010 质量评审 + SUS/HEART；NIST AI RMF / ISO/IEC 42001 差距评估。
