@@ -67,6 +67,10 @@ NF_EVAL_TARGET=magpie NF_EVAL_BFCL_CATEGORIES=simple_python \
 NF_EVAL_TARGET=magpie \
 NF_EVAL_BFCL_CATEGORIES=parallel_multiple,simple_java,simple_javascript,live_simple,live_parallel,live_parallel_multiple,live_relevance \
   bash evals/sandbox/run-bfcl-categories.sh .scratch/evals/bfcl-extra-categories-full
+
+# 剩余两个 live 大类（live_multiple 1053 + live_irrelevance 884）
+NF_EVAL_TARGET=magpie NF_EVAL_BFCL_CATEGORIES=live_multiple,live_irrelevance \
+  bash evals/sandbox/run-bfcl-categories.sh .scratch/evals/bfcl-live-large-full
 ```
 
 - 使用 `bfcl generate --test-category ...` + `bfcl evaluate`，不带 `--run-ids` / `--partial-eval`；结果是类别全量分数，但仍不能与官方总榜直接横比。
