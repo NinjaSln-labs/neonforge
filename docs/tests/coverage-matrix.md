@@ -253,7 +253,7 @@
 ## L5 视觉基线纪律（K8）
 
 - 2026-11-17 macOS 宿主全量 **37/37** 通过并更新基线（trust-ladder、settings、delivery、toolcalls 7 张）；WSL/Linux 不复现像素，不更新基线。
-- 设置页新增模型区块（ADR-017）与问题台账同步区块（ADR-018）后，macOS L5 `settings` 基线待重跑更新（非 Mac 不更新）。
+- 设置页模型区块（ADR-017）与问题台账同步区块（ADR-018）已随 PR #24 在 macOS 15.8.3（x86_64）重刷 `settings-open.png`，visual 37/37；非 Mac 不更新。
 
 
 - 基线权威宿主 = **macOS**；仅在 Mac 上 `--update-snapshots` 后入库（见 `apps/desktop/playwright.config.ts`）。
