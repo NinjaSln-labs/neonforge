@@ -7,7 +7,7 @@
 - `--cap-drop=ALL --security-opt=no-new-privileges`
 - PID/内存/CPU 限制
 - 不挂载宿主 Home、SSH、仓库源码或云凭据
-- 仅加入 `nf-eval-internal` 内部网络，出站只经 Squid 白名单代理（仅允许 `api.deepseek.com:443`）
+- 仅加入 `nf-eval-internal` 内部网络；DeepSeek 路径出站只经 Squid 白名单代理（仅允许 `api.deepseek.com:443`），Magpie 路径只经单目标适配器中继
 
 ## 前置（WSL2）
 
@@ -33,6 +33,25 @@ NF_EVAL_DEFENSE=none bash evals/sandbox/run-agentdojo-subset.sh
 ```
 
 脚本会自动启动/停止出站代理；结果默认写入 `.scratch/evals/`（已 gitignore）。把摘要整理到 `docs/evals/baselines/`，不要提交原始日志或任何 Key。
+
+## 本地 Magpie / opendesign DSV4.1F
+
+`NF_EVAL_TARGET=magpie` 时，harness 经 **NeonForge 无头评估适配器**（`evals/adapter/`）调用本机 Magpie：
+
+```bash
+# 前置：Magpie 在 127.0.0.1:3425；MAGPIE_GATEWAY_KEY 已在环境中
+NF_EVAL_TARGET=magpie NF_EVAL_PROMPT=product bash evals/sandbox/run-bfcl-subset.sh
+NF_EVAL_TARGET=magpie NF_EVAL_PROMPT=product NF_EVAL_DEFENSE=none bash evals/sandbox/run-agentdojo-subset.sh
+
+# 一次跑 prompt=none/product × 无防御/tool_filter 的完整子集
+bash evals/sandbox/run-magpie-baseline.sh
+```
+
+- 适配器只监听 Docker bridge 网关地址（默认 `172.17.0.1:18080`），由 `nf-eval-adapter-relay` 单目标中继进 `nf-eval-internal`；评估容器拿不到 `MAGPIE_GATEWAY_KEY`。
+- 中继镜像默认 `python:3.11-slim`（首次需拉取，可用 `NF_EVAL_RELAY_IMAGE` 覆盖）；适配器单元测试：`bash evals/adapter/test.sh`。
+- `NF_EVAL_PROMPT=product` 注入 NeonForge 产品系统提示；`none` 是不注入的对照。
+- **v0 边界**：适配器覆盖产品系统提示、provider 传输语义、工具参数修复；**尚未**把工具授权/审批门接入 harness。能力卡不得把本结果称为“完整产品级安全认证”。
+- 不写入仓库：适配器 bundle 在 `evals/adapter/dist/`（gitignore），原始日志在 `.scratch/evals/`。
 
 ## 版本固定
 

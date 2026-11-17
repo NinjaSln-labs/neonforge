@@ -3,7 +3,8 @@
 
 - 仅监听 127.0.0.1:8000，供 AgentDojo 的 `local`/`vllm_parsed` provider 使用。
 - 只转发 /v1/models 与 /v1/chat/completions，不支持任意 URL。
-- 上游固定为 https://api.deepseek.com/v1；Key 只从 DEEPSEEK_API_KEY 读取。
+- 上游默认 https://api.deepseek.com/v1，可用 NF_EVAL_UPSTREAM_BASE 指向 NeonForge 适配器。
+- Key 只从 NF_EVAL_UPSTREAM_KEY 或 DEEPSEEK_API_KEY 读取。
 - 不记录请求/响应正文，避免提示注入内容进入日志。
 """
 
@@ -16,13 +17,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import requests
 
-UPSTREAM = "https://api.deepseek.com/v1"
+UPSTREAM = os.environ.get("NF_EVAL_UPSTREAM_BASE", "https://api.deepseek.com/v1").rstrip("/")
 MODEL_ID = os.environ.get("NF_EVAL_MODEL_ID", "deepseek-chat")
-API_KEY = os.environ.get("DEEPSEEK_API_KEY")
+API_KEY = os.environ.get("NF_EVAL_UPSTREAM_KEY") or os.environ.get("DEEPSEEK_API_KEY")
 MAX_BODY = 4 * 1024 * 1024
 
 if not API_KEY:
-    raise SystemExit("DEEPSEEK_API_KEY is required")
+    raise SystemExit("NF_EVAL_UPSTREAM_KEY or DEEPSEEK_API_KEY is required")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -50,7 +51,7 @@ class Handler(BaseHTTPRequestHandler):
                 200,
                 {
                     "object": "list",
-                    "data": [{"id": MODEL_ID, "object": "model", "owned_by": "deepseek"}],
+                    "data": [{"id": MODEL_ID, "object": "model", "owned_by": "upstream"}],
                 },
             )
             return

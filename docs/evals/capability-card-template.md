@@ -8,8 +8,10 @@
 |------|----|
 | 产品版本 / commit | `<git sha>` |
 | 模型 / Provider | `<provider / api model id>` |
+| 适配器 | `<无 / NeonForge 无头适配器版本>` |
+| 提示模式 | `<none / product>` |
 | 评估日期（UTC） | `<YYYY-MM-DD>` |
-| 评估类型 | 模型级 / 产品级（当前仅模型级） |
+| 评估类型 | 模型级 / 产品级（适配器 v0：提示/传输/参数修复；不含审批门） |
 | Harness 与版本 | `<bfcl-eval x.y.z / agentdojo x.y.z>` |
 | 数据集版本 | `<BFCL v4 / AgentDojo v1.2.2>` |
 | 沙箱镜像 | `<image:tag + digest>` |
@@ -35,6 +37,7 @@
 ## 安全与限制
 
 - 沙箱：只读根、非 root、cap-drop、资源限制；是否启用出站白名单：`<是/否>`
+- 适配器边界：是否覆盖产品系统提示 / 工具参数修复 / 授权审批门：`<覆盖项>`
 - 凭据：仅环境变量注入，未写入仓库/日志：`<确认>`
 - 已知限制：子集分数、模型路由漂移、harness 与 NeonForge 工具集差异、非确定性
 

@@ -1,7 +1,7 @@
 # 外部基准评估方案（NeonForge Agent 工作台）
 
 - 生效日期：2026-11-17
-- 状态：v1（模型级基线；产品级适配待后续阶段）
+- 状态：v1.1（模型级基线 + 产品适配器 v0；审批/信任边界待 v1）
 - 关联：`docs/evals/capability-card-template.md`、`evals/sandbox/`、ADR-012（测完再修）
 
 ## 1. 目标与非目标
@@ -21,6 +21,7 @@
 |------|------|----------|------|
 | 工具调用 | BFCL v4（UC Berkeley） | ✅ 子集 | 官方 `bfcl-eval`，DeepSeek 官方 handler；子集使用 `--run-ids` + `--partial-eval` |
 | 提示注入韧性 | AgentDojo（ETH Zurich） | ✅ 子集 | 官方 `agentdojo`，`workspace` suite + `important_instructions` 攻击；仅作模型级安全信号 |
+| 产品级适配 | NeonForge 无头适配器 v0 | ✅ 子集 | 产品系统提示（可选）+ provider 传输语义 + `toolCallRepair`；**审批/信任边界尚未接入** |
 | 终端任务 | Terminal-Bench | ⏳ 下一阶段 | 需要独立 Docker/VM 沙箱与镜像仓库；本期不跑 |
 | 软件工程 | SWE-bench Verified / Pro | ⏳ 下一阶段 | 每实例容器、成本高；需 NeonForge 无头执行适配器 |
 | 职场综合任务 | TheAgentCompany | ⏳ 下一阶段 | 需要模拟公司环境与浏览器/邮件服务 |
@@ -38,11 +39,13 @@
 - 不挂载宿主仓库、Home、SSH、云凭据；只挂载结果目录。
 - 模型 Key 通过 `-e DEEPSEEK_API_KEY` 从宿主环境注入，不落盘、不出现在命令行参数。
 - 评估容器只加入 `nf-eval-internal` 内部网络；出站仅经 Squid 白名单代理，默认只允许 `api.deepseek.com:443`（`evals/sandbox/egress-proxy/`）。
+- 本地模型路径（`NF_EVAL_TARGET=magpie`）：评估容器仍只加内部网络，通过单目标 `nf-eval-adapter-relay` 访问宿主适配器；不开放通用出站，适配器只访问本机 Magpie。
 
 ## 4. 本期基线范围（成本可控）
 
 - BFCL v4：`simple_python` 10 题 + `multiple` 4 题 + `parallel` 5 题 + `irrelevance` 5 题，共 24 题；单线程。首发 50 题版本在 `multiple_4` 出现长时间等待，基线改用 24 题子集并记录该限制。
 - AgentDojo：`workspace` suite，`user_task_0/1/2`，`injection_task_0/1`，攻击 `important_instructions`；分别跑无防御与 `tool_filter` 两组。
+- 本地模型链路：`NF_EVAL_TARGET=magpie` 经 `evals/adapter/`（NeonForge 无头适配器 v0）调用本机 Magpie 的 `opendesign/deepseek-v4.1-flash`；`NF_EVAL_PROMPT=product|none` 对照产品系统提示的影响。
 - 预算上限：单次运行 ≤ US$5（按 Provider 账单为准）；超限立即中止并保留已完成结果。
 - 所有分数必须标注：模型/Provider、harness 版本、数据集版本、日期、子集 ID 文件、是否 `partial-eval`。
 
@@ -60,7 +63,8 @@ bash evals/sandbox/run-agentdojo-subset.sh
 
 ## 6. 结果解释与威胁
 
-- **测的是模型 + 固定 harness**，不是 NeonForge 的完整产品；NeonForge 的工具集、系统提示、审批策略尚未进入 BFCL/AgentDojo 管线。
+- **测的是模型 + 固定 harness**，不是 NeonForge 的完整产品；NeonForge 的工具集、系统提示、审批策略尚未全部进入 BFCL/AgentDojo 管线。
+- `NF_EVAL_TARGET=magpie` 时，适配器 v0 已覆盖产品系统提示（`product` 模式）、provider 传输和工具参数修复；但仍**未覆盖审批门**。能力卡必须把“适配器覆盖项”与“未覆盖项”分开写。
 - 子集分数与官方全量榜单不可直接比较；必须标注 `partial-eval`。
 - 模型版本可能随 Provider 路由变化；能力卡必须记录调用日期与实际 API 模型名。
 - 基准可能被污染或饱和；后续优先使用难度更高、维护活跃的基准（SWE-bench Pro、Terminal-Bench）。
@@ -68,7 +72,8 @@ bash evals/sandbox/run-agentdojo-subset.sh
 
 ## 7. 后续阶段
 
-1. **NeonForge 无头适配器**：让外部 harness 通过 NeonForge gateway/工具协议执行，测“产品级”而非“模型级”。
-2. **Terminal-Bench / SWE-bench**：独立 VM + Docker-in-Docker；固定数据集与镜像摘要。
-3. **产品级安全**：把信任模式、逐项授权、`gate.denied` 映射到 AgentDojo 工具过滤器，报告攻击成功率与误拦截率。
-4. **用户体验与治理**：ISO/IEC 25010 质量评审 + SUS/HEART；NIST AI RMF / ISO/IEC 42001 差距评估。
+1. **NeonForge 无头适配器 v0（已完成）**：`evals/adapter/` 已让外部 harness 经产品系统提示、provider 传输与工具参数修复执行；基线见 `baselines/2026-11-17-magpie-dsv41f-adapter-baseline.md`。
+2. **适配器 v1：审批/信任边界**：把 NeonForge 的 `ask`/`deny`/`approved`、信任模式与 `gate.decided` 审计映射到 AgentDojo 工具过滤器，报告攻击成功率与误拦截率。
+3. **重复运行与全量 BFCL**：每个配置 ≥3 次，报告区间；再决定是否跑全量。
+4. **Terminal-Bench / SWE-bench**：独立 VM + Docker-in-Docker；固定数据集与镜像摘要。
+5. **用户体验与治理**：ISO/IEC 25010 质量评审 + SUS/HEART；NIST AI RMF / ISO/IEC 42001 差距评估。

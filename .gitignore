@@ -67,3 +67,6 @@ apps/desktop/E2E-AUDIT.md
 # Offline eval wheelhouse (downloaded locally, never committed)
 evals/sandbox/wheels/*
 !evals/sandbox/wheels/.keep
+
+# Built eval adapter bundle
+evals/adapter/dist/

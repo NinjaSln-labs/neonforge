@@ -1,12 +1,19 @@
 #!/usr/bin/env bash
 # 在一次性 Docker 沙箱中运行 AgentDojo workspace 子集（提示注入韧性）。
-# 凭据只从环境变量读取：DEEPSEEK_API_KEY（映射为 OPENAI_COMPATIBLE_API_KEY）。
+# 凭据只从环境变量读取：DEEPSEEK_API_KEY 或 MAGPIE_GATEWAY_KEY。
+# NF_EVAL_TARGET=deepseek（默认）|magpie；magpie 经 NeonForge 无头适配器调用本地 DSV4.1F。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
-: "${DEEPSEEK_API_KEY:?请先在环境中设置 DEEPSEEK_API_KEY（不要写入文件）}"
+TARGET="${NF_EVAL_TARGET:-deepseek}"
+if [ "$TARGET" = "magpie" ]; then
+  : "${MAGPIE_GATEWAY_KEY:?请先在环境中设置 MAGPIE_GATEWAY_KEY（不要写入文件）}"
+else
+  : "${DEEPSEEK_API_KEY:?请先在环境中设置 DEEPSEEK_API_KEY（不要写入文件）}"
+fi
+
 IMAGE="nf-eval-agentdojo:0.1.35"
 OUT="${1:-.scratch/evals/agentdojo-$(date -u +%Y%m%dT%H%M%SZ)}"
 case "$OUT" in
@@ -18,7 +25,11 @@ mkdir -p "$OUT_ABS"
 DOCKER_BIN=(docker)
 if ! docker info >/dev/null 2>&1; then
   if command -v sudo >/dev/null 2>&1 && sudo -n docker info >/dev/null 2>&1; then
-    DOCKER_BIN=(sudo -n --preserve-env=DEEPSEEK_API_KEY docker)
+    if [ "$TARGET" = "deepseek" ]; then
+      DOCKER_BIN=(sudo -n --preserve-env=DEEPSEEK_API_KEY docker)
+    else
+      DOCKER_BIN=(sudo -n docker)
+    fi
   else
     echo "错误：无法访问 Docker daemon（需 docker 组权限或免密 sudo）" >&2
     exit 1
@@ -32,14 +43,35 @@ else
   "${DOCKER_BIN[@]}" build -f evals/sandbox/Dockerfile.agentdojo -t "$IMAGE" evals/sandbox
 fi
 
-# shellcheck source=egress-proxy/proxy.sh
-source evals/sandbox/egress-proxy/proxy.sh
-eval_proxy_start
-trap eval_proxy_stop EXIT
 NET="${NF_EVAL_NET:-nf-eval-internal}"
 PROXY="${NF_EVAL_PROXY_NAME:-nf-eval-proxy}"
+# shellcheck source=egress-proxy/proxy.sh
+source evals/sandbox/egress-proxy/proxy.sh
+# shellcheck source=local-model-adapter.sh
+source evals/sandbox/local-model-adapter.sh
 
-echo "[eval] 运行 AgentDojo 子集 -> $OUT"
+if [ "$TARGET" = "magpie" ]; then
+  adapter_start
+  trap adapter_stop EXIT
+  RUN_ENV=(
+    -e OPENAI_API_KEY=unused
+    -e NF_EVAL_UPSTREAM_BASE="$NF_EVAL_ADAPTER_URL"
+    -e NF_EVAL_UPSTREAM_KEY=unused
+    -e NF_EVAL_MODEL_ID=opendesign/deepseek-v4.1-flash
+    -e NO_PROXY="localhost,127.0.0.1,$NF_EVAL_ADAPTER_HOSTNAME"
+  )
+else
+  eval_proxy_start
+  trap eval_proxy_stop EXIT
+  RUN_ENV=(
+    -e DEEPSEEK_API_KEY
+    -e HTTP_PROXY="http://$PROXY:3128"
+    -e HTTPS_PROXY="http://$PROXY:3128"
+    -e NO_PROXY="localhost,127.0.0.1"
+  )
+fi
+
+echo "[eval] 运行 AgentDojo 子集 target=$TARGET -> $OUT"
 DEFENSE="${NF_EVAL_DEFENSE:-tool_filter}"
 DEFENSE_ARGS=()
 if [ "$DEFENSE" != "none" ]; then
@@ -57,11 +89,7 @@ fi
   --cpus=2 \
   --user "$(id -u):$(id -g)" \
   -e HOME=/tmp \
-  -e DEEPSEEK_API_KEY \
-  -e NF_EVAL_MODEL_ID=deepseek-chat \
-  -e HTTP_PROXY="http://$PROXY:3128" \
-  -e HTTPS_PROXY="http://$PROXY:3128" \
-  -e NO_PROXY="localhost,127.0.0.1" \
+  "${RUN_ENV[@]}" \
   -v "$OUT_ABS:/eval/out" \
   -v "$ROOT/evals/sandbox/agentdojo_with_proxy.py:/eval/agentdojo_with_proxy.py:ro" \
   "$IMAGE" \
