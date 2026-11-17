@@ -1,0 +1,21 @@
+# BFCL v4 评估沙箱（一次性容器）
+FROM python:3.11-slim
+
+ENV PIP_NO_CACHE_DIR=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# 固定版本，保证能力卡可复现（离线：预置 wheels；在线：走 PyPI）
+ARG BFCL_VERSION=2026.3.23
+COPY wheels /wheels
+RUN if ls /wheels/*.whl >/dev/null 2>&1; then \
+      pip install --no-cache-dir --no-index --find-links=/wheels "bfcl-eval==${BFCL_VERSION}" soundfile; \
+    else \
+      pip install --no-cache-dir "bfcl-eval==${BFCL_VERSION}" soundfile; \
+    fi
+
+RUN useradd --create-home --uid 10001 eval
+WORKDIR /eval
+USER eval
+
+CMD ["bfcl", "--help"]
