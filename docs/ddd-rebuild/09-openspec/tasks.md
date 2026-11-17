@@ -219,3 +219,4 @@
 - [x] 14.5 IPC/UI：`problems:load/save/sync-status/choose-sync-folder/set-sync-folder/sync-now`；preload/types；设置页「问题台账同步」区块；renderer main 权威加载 + localStorage 降级
 - [x] 14.6 测试：`problemLedger.test.ts`、`problemLedgerStore.test.ts`、`problemSyncCrypto.test.ts`、`problemStore.test.ts` 扩充、`ipcSchema.test.ts`、`problemSync.interaction.ts`；全量 79 文件 / 939 用例、interaction 90/90
 - [x] 14.7 文档：ADR-018、V2-problem-ledger-sync spec、覆盖矩阵表 16/快照、决策日志索引、阶段 spec 索引
+- [x] 14.8 合并与验证：PR #23（CI quality 绿）；双 tsc、L1 939、L3 90、lint 0 error、format、build 全通过；macOS L5 settings 基线待重跑

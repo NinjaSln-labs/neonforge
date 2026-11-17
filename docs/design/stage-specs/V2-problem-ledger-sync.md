@@ -3,17 +3,17 @@
 
 ## DoD（机器可验证断言——stage-gate 逐条执行）
 
-- [ ] L1 全量绿：`npx vitest run`（新增 ≥12 条——见 TDD 网格）
-- [ ] L2 契约：`npx tsc -p tsconfig.json --noEmit` + `npx tsc -p tsconfig.main.json --noEmit` 0 错
-- [ ] L3 交互：`npx playwright test --project=interaction`（设置页同步区块场景 + 全量回归）
-- [ ] 行为验收：renderer 启动加载 main 台账；保存后 main 文件存在且 0600；localStorage 仅作降级
-- [ ] 行为验收：加密快照 roundtrip；错误口令/损坏 → 拒绝覆盖；无口令 → 同步失败且不写明文
-- [ ] 行为验收：本地/远端同 id 冲突按 revision→updatedAt→deviceId 确定性合并；删除 tombstone 不复活；结果上限 20
-- [ ] 行为验收：同步目录指向项目根/工作区 → 拒绝；远端 >1 MiB/未知 schema → 拒绝
-- [ ] 审计状态：上阶段 open 项全部 fixed / recorded
-- [ ] 覆盖矩阵已更新（表 16）
-- [ ] 决策日志同步：ADR-018；`000-decision-log.md` 索引已更新
-- [ ] 已 push + CI 绿（qa.yml run）
+- [x] L1 全量绿：`npx vitest run`（79 文件 / 939 用例；见 TDD 网格）
+- [x] L2 契约：`npx tsc -p tsconfig.json --noEmit` + `npx tsc -p tsconfig.main.json --noEmit` 0 错
+- [x] L3 交互：`npx playwright test --project=interaction`（90/90；设置页同步区块场景 + 全量回归）
+- [x] 行为验收：renderer 启动加载 main 台账；保存后 main 文件存在且 0600；localStorage 仅作降级
+- [x] 行为验收：加密快照 roundtrip；错误口令/损坏 → 拒绝覆盖；无口令 → 同步失败且不写明文
+- [x] 行为验收：本地/远端同 id 冲突按 revision→updatedAt→deviceId 确定性合并；删除 tombstone 不复活；结果上限 20
+- [x] 行为验收：同步目录指向项目根/工作区 → 拒绝；远端 >1 MiB/未知 schema → 拒绝
+- [x] 审计状态：上阶段 open 项全部 fixed / recorded
+- [x] 覆盖矩阵已更新（表 16）
+- [x] 决策日志同步：ADR-018；`000-decision-log.md` 索引已更新
+- [x] 已 push + CI 绿（qa.yml run；PR #23）
 
 ## TDD 网格（本阶段新增功能——spec-first + test-first）
 
