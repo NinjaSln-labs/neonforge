@@ -35,6 +35,32 @@ describe('IPC 契约校验（P1-04）', () => {
     expect(validateIpc({ mode: 'delegated', extra: 1 }, IPC_SCHEMAS.trustSet).ok).toBe(true)
   })
 
+  it('problemsSave：数组必填且上限 20（ADR-018）', () => {
+    const item = (i: number) => ({ id: `p${i}` })
+    expect(validateIpc({ problems: [] }, IPC_SCHEMAS.problemsSave).ok).toBe(true)
+    expect(
+      validateIpc(
+        { problems: Array.from({ length: 20 }, (_, i) => item(i)) },
+        IPC_SCHEMAS.problemsSave,
+      ).ok,
+    ).toBe(true)
+    expect(
+      validateIpc(
+        { problems: Array.from({ length: 21 }, (_, i) => item(i)) },
+        IPC_SCHEMAS.problemsSave,
+      ).ok,
+    ).toBe(false)
+    expect(validateIpc({ problems: 'nope' }, IPC_SCHEMAS.problemsSave).ok).toBe(false)
+    expect(validateIpc({}, IPC_SCHEMAS.problemsSave).ok).toBe(false)
+  })
+
+  it('problemsSyncFolder：目录必填，可为 null（关闭同步）', () => {
+    expect(validateIpc({ folder: '/tmp/nf-sync' }, IPC_SCHEMAS.problemsSyncFolder).ok).toBe(true)
+    expect(validateIpc({ folder: null }, IPC_SCHEMAS.problemsSyncFolder).ok).toBe(true)
+    expect(validateIpc({ folder: '' }, IPC_SCHEMAS.problemsSyncFolder).ok).toBe(false)
+    expect(validateIpc({}, IPC_SCHEMAS.problemsSyncFolder).ok).toBe(false)
+  })
+
   it('streamChat：messages 数组/role 必填；枚举约束', () => {
     expect(
       validateIpc(

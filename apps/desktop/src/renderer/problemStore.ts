@@ -13,6 +13,8 @@ export function createProblem(text: string): ProblemInstance {
     title,
     status: 'executing',
     updatedAt: now,
+    updatedAtIso: new Date().toISOString(),
+    revision: 1,
     snapshot: { goal: text, decisions: [], authorized: [], pending: [] },
   }
 }
@@ -37,7 +39,11 @@ export function loadProblems(fallback: ProblemInstance[] = []): ProblemInstance[
     const raw = localStorage.getItem(PROBLEMS_KEY)
     if (raw) {
       const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed)) return parsed.map(migrateAuthorized)
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter((p) => !(p && typeof p === 'object' && 'deletedAt' in p && p.deletedAt))
+          .map(migrateAuthorized)
+      }
     }
   } catch {
     /* 损坏/不可用——忽略 */
@@ -63,5 +69,32 @@ export function saveProblems(problems: ProblemInstance[]): void {
     localStorage.setItem(PROBLEMS_KEY, JSON.stringify(problems.slice(0, PROBLEMS_MAX)))
   } catch {
     /* 存储不可用——忽略（内存态仍工作） */
+  }
+}
+
+// ADR-018：main 为权威；localStorage 仅降级。main 不可用/测试 mock 缺失时回退本地。
+export async function loadProblemsAuthoritative(
+  fallback: ProblemInstance[] = [],
+): Promise<ProblemInstance[]> {
+  const api = typeof window === 'undefined' ? undefined : window.neonforge?.problems
+  if (!api?.load) return fallback
+  try {
+    const result = await api.load()
+    if (result.problems.length > 0) return result.problems
+    if (fallback.length > 0) {
+      await api.save(fallback)
+      return fallback
+    }
+    return []
+  } catch {
+    return fallback
+  }
+}
+
+export async function saveProblemsMain(problems: ProblemInstance[]): Promise<void> {
+  try {
+    await window.neonforge?.problems?.save?.(problems.slice(0, PROBLEMS_MAX))
+  } catch {
+    /* main 不可用——localStorage 仍保留 */
   }
 }

@@ -1,5 +1,5 @@
 // IPC handlers：renderer 经 preload → 主进程 gateway/configStore/workspace
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, type OpenDialogOptions } from 'electron'
 import { readFileSync } from 'node:fs'
 import {
   parseUnifiedDiff,
@@ -38,6 +38,7 @@ import { getBudgetStore } from './budgetStore.instance.js'
 import { getPriceStore } from './priceStore.instance.js'
 import { getUsageStore } from './usageStore.instance.js'
 import { getAcceptanceStore } from './acceptanceStore.instance.js'
+import { getProblemLedgerStore } from './problemLedgerStore.instance.js'
 import type { AcceptanceSource } from '../domain/acceptance.js'
 import { getChangeSetService } from './changeSetService.instance.js'
 import { getTaskQueueStore } from './taskQueueStore.instance.js'
@@ -235,6 +236,30 @@ export function registerIpc(): void {
       return { ok: true, active: gateway.peekActiveModel(id, configStore.getModelId(), 'flash') }
     },
   )
+
+  // ADR-018：问题台账 main 权威 + 同步目录（凭据仅环境变量/文件，不在配置中存值）
+  ipcMain.handle('problems:load', () => getProblemLedgerStore().load())
+  ipcMain.handle('problems:save', (_e, opts: { problems: unknown[] }) => {
+    const valid = validateIpc(opts, IPC_SCHEMAS.problemsSave)
+    if (!valid.ok) return { ok: false, problems: [], error: `参数校验失败：${valid.error}` }
+    return getProblemLedgerStore().save(opts.problems as never)
+  })
+  ipcMain.handle('problems:sync-status', () => getProblemLedgerStore().status())
+  ipcMain.handle('problems:set-sync-folder', (_e, opts: { folder: string | null }) => {
+    const valid = validateIpc(opts, IPC_SCHEMAS.problemsSyncFolder)
+    if (!valid.ok) return { ok: false, error: `参数校验失败：${valid.error}` }
+    return getProblemLedgerStore().setSyncFolder(opts.folder)
+  })
+  ipcMain.handle('problems:choose-sync-folder', async () => {
+    const win = BrowserWindow.getFocusedWindow()
+    const options: OpenDialogOptions = { properties: ['openDirectory', 'createDirectory'] }
+    const result = win
+      ? await dialog.showOpenDialog(win, options)
+      : await dialog.showOpenDialog(options)
+    if (result.canceled || !result.filePaths[0]) return { ok: false, canceled: true }
+    return getProblemLedgerStore().setSyncFolder(result.filePaths[0])
+  })
+  ipcMain.handle('problems:sync-now', () => getProblemLedgerStore().syncNow())
 
   // 流式 chat：事件逐块推给 renderer（经 webContents.send）
   ipcMain.handle(

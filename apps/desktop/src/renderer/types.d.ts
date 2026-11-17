@@ -317,6 +317,40 @@ export interface NeonForgeBridge {
       query: string,
     ) => Promise<{ hits: Array<{ path: string; line: number; snippet: string }>; note?: string }>
   }
+  // ADR-018：问题台账 main 权威 + 加密同步目录
+  problems: {
+    load: () => Promise<{ problems: ProblemInstance[]; error?: string }>
+    save: (
+      problems: ProblemInstance[],
+    ) => Promise<{ ok: boolean; problems: ProblemInstance[]; error?: string }>
+    syncStatus: () => Promise<{
+      deviceId: string
+      folder: string | null
+      lastSyncAt: string | null
+      snapshotPath: string
+      passphraseSource: 'env' | 'file' | 'none'
+    }>
+    chooseSyncFolder: () => Promise<{
+      ok: boolean
+      canceled?: boolean
+      error?: string
+      status?: ProblemSyncStatus
+    }>
+    setSyncFolder: (
+      folder: string | null,
+    ) => Promise<{ ok: boolean; error?: string; status?: ProblemSyncStatus }>
+    syncNow: () => Promise<{
+      ok: boolean
+      error?: string
+      message?: string
+      syncedAt?: string
+      merged?: number
+      localOnly?: number
+      remoteOnly?: number
+      conflicts?: number
+      total?: number
+    }>
+  }
   plugins: {
     list: () => Promise<Array<{ name: string; version: string; active: boolean }>>
     toggle: (name: string, active: boolean) => Promise<boolean>
@@ -500,8 +534,19 @@ export interface ProblemInstance {
   id: string
   title: string // 用户的问题（第一句话）
   status: ProblemStatus
-  updatedAt: string // 最近活动时间
+  updatedAt: string // 最近活动时间（展示）
+  updatedAtIso?: string // 同步排序用 ISO 时间（旧数据缺失时回退 updatedAt）
+  revision?: number // 同步冲突合并版本（ADR-018）
+  deletedAt?: string // 同步 tombstone（本阶段 UI 不提供删除）
   snapshot?: ProblemSnapshot // 断点续做快照（可选——旧数据兼容）
+}
+
+export interface ProblemSyncStatus {
+  deviceId: string
+  folder: string | null
+  lastSyncAt: string | null
+  snapshotPath: string
+  passphraseSource: 'env' | 'file' | 'none'
 }
 
 // ToolRegistry（ticket 10/14）：renderer 侧工具接口（risk：none=L1 观察 / low=L3 文件操作 / high=L3 命令执行）

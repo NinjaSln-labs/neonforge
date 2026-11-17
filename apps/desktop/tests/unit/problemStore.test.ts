@@ -1,8 +1,10 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import {
   createProblem,
   loadProblems,
+  loadProblemsAuthoritative,
   saveProblems,
+  saveProblemsMain,
   updateProblemSnapshot,
   PROBLEMS_KEY,
   PROBLEMS_MAX,
@@ -63,6 +65,80 @@ describe('problemStore（问题台账——创建/持久化）', () => {
     saveProblems(many)
     const loaded = loadProblems()
     expect(loaded).toHaveLength(PROBLEMS_MAX)
+  })
+
+  it('loadProblems：过滤 tombstone（ADR-018 删除不回到 UI）', () => {
+    localStorage.setItem(
+      PROBLEMS_KEY,
+      JSON.stringify([
+        { ...createProblem('已删除'), deletedAt: '2026-11-17T12:00:00.000Z' },
+        createProblem('仍活动'),
+      ]),
+    )
+    expect(loadProblems().map((p) => p.title)).toEqual(['仍活动'])
+  })
+})
+
+// ADR-018：main 权威台账；localStorage 仅降级。Node 测试环境没有 window——按需注入。
+function stubProblemsApi(api: unknown): void {
+  ;(globalThis as Record<string, unknown>).window = { neonforge: { problems: api } }
+}
+
+describe('main 权威台账（ADR-018）', () => {
+  beforeEach(() => stubLocalStorage())
+  afterEach(() => {
+    delete (globalThis as Record<string, unknown>).window
+  })
+
+  it('main 有数据 → 采用 main（不读 localStorage）', async () => {
+    saveProblems([createProblem('本地旧副本')])
+    stubProblemsApi({
+      load: async () => ({
+        problems: [{ id: 'm1', title: 'main 版本', status: 'closed', updatedAt: '11:00' }],
+      }),
+    })
+    const list = await loadProblemsAuthoritative(loadProblems())
+    expect(list.map((p) => p.title)).toEqual(['main 版本'])
+  })
+
+  it('main 为空且本地有 → 回写 main 并返回本地', async () => {
+    const saved: Array<{ id: string }> = []
+    stubProblemsApi({
+      load: async () => ({ problems: [] }),
+      save: async (problems: Array<{ id: string }>) => {
+        saved.push(...problems)
+        return { ok: true, problems }
+      },
+    })
+    const fallback = [createProblem('本地待迁移')]
+    expect(await loadProblemsAuthoritative(fallback)).toBe(fallback)
+    expect(saved).toHaveLength(1)
+  })
+
+  it('main 不可用/抛错 → 回退本地（不崩）', async () => {
+    stubProblemsApi({
+      load: async () => {
+        throw new Error('boom')
+      },
+    })
+    const fallback = [createProblem('回退')]
+    expect(await loadProblemsAuthoritative(fallback)).toBe(fallback)
+    delete (globalThis as Record<string, unknown>).window
+    expect(await loadProblemsAuthoritative(fallback)).toBe(fallback)
+  })
+
+  it('saveProblemsMain：截取上限后提交', async () => {
+    let got: unknown[] = []
+    stubProblemsApi({
+      save: async (problems: unknown[]) => {
+        got = problems
+        return { ok: true, problems }
+      },
+    })
+    await saveProblemsMain(
+      Array.from({ length: PROBLEMS_MAX + 5 }, (_, i) => createProblem(`问题 ${i}`)),
+    )
+    expect(got).toHaveLength(PROBLEMS_MAX)
   })
 })
 

@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { IconCheck, IconDot, IconSettings } from './icons'
-import type { ApiKeyStatusView, ExtensionInfo, McpServerStatus, PermissionRuleView } from './types'
+import type {
+  ApiKeyStatusView,
+  ExtensionInfo,
+  McpServerStatus,
+  PermissionRuleView,
+  ProblemSyncStatus,
+} from './types'
 import { useTrustPolicy } from './useTrustPolicy'
 import type { TrustMode } from '../domain/trustMode'
 
@@ -316,6 +322,67 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
     new Set([...modelOptions, ...(activeModel?.upstream ? [activeModel.upstream] : [])]),
   )
 
+  // ADR-018：问题台账同步（目录 + 口令来源；口令值只在环境/凭据文件）
+  const [problemSync, setProblemSync] = useState<ProblemSyncStatus | null>(null)
+  const [problemSyncBusy, setProblemSyncBusy] = useState(false)
+  const [problemSyncMsg, setProblemSyncMsg] = useState<string | null>(null)
+  const refreshProblemSync = () => {
+    void window.neonforge.problems?.syncStatus?.().then((s) => setProblemSync(s ?? null))
+  }
+  useEffect(() => {
+    refreshProblemSync()
+  }, [])
+  const chooseProblemSyncFolder = () => {
+    setProblemSyncBusy(true)
+    void window.neonforge.problems
+      ?.chooseSyncFolder?.()
+      .then((r) => {
+        if (r?.canceled) return
+        if (r?.ok && r.status) {
+          setProblemSync(r.status)
+          setProblemSyncMsg('同步目录已保存')
+        } else {
+          setProblemSyncMsg(r?.error ?? '目录设置失败')
+        }
+      })
+      .finally(() => setProblemSyncBusy(false))
+  }
+  const clearProblemSyncFolder = () => {
+    setProblemSyncBusy(true)
+    void window.neonforge.problems
+      ?.setSyncFolder?.(null)
+      .then((r) => {
+        if (r?.ok && r.status) {
+          setProblemSync(r.status)
+          setProblemSyncMsg('已关闭同步目录')
+        } else {
+          setProblemSyncMsg(r?.error ?? '关闭失败')
+        }
+      })
+      .finally(() => setProblemSyncBusy(false))
+  }
+  const syncProblemsNow = () => {
+    setProblemSyncBusy(true)
+    setProblemSyncMsg('正在同步…')
+    void window.neonforge.problems
+      ?.syncNow?.()
+      .then((r) => {
+        if (r?.ok) {
+          setProblemSyncMsg(
+            `同步完成：${r.total ?? 0} 条（冲突 ${r.conflicts ?? 0}；本地独有 ${r.localOnly ?? 0} / 远端独有 ${r.remoteOnly ?? 0}）`,
+          )
+          refreshProblemSync()
+        } else {
+          setProblemSyncMsg(
+            r?.error === 'passphrase-missing'
+              ? (r.message ?? '未配置同步口令')
+              : (r?.message ?? r?.error ?? '同步失败'),
+          )
+        }
+      })
+      .finally(() => setProblemSyncBusy(false))
+  }
+
   // 外网检索（web_search / web_fetch）
   const [webEnabled, setWebEnabled] = useState(false)
   const [webProbeOk, setWebProbeOk] = useState(false)
@@ -495,6 +562,53 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
           </button>
         </div>
         {modelMsg ? <p className="nf-settings__export-msg">{modelMsg}</p> : null}
+      </div>
+
+      <div className="nf-settings__plugins">
+        <span className="nf-settings__plugins-title">问题台账同步</span>
+        <p className="nf-settings__key-status">
+          目录：{problemSync?.folder ?? '未选择（可选 iCloud/Dropbox/OneDrive 同步目录）'}
+        </p>
+        <p className="nf-settings__key-status">
+          口令来源：
+          {problemSync?.passphraseSource === 'env'
+            ? '环境变量'
+            : problemSync?.passphraseSource === 'file'
+              ? '凭据文件'
+              : '未配置（NEONFORGE_SYNC_PASSPHRASE 或 _FILE）'}
+          {problemSync?.lastSyncAt
+            ? `；上次同步：${new Date(problemSync.lastSyncAt).toLocaleString()}`
+            : ''}
+        </p>
+        <div className="nf-settings__mcp-actions">
+          <button
+            type="button"
+            className="nf-settings__plugin-toggle"
+            onClick={chooseProblemSyncFolder}
+            disabled={problemSyncBusy}
+          >
+            {problemSync?.folder ? '更换目录' : '选择同步目录'}
+          </button>
+          <button
+            type="button"
+            className="nf-settings__plugin-toggle"
+            onClick={syncProblemsNow}
+            disabled={problemSyncBusy || !problemSync?.folder}
+          >
+            立即同步
+          </button>
+          {problemSync?.folder ? (
+            <button
+              type="button"
+              className="nf-settings__plugin-toggle"
+              onClick={clearProblemSyncFolder}
+              disabled={problemSyncBusy}
+            >
+              关闭同步
+            </button>
+          ) : null}
+        </div>
+        {problemSyncMsg ? <p className="nf-settings__export-msg">{problemSyncMsg}</p> : null}
       </div>
 
       <div className="nf-settings__plugins">

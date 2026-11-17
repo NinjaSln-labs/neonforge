@@ -122,10 +122,10 @@ Session Timeline BC      — 全步骤统一记录（可观测性——JSONL）
 ## 测试
 
 ```bash
-npx vitest run                            # L1 领域逻辑（914）
+npx vitest run                            # L1 领域逻辑（939）
 npx tsc -p tsconfig.json --noEmit         # L2 契约（renderer + main）
 npx tsc -p tsconfig.main.json --noEmit    # L2 主进程契约
-npx playwright test --project=interaction # L3 组件交互（89）
+npx playwright test --project=interaction # L3 组件交互（90）
 npx playwright test                       # L5 视觉 + L3
 NF_TEST_KEY=<key> node e2e-suite.mjs      # L4 真实 API E2E（前置：mkdir -p /tmp/nf-e2e-test）
 ```

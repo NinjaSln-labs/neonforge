@@ -368,6 +368,20 @@ export const IPC_SCHEMAS = {
     },
     required: ['modelId'],
   },
+  problemsSave: {
+    type: 'object',
+    properties: {
+      problems: { type: 'array', maxItems: 20, items: { type: 'any' } },
+    },
+    required: ['problems'],
+  },
+  problemsSyncFolder: {
+    type: 'object',
+    properties: {
+      folder: { type: 'string', minLength: 1, maxLength: 4000, nullable: true },
+    },
+    required: ['folder'],
+  },
   workspacePath: { type: 'string', minLength: 1, maxLength: 4000 },
   // init-project/update-title 的 title 来自用户首条需求（可能较长）——上限与路径同级，避免长需求被误拒
   workspaceTitle: { type: 'string', minLength: 1, maxLength: 4000 },

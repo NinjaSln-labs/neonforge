@@ -1,7 +1,7 @@
 # 覆盖矩阵（Coverage Matrix）
 
 > 首版：2026-08-16（S2）→ 增补：2026-09-29（Keenable 合规）
-> 当前快照（2026-11-17，PR #19/#20/#21 合并后）：L1 **76 文件 / 914 用例** · 事件注册表 56+ 事件 · 不变量 Inv 1-8 + I17-I21 · L3 interaction **89 场景**
+> 当前快照（2026-11-17，PR #19/#20/#21/#22 合并 + #15 实现后）：L1 **79 文件 / 939 用例** · 事件注册表 56+ 事件 · 不变量 Inv 1-8 + I17-I21 · L3 interaction **90 场景**
 > 表 1-表 10 保留各阶段时点的基线记录；当前总数以本快照与 `09-openspec/tasks.md §4` 为准。
 > 维护：阶段末更新（coverage-matrix skill）；缺口入 audit-items
 
@@ -235,9 +235,25 @@
 | MCP 移除回收 + 事件 | `mcpManager.test.ts`（移除服务器 → unregister + extension.unregistered） | ✅ |
 | 设置页扩展能力明细 | `extensionCapabilities.interaction.ts`（能力名称 + risk 展示） | ✅ |
 
+## 表 16：#15 问题台账 Local-first 同步 ↔ 测试（ADR-018，2026-11-17）
+
+| 功能 | 覆盖测试 | 判定 |
+|------|----------|------|
+| 台账规范化（白名单/跳过损坏/重复 id/活动上限 20） | `problemLedger.test.ts`（非法项/重复 id/快照白名单/上限） | ✅ |
+| 确定性合并（revision → updatedAt → deviceId；冲突摘要） | `problemLedger.test.ts`（三条优先级 + deviceId tiebreak 冲突） | ✅ |
+| 删除 tombstone 传播且不复活 | `problemLedger.test.ts`（删除优先）、`problemLedgerStore.test.ts`（renderer 回写不复活） | ✅ |
+| main 权威存储（0600/原子写/损坏回退/revision 递增） | `problemLedgerStore.test.ts`（权限位/损坏/内容变化 revision） | ✅ |
+| 加密快照（env/file 口令来源；AES-GCM roundtrip；错口令/篡改/超限/未知版本拒绝） | `problemSyncCrypto.test.ts` | ✅ |
+| 同步编排（无目录/口令 → 不写快照；两设备往返；坏远端不覆盖本地） | `problemLedgerStore.test.ts`（folder-missing/passphrase-missing/两设备/remote-invalid） | ✅ |
+| 同步目录边界（项目根/仓库子目录/realpath） | `problemLedgerStore.test.ts`（package.json、祖先 `.git`） | ✅ |
+| renderer 权威加载/保存/降级/tombstone 过滤 | `problemStore.test.ts`（main 优先、回写迁移、不可用回退、上限、tombstone） | ✅ |
+| IPC schema（problems 上限 20；目录 null 关闭）与通道漂移 | `ipcSchema.test.ts`、`ipcContractParity.test.ts` | ✅ |
+| 设置页同步区块（目录选择/立即同步/关闭/口令来源只读） | `problemSync.interaction.ts` | ✅ |
+
 ## L5 视觉基线纪律（K8）
 
 - 2026-11-17 macOS 宿主全量 **37/37** 通过并更新基线（trust-ladder、settings、delivery、toolcalls 7 张）；WSL/Linux 不复现像素，不更新基线。
+- 设置页新增模型区块（ADR-017）与问题台账同步区块（ADR-018）后，macOS L5 `settings` 基线待重跑更新（非 Mac 不更新）。
 
 
 - 基线权威宿主 = **macOS**；仅在 Mac 上 `--update-snapshots` 后入库（见 `apps/desktop/playwright.config.ts`）。
