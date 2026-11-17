@@ -1,7 +1,7 @@
 # 覆盖矩阵（Coverage Matrix）
 
 > 首版：2026-08-16（S2）→ 增补：2026-09-29（Keenable 合规）
-> 当前快照（2026-11-17，审查修复批后）：L1 **75 文件 / 902 用例** · 事件注册表 56+ 事件 · 不变量 Inv 1-8 + I17-I21 · L3 interaction **87 场景**
+> 当前快照（2026-11-17，PR #19/#20/#21 合并后）：L1 **76 文件 / 914 用例** · 事件注册表 56+ 事件 · 不变量 Inv 1-8 + I17-I21 · L3 interaction **89 场景**
 > 表 1-表 10 保留各阶段时点的基线记录；当前总数以本快照与 `09-openspec/tasks.md §4` 为准。
 > 维护：阶段末更新（coverage-matrix skill）；缺口入 audit-items
 
@@ -221,6 +221,19 @@
 | 新任务边界：目标/方案确认位复位、主进程计划门 reset、确认卡重新出现 | `taskBoundary.interaction.ts`（新任务后末次 `setPlanConfirmed(false)` 且新方案卡重现） | ✅ |
 | 会话 ID 跨重启保留且按 rootPath 隔离（queue/acceptance/changeset 可再定位） | `sessionStore.test.ts`（往返/隔离/越界值）、`taskBoundary.interaction.ts`（reload 后 timeline 使用同一会话 ID） | ✅ |
 | `approvePlan` 接入授权结果回调，挂起队列条目恢复 | 共用 `onApprovalResolved`；既有 `core.interaction.ts`「卡悬挂→批准后恢复续聊」与 `queue.interaction.ts` FIFO 回归（未新增专用队列场景） | ✅ |
+
+## 表 15：#14 多模型网关与扩展能力治理 ↔ 测试（ADR-017，2026-11-17）
+
+| 功能 | 覆盖测试 | 判定 |
+|------|----------|------|
+| 显式模型优先 + 旧配置路径 | `providersCatalog.test.ts`（显式 modelId 优先、空值回退档位、旧 fallback） | ✅ |
+| ModelProfile：DeepSeek 参数不变；generic 不发 thinking | `providersCatalog.test.ts`（profile 参数矩阵）、`gatewayModelSelection.test.ts`（请求 body 无 thinking/reasoning_effort） | ✅ |
+| 网关显式模型选择 | `gatewayModelSelection.test.ts`（列表有 DeepSeek 时显式非 DeepSeek 仍优先；无列表手填路径） | ✅ |
+| 模型列表/切换 IPC 与持久化 | `configStore.test.ts`（setModelSelection 不清 Key/可清空）、`modelSelection.interaction.ts`（设置页列表/选择/IPC 捕获） | ✅ |
+| 能力指纹稳定性与变化 | `extension.test.ts`（id+risk 顺序无关；风险变化改指纹） | ✅ |
+| 能力变化信任重审 + 事件 | `extensionRegistry.test.ts`（user-authorized → untrusted；同能力保留；capabilities_changed 载荷）、`timelineEvents.test.ts`（事件登记/载荷） | ✅ |
+| MCP 移除回收 + 事件 | `mcpManager.test.ts`（移除服务器 → unregister + extension.unregistered） | ✅ |
+| 设置页扩展能力明细 | `extensionCapabilities.interaction.ts`（能力名称 + risk 展示） | ✅ |
 
 ## L5 视觉基线纪律（K8）
 

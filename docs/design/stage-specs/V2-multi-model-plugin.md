@@ -3,16 +3,16 @@
 
 ## DoD（机器可验证断言——stage-gate 逐条执行）
 
-- [x] L1 全量绿：`npx vitest run`（实现分支 76 文件 / 896 用例；合并 PR #19 后预计 914 用例——见 TDD 网格）
+- [x] L1 全量绿：`npx vitest run`（76 文件 / 914 用例；合并 PR #19 后最终值——见 TDD 网格）
 - [x] L2 契约：`npx tsc -p tsconfig.json --noEmit` + `npx tsc -p tsconfig.main.json --noEmit` 0 错
-- [x] L3 交互：`npx playwright test --project=interaction`（实现分支 87/87；合并 PR #19 后预计 89 场景）
+- [x] L3 交互：`npx playwright test --project=interaction`（89/89；合并 PR #19 后最终值）
 - [x] 行为验收：显式选择非 DeepSeek 模型后，下一轮请求使用该模型且不发送 DeepSeek thinking 字段；旧配置无 modelId 时仍走 flash 档 / `/models` / fallback 旧路径
 - [x] 行为验收：已 `user-authorized` 的 MCP 扩展刷新后能力集合变化 → 信任回退 `untrusted` 且出现 `extension.capabilities_changed`；能力不变则保留授权
 - [x] 行为验收：配置移除 MCP 服务器后刷新 → 对应扩展被 unregister 且出现 `extension.unregistered`，不再出现在 `extensions:list`
-- [ ] 审计状态：PR #18 后审查修复批（PR #19）待合并；合并后审计项全部 fixed / recorded
-- [ ] 覆盖矩阵已更新（表 15——待 PR #19 合并后按最终计数更新）
+- [x] 审计状态：PR #18 后审查修复批（PR #19）已合并；审计项全部 fixed / recorded
+- [x] 覆盖矩阵已更新（表 15）
 - [x] 决策日志同步：ADR-017；`000-decision-log.md` 索引已更新
-- [ ] 已 push + CI 绿（qa.yml run）
+- [x] 已 push + CI 绿（qa.yml run；PR #19/#20/#21 已合并）
 
 ## TDD 网格（本阶段新增功能——spec-first + test-first）
 
