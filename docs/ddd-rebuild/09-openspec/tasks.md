@@ -64,7 +64,7 @@
 ## 4. 验证
 
 - [x] 4.1 `npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit`
-- [x] 4.2 `npx vitest run`（75 文件 / 884 用例通过，2026-11-17；含审查修复、P1-04 第二批、入口硬化、轻量/跨存储事务 Outbox、BC-02 权限规则持久化与安全复核新增回归；ADR-013 审查修复批补快照深校验/恢复竞态/WAL 耐久写回归；ADR-014 结构化澄清新增假设核对/来源制裁/JSON 回答/快照 v1 兼容回归；ADR-015 信任模式新增 store/判定/委托边界/迁移/审计回归；ADR-016 gate.denied 结构化拒绝回归）
+- [x] 4.2 `npx vitest run`（75 文件 / 902 用例通过，2026-11-17；含审查修复、P1-04 第二批、入口硬化、轻量/跨存储事务 Outbox、BC-02 权限规则持久化与安全复核新增回归；ADR-013 审查修复批补快照深校验/恢复竞态/WAL 耐久写回归；ADR-014 结构化澄清新增假设核对/来源制裁/JSON 回答/快照 v1 兼容回归；ADR-015 信任模式新增 store/判定/委托边界/迁移/审计回归；ADR-016 gate.denied 结构化拒绝回归；PR #18 后审查修复批新增 SSRF/交付根边界/MCP envFrom/WAL mtime/新任务边界/会话 ID 回归）
 - [x] 4.3 `npx eslint .`（0 error，6 条既有 hook 依赖 warning）
 - [x] 4.4 `npx playwright test --project=interaction`（2026-11-15 全量 71/71 通过。两个既有 flaky 已定位并处置：
   ① `.nf-start` 启动竞态 = WSL/Chromium 偶发 `net::ERR_NETWORK_CHANGED`，网络栈变更取消模块请求，页面只剩空 `<div id="root">`（非应用启动逻辑 bug）——所有 interaction 入口统一走 `gotoStart`（启动超时一次重载重试 + DOM/bridge/hasKey/console 诊断），环境问题在测试层消除；
@@ -72,7 +72,7 @@
   **2026-11-15 代码审查修复后**全量 72/72（新增「第二轮失败重试重放第二轮上下文」回归）；队列已改多槽 FIFO，既有 approve-files 用例（1804）改为等 working 释放后操作（不再依赖旧单槽覆盖行为）。**排队回归补齐后**全量 74/74（新增「连续排队两条按序送达」「停止回填输入框」）。**入口硬化批次**：`approve-files 多卡并存` 用例（1560）也改为等 working 释放后再发送「继续」——原在流式未结束时发送会按排队语义进入 FIFO，第二卡在授权等待期间可能不生成（排队语义已由 `queue.interaction.ts` 单独覆盖）；repeat-each=5 稳定。）
 - [x] 4.5 回归：现有 P0 用例与既有 `conversationState` / `tools` / `verifyCompletionSystem` 测试全部仍通过
 - [x] 4.6 `npx prettier --check "src/**/*.{ts,tsx}" "tests/**/*.{ts,tsx}" "*.mjs" "*.config.*"`（qa.yml 格式门禁；2026-11-15 对齐 42 个既有文件，326 行格式化，无逻辑变更）
-- [x] 4.7 文档一致性（2026-11-15；2026-11-17 计数刷新）：14 spec / 69 Requirement / 268 Scenario（单 Requirement ≤5 Scenario）；`10-code-evidence.md` 行号刷新并校验 0 越界；`docs/ddd-rebuild` 相对链接 0 缺失；`docs/tests/coverage-matrix.md` 增补 75 文件 / 884 用例 / 85 场景快照与 BC-10～BC-14、BC-02、Outbox、ADR-013 恢复、ADR-014 结构化澄清、ADR-015 信任模式、ADR-016 gate.denied 覆盖表
+- [x] 4.7 文档一致性（2026-11-15；2026-11-17 计数刷新）：14 spec / 69 Requirement / 268 Scenario（单 Requirement ≤5 Scenario）；`10-code-evidence.md` 行号刷新并校验 0 越界；`docs/ddd-rebuild` 相对链接 0 缺失；`docs/tests/coverage-matrix.md` 增补 75 文件 / 902 用例 / 87 场景快照与 BC-10～BC-14、BC-02、Outbox、ADR-013 恢复、ADR-014 结构化澄清、ADR-015 信任模式、ADR-016 gate.denied、审查修复批覆盖表
 
 ---
 
@@ -185,3 +185,13 @@
 - [x] 11.4 `R/useChatStream.ts`：仅 rejection-memory/action-gate 且非 pending/confirm 抢先时发送；与 `tool.blocked` 分层共存
 - [x] 11.5 测试：`conversationState.test.ts`（结构化拒绝来源/属性/风险）、`timelineEvents.test.ts`（注册/载荷/缺必选）、`gateDenied.interaction.ts`（拒绝后重试 → 一条事件、首次 ask 不记）；全量 75 文件 / 884 用例、interaction 85/85
 - [x] 11.6 文档：ADR-016、V2-gate-denied-events spec、06 事件目录注记、覆盖矩阵表 2/表 13、决策日志/阶段索引、tasks §4 计数
+
+---
+
+## 12. PR #18 合并后代码审查修复（2026-11-17）
+
+- [x] 12.1 独立审查 PR #18 合并基线（`bdf437b`）：15 findings（7 安全边界 + 8 正确性/状态一致性）
+- [x] 12.2 安全边界修复：`read` preApproval/realpath 一致；只读命令分类 fail-closed（换行/命令替换/网络命令链/危险参数形态）；`web_fetch` IPv4-mapped/DNS/重定向逐跳校验；MCP 子进程 `envFrom` allowlist；交付 diff `rootPath` + realpath；权限路径/URL 前缀边界；进程组 kill 无效 pid 防护
+- [x] 12.3 正确性修复：WAL 读取失败可见 + mtime 守卫；changeSet 回滚事务化 + 随机临时文件；验收豁免不覆盖已有项；新任务边界全量复位；会话 ID 按 rootPath 持久化；`approvePlan` 接入 `onApprovalResolved`
+- [x] 12.4 回归：新增 L1 18 条（`conversationState`/`tools`/`permissionRules`/`webTools`/`mcpClient`/`mcpConfig`/`stateTransaction`/`changeSetService`/`acceptanceStore`/`sessionStore`）+ L3 `taskBoundary.interaction.ts` 2 场景；全量 75 文件 / 902 用例、interaction 87/87
+- [x] 12.5 文档：`docs/audits/code-review-2026-11-17.md`、覆盖矩阵表 14/快照、README 计数与网关两轴说明、DDD 验证结果、设置页 MCP `envFrom` 提示

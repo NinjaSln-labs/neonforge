@@ -8,6 +8,30 @@ import type { TaskSnapshot } from '../domain/taskSnapshot'
 export const SESSION_KEY = 'nf-session'
 export const SESSION_MAX = 50 // 会话消息上限（防膨胀）
 export const SESSION_VERSION = 2
+export const SESSION_ID_PREFIX = 'nf-session-id'
+
+/** 2026-11-17 审查修复：工作区会话 ID 跨重启保留（queue/acceptance/changeset 以 sessionId 为键）。 */
+export function workspaceSessionIdKey(rootPath?: string | null): string {
+  return rootPath ? `${SESSION_ID_PREFIX}:${rootPath}` : SESSION_ID_PREFIX
+}
+
+export function loadWorkspaceSessionId(rootPath?: string | null): string | null {
+  try {
+    const id = localStorage.getItem(workspaceSessionIdKey(rootPath))
+    return id && id.length <= 200 ? id : null
+  } catch {
+    return null
+  }
+}
+
+export function saveWorkspaceSessionId(rootPath: string | null | undefined, id: string): void {
+  try {
+    if (!id) return
+    localStorage.setItem(workspaceSessionIdKey(rootPath), id)
+  } catch {
+    /* 存储不可用——会话仍可用，只是跨重启失联 */
+  }
+}
 
 // 可持久化消息（过滤半截 streaming——只存完整消息）
 export interface StoredMsg {

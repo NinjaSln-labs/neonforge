@@ -331,16 +331,18 @@ export const IPC_SCHEMAS = {
       diff: { type: 'string', minLength: 1, maxLength: 2_000_000 },
       approved: { type: 'boolean' },
       sessionId: { type: 'string', minLength: 1, maxLength: 200 },
+      rootPath: { type: 'string', minLength: 1, maxLength: 4000 },
     },
-    required: ['path', 'diff'],
+    required: ['path', 'diff', 'rootPath'],
   },
   deliveryRevertDiff: {
     type: 'object',
     properties: {
       path: { type: 'string', minLength: 1, maxLength: 4000 },
       sessionId: { type: 'string', minLength: 1, maxLength: 200 },
+      rootPath: { type: 'string', minLength: 1, maxLength: 4000 },
     },
-    required: ['path'],
+    required: ['path', 'rootPath'],
   },
   // P1-04 收尾：工作区/网关/日志入口的结构校验
   gatewayValidate: {

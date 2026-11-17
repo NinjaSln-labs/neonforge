@@ -1,7 +1,7 @@
 # 覆盖矩阵（Coverage Matrix）
 
 > 首版：2026-08-16（S2）→ 增补：2026-09-29（Keenable 合规）
-> 当前快照（2026-11-17）：L1 **75 文件 / 884 用例** · 事件注册表 56+ 事件 · 不变量 Inv 1-8 + I17-I21 · L3 interaction **85 场景**
+> 当前快照（2026-11-17，审查修复批后）：L1 **75 文件 / 902 用例** · 事件注册表 56+ 事件 · 不变量 Inv 1-8 + I17-I21 · L3 interaction **87 场景**
 > 表 1-表 10 保留各阶段时点的基线记录；当前总数以本快照与 `09-openspec/tasks.md §4` 为准。
 > 维护：阶段末更新（coverage-matrix skill）；缺口入 audit-items
 
@@ -203,6 +203,24 @@
 | canExecute 结构化拒绝来源 | `conversationState.test.ts`（拒绝记忆 → `deniedBy=rejection-memory` + attribute/risk；策略 deny → `action-gate`；pending/清单边界 → `session-gate`） | ✅ |
 | gate.denied 事件注册 | `timelineEvents.test.ts`（domain gate、role system、name/gate/reason/attribute/risk、缺必选 warn） | ✅ |
 | 发送点与边界 | `gateDenied.interaction.ts`（首次授权 ask 不记；拒绝后同命令重试 → 不弹卡不执行 + 一条 gate.denied 且属性 hazardous/risk high） | ✅ |
+
+## 表 14：审查修复批 ↔ 回归断言（2026-11-17，PR #18 后）
+
+| 修复项 | 覆盖测试 | 判定 |
+|------|----------|------|
+| `web_fetch` SSRF：IPv4-mapped IPv6 字面量、DNS 解析到私网、重定向逐跳校验 | `webTools.test.ts`（字面量拒绝 / DNS resolver 私网拒绝 / 重定向私网阻断且只发第一跳） | ✅ |
+| `read` 自动放行与执行路径一致：相对路径解析 + 根内 symlink 指向根外不放行 | `tools.test.ts`（read 相对路径误带项目名 + symlink 逃逸） | ✅ |
+| 交付 diff 写入边界：`rootPath` 必需、路径归一 + realpath 根内校验（apply/revert 同一目标） | `tools.test.ts`（`resolveDeliveryTarget` 边界/symlink/无根拒绝）、预加载签名与 DeliveryPanel 接线 | ✅ |
+| MCP 子进程环境隔离：默认不继承宿主全量 env，仅安全基础变量 + 显式 `envFrom` 名称（不存值） | `mcpClient.test.ts`（`buildMcpEnv` 不传宿主凭据）、`mcpConfig.test.ts`（`envFrom` 名称校验/去重/非数组拒绝） | ✅ |
+| 权限前缀边界：目录 specifier 不匹配同前缀兄弟路径；URL host 精确匹配防 lookalike 域 | `permissionRules.test.ts`（路径 `src` vs `src-evil`、`trusted.example` vs 子域/假域） | ✅ |
+| 进程组终止防护：无效 pid 不调用 `kill(-pid)`（避免 `kill(-0)` 打当前进程组） | `tools.test.ts`（`killProcessGroupBestEffort` 无效 pid 不调用 kill） | ✅ |
+| 只读命令分类 fail-closed：换行/命令替换、网络读命令与链/管道/重定向混合、sed `w`、`find -fprint0`、`sort --compress-program`、`git branch` 写形态 | `conversationState.test.ts`（4 组新增断言） | ✅ |
+| 状态事务：损坏 WAL 不报 applied 成功；保留 WAL 重放不覆盖更新磁盘 | `stateTransaction.test.ts`（pending 可见性、mtime 守卫） | ✅ |
+| 变更集回滚：`.nf-restore` symlink 不跟随；恢复写入与状态同一事务，commit 非 applied 返回错误 | `changeSetService.test.ts`（symlink 防护 + 事务提交 mock） | ✅ |
+| 验收豁免不覆盖已有验收项（防竞态把真实验收洗成豁免） | `acceptanceStore.test.ts`（已有 items → `acceptEmpty` 不覆盖） | ✅ |
+| 新任务边界：目标/方案确认位复位、主进程计划门 reset、确认卡重新出现 | `taskBoundary.interaction.ts`（新任务后末次 `setPlanConfirmed(false)` 且新方案卡重现） | ✅ |
+| 会话 ID 跨重启保留且按 rootPath 隔离（queue/acceptance/changeset 可再定位） | `sessionStore.test.ts`（往返/隔离/越界值）、`taskBoundary.interaction.ts`（reload 后 timeline 使用同一会话 ID） | ✅ |
+| `approvePlan` 接入授权结果回调，挂起队列条目恢复 | 共用 `onApprovalResolved`；既有 `core.interaction.ts`「卡悬挂→批准后恢复续聊」与 `queue.interaction.ts` FIFO 回归（未新增专用队列场景） | ✅ |
 
 ## L5 视觉基线纪律（K8）
 

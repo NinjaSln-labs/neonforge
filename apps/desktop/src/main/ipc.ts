@@ -19,6 +19,7 @@ import {
   cancelActiveCommand,
   syncPlanApprovedFromStore,
   syncPlanConfirmed,
+  resolveDeliveryTarget,
 } from './tools.js'
 import { getPlannedFilesStore } from './plannedFilesStore.instance.js'
 import { getPermissionRulesStore } from './permissionRulesStore.instance.js'
@@ -508,26 +509,38 @@ export function registerIpc(): void {
   // 05 交付包执行层：diff 应用（L3 授权）/ 快照回滚
   ipcMain.handle(
     'delivery:apply-diff',
-    (_e, opts: { path: string; diff: string; approved?: boolean; sessionId?: string }) => {
+    async (
+      _e,
+      opts: {
+        path: string
+        diff: string
+        approved?: boolean
+        sessionId?: string
+        rootPath?: string
+      },
+    ) => {
       // P1-04：diff 应用是写路径——先校验结构，再判授权
       const valid = validateIpc(opts, IPC_SCHEMAS.deliveryApplyDiff)
       if (!valid.ok) return { ok: false, error: `参数校验失败：${valid.error}` }
       if (!opts.approved)
         return { ok: false, error: '「applyDiff」需要授权（L3）——approved=true 后执行' }
+      // 2026-11-17 审查修复：交付 diff 也必须过沙箱 realpath——不得只凭 renderer approved 写任意路径
+      const target = await resolveDeliveryTarget(opts.path, opts.rootPath)
+      if (!target.ok) return { ok: false, error: target.error }
       const changes = parseUnifiedDiff(opts.diff ?? '')
       if (changes.length === 0) return { ok: false, error: 'diff 解析为空——不支持该格式' }
       // 写前捕获原内容（快照失败也不能把已存在文件误判为新建——回滚删文件的破坏性错误）
       let preWrite: { content: string | null } | undefined
       try {
-        preWrite = { content: readFileSync(opts.path, 'utf-8') }
+        preWrite = { content: readFileSync(target.target, 'utf-8') }
       } catch {
         preWrite = undefined
       }
-      snapshot(opts.path)
-      const r = applyDiffToFile(opts.path, changes)
+      snapshot(target.target)
+      const r = applyDiffToFile(target.target, changes)
       if (r.ok) {
         try {
-          getChangeSetService().recordMutation(opts.sessionId ?? 'default', opts.path, preWrite)
+          getChangeSetService().recordMutation(opts.sessionId ?? 'default', target.target, preWrite)
         } catch {
           /* 变更集记录失败不影响应用结果 */
         }
@@ -535,19 +548,24 @@ export function registerIpc(): void {
       return r
     },
   )
-  ipcMain.handle('delivery:revert-diff', (_e, opts: { path: string; sessionId?: string }) => {
-    const valid = validateIpc(opts, IPC_SCHEMAS.deliveryRevertDiff)
-    if (!valid.ok) return { ok: false, error: `参数校验失败：${valid.error}` }
-    const r = revert(opts.path)
-    if (r.ok) {
-      try {
-        getChangeSetService().recordRevert(opts.sessionId ?? 'default', opts.path)
-      } catch {
-        /* 变更集状态同步失败不影响回滚结果 */
+  ipcMain.handle(
+    'delivery:revert-diff',
+    async (_e, opts: { path: string; sessionId?: string; rootPath?: string }) => {
+      const valid = validateIpc(opts, IPC_SCHEMAS.deliveryRevertDiff)
+      if (!valid.ok) return { ok: false, error: `参数校验失败：${valid.error}` }
+      const target = await resolveDeliveryTarget(opts.path, opts.rootPath)
+      if (!target.ok) return { ok: false, error: target.error }
+      const r = revert(target.target)
+      if (r.ok) {
+        try {
+          getChangeSetService().recordRevert(opts.sessionId ?? 'default', target.target)
+        } catch {
+          /* 变更集状态同步失败不影响回滚结果 */
+        }
       }
-    }
-    return r
-  })
+      return r
+    },
+  )
 
   // BC-10 变更与版本：查询/整集回滚/清理
   ipcMain.handle('changeset:list', (_e, sessionId: string) => {

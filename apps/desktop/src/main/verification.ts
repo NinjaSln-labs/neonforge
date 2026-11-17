@@ -4,6 +4,7 @@
 // 安全护栏：fail-closed（非只读命令不执行——判定由领域层 unverifiable 承担）+ 超时 5s + 输出截断 4KB + 串行执行
 // 进程清理（坑 54 模式——S4 复审修正）：spawn detached 新进程组——超时/结束统一杀进程组（含 &/nohup 后代），不留孤儿
 import { spawn } from 'node:child_process'
+import { isKillablePid, killProcessGroupBestEffort } from './processGuard.js'
 import { isSystemVerifiable } from '../domain/conversationState.js'
 
 // P0-05：代跑判定单源在领域层（readonly + localhost network-read）；此处不再本地复制
@@ -31,11 +32,9 @@ function runOne(command: string, cwd?: string): Promise<VerificationResult> {
     let stderr = ''
     let done = false
     const killGroup = () => {
-      try {
-        process.kill(-child.pid!, 'SIGKILL') // 杀整个进程组（负 PID）
-      } catch {
-        /* 已退出——无残留 */
-      }
+      // 2026-11-17 审查修复：spawn 失败/未拿到 pid 时不得 kill(-0)（当前进程组）
+      if (!isKillablePid(child.pid)) return
+      killProcessGroupBestEffort(child.pid)
     }
     const timer = setTimeout(() => finish(false, `(超时 ${RUN_TIMEOUT_MS}ms)`), RUN_TIMEOUT_MS)
     const finish = (ok: boolean, output?: string) => {

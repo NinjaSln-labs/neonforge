@@ -32,10 +32,13 @@ export interface StoreEvent {
   detail: Record<string, unknown>
 }
 
-export type StateCommitSink = (writes: StateWrite[], events: StoreEvent[]) => void
-
 /** 事件出口：返回 true = 已进入时间线；false = 待重放。 */
 export type StateEventSink = (event: OutboxEvent, outboxId: string) => boolean
+
+export type StateCommitSink = (
+  writes: StateWrite[],
+  events: StoreEvent[],
+) => StateCommitResult | void
 
 interface StateTransactionRecord {
   id: string
@@ -56,7 +59,21 @@ export interface StateDrainResult {
   applied: number
   events: number
   remaining: number
+  /** WAL 读取失败等阻塞态（不是“没有剩余”，调用方不得据此判成功）。 */
+  pending?: boolean
   error?: string
+}
+
+/** 磁盘文件是否比 WAL 记录更新（WAL 降级直写后的磁盘意图优先，不回放旧快照）。 */
+function diskNewerThan(target: string, at: string): boolean {
+  const ts = Date.parse(at)
+  if (!Number.isFinite(ts)) return false
+  try {
+    const info = statSync(target)
+    return info.isFile() && info.mtimeMs >= ts
+  } catch {
+    return false
+  }
 }
 
 function syncDirBestEffort(dir: string): void {
@@ -108,12 +125,13 @@ function appendLineDurable(filePath: string, line: string): void {
   }
 }
 
-/** 原子写单个状态文件（tmp + fsync + rename + 目录同步）。抛错由调用方决定保留/重试。 */
+/** 原子写单个状态文件（tmp + fsync + rename + 目录同步）。抛错由调用方决定保留/重试。
+ * 2026-11-17 审查修复：临时名随机 + O_EXCL——防止预置 symlink 把写重定向到项目外。 */
 export function writeStateFile(filePath: string, content: string): void {
   const dir = path.dirname(filePath)
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-  const tmp = `${filePath}.tx-tmp`
-  const fd = openSync(tmp, 'w', 0o600)
+  const tmp = `${filePath}.tx-tmp-${randomUUID()}`
+  const fd = openSync(tmp, 'wx', 0o600)
   try {
     writeAll(fd, content)
     fsyncSync(fd)
@@ -196,8 +214,8 @@ export class StateTransactionLog {
       syncDirBestEffort(dir)
       return
     }
-    const tmp = `${this.filePath}.tmp`
-    const fd = openSync(tmp, 'w', 0o600)
+    const tmp = `${this.filePath}.tmp-${randomUUID()}`
+    const fd = openSync(tmp, 'wx', 0o600)
     try {
       writeAll(fd, records.map((r) => JSON.stringify(r)).join('\n') + '\n')
       fsyncSync(fd)
@@ -208,15 +226,27 @@ export class StateTransactionLog {
     syncDirBestEffort(dir)
   }
 
-  /** 应用一条事务：先写状态，再投递事件。返回是否有待重放项。 */
-  private applyRecord(record: StateTransactionRecord): {
+  /** 应用一条事务：先写状态，再投递事件。返回是否有待重放项。
+   * `writtenThisDrain`：本次 drain 已写过的文件不再做 mtime 守卫
+   * （否则刚由前一条 WAL 记录写入的 mtime 会误拦同批次后续记录）。 */
+  private applyRecord(
+    record: StateTransactionRecord,
+    writtenThisDrain?: Set<string>,
+  ): {
     applied: boolean
     events: number
     pending: boolean
     error?: string
   } {
     try {
-      applyStateWrites(record.writes)
+      // 2026-11-17 审查修复：重放也要做 mtime 守卫——降级直写更新的文件不被旧 WAL 快照覆盖
+      const writes = record.writes.filter(
+        (w) => writtenThisDrain?.has(w.filePath) || !diskNewerThan(w.filePath, record.at),
+      )
+      if (writes.length > 0) {
+        applyStateWrites(writes)
+        writes.forEach((w) => writtenThisDrain?.add(w.filePath))
+      }
     } catch (e) {
       return {
         applied: false,
@@ -248,7 +278,8 @@ export class StateTransactionLog {
   drain(): StateDrainResult {
     const read = this.readRecords()
     if (read.error) {
-      return { applied: 0, events: 0, remaining: 0, error: read.error }
+      // 2026-11-17 审查修复：读取失败不是“剩余 0”——显式 pending，commit 不得谎报成功
+      return { applied: 0, events: 0, remaining: 0, pending: true, error: read.error }
     }
     const records = read.records
     if (records.length === 0) return { applied: 0, events: 0, remaining: 0 }
@@ -256,8 +287,9 @@ export class StateTransactionLog {
     let events = 0
     let firstPending = -1
     let error: string | undefined
+    const writtenThisDrain = new Set<string>()
     records.forEach((record, index) => {
-      const result = this.applyRecord(record)
+      const result = this.applyRecord(record, writtenThisDrain)
       if (result.applied) applied += 1
       events += result.events
       if (result.pending || !result.applied) {
@@ -323,11 +355,12 @@ export class StateTransactionLog {
       }
     }
     const drained = this.drain()
+    const blocked = Boolean(drained.pending)
     return {
       id,
-      applied: drained.remaining === 0 || drained.applied > 0,
-      eventsDelivered: drained.remaining === 0 && !drained.error,
-      pending: drained.remaining > 0,
+      applied: !blocked && (drained.remaining === 0 || drained.applied > 0),
+      eventsDelivered: !blocked && drained.remaining === 0 && !drained.error,
+      pending: blocked || drained.remaining > 0,
       error: drained.error,
     }
   }
@@ -346,13 +379,7 @@ export class StateTransactionLog {
       const write = record.writes.find((w) => w.filePath === target)
       if (!write) continue
       // WAL append 失败时的直写降级不会进入日志：磁盘 mtime 晚于记录时间 → 磁盘是更新的意图，不回放旧 WAL。
-      try {
-        const info = statSync(target)
-        const at = Date.parse(record.at)
-        if (info.isFile() && Number.isFinite(at) && info.mtimeMs >= at) return null
-      } catch {
-        /* 文件不存在/不可 stat → 使用 WAL 内容（重试落盘） */
-      }
+      if (diskNewerThan(target, record.at)) return null
       return write.content
     }
     return null

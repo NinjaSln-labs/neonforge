@@ -193,15 +193,22 @@ contextBridge.exposeInMainWorld('neonforge', {
     clear: (sessionId: string) => ipcRenderer.invoke('queue:clear', sessionId),
   },
   delivery: {
-    applyDiff: (path: string, diff: string, approved?: boolean, sessionId?: string) =>
+    applyDiff: (
+      path: string,
+      diff: string,
+      approved?: boolean,
+      sessionId?: string,
+      rootPath?: string,
+    ) =>
       ipcRenderer.invoke('delivery:apply-diff', {
         path,
         diff,
         approved: approved ?? false,
         sessionId,
+        rootPath,
       }) as Promise<{ ok: boolean; file?: string; error?: string }>,
-    revertDiff: (path: string, sessionId?: string) =>
-      ipcRenderer.invoke('delivery:revert-diff', { path, sessionId }) as Promise<{
+    revertDiff: (path: string, sessionId?: string, rootPath?: string) =>
+      ipcRenderer.invoke('delivery:revert-diff', { path, sessionId, rootPath }) as Promise<{
         ok: boolean
         error?: string
       }>,

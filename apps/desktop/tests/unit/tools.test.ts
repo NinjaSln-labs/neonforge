@@ -11,8 +11,9 @@ import {
   syncPlanApprovedFromStore,
   isValidOpenUrl,
   isReadOnlyBash,
+  resolveDeliveryTarget,
 } from '../../src/main/tools'
-import { isKillablePid } from '../../src/main/processGuard'
+import { isKillablePid, killProcessGroupBestEffort } from '../../src/main/processGuard'
 import { getPlannedFilesStore } from '../../src/main/plannedFilesStore.instance'
 
 // 2026-08-06 open 工具（用户「帮我打开」）：mock electron shell——vitest node 环境无 electron
@@ -283,6 +284,75 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     }
   })
 
+  // 2026-11-17 审查修复：read 预检必须与执行器同一路径解析（否则带项目名前缀的 symlink 可绕过 realpath）
+  it('read：相对路径误带项目名 + 根内 symlink 指向根外 → 不得自动放行', async () => {
+    const secret = '/tmp/nf-unit-tools-read-escape-secret.txt'
+    const link = path.join(TMP, 'escape-link.txt')
+    writeFileSync(secret, 'outside-secret', 'utf-8')
+    try {
+      rmSync(link, { force: true })
+    } catch {
+      /* ignore */
+    }
+    const { symlinkSync } = await import('node:fs')
+    symlinkSync(secret, link)
+    try {
+      const denied = await toolRegistry.execute(
+        'read',
+        { path: `${path.basename(TMP)}/escape-link.txt` },
+        { rootPath: TMP },
+      )
+      expect(denied.ok).toBe(false)
+      expect(denied.needApproval).toBe(true)
+      expect(denied.data).toBeUndefined()
+
+      const granted = await toolRegistry.execute(
+        'read',
+        { path: `${path.basename(TMP)}/escape-link.txt` },
+        { rootPath: TMP, approved: true },
+      )
+      expect(granted.ok).toBe(true)
+      expect(granted.data).toBe('outside-secret')
+    } finally {
+      rmSync(link, { force: true })
+      rmSync(secret, { force: true })
+    }
+  })
+
+  it('resolveDeliveryTarget：交付 diff 写路径必须根内且不可 symlink 逃逸', async () => {
+    const inside = path.join(TMP, 'delivery.txt')
+    writeFileSync(inside, 'x', 'utf-8')
+    const ok = await resolveDeliveryTarget(inside, TMP)
+    expect(ok).toMatchObject({ ok: true, target: inside })
+
+    const outside = '/tmp/nf-unit-delivery-outside.txt'
+    writeFileSync(outside, 'secret', 'utf-8')
+    try {
+      const denied = await resolveDeliveryTarget(outside, TMP)
+      expect(denied.ok).toBe(false)
+      expect(denied.error).toMatch(/项目根内/)
+    } finally {
+      rmSync(outside, { force: true })
+    }
+
+    const secret = '/tmp/nf-unit-delivery-link-secret.txt'
+    const link = path.join(TMP, 'delivery-link.txt')
+    writeFileSync(secret, 'secret', 'utf-8')
+    const { symlinkSync } = await import('node:fs')
+    symlinkSync(secret, link)
+    try {
+      const escaped = await resolveDeliveryTarget(link, TMP)
+      expect(escaped.ok).toBe(false)
+      expect(escaped.error).toMatch(/项目根内/)
+    } finally {
+      rmSync(link, { force: true })
+      rmSync(secret, { force: true })
+    }
+
+    const noRoot = await resolveDeliveryTarget(inside, undefined)
+    expect(noRoot.ok).toBe(false)
+  })
+
   // P0-04：进程清理守卫——无效 pid 不得进入 kill(-pid)（-0 会向当前进程组发信号）
   it('isKillablePid：只接受正整数', () => {
     expect(isKillablePid(1234)).toBe(true)
@@ -293,6 +363,17 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     expect(isKillablePid(Number.NaN)).toBe(false)
     expect(isKillablePid(undefined)).toBe(false)
     expect(isKillablePid(null)).toBe(false)
+  })
+
+  it('killProcessGroupBestEffort：无效 pid 不调用 kill（防 kill(-0) 打当前进程组）', () => {
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true as never)
+    expect(killProcessGroupBestEffort(undefined)).toBe(false)
+    expect(killProcessGroupBestEffort(0)).toBe(false)
+    expect(killProcessGroupBestEffort(Number.NaN)).toBe(false)
+    expect(kill).not.toHaveBeenCalled()
+    expect(killProcessGroupBestEffort(1234)).toBe(true)
+    expect(kill).toHaveBeenCalledWith(-1234, 'SIGKILL')
+    kill.mockRestore()
   })
 
   it('search：关键词检索（Layer2 CodeRAG——agentic grep 模式）返回命中+行号+片段', async () => {

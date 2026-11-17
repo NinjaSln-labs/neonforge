@@ -431,34 +431,73 @@ function hasDangerousArgumentShape(seg: string): boolean {
   const joined = args.join(' ')
   switch (head) {
     case 'sed': {
-      // -i / --in-place / 组合短标志（-ni）/ BSD 备份后缀（-i.bak）；脚本内 w 写文件命令
+      // -i / --in-place / 组合短标志（-ni）/ BSD 备份后缀（-i.bak）；脚本内 w 写文件命令（地址/替换标志形态）
       const inPlace = args.some(
         (t) => /^--in-place(?:=.*)?$/.test(t) || /^-([a-zA-Z.]*)i([a-zA-Z.]*)$/.test(t),
       )
-      const writesFile = /(?:^|;)\s*w\s+\S+/.test(joined)
+      // 2026-11-17 审查修复：`1w file`（地址）与 `s/a/b/w file`（替换标志）都写文件——
+      // 原正则只认段首/分号后的裸 `w`，漏掉地址前缀与 `/` 分隔的脚本形态。
+      const writesFile = /(?:^|;|\s|\/|['"])\s*(?:\d+(?:,\d*)?)?\s*w\s+\S+/.test(joined)
       return inPlace || writesFile
     }
     case 'find':
-      // -exec/-execdir 执行命令；-delete 删除；-fprint/-fprintf/-fls 写文件；-ok/-okdir 执行
-      return args.some((t) => /^(-exec|-execdir|-delete|-fprint|-fprintf|-fls|-ok|-okdir)$/.test(t))
+      // -exec/-execdir 执行命令；-delete 删除；-fprint/-fprint0/-fprintf/-fls 写文件；-ok/-okdir 执行
+      return args.some((t) =>
+        /^(-exec|-execdir|-delete|-fprint|-fprint0|-fprintf|-fls|-ok|-okdir)$/.test(t),
+      )
     case 'awk':
       // system() 执行命令；print/printf 重定向到文件或管道到命令
       return /system\s*\(|\bprint(?:f)?\s*(?:>|\|)/.test(joined)
     case 'sort':
-      return args.some((t) => t === '-o' || /^--output(?:=.*)?$/.test(t))
+      // --compress-program 执行外部程序（原只拦 -o/--output）
+      return args.some(
+        (t) =>
+          t === '-o' || /^--output(?:=.*)?$/.test(t) || /^--compress-program(?:=|\s|$)/.test(t),
+      )
     case 'rg':
       return args.some((t) => /^--pre(?:=.*)?$/.test(t)) // --pre 执行外部命令
     case 'git': {
       const sub = args[0] ?? ''
       if (sub === 'branch') {
-        // 创建/删除/重命名/复制/强制移动引用
-        return args
-          .slice(1)
-          .some((t) =>
-            /^(-d|-D|-m|-M|-c|-C|-f|--delete|--move|--copy|--force|--set-upstream-to)(?:=.*)?$/.test(
-              t,
-            ),
-          )
+        // 创建/删除/重命名/复制/强制移动/设置上游都写引用；只读 = 查询标志（无位置参数）
+        const READONLY_FLAGS = new Set([
+          '-a',
+          '--all',
+          '-r',
+          '--remotes',
+          '-v',
+          '-vv',
+          '--verbose',
+          '--list',
+          '--show-current',
+          '--column',
+          '--no-column',
+          '--color',
+          '--no-color',
+          '--ignore-case',
+        ])
+        const READONLY_VALUE_FLAGS = new Set([
+          '--contains',
+          '--no-contains',
+          '--merged',
+          '--no-merged',
+          '--points-at',
+          '--sort',
+          '--format',
+        ])
+        const rest = args.slice(1)
+        for (let i = 0; i < rest.length; i += 1) {
+          const t = rest[i]!
+          if (READONLY_VALUE_FLAGS.has(t)) {
+            i += 1 // 查询值参数（commit/object/format）——只读
+            continue
+          }
+          if ([...READONLY_VALUE_FLAGS].some((f) => t.startsWith(f + '='))) continue
+          if (t.startsWith('--color=') || t.startsWith('--format=')) continue
+          if (READONLY_FLAGS.has(t)) continue
+          return true // 未知标志/位置参数 = 创建/修改分支
+        }
+        return false
       }
       if (sub === 'remote') {
         // 仅列出/查询只读；add/remove/rename/set-url/prune/set-head 均为写
@@ -484,9 +523,16 @@ export function classifyReadonly(name: string, command?: string): ActionKind {
   if (name !== 'bash') return 'readonly' // read/search/LSP/check-capability → 工具类型只读
   const c = String(command ?? '').trim()
   if (!c) return 'hazardous' // 空命令 fail-closed（非只读）
+  // 2026-11-17 审查修复：命令替换/换行/进程替换可执行任意命令——原链分割只认 [;&|]，
+  // `ls\nrm`、`echo $(rm)`、反引号均会被误判只读并自动执行。统一 fail-closed。
+  if (/[\n\r]|`|\$\(|<\(|>\(/.test(c)) return 'hazardous'
   // 网络只读（curl/wget GET/HEAD 无写副作用 → network-read；拍板 3：localhost 自动放行，外网 ask——S6 策略落地在 actionGate）
+  // 2026-11-17 审查修复：快路径仅在**单一命令**时成立——链/管道/重定向必须落回下方段级判定；
+  // 否则 `curl localhost; rm -rf` 会因头上 localhost 被整条判 network-read 自动放行。
+  const withoutStderr = c.replace(/2>&1|2>>1|2>>?\/dev\/null/g, '')
+  const hasShellComposition = /[;&|<>]/.test(withoutStderr)
   const netMatch = c.match(/^(curl|wget)\s+/)
-  if (netMatch) {
+  if (netMatch && !hasShellComposition) {
     const tool = netMatch[1]
     if (tool === 'wget') {
       // P0-02：wget 默认下载落盘 → hazardous；只有 --spider / 输出到 stdout 才是网络只读

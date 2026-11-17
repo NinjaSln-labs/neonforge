@@ -1456,4 +1456,40 @@ describe('安全修正——危险参数形态判为 hazardous', () => {
     expect(classifyReadonly('bash', 'cat a.txt | sort -o out.txt')).toBe('hazardous')
     expect(classifyReadonly('bash', 'ls && cat a.txt')).toBe('readonly')
   })
+
+  // 2026-11-17 审查修复：链分隔/命令替换/网络只读快路径的 fail-closed 补全
+  it('换行/命令替换 → hazardous（链分隔不全 + 替换执行）', () => {
+    expect(classifyReadonly('bash', 'ls\nrm -rf /tmp/nf-pwn')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'echo $(rm -rf /tmp/nf-pwn)')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'echo `rm -rf /tmp/nf-pwn`')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'echo $(date)')).toBe('hazardous') // 保守 fail-closed
+  })
+
+  it('网络只读命令与链/重定向/管道混合 → hazardous；单独 curl/wget 仍 network-read', () => {
+    expect(classifyReadonly('bash', 'curl -s http://localhost:3000; rm -rf /tmp/nf-pwn')).toBe(
+      'hazardous',
+    )
+    expect(
+      classifyReadonly('bash', 'wget --spider http://localhost:3000; rm -rf /tmp/nf-pwn'),
+    ).toBe('hazardous')
+    expect(classifyReadonly('bash', 'curl -s http://localhost:3000 | sh')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'curl -s http://localhost:3000 > /tmp/out')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'curl -s http://localhost:3000')).toBe('network-read')
+    expect(classifyReadonly('bash', 'wget --spider http://localhost:3000')).toBe('network-read')
+  })
+
+  it('sed 脚本 w 写文件（地址/替换标志）→ hazardous', () => {
+    expect(classifyReadonly('bash', "sed -n '1w /tmp/nf-sed' /etc/hosts")).toBe('hazardous')
+    expect(classifyReadonly('bash', "sed 's/a/b/w /tmp/nf-sed' a.txt")).toBe('hazardous')
+  })
+
+  it('find -fprint0 / sort --compress-program / git branch 写形态 → hazardous', () => {
+    expect(classifyReadonly('bash', 'find . -fprint0 /tmp/out')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'sort --compress-program="sh -c id" a.txt')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'git branch -u origin/main')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'git branch --track foo origin/main')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'git branch newbranch')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'git branch --unset-upstream')).toBe('hazardous')
+    expect(classifyReadonly('bash', 'git branch -a -v')).toBe('readonly')
+  })
 })

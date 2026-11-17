@@ -15,7 +15,7 @@ import {
   ensureEnvironment,
   getEnvironment,
 } from './envManager.js'
-import { isKillablePid } from './processGuard.js'
+import { isKillablePid, killProcessGroupBestEffort } from './processGuard.js'
 
 export interface ServiceEntry {
   rootPath: string
@@ -154,14 +154,12 @@ export async function startServer(
     const { url, error } = await waitForUrl(child)
     if (error) {
       // 2026-08-06 失败检测：命令失败（command not found 等）→ 明确错误 + 释放端口（不再 port 0 误导）
+      // 2026-11-17 审查修复：spawn 失败时 child.pid 可能 undefined——不得 kill(-0)（会命中当前进程组）
+      killProcessGroupBestEffort(child.pid)
       try {
-        process.kill(-(child.pid ?? 0), 'SIGKILL')
+        child.kill('SIGKILL')
       } catch {
-        try {
-          child.kill('SIGKILL')
-        } catch {
-          /* 已退出 */
-        }
+        /* 已退出 */
       }
       serviceProcs.delete(child)
       releasePort(rootPath)
@@ -184,14 +182,12 @@ export async function startServer(
     const actualPort = Number(url.match(/:(\d+)/)?.[1] ?? 0)
     // 宿主端口保护机制化：结果端口 ∈ 保留集（npm run dev 等无法强制端口的脚本可能落 5173）→ 拒绝占用 + 杀进程
     if (HOST_RESERVED_PORTS.has(actualPort)) {
+      // 2026-11-17 审查修复：同上——无有效 pid 时只杀 child，不发 kill(-0)
+      killProcessGroupBestEffort(child.pid)
       try {
-        process.kill(-(child.pid ?? 0), 'SIGKILL')
+        child.kill('SIGKILL')
       } catch {
-        try {
-          child.kill('SIGKILL')
-        } catch {
-          /* 已退出 */
-        }
+        /* 已退出 */
       }
       serviceProcs.delete(child)
       releasePort(rootPath)

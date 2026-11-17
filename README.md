@@ -97,7 +97,7 @@ neonforge/
 
 ## 架构
 
-**技术栈**：Electron 43 + React 19 + TypeScript + Vite + esbuild + Monaco（产物查看）+ Vitest + Playwright。V1 网关仅接 DeepSeek（`toDeepSeekParams` 单点收敛，V2 多模型只动网关）。
+**技术栈**：Electron 43 + React 19 + TypeScript + Vite + esbuild + Monaco（产物查看）+ Vitest + Playwright。网关按 Provider / ModelProfile 两轴收敛（ADR-010）：Provider 描述传输/鉴权/上游，模型族参数由 `toDeepSeekParams` 单点收敛；内置 deepseek / commandcode / opencode-zen / opencode-go 四接入方，flash / pro 档位优先由各家 `/models` 解析并回退 descriptor fallback。
 
 **领域架构（无阶段 · 目标驱动）**：
 
@@ -122,9 +122,10 @@ Session Timeline BC      — 全步骤统一记录（可观测性——JSONL）
 ## 测试
 
 ```bash
-npx vitest run                            # L1 领域逻辑（436）
+npx vitest run                            # L1 领域逻辑（902）
 npx tsc -p tsconfig.json --noEmit         # L2 契约（renderer + main）
-npx playwright test --project=interaction # L3 组件交互（49）
+npx tsc -p tsconfig.main.json --noEmit    # L2 主进程契约
+npx playwright test --project=interaction # L3 组件交互（87）
 npx playwright test                       # L5 视觉 + L3
 NF_TEST_KEY=<key> node e2e-suite.mjs      # L4 真实 API E2E（前置：mkdir -p /tmp/nf-e2e-test）
 ```

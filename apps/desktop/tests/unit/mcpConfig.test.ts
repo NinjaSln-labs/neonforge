@@ -39,6 +39,19 @@ describe('MCP 配置（BC-13）', () => {
     expect(loaded.error).toMatch(/读取失败/)
   })
 
+  it('envFrom：只接受合法环境变量名（不存值）；非法/非数组拒绝', () => {
+    const servers = validateMcpServers([
+      { name: 'fs', command: 'npx', envFrom: ['GITHUB_TOKEN', 'GITHUB_TOKEN', 'NODE_ENV'] },
+    ])
+    expect(servers[0]?.envFrom).toEqual(['GITHUB_TOKEN', 'NODE_ENV'])
+    expect(() =>
+      validateMcpServers([{ name: 'x', command: 'a', envFrom: 'GITHUB_TOKEN' }]),
+    ).toThrow(/envFrom/)
+    expect(() => validateMcpServers([{ name: 'x', command: 'a', envFrom: ['BAD NAME'] }])).toThrow(
+      /envFrom/,
+    )
+  })
+
   it('load：无文件为空配置；save 非法输入返回错误', () => {
     expect(store.load()).toEqual({ servers: [] })
     const bad = store.save({ servers: 'nope' })

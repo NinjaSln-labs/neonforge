@@ -27,7 +27,7 @@ import {
 } from '../domain/conversationState.js'
 import { configStore } from './configStore.js'
 import { webSearch, webFetch } from './webTools.js'
-import { isKillablePid } from './processGuard.js'
+import { isKillablePid, killProcessGroupBestEffort } from './processGuard.js'
 import { getChangeSetService } from './changeSetService.instance.js'
 import { gitRead } from './gitBridge.js'
 import { getMcpManager } from './mcpManager.instance.js'
@@ -143,6 +143,27 @@ function bashAllowMatches(command: string, specifier: string): boolean {
   return segments.length > 0 && segments.every((seg) => seg.startsWith(specifier))
 }
 
+/** 路径边界匹配：target 等于 base 或位于其子目录（`src` 不放行 `src-evil`）。 */
+function pathWithin(target: string, base: string): boolean {
+  const rel = path.relative(base, target)
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
+}
+
+/** URL 前缀边界：协议/host/port 精确，specifier 路径按目录边界（`/api` 不放行 `/apix`）。 */
+function urlPrefixMatches(value: string, specifier: string): boolean | null {
+  if (!/^https?:\/\//i.test(value) && !/^https?:\/\//i.test(specifier)) return null
+  try {
+    const v = new URL(value)
+    const s = new URL(specifier)
+    if (v.protocol !== s.protocol || v.hostname !== s.hostname || v.port !== s.port) return false
+    const basePath = s.pathname.replace(/\/+$/, '')
+    if (!basePath || basePath === '/') return true
+    return v.pathname === basePath || v.pathname.startsWith(basePath + '/')
+  } catch {
+    return null // 非标准 URL：退回字符串前缀匹配（不放大匹配面）
+  }
+}
+
 export function matchesRule(
   tool: string,
   args: Record<string, unknown>,
@@ -158,11 +179,13 @@ export function matchesRule(
   for (const value of ruleMatchValues(tool, args, rule.action)) {
     if (pathTool) {
       const resolved = path.resolve(base, value)
-      if (resolved === specifier || resolved.startsWith(specifier)) return true
+      if (pathWithin(resolved, specifier)) return true
     } else if (tool === 'bash' && rule.action === 'allow') {
       if (bashAllowMatches(value, rule.specifier)) return true
-    } else if (value.startsWith(rule.specifier)) {
-      return true
+    } else {
+      const urlMatch = urlPrefixMatches(value, rule.specifier)
+      if (urlMatch === true) return true
+      if (urlMatch === null && value.startsWith(rule.specifier)) return true
     }
   }
   return false
@@ -261,6 +284,27 @@ async function assertNoSymlinkEscape(
     detail: { path: target, rootPath },
   })
   throw new Error('路径经符号链接指向项目外——已阻止。请改用项目内真实路径')
+}
+
+/**
+ * 交付层 diff 写路径边界（2026-11-17 审查修复）：renderer 传来的 diff path 也必须过沙箱 realpath。
+ * 返回规范化目标路径；根外/symlink 逃逸/无 root 一律拒绝。
+ */
+export async function resolveDeliveryTarget(
+  pathArg: unknown,
+  rootPath?: string,
+): Promise<{ ok: true; target: string } | { ok: false; error: string }> {
+  if (!rootPath) return { ok: false, error: '缺少项目根——交付写路径必须在项目内' }
+  let target: string
+  try {
+    target = resolvePath(pathArg, { rootPath })
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+  if (!(await isInSandboxRealpath(target, rootPath))) {
+    return { ok: false, error: '目标不在项目根内（或符号链接指向项目外）——拒绝写入' }
+  }
+  return { ok: true, target }
 }
 
 /**
@@ -780,8 +824,10 @@ async function bashExecutor(
             : '【服务状态】服务命令已启动（长驻）——用 lsof/curl 确认实际端口',
         })
       } else {
+        // 2026-11-17 审查修复：spawn 失败时 pid 为空——不得 kill(-0)（当前进程组）
+        killProcessGroupBestEffort(child.pid)
         try {
-          process.kill(-(child.pid ?? 0), 'SIGKILL')
+          child.kill('SIGKILL')
         } catch {
           /* 已退出 */
         }
@@ -793,13 +839,11 @@ async function bashExecutor(
 // 可撤销（ticket 14）：停止当前活动命令（bash 高危——任何时刻可停；无活动命令返回错误）——杀整个进程组
 export function cancelActiveCommand(): { ok: true } | { ok: false; error: string } {
   if (!activeProc) return { ok: false, error: '无活动命令' }
+  // 2026-11-17 审查修复：无有效 pid 时只杀 child——kill(-0) 会打当前进程组
+  killProcessGroupBestEffort(activeProc.proc.pid)
   try {
-    process.kill(-(activeProc.proc.pid ?? 0), 'SIGKILL')
-  } catch {
-    try {
-      activeProc.proc.kill('SIGKILL')
-    } catch {}
-  }
+    activeProc.proc.kill('SIGKILL')
+  } catch {}
   activeProc = null
   return { ok: true }
 }
@@ -898,9 +942,18 @@ export function initTools(): void {
     requiresApproval: true,
     risk: 'none',
     execute: readExecutor,
-    preApproval: async (args, opts) => ({
-      auto: await isInSandboxRealpath(args.path, opts?.rootPath),
-    }),
+    // 2026-11-17 审查修复：预检必须与 readExecutor 同一路径解析（resolvePath 会剥项目名前缀）；
+    // 原 lexicalSandboxTarget 把 `项目名/link.txt` 判成根内，执行器却解析到根内 symlink → 根外。
+    preApproval: async (args, opts) => {
+      if (!opts?.rootPath) return { auto: false }
+      let target: string
+      try {
+        target = resolvePath(args.path, { rootPath: opts.rootPath })
+      } catch {
+        return { auto: false }
+      }
+      return { auto: await isInSandboxRealpath(target, opts.rootPath) }
+    },
   })
   toolRegistry.register({
     name: 'write',

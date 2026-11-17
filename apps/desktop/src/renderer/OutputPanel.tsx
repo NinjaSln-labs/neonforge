@@ -101,6 +101,7 @@ export default function OutputPanel({
           <DeliveryPanel
             pkg={deliveryPkg}
             sessionId={sessionId}
+            rootPath={rootPath}
             onClose={onCloseProblem}
             onAdjust={onAdjustProblem}
             onRerun={onRerun}
@@ -119,6 +120,7 @@ export default function OutputPanel({
           <DeliveryPanel
             pkg={null}
             sessionId={sessionId}
+            rootPath={rootPath}
             onClose={onCloseProblem}
             onAdjust={onAdjustProblem}
             onRerun={onRerun}

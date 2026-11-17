@@ -1,18 +1,11 @@
 // BC-10 变更集应用服务（main）：记录真实变更、基线校验、回滚。
 // 领域状态机在 domain/changeSet.ts；文件快照复用 applyDiff 的 `.nf-bak`。
 import { createHash } from 'node:crypto'
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  unlinkSync,
-  writeFileSync,
-} from 'node:fs'
+import { existsSync, readFileSync, rmSync, unlinkSync } from 'node:fs'
 import path from 'node:path'
 import {
   applyStateWrites,
+  type StateCommitResult,
   type StateCommitSink,
   type StateWrite,
   type StoreEvent,
@@ -86,15 +79,19 @@ export class ChangeSetService {
     return { sets: {} }
   }
 
-  /** 状态 + 基线文件 + 事件同一事务（有 commit 回调时走 WAL；单测降级为原子写 + emit）。 */
-  private write(data: ChangeSetFile, events: StoreEvent[], extraWrites: StateWrite[] = []): void {
+  /** 状态 + 基线文件 + 事件同一事务（有 commit 回调时走 WAL；单测降级为原子写 + emit）。
+   * 返回 commit 结果（无事务回调时 null）——回滚等关键路径可检查提交是否真正应用。 */
+  private write(
+    data: ChangeSetFile,
+    events: StoreEvent[],
+    extraWrites: StateWrite[] = [],
+  ): StateCommitResult | null {
     const writes: StateWrite[] = [
       { filePath: this.filePath, content: JSON.stringify(data, null, 2) },
       ...extraWrites,
     ]
     if (this.commit) {
-      this.commit(writes, events)
-      return
+      return this.commit(writes, events) ?? null
     }
     try {
       applyStateWrites(writes)
@@ -102,6 +99,7 @@ export class ChangeSetService {
       /* 落盘失败不阻断业务 */
     }
     for (const event of events) this.emit(event)
+    return null
   }
 
   get(sessionId: string): ChangeSet | null {
@@ -261,6 +259,7 @@ export class ChangeSetService {
       .filter((i) => i.status === 'conflicted')
       .map((i) => i.path)
     const outcomes: Record<string, boolean> = {}
+    const restoreWrites: StateWrite[] = []
     for (const item of set.items) {
       if (item.status !== 'applied') continue
       const nowContent = readText(item.path)
@@ -293,18 +292,11 @@ export class ChangeSetService {
         conflicted.push(item.path)
         continue
       }
-      try {
-        const tmp = `${item.path}.nf-restore`
-        const dir = path.dirname(item.path)
-        if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-        writeFileSync(tmp, baseline, { mode: 0o600 })
-        renameSync(tmp, item.path)
-        outcomes[item.id] = true
-        reverted.push(item.path)
-      } catch {
-        outcomes[item.id] = false
-        conflicted.push(item.path)
-      }
+      // 2026-11-17 审查修复：基线恢复写入交给事务层（与变更集状态同一次 WAL 提交），
+      // 不再直写可预测的 `.nf-restore` 临时文件（symlink 可重定向到项目外），也消除“文件已恢复但状态未提交”的崩溃窗口。
+      restoreWrites.push({ filePath: item.path, content: baseline })
+      outcomes[item.id] = true
+      reverted.push(item.path)
     }
     // 冲突项已是 conflicted（revertChangeSet 跳过非 applied 项）
     const next = revertChangeSet(current, outcomes)
@@ -325,14 +317,20 @@ export class ChangeSetService {
         detail: { changeId: next.id, file },
       })
     }
-    this.write(data, events)
+    const commitResult = this.write(data, events, restoreWrites)
+    const commitError =
+      commitResult && !commitResult.applied
+        ? (commitResult.error ?? '变更集状态提交未完成（已保留 WAL 待重放）')
+        : undefined
     return {
-      ok: conflicted.length === 0 && reverted.length > 0,
+      ok: conflicted.length === 0 && reverted.length > 0 && !commitError,
       reverted,
       conflicted,
-      ...(conflicted.length > 0
-        ? { error: `有 ${conflicted.length} 个文件与基线不一致，已拒绝覆盖` }
-        : {}),
+      ...(commitError
+        ? { error: commitError }
+        : conflicted.length > 0
+          ? { error: `有 ${conflicted.length} 个文件与基线不一致，已拒绝覆盖` }
+          : {}),
     }
   }
 

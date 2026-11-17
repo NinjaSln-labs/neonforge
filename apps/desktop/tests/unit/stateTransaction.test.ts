@@ -87,6 +87,37 @@ describe('StateTransactionLog（跨存储事务性 Outbox）', () => {
     expect(existsSync(JOURNAL)).toBe(true)
   })
 
+  // 2026-11-17 审查修复：WAL 不可读时 commit 不得谎报成功（原 remaining=0 → applied:true）
+  it('损坏 WAL：commit 返回 applied=false/pending=true，不静默丢事务', () => {
+    writeFileSync(JOURNAL, '{broken\n')
+    const log = new StateTransactionLog(JOURNAL, () => true)
+    const result = log.commit([{ filePath: STATE, content: '{"v":3}' }], [event('x')])
+    expect(result.applied).toBe(false)
+    expect(result.pending).toBe(true)
+    expect(result.eventsDelivered).toBe(false)
+    expect(result.error).toBeTruthy()
+  })
+
+  it('保留 WAL 重放不覆盖比记录更新的磁盘状态（mtime 守卫）', () => {
+    writeFileSync(
+      JOURNAL,
+      JSON.stringify({
+        id: 'tx-old',
+        at: '2020-01-01T00:00:00.000Z',
+        writes: [{ filePath: STATE, content: '{"v":"old"}' }],
+        events: [event('a')],
+      }) + '\n',
+    )
+    writeFileSync(STATE, '{"v":"new"}')
+    const sink = vi.fn(() => true)
+    const log = new StateTransactionLog(JOURNAL, sink)
+    const drained = log.drain()
+    expect(readFileSync(STATE, 'utf-8')).toBe('{"v":"new"}')
+    expect(drained.remaining).toBe(0)
+    expect(sink).toHaveBeenCalledTimes(1)
+    expect(existsSync(JOURNAL)).toBe(false)
+  })
+
   it('latestWriteContent 在状态落盘失败时返回 WAL 意图；清空后 null', () => {
     mkdirSync(STATE) // 同名目录 → 状态写入失败，记录保留
     const log = new StateTransactionLog(JOURNAL, () => true)
