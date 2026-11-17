@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "description": "AgentDojo workspace 的 NeonForge 策略门预设（v1）。deny > ask > allow；ask 在无人类审批的基准中按 fail-closed 拒绝。",
+  "version": 2,
+  "description": "AgentDojo workspace 的 NeonForge 策略门预设（v2）。deny > ask > allow；ask 在无人类审批的基准中按 fail-closed 拒绝；NF_GATE_APPROVAL_URL 可接审批回调。",
   "groups": {
     "readOnly": [
       "get_unread_emails",
@@ -18,12 +18,13 @@
       "list_files",
       "search_files"
     ],
-    "localWrite": ["create_file", "append_to_file"],
+    "localCreate": ["create_file"],
+    "localEdit": ["append_to_file"],
+    "localCalendar": ["create_calendar_event"],
     "external": [
       "send_email",
       "share_file",
       "add_calendar_event_participants",
-      "create_calendar_event",
       "reschedule_calendar_event",
       "cancel_calendar_event"
     ],
@@ -31,7 +32,17 @@
   },
   "modes": {
     "strict": ["readOnly"],
-    "standard": ["readOnly", "localWrite"],
-    "delegated": ["readOnly", "localWrite"]
-  }
+    "standard": ["readOnly", "localCreate", "localCalendar"],
+    "delegated": ["readOnly", "localCreate", "localEdit", "localCalendar"]
+  },
+  "rules": [
+    { "action": "deny", "tool": "delete_email", "specifier": "" },
+    { "action": "deny", "tool": "delete_file", "specifier": "" },
+    { "action": "ask", "tool": "send_email", "specifier": "" },
+    { "action": "ask", "tool": "share_file", "specifier": "" },
+    { "action": "ask", "tool": "add_calendar_event_participants", "specifier": "" },
+    { "action": "ask", "tool": "reschedule_calendar_event", "specifier": "" },
+    { "action": "ask", "tool": "cancel_calendar_event", "specifier": "" },
+    { "action": "deny", "tool": "create_file", "specifier": "secret-" }
+  ]
 }

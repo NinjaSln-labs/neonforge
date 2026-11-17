@@ -78,18 +78,43 @@ if [ "$DEFENSE" != "none" ]; then
   DEFENSE_ARGS=(--defense "$DEFENSE")
 fi
 
+USER_TASKS="${NF_EVAL_USER_TASKS:-user_task_0,user_task_1,user_task_2}"
+INJECTION_TASKS="${NF_EVAL_INJECTION_TASKS:-injection_task_0,injection_task_1}"
+USER_ARGS=()
+INJECTION_ARGS=()
+IFS=',' read -r -a _user_list <<<"$USER_TASKS"
+for t in "${_user_list[@]}"; do
+  t="${t// /}"
+  [ -n "$t" ] && USER_ARGS+=(--user-task "$t")
+done
+IFS=',' read -r -a _injection_list <<<"$INJECTION_TASKS"
+for t in "${_injection_list[@]}"; do
+  t="${t// /}"
+  [ -n "$t" ] && INJECTION_ARGS+=(--injection-task "$t")
+done
+
 GATE_MODE="${NF_GATE_MODE:-off}"
 GATE_ARGS=()
 if [ "$GATE_MODE" != "off" ]; then
   echo "[eval] NeonForge policy gate: $GATE_MODE"
+  GATE_POLICY_FILE="${NF_GATE_POLICY_FILE:-evals/sandbox/neonforge-policy.json}"
+  case "$GATE_POLICY_FILE" in
+    /*) GATE_POLICY_ABS="$GATE_POLICY_FILE" ;;
+    *) GATE_POLICY_ABS="$ROOT/$GATE_POLICY_FILE" ;;
+  esac
+  if [ ! -f "$GATE_POLICY_ABS" ]; then
+    echo "错误：找不到策略文件 $GATE_POLICY_ABS" >&2
+    exit 1
+  fi
   GATE_ARGS=(
     -e NF_GATE_MODE="$GATE_MODE"
     -e NF_GATE_RUNNER=/eval/neonforge_gate_runner.py
     -e NF_GATE_POLICY=/eval/neonforge-policy.json
     -e NF_GATE_LOG=/eval/out/neonforge-gate.jsonl
+    -e NF_GATE_APPROVAL_URL
     -v "$ROOT/evals/sandbox/neonforge_gate.py:/eval/neonforge_gate.py:ro"
     -v "$ROOT/evals/sandbox/neonforge_gate_runner.py:/eval/neonforge_gate_runner.py:ro"
-    -v "$ROOT/evals/sandbox/neonforge-policy.json:/eval/neonforge-policy.json:ro"
+    -v "$GATE_POLICY_ABS:/eval/neonforge-policy.json:ro"
   )
 fi
 "${DOCKER_BIN[@]}" run --rm \
@@ -113,11 +138,8 @@ fi
     --model VLLM_PARSED \
     --model-id deepseek-chat \
     --suite workspace \
-    --user-task user_task_0 \
-    --user-task user_task_1 \
-    --user-task user_task_2 \
-    --injection-task injection_task_0 \
-    --injection-task injection_task_1 \
+    "${USER_ARGS[@]}" \
+    "${INJECTION_ARGS[@]}" \
     --attack important_instructions \
     "${DEFENSE_ARGS[@]}" \
     --max-workers 1 \
