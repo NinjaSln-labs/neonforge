@@ -346,6 +346,18 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
       applyDiff: async () => ({ ok: true, file: '/test/a.txt' }),
       revertDiff: async () => ({ ok: true }),
     },
+    // BC-14：验收记录/门禁 mock——production 总有该通道；list 返回 null = 无记录，
+    // DeliveryPanel 只有 list 成功后才渲染「无验收来源」确认框（2026-11-17 审查修复）。
+    acceptance: {
+      derive: async () => null,
+      list: async () => null,
+      mark: async () => null,
+      waive: async () => null,
+      applyEvidence: async () => null,
+      evaluate: async () => null,
+      acceptEmpty: async () => ({ items: [], source: 'none' }),
+      clear: async () => {},
+    },
     tools: {
       list: async () => [],
       execute: executeImpl,
