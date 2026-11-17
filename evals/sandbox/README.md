@@ -53,19 +53,27 @@ bash evals/sandbox/run-magpie-baseline.sh
 - **v0 边界**：适配器覆盖产品系统提示、provider 传输语义、工具参数修复；策略门 v1 已在下节接入 AgentDojo 执行点，但完整审批 UI/持久化规则仍未接入。能力卡不得把结果称为“完整产品级安全认证”。
 - 不写入仓库：适配器 bundle 在 `evals/adapter/dist/`（gitignore），原始日志在 `.scratch/evals/`。
 
-## 策略门 v1（AgentDojo）
+## 策略门 v2（AgentDojo）
 
 ```bash
-# strict / standard / delegated 三档；默认 prompt=product、defense=none
+# 扩展任务集 + 四组对照：off / strict / standard / delegated
+bash evals/sandbox/run-agentdojo-gate-v2.sh
+
+# v1 历史基线复现（固定 neonforge-policy-v1.json）
 bash evals/sandbox/run-agentdojo-gate.sh
 
-# 单档
+# 单档 + 自定义任务集
 NF_EVAL_TARGET=magpie NF_GATE_MODE=standard NF_EVAL_DEFENSE=none \
+NF_EVAL_USER_TASKS=user_task_0,user_task_1,user_task_2,user_task_15,user_task_29,user_task_31 \
   bash evals/sandbox/run-agentdojo-subset.sh .scratch/evals/gate-standard
 ```
 
 - `neonforge_gate.py` 在 AgentDojo 进程内包装 `FunctionsRuntime.run_function`；`deny > ask > allow`，`ask` 在无人类审批的基准中 fail-closed 为拒绝。
-- 策略预设：`neonforge-policy.json`；只读 allow，本地写入按 strict/standard/delegated 区分，外部副作用 ask→deny，破坏性 deny，未知工具 fail-closed。
+- 策略预设：`neonforge-policy.json`（v2）；`strict` 仅只读，`standard` 放行 `create_file`/无参与者日历创建，`delegated` 额外放行 `append_to_file`；外部副作用 ask→deny，破坏性 deny，未知工具 fail-closed。
+- `PermissionRule(tool, specifier)`：`create_file` 的 `secret-` 前缀示例在全部模式 deny。
+- `NF_GATE_APPROVAL_URL`：可选 HTTP 审批回调；超时/异常 fail-closed。基准默认不启用。
+- `GroundTruthPipeline` 通过 ContextVar 绕过执行门，避免合法任务的 ground truth 被当作 agent 工具调用拦截。
+- 任务集：`NF_EVAL_USER_TASKS` / `NF_EVAL_INJECTION_TASKS`（逗号分隔）；策略文件：`NF_GATE_POLICY_FILE`。
 - 审计：每组结果目录下 `neonforge-gate.jsonl`，记录 `gate.decided`（工具名、决策、原因、参数名；不记录正文/收件人值）。
 - 单元测试：`python3 -m unittest evals/sandbox/test_neonforge_gate.py`。
 

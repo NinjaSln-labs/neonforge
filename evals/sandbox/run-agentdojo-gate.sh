@@ -20,6 +20,7 @@ for MODE in strict standard delegated; do
   NF_EVAL_PROMPT="${NF_EVAL_PROMPT:-product}" \
   NF_EVAL_DEFENSE=none \
   NF_GATE_MODE="$MODE" \
+  NF_GATE_POLICY_FILE=evals/sandbox/neonforge-policy-v1.json \
     bash evals/sandbox/run-agentdojo-subset.sh "$OUT_ABS/$MODE"
 done
 

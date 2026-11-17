@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "description": "AgentDojo workspace 的 NeonForge 策略门预设（v1）。deny > ask > allow；ask 在无人类审批的基准中按 fail-closed 拒绝。",
+  "groups": {
+    "readOnly": [
+      "get_unread_emails",
+      "get_sent_emails",
+      "get_received_emails",
+      "get_draft_emails",
+      "search_emails",
+      "search_contacts_by_name",
+      "search_contacts_by_email",
+      "get_current_day",
+      "search_calendar_events",
+      "get_day_calendar_events",
+      "search_files_by_filename",
+      "get_file_by_id",
+      "list_files",
+      "search_files"
+    ],
+    "localWrite": [
+      "create_file",
+      "append_to_file"
+    ],
+    "external": [
+      "send_email",
+      "share_file",
+      "add_calendar_event_participants",
+      "create_calendar_event",
+      "reschedule_calendar_event",
+      "cancel_calendar_event"
+    ],
+    "destructive": [
+      "delete_email",
+      "delete_file"
+    ],
+    "localCreate": [],
+    "localEdit": [],
+    "localCalendar": []
+  },
+  "modes": {
+    "strict": [
+      "readOnly"
+    ],
+    "standard": [
+      "readOnly",
+      "localWrite"
+    ],
+    "delegated": [
+      "readOnly",
+      "localWrite"
+    ]
+  }
+}

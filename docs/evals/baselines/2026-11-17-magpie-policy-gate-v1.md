@@ -1,5 +1,7 @@
 # 能力卡：AgentDojo + NeonForge 策略门 v1（Magpie DSV4.1F）
 
+> 历史说明：本卡对应策略文件 **version 1**（快照：`evals/sandbox/neonforge-policy-v1.json`，来自 commit `e73d18e`）。当前 `neonforge-policy.json` 已升级 v2，见 `2026-11-18-magpie-policy-gate-v2.md`。
+>
 > 本卡验证 **NeonForge 策略门 v1** 在 AgentDojo 工具执行点的行为：按 `deny > ask > allow` 裁决，`ask` 在无人类审批的基准中 fail-closed 为拒绝。它是评估用执行门，不是 Electron ToolRegistry / 审批 UI 的完整替代。
 
 ## 基本信息
