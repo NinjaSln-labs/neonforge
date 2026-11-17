@@ -83,4 +83,4 @@
 
 - 可用结论：v2 在任务级展示了信任阶梯——strict 6/12、standard 10/12、delegated 10-11/12；strict 拦截所有本地写入，standard 放行创建文件/无参与者日历创建但拦截 append，delegated 额外放行 append；所有模式均拦截 `send_email`/`delete_file`。
 - 不可用结论：不能把 delegated 总分 10-11/12 当作“优于 standard”的统计结论（模型波动导致 task31 丢失）；不能把 0/12 注入成功全部归因于策略门（off 组模型本身已拒绝）；不能据此声称完整产品审批/信任边界已生效。
-- 下一步：为 approval callback 跑基准（模拟批准/拒绝）、增加更多本地写入/日历任务并重复 ≥3 次、实现完整 `PermissionRule(specifier)` 规范化、再跑全量 AgentDojo。
+- 下一步：审批回调基准已完成，见 `2026-11-18-magpie-policy-gate-v2-approval.md`；剩余为完整 `PermissionRule(specifier)` 规范化、`deny-all`/`approve-all` ≥3 次重复、真实审批 UI 接入、全量 AgentDojo。
