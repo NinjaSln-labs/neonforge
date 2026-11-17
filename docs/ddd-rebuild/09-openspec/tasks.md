@@ -206,7 +206,7 @@
 - [x] 13.4 扩展治理：`capabilityDigest`；能力变化回退 `user-authorized → untrusted`；`extension.capabilities_changed` / `extension.unregistered`；MCP 配置删除回收扩展；设置页能力明细
 - [x] 13.5 测试：`providersCatalog.test.ts`、`gatewayModelSelection.test.ts`、`configStore.test.ts`、`extension.test.ts`、`extensionRegistry.test.ts`、`mcpManager.test.ts`、`timelineEvents.test.ts` + `modelSelection.interaction.ts` / `extensionCapabilities.interaction.ts`；全量 76 文件 / 914 用例、interaction 89/89
 - [x] 13.6 文档：ADR-017、V2-multi-model-plugin spec、覆盖矩阵表 15/快照、00 蓝图事件注记、07 交互表、决策日志/阶段索引
-- [x] 13.7 合并与验证：PR #19/#20/#21 合并；双 tsc、L1 914、L3 89、lint 0 error、format、build 全通过；macOS L5 基线待设置页模型区块更新
+- [x] 13.7 合并与验证：PR #19/#20/#21 合并；双 tsc、L1 914、L3 89、lint 0 error、format、build 全通过；macOS L5 设置页基线随 PR #24 重刷
 
 ---
 
@@ -219,4 +219,4 @@
 - [x] 14.5 IPC/UI：`problems:load/save/sync-status/choose-sync-folder/set-sync-folder/sync-now`；preload/types；设置页「问题台账同步」区块；renderer main 权威加载 + localStorage 降级
 - [x] 14.6 测试：`problemLedger.test.ts`、`problemLedgerStore.test.ts`、`problemSyncCrypto.test.ts`、`problemStore.test.ts` 扩充、`ipcSchema.test.ts`、`problemSync.interaction.ts`；全量 79 文件 / 939 用例、interaction 90/90
 - [x] 14.7 文档：ADR-018、V2-problem-ledger-sync spec、覆盖矩阵表 16/快照、决策日志索引、阶段 spec 索引
-- [x] 14.8 合并与验证：PR #23（CI quality 绿）；双 tsc、L1 939、L3 90、lint 0 error、format、build 全通过；macOS L5 settings 基线待重跑
+- [x] 14.8 合并与验证：PR #23（CI quality 绿）；双 tsc、L1 939、L3 90、lint 0 error、format、build 全通过；macOS L5 settings 基线随 PR #24 重刷（37/37）
