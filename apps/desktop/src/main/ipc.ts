@@ -10,7 +10,7 @@ import {
 } from './applyDiff.js'
 import { gateway, classifyGatewayError } from './gateway.js'
 import { configStore } from './configStore.js'
-import { isProviderId, listProviders } from './providers/index.js'
+import { isProviderId, listProviders, normalizeModelId } from './providers/index.js'
 import { workspace } from './workspace.js'
 import {
   initTools,
@@ -201,6 +201,40 @@ export function registerIpc(): void {
     const id = configStore.getProviderId()
     return gateway.peekActiveModel(id, configStore.getModelId(), 'flash')
   })
+
+  // ADR-017：模型列表/切换（使用已保存 Key；失败保留上次可用列表由 renderer 决定）
+  ipcMain.handle('gateway:list-models', async (_e, opts: { providerId?: string } = {}) => {
+    const valid = validateIpc(opts, IPC_SCHEMAS.gatewayListModels)
+    if (!valid.ok) return { ok: false, error: `参数校验失败：${valid.error}` }
+    const id = isProviderId(opts.providerId) ? opts.providerId : configStore.getProviderId()
+    const apiKey = configStore.getApiKey()
+    if (!apiKey) return { ok: false, error: 'no-key' }
+    try {
+      const r = await gateway.refreshModels(id, apiKey, configStore.getModelId())
+      return {
+        ok: true,
+        providerId: id,
+        models: r.available,
+        resolved: r.resolved,
+        source: r.source,
+      }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : 'network' }
+    }
+  })
+
+  ipcMain.handle(
+    'gateway:set-model',
+    async (_e, opts: { providerId?: string; modelId: string | null }) => {
+      const valid = validateIpc(opts, IPC_SCHEMAS.gatewaySetModel)
+      if (!valid.ok) return { ok: false, error: `参数校验失败：${valid.error}` }
+      const id = isProviderId(opts.providerId) ? opts.providerId : configStore.getProviderId()
+      const modelId = normalizeModelId(opts.modelId)
+      if (opts.modelId !== null && !modelId) return { ok: false, error: 'invalid-model' }
+      await configStore.setModelSelection(modelId, id)
+      return { ok: true, active: gateway.peekActiveModel(id, configStore.getModelId(), 'flash') }
+    },
+  )
 
   // 流式 chat：事件逐块推给 renderer（经 webContents.send）
   ipcMain.handle(

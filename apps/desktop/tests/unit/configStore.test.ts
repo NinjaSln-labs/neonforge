@@ -209,4 +209,23 @@ describe('ConfigStore 密钥存储（P1-09）', () => {
     expect(store.getWebAccess().searchKey).toBe('file-search')
     expect(store.getWebAccess().searchKeySource).toBe('file')
   })
+
+  // ADR-017：模型选择与 Key 分离持久化
+  it('setModelSelection：写入 providerId/modelId，不清除 Key；null 清除显式模型', async () => {
+    mkdirSync(path.join(TMP, 'config'), { recursive: true })
+    writeFileSync(
+      configFile(),
+      JSON.stringify({ apiKeyPlain: 'disk-key', providerId: 'commandcode' }),
+      { mode: 0o600 },
+    )
+    const store = new ConfigStore()
+    expect(store.getApiKey()).toBe('disk-key')
+    await store.setModelSelection('gpt-4o', 'deepseek')
+    expect(store.getProviderId()).toBe('deepseek')
+    expect(store.getModelId()).toBe('gpt-4o')
+    expect(readConfig().apiKeyPlain).toBe('disk-key')
+    await store.setModelSelection(null)
+    expect(store.getModelId()).toBeNull()
+    expect(readConfig().modelId).toBeUndefined()
+  })
 })

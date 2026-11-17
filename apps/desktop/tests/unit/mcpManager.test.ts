@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { McpConfigStore } from '../../src/main/mcpConfig'
 import { McpManager, type McpClientFactory, type McpClientLike } from '../../src/main/mcpManager'
-import { PluginRegistry } from '../../src/main/pluginSystem'
+import { PluginRegistry, setPluginTimelineSink } from '../../src/main/pluginSystem'
 
 class FakeClient implements McpClientLike {
   initialized = false
@@ -35,10 +35,11 @@ let dir = ''
 let registry: PluginRegistry
 let manager: McpManager
 let clients: FakeClient[]
+let store: McpConfigStore
 
 beforeEach(() => {
   dir = mkdtempSync(path.join(tmpdir(), 'nf-mcp-mgr-'))
-  const store = new McpConfigStore(path.join(dir, 'mcp-servers.json'))
+  store = new McpConfigStore(path.join(dir, 'mcp-servers.json'))
   store.save([
     { name: 'fs', command: 'fake-server' },
     { name: 'broken', command: 'fake-broken' },
@@ -88,6 +89,23 @@ describe('McpManager（BC-13 集成编排）', () => {
     const fsClient = clients.find((c) => c.calls.length > 0)
     expect(fsClient?.calls[0]).toEqual({ tool: 'read_file', args: { path: 'a.txt' } })
     expect(await manager.callTool('nope', 'x', {})).toMatchObject({ ok: false })
+  })
+
+  // ADR-017：配置删除服务器 → 扩展回收（不残留可调用能力）
+  it('刷新回收：移除配置的服务器扩展被 unregister 并记录事件', async () => {
+    const events: Array<{ type: string; detail: Record<string, unknown> }> = []
+    setPluginTimelineSink((e) => events.push(e))
+    try {
+      await manager.refresh()
+      expect(registry.getExtension('mcp:broken')).not.toBeNull()
+      store.save([{ name: 'fs', command: 'fake-server' }])
+      const result = await manager.refresh()
+      expect(result.servers.map((s) => s.name)).toEqual(['fs'])
+      expect(registry.getExtension('mcp:broken')).toBeNull()
+      expect(events.some((e) => e.type === 'extension.unregistered')).toBe(true)
+    } finally {
+      setPluginTimelineSink(() => {})
+    }
   })
 
   it('配置错误：不启动任何服务器并返回原因', async () => {

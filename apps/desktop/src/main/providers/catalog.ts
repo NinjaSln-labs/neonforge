@@ -1,6 +1,8 @@
 // 产品 Catalog：DeepSeek 过滤 + 档位挑选（上游 id 优先来自各家 /models）
-import type { ModelTier, ProviderId } from './types.js'
+import type { ModelProfileId, ModelTier, ProviderId, ThinkingLevel } from './types.js'
 import { getProvider } from './registry.js'
+import { toDeepSeekParams } from './profiles/deepseek.js'
+import { toGenericParams } from './profiles/generic.js'
 
 export function isDeepSeekModelId(id: string): boolean {
   return /deepseek/i.test(id)
@@ -76,4 +78,46 @@ export function resolveFromList(
     flash: pickModelForTier(deepseek, 'flash') ?? fallbackUpstream(providerId, 'flash'),
     pro: pickModelForTier(deepseek, 'pro') ?? fallbackUpstream(providerId, 'pro'),
   }
+}
+
+/** 显式模型优先；无显式选择时按档位解析。 */
+export function resolveSelectedModel(
+  providerId: ProviderId,
+  selection: { modelId?: string | null; tier: ModelTier },
+  resolved?: Partial<Record<ModelTier, string>> | null,
+): string {
+  const explicit = normalizeModelId(selection.modelId)
+  if (explicit) return explicit
+  return resolveUpstreamModel(providerId, selection.tier, resolved)
+}
+
+/** 模型 id 输入校验：非空、长度受限、无控制字符（不做 provider 存在性判断）。 */
+export function normalizeModelId(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed || trimmed.length > 512) return null
+  for (const ch of trimmed) {
+    const code = ch.codePointAt(0) ?? 0
+    if (code < 0x20 || code === 0x7f) return null
+  }
+  return trimmed
+}
+
+/**
+ * 模型族参数解析：DeepSeek 族沿用 v4 profile；其余（含未知模型）使用 generic，
+ * 避免把 thinking 等专属字段发给不兼容模型。
+ */
+export function resolveModelProfileId(providerId: ProviderId, modelId: string): ModelProfileId {
+  if (isDeepSeekModelId(modelId)) return 'deepseek-v4'
+  return getProvider(providerId).profile ?? 'generic-openai'
+}
+
+export function modelParams(
+  providerId: ProviderId,
+  modelId: string,
+  level: ThinkingLevel,
+): Record<string, unknown> {
+  return resolveModelProfileId(providerId, modelId) === 'deepseek-v4'
+    ? { ...toDeepSeekParams(level) }
+    : toGenericParams(level)
 }

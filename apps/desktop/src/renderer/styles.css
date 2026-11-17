@@ -836,6 +836,8 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-settings__row { display: flex; align-items: center; justify-content: space-between; gap: var(--nf-space-3); font-size: var(--nf-font-sm); color: var(--nf-text); }
 .nf-settings__row em { color: var(--nf-text-dim); font-style: normal; font-size: 12px; }
 .nf-settings__row--switch input { accent-color: var(--nf-accent); }
+/* ADR-017：设置页模型选择（保持与行控件同一视觉密度） */
+.nf-settings__select { min-width: 240px; max-width: 100%; padding: 6px 8px; background: var(--nf-bg-panel); color: var(--nf-text); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-sm); font-size: 12px; }
 /* 2026-08-04：对话记录导出 */
 .nf-settings__export { background: none; border: 1px solid var(--nf-border); color: var(--nf-accent); border-radius: var(--nf-radius-sm); padding: 2px var(--nf-space-3); font-size: 12px; cursor: pointer; flex-shrink: 0; }
 .nf-settings__export:hover { border-color: var(--nf-accent); }

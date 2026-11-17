@@ -14,7 +14,10 @@ import {
   fallbackUpstream,
   getProvider,
   listModels,
+  modelParams,
+  normalizeModelId,
   resolveFromList,
+  resolveSelectedModel,
   resolveUpstreamModel,
   toDeepSeekParams,
   extractReasoningText,
@@ -516,7 +519,11 @@ export class DeepSeekGateway {
     providerId: ProviderId,
     apiKey: string,
     manualModelId?: string | null,
-  ): Promise<{ resolved: Record<ModelTier, string>; source: 'list' | 'manual' | 'fallback' }> {
+  ): Promise<{
+    resolved: Record<ModelTier, string>
+    source: 'list' | 'manual' | 'fallback'
+    available: string[]
+  }> {
     const { baseURL } = getProvider(providerId)
     let ids: string[] = []
     let listed = false
@@ -527,23 +534,22 @@ export class DeepSeekGateway {
       console.log('[gateway] /models failed:', e instanceof Error ? e.message : e)
     }
     const deepseek = filterDeepSeekModels(ids)
+    const manual = normalizeModelId(manualModelId)
     let resolved: Record<ModelTier, string>
     let source: 'list' | 'manual' | 'fallback'
-    if (deepseek.length > 0) {
+    if (manual) {
+      // ADR-017：显式模型优先于列表/档位解析
+      resolved = { flash: manual, pro: manual }
+      source = 'manual'
+    } else if (deepseek.length > 0) {
       resolved = resolveFromList(providerId, ids)
       source = 'list'
     } else {
-      const mid = manualModelId?.trim()
-      if (mid) {
-        resolved = { flash: mid, pro: mid }
-        source = 'manual'
-      } else {
-        resolved = {
-          flash: fallbackUpstream(providerId, 'flash'),
-          pro: fallbackUpstream(providerId, 'pro'),
-        }
-        source = 'fallback'
+      resolved = {
+        flash: fallbackUpstream(providerId, 'flash'),
+        pro: fallbackUpstream(providerId, 'pro'),
       }
+      source = 'fallback'
     }
     this.resolvedModels.set(providerId, resolved)
     console.log(
@@ -558,11 +564,20 @@ export class DeepSeekGateway {
         ' pro=' +
         resolved.pro,
     )
-    return { resolved, source }
+    return { resolved, source, available: [...new Set(ids)] }
   }
 
   private upstream(providerId: ProviderId, tier: ModelTier): string {
     return resolveUpstreamModel(providerId, tier, this.resolvedModels.get(providerId))
+  }
+
+  /** 显式模型优先；无显式选择时按档位解析。 */
+  private modelForTier(
+    providerId: ProviderId,
+    tier: ModelTier,
+    manualModelId?: string | null,
+  ): string {
+    return normalizeModelId(manualModelId) ?? this.upstream(providerId, tier)
   }
 
   /** UI：接入方 + 实际上游模型（未刷列表时用 fallback；手填优先） */
@@ -592,6 +607,8 @@ export class DeepSeekGateway {
     error?: string
     suggestModelId?: string
     modelSource?: 'list' | 'manual' | 'fallback'
+    models?: string[]
+    selectedModel?: string
   }> {
     // 测试钩子：模拟断网/超时（不改系统网络——Q7 集中 TEST_HOOKS）
     if (TEST_HOOKS.forceNetworkError === '1') {
@@ -604,28 +621,37 @@ export class DeepSeekGateway {
       return { ok: false, error: 'service-error' }
     }
     try {
-      const { resolved, source } = await this.refreshModels(providerId, apiKey, modelId)
+      const { resolved, source, available } = await this.refreshModels(providerId, apiKey, modelId)
       if (source === 'fallback') {
         return {
           ok: false,
           error: 'needs-model-id',
           suggestModelId: fallbackUpstream(providerId, 'flash'),
+          models: available,
         }
       }
       const { baseURL } = getProvider(providerId)
+      const selected = resolveSelectedModel(providerId, { modelId, tier: 'flash' }, resolved)
       const res = await postChatCompletions(
         baseURL,
         apiKey,
         {
-          model: resolved.flash,
-          ...toDeepSeekParams('none'),
+          model: selected,
+          ...modelParams(providerId, selected, 'none'),
           messages: [{ role: 'user', content: 'hi' }],
           max_tokens: 1,
         },
         15000,
       )
       const classified = await classifyValidateResponse(res)
-      if (classified.ok) return { ok: true, modelSource: source }
+      if (classified.ok) {
+        return {
+          ok: true,
+          modelSource: source,
+          models: available,
+          selectedModel: selected,
+        }
+      }
       return classified
     } catch (e) {
       return { ok: false, error: classifyFetchError(e) }
@@ -704,7 +730,7 @@ export class DeepSeekGateway {
     if (!this.resolvedModels.has(opts.providerId)) {
       await this.refreshModels(opts.providerId, apiKey, opts.manualModelId)
     }
-    const upstream = this.upstream(opts.providerId, tier)
+    const upstream = this.modelForTier(opts.providerId, tier, opts.manualModelId)
     const provider = getProvider(opts.providerId)
     const { baseURL } = provider
     console.log(
@@ -723,8 +749,9 @@ export class DeepSeekGateway {
       apiKey,
       {
         model: upstream,
-        // 工具调用模式禁用 thinking（DeepSeek thinking+tools 易陷入思考-工具循环）
-        ...toDeepSeekParams(opts.tools ? 'none' : (opts.level ?? 'basic')),
+        // 工具调用模式禁用 thinking（DeepSeek thinking+tools 易陷入思考-工具循环）；
+        // 非 DeepSeek 模型走 generic profile（不发送 thinking 字段）
+        ...modelParams(opts.providerId, upstream, opts.tools ? 'none' : (opts.level ?? 'basic')),
         messages: opts.messages,
         stream: true,
         ...(opts.tools ? { tools: TOOL_DEFS, tool_choice: DEEPSEEK_TOOL_CHOICE } : {}),
@@ -852,12 +879,13 @@ export class DeepSeekGateway {
         await this.refreshModels(providerId, apiKey, manualModelId)
       }
       const { baseURL } = getProvider(providerId)
+      const upstream = this.modelForTier(providerId, 'flash', manualModelId)
       const res = await postChatCompletions(
         baseURL,
         apiKey,
         {
-          model: this.upstream(providerId, 'flash'),
-          ...toDeepSeekParams('none'),
+          model: upstream,
+          ...modelParams(providerId, upstream, 'none'),
           messages: [
             { role: 'system', content: prefix },
             { role: 'user', content: '继续' },
@@ -890,12 +918,13 @@ export class DeepSeekGateway {
         await this.refreshModels(providerId, apiKey, manualModelId)
       }
       const { baseURL } = getProvider(providerId)
+      const upstream = this.modelForTier(providerId, 'flash', manualModelId)
       const res = await postChatCompletions(
         baseURL,
         apiKey,
         {
-          model: this.upstream(providerId, 'flash'),
-          ...toDeepSeekParams('none'),
+          model: upstream,
+          ...modelParams(providerId, upstream, 'none'),
           messages: [
             {
               role: 'system',

@@ -2,6 +2,8 @@ export type {
   ProviderId,
   ModelID,
   ModelTier,
+  ModelProfileId,
+  ModelSelection,
   ThinkingLevel,
   DeepSeekThinkingParams,
   ProviderDescriptor,
@@ -18,6 +20,10 @@ export {
   fallbackUpstream,
   resolveUpstreamModel,
   resolveFromList,
+  resolveSelectedModel,
+  normalizeModelId,
+  resolveModelProfileId,
+  modelParams,
 } from './catalog.js'
 export {
   toDeepSeekParams,
@@ -25,6 +31,7 @@ export {
   REASONING_FIELDS,
   DEEPSEEK_TOOL_CHOICE,
 } from './profiles/deepseek.js'
+export { toGenericParams } from './profiles/generic.js'
 export {
   postChatCompletions,
   listModels,

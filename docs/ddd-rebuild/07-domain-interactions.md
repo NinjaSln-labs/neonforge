@@ -77,6 +77,7 @@
 | `usage.budget_threshold_reached` | — | UsageLedger（已实现） | 达到用户预算阈值 | period, spent, limit | Domain | 用户提醒（不硬中断） |
 | `extension.registered` / `extension.activated` / `extension.deactivated` | — | Extension（已实现） | 扩展生命周期 | extensionId, kind, version | Domain | 插件 UI、工具目录 |
 | `extension.invocation_denied` | — | Extension（已实现） | 未注册/未激活/未授权调用 | extensionId, capability, reason | Domain | 安全审计、用户提示 |
+| `extension.capabilities_changed` / `extension.unregistered` | — | Extension（已实现） | 能力集合变化/扩展回收（授权重审） | extensionId, oldDigest/newDigest/added/removed；kind | Domain | 授权提示、审计 |
 | `acceptance.criteria_derived` | — | AcceptanceRecord（已实现） | 从方案/DoD 派生验收项 | recordId, source, items | Domain | 交付 UI、门禁 |
 | `acceptance.item_passed` / `acceptance.item_failed` / `acceptance.item_waived` | — | AcceptanceRecord（已实现） | 验收项判定 | recordId, itemId, evidenceRef/reason | Domain | 门禁、交付 |
 | `quality_gate.evaluated` | — | AcceptanceRecord（已实现） | 门禁计算 | recordId, verdict, blockingItems | Domain | 关闭前置、交付包 |

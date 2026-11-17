@@ -105,6 +105,24 @@ describe('validateTimelineEvent（注册表——A2 接入约束）', () => {
     const warns = validateTimelineEvent('conversation.message_sent', {})
     expect(warns.some((w) => w.includes('content'))).toBe(true)
   })
+  // ADR-017：扩展能力变化/回收事件登记（能力指纹与授权重审可观测）
+  it('extension.capabilities_changed / extension.unregistered 已登记且载荷齐全', () => {
+    expect(
+      validateTimelineEvent('extension.capabilities_changed', {
+        extensionId: 'mcp:fs',
+        oldDigest: 'read_file:high',
+        newDigest: 'read_file:high|write_file:high',
+        added: ['write_file'],
+        removed: [],
+      }),
+    ).toEqual([])
+    expect(
+      validateTimelineEvent('extension.unregistered', {
+        extensionId: 'mcp:fs',
+        kind: 'mcp',
+      }),
+    ).toEqual([])
+  })
 })
 
 describe('dedupeKey / detectProposed（2026-08-15 补齐）', () => {

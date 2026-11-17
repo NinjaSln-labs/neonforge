@@ -36,6 +36,8 @@ export interface ExtensionState {
   status: ExtensionStatus
   trust: TrustLevel
   capabilities: CapabilityDescriptor[]
+  /** 能力集合指纹（id+risk 稳定排序）——授权范围与能力集合绑定 */
+  capabilityDigest: string
   createdAt: string
   updatedAt: string
   failureReason?: string
@@ -69,11 +71,20 @@ function normalizeCapabilities(input: CapabilityDescriptor[] = []): CapabilityDe
   })
 }
 
+/** 能力集合指纹：同一 id/risk 集合稳定；名称/描述变化不影响授权范围。 */
+export function computeCapabilityDigest(capabilities: readonly CapabilityDescriptor[]): string {
+  return capabilities
+    .map((cap) => `${cap.id}:${cap.risk}`)
+    .sort()
+    .join('|')
+}
+
 export function createExtension(input: ExtensionInput, at: string): ExtensionState {
   const name = requireText(input.name, 'name')
   const version = requireText(input.version, 'version')
   const kind = input.kind ?? 'builtin'
   const trust = input.trust ?? (kind === 'builtin' ? 'builtin' : 'untrusted')
+  const capabilities = normalizeCapabilities(input.capabilities)
   return {
     id: (input.id ?? name).trim() || name,
     name,
@@ -81,7 +92,8 @@ export function createExtension(input: ExtensionInput, at: string): ExtensionSta
     kind,
     status: 'registered',
     trust,
-    capabilities: normalizeCapabilities(input.capabilities),
+    capabilities,
+    capabilityDigest: computeCapabilityDigest(capabilities),
     createdAt: at,
     updatedAt: at,
   }
@@ -121,7 +133,21 @@ export function updateCapabilities(
   capabilities: CapabilityDescriptor[],
   at: string,
 ): ExtensionState {
-  return { ...state, capabilities: normalizeCapabilities(capabilities), updatedAt: at }
+  const normalized = normalizeCapabilities(capabilities)
+  const nextDigest = computeCapabilityDigest(normalized)
+  if (nextDigest === state.capabilityDigest) {
+    return { ...state, capabilities: normalized, updatedAt: at }
+  }
+  // 能力集合变化 = 授权范围变化：第三方已授权状态回退，需用户重新授权；内置信任不变。
+  const revoked = state.trust === 'user-authorized'
+  return {
+    ...state,
+    capabilities: normalized,
+    capabilityDigest: nextDigest,
+    trust: revoked ? 'untrusted' : state.trust,
+    authorizedAt: revoked ? undefined : state.authorizedAt,
+    updatedAt: at,
+  }
 }
 
 /** 用户显式授权第三方扩展（首次调用前的信任授予；内置扩展保持 builtin） */

@@ -5,7 +5,12 @@
 import { app, safeStorage } from 'electron'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import path from 'node:path'
-import { DEFAULT_PROVIDER_ID, isProviderId, type ProviderId } from './providers/index.js'
+import {
+  DEFAULT_PROVIDER_ID,
+  isProviderId,
+  normalizeModelId,
+  type ProviderId,
+} from './providers/index.js'
 
 const API_KEY_ENV = 'NEONFORGE_API_KEY'
 const API_KEY_FILE_ENV = 'NEONFORGE_API_KEY_FILE'
@@ -276,6 +281,19 @@ export class ConfigStore {
     next.providerId = isProviderId(providerId) ? providerId : DEFAULT_PROVIDER_ID
     next.apiKeyStoredAt = new Date().toISOString()
     const mid = modelId?.trim()
+    if (mid) next.modelId = mid
+    else delete next.modelId
+    this.config = next
+    writeFileSync(configPath(), JSON.stringify(this.config, null, 2), { mode: 0o600 })
+  }
+
+  /** 切换显式模型（不改 Key）；null = 回到档位自动解析。 */
+  async setModelSelection(modelId: string | null, providerId?: ProviderId): Promise<void> {
+    const next: NeonForgeConfig = { ...this.config }
+    if (providerId !== undefined) {
+      next.providerId = isProviderId(providerId) ? providerId : DEFAULT_PROVIDER_ID
+    }
+    const mid = normalizeModelId(modelId)
     if (mid) next.modelId = mid
     else delete next.modelId
     this.config = next

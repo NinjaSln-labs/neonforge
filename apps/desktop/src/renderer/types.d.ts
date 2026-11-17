@@ -79,12 +79,35 @@ export interface NeonForgeBridge {
       error?: string
       suggestModelId?: string
       modelSource?: 'list' | 'manual' | 'fallback'
+      models?: string[]
+      selectedModel?: string
     }>
     activeModel?: () => Promise<{
       providerId: string
       providerLabel: string
       upstream: string
       shortName: string
+    }>
+    listModels?: (providerId?: string) => Promise<{
+      ok: boolean
+      providerId?: string
+      models?: string[]
+      resolved?: { flash: string; pro: string }
+      source?: 'list' | 'manual' | 'fallback'
+      error?: string
+    }>
+    setModel?: (
+      modelId: string | null,
+      providerId?: string,
+    ) => Promise<{
+      ok: boolean
+      error?: string
+      active?: {
+        providerId: string
+        providerLabel: string
+        upstream: string
+        shortName: string
+      }
     }>
     streamChat: (opts: {
       apiKey: string
