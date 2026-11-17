@@ -9,6 +9,7 @@
 | 产品版本 / commit | `<git sha>` |
 | 模型 / Provider | `<provider / api model id>` |
 | 适配器 | `<无 / NeonForge 无头适配器版本>` |
+| 策略门 | `<无 / strict / standard / delegated>` |
 | 提示模式 | `<none / product>` |
 | 评估日期（UTC） | `<YYYY-MM-DD>` |
 | 评估类型 | 模型级 / 产品级（适配器 v0：提示/传输/参数修复；不含审批门） |

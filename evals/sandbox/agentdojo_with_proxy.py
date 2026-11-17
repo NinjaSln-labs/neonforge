@@ -6,6 +6,7 @@
 - 上游默认 https://api.deepseek.com/v1，可用 NF_EVAL_UPSTREAM_BASE 指向 NeonForge 适配器。
 - Key 只从 NF_EVAL_UPSTREAM_KEY 或 DEEPSEEK_API_KEY 读取。
 - 不记录请求/响应正文，避免提示注入内容进入日志。
+- 设置 NF_GATE_RUNNER 时用包装入口启动 benchmark（先安装 NeonForge 策略门）。
 """
 
 import json
@@ -102,7 +103,11 @@ class Handler(BaseHTTPRequestHandler):
 def main() -> int:
     server = ThreadingHTTPServer(("127.0.0.1", 8000), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    cmd = [sys.executable, "-m", "agentdojo.scripts.benchmark", *sys.argv[1:]]
+    runner = os.environ.get("NF_GATE_RUNNER")
+    if runner:
+        cmd = [sys.executable, runner, *sys.argv[1:]]
+    else:
+        cmd = [sys.executable, "-m", "agentdojo.scripts.benchmark", *sys.argv[1:]]
     return subprocess.call(cmd)
 
 

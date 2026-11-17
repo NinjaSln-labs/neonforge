@@ -4,5 +4,6 @@
 - [能力卡模板](capability-card-template.md)
 - [2026-11-17 DeepSeek 沙箱基线](baselines/2026-11-17-deepseek-sandbox-baseline.md)
 - [2026-11-17 Magpie DSV4.1F 适配器 v0 基线](baselines/2026-11-17-magpie-dsv41f-adapter-baseline.md)
+- [2026-11-17 Magpie 策略门 v1](baselines/2026-11-17-magpie-policy-gate-v1.md)
 
 运行脚本与沙箱定义在 `evals/sandbox/`。所有外部基准必须在一次性容器中运行；不要在本机直接执行。

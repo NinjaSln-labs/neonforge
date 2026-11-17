@@ -70,3 +70,7 @@ evals/sandbox/wheels/*
 
 # Built eval adapter bundle
 evals/adapter/dist/
+
+# Python bytecode (eval scripts)
+__pycache__/
+*.pyc
