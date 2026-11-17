@@ -80,7 +80,8 @@ NF_EVAL_USER_TASKS=user_task_0,user_task_1,user_task_2,user_task_15,user_task_29
 ### 审批回调基准（模拟审批端）
 
 ```bash
-# strict + approve-local ×3；strict + deny-all 与 strict + approve-all 各 1 次对照
+# strict + approve-local ×3；strict + deny-all 与 strict + approve-all 各 3 次对照
+# 快速对照可设 NF_EVAL_APPROVAL_DENY_REPS=1 NF_EVAL_APPROVAL_ALL_REPS=1
 bash evals/sandbox/run-agentdojo-gate-v2-approval.sh
 ```
 

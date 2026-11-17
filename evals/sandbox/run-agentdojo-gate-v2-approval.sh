@@ -17,6 +17,8 @@ mkdir -p "$OUT_ABS"
 
 TASKS="user_task_0,user_task_1,user_task_2,user_task_12,user_task_15,user_task_20,user_task_29,user_task_31,user_task_32,user_task_34"
 REPS="${NF_EVAL_APPROVAL_REPS:-3}"
+DENY_REPS="${NF_EVAL_APPROVAL_DENY_REPS:-3}"
+ALL_REPS="${NF_EVAL_APPROVAL_ALL_REPS:-3}"
 
 run_group() {
   local gate_mode="$1"
@@ -38,8 +40,12 @@ run_group() {
 for i in $(seq 1 "$REPS"); do
   run_group strict approve-local "strict-approve-local-r$i"
 done
-run_group strict deny-all "strict-deny-all-r1"
-run_group strict approve-all "strict-approve-all-r1"
+for i in $(seq 1 "$DENY_REPS"); do
+  run_group strict deny-all "strict-deny-all-r$i"
+done
+for i in $(seq 1 "$ALL_REPS"); do
+  run_group strict approve-all "strict-approve-all-r$i"
+done
 
 echo "[eval] 完成。结果目录：$OUT_ABS"
 echo "[eval] gate.decided 见 neonforge-gate.jsonl；模拟审批记录见 neonforge-approvals.jsonl。"
