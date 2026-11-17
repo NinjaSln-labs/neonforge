@@ -118,6 +118,7 @@ Session Timeline BC      — 全步骤统一记录（可观测性——JSONL）
 | `docs/product/00-product-design.md`（D0 v2.2）  | 产品设计总纲（定位 / 用户流 / 组件 / 指标）  |
 | `docs/domain/00-domain-authority.md`（A0 v4.0） | 领域实现权威（确认点 / 推进保障 / 宿主边界） |
 | `docs/product/`、`docs/domain/`                 | 完整索引（D0-D9 / A0-A9）                    |
+| `docs/evals/`                                   | 外部基准评估（方案 / 能力卡 / 沙箱基线）     |
 
 ## 测试
 

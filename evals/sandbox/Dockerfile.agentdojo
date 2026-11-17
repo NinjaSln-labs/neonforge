@@ -1,0 +1,21 @@
+# AgentDojo 评估沙箱（一次性容器）
+FROM python:3.11-slim
+
+ENV PIP_NO_CACHE_DIR=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# 固定版本，保证能力卡可复现（离线：预置 wheels；在线：走 PyPI）
+ARG AGENTDOJO_VERSION=0.1.35
+COPY wheels /wheels
+RUN if ls /wheels/*.whl >/dev/null 2>&1; then \
+      pip install --no-cache-dir --no-index --find-links=/wheels "agentdojo==${AGENTDOJO_VERSION}"; \
+    else \
+      pip install --no-cache-dir "agentdojo==${AGENTDOJO_VERSION}"; \
+    fi
+
+RUN useradd --create-home --uid 10001 eval
+WORKDIR /eval
+USER eval
+
+CMD ["python", "-m", "agentdojo.scripts.benchmark", "--help"]
