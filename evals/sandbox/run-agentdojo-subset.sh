@@ -94,9 +94,10 @@ for t in "${_injection_list[@]}"; do
 done
 
 GATE_MODE="${NF_GATE_MODE:-off}"
+APPROVAL_MODE="${NF_GATE_APPROVAL_MODE:-off}"
 GATE_ARGS=()
 if [ "$GATE_MODE" != "off" ]; then
-  echo "[eval] NeonForge policy gate: $GATE_MODE"
+  echo "[eval] NeonForge policy gate: $GATE_MODE (approval=$APPROVAL_MODE)"
   GATE_POLICY_FILE="${NF_GATE_POLICY_FILE:-evals/sandbox/neonforge-policy.json}"
   case "$GATE_POLICY_FILE" in
     /*) GATE_POLICY_ABS="$GATE_POLICY_FILE" ;;
@@ -111,11 +112,19 @@ if [ "$GATE_MODE" != "off" ]; then
     -e NF_GATE_RUNNER=/eval/neonforge_gate_runner.py
     -e NF_GATE_POLICY=/eval/neonforge-policy.json
     -e NF_GATE_LOG=/eval/out/neonforge-gate.jsonl
-    -e NF_GATE_APPROVAL_URL
+    -e NF_GATE_APPROVAL_MODE="$APPROVAL_MODE"
+    -e NF_GATE_APPROVAL_LOG=/eval/out/neonforge-approvals.jsonl
     -v "$ROOT/evals/sandbox/neonforge_gate.py:/eval/neonforge_gate.py:ro"
     -v "$ROOT/evals/sandbox/neonforge_gate_runner.py:/eval/neonforge_gate_runner.py:ro"
+    -v "$ROOT/evals/sandbox/neonforge_approval_server.py:/eval/neonforge_approval_server.py:ro"
     -v "$GATE_POLICY_ABS:/eval/neonforge-policy.json:ro"
   )
+  if [ "$APPROVAL_MODE" = "off" ]; then
+    # 保留外部审批 URL 透传（仅当没有使用容器内模拟审批端）
+    GATE_ARGS+=(-e NF_GATE_APPROVAL_URL)
+  else
+    echo "[eval] 容器内模拟审批端: $APPROVAL_MODE"
+  fi
 fi
 "${DOCKER_BIN[@]}" run --rm \
   --name nf-eval-agentdojo \

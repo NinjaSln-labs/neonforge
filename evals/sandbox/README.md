@@ -77,6 +77,21 @@ NF_EVAL_USER_TASKS=user_task_0,user_task_1,user_task_2,user_task_15,user_task_29
 - 审计：每组结果目录下 `neonforge-gate.jsonl`，记录 `gate.decided`（工具名、决策、原因、参数名；不记录正文/收件人值）。
 - 单元测试：`python3 -m unittest evals/sandbox/test_neonforge_gate.py`。
 
+### 审批回调基准（模拟审批端）
+
+```bash
+# strict + approve-local ×3；strict + deny-all 与 strict + approve-all 各 1 次对照
+bash evals/sandbox/run-agentdojo-gate-v2-approval.sh
+```
+
+- `neonforge_approval_server.py` 在评估容器内监听 `127.0.0.1`，由 `NF_GATE_APPROVAL_MODE` 启用：
+  - `approve-local`：批准 `create_file`/`append_to_file`/无参与者 `create_calendar_event`；外部副作用与破坏性拒绝。
+  - `deny-all`：全部拒绝（无审批 fail-closed 的显式对照）。
+  - `approve-all`：全部批准，仅用于演示“过度宽松审批者”；`deny` 规则仍不可被覆盖。
+- 请求/响应只含工具名与参数名；模拟审批日志写入结果目录 `neonforge-approvals.jsonl`，不记录参数值。
+- 审批端不暴露到容器外，也不改变 `nf-eval-internal` 网络边界。
+- 单元测试：`python3 -m unittest evals/sandbox/test_neonforge_approval_server.py`。
+
 ## 版本固定
 
 - BFCL：`bfcl-eval==2026.3.23`（DeepSeek handler 构造基类 client 需要 `OPENAI_API_KEY`；脚本注入 dummy `unused`，实际请求使用 `DEEPSEEK_API_KEY`）
