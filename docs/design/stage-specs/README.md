@@ -46,4 +46,5 @@
 - [V2 信任模式预设与低危委托边界](V2-trust-modes.md)（GitHub #12——2026-11-16）
 - [V2 机制拒绝事件 gate.denied](V2-gate-denied-events.md)（GitHub #16——2026-11-17）
 - [V2 多模型网关与扩展能力治理](V2-multi-model-plugin.md)（GitHub #14——2026-11-17，开工前定稿）
+- [V2 问题台账 Local-first 同步](V2-problem-ledger-sync.md)（GitHub #15——2026-11-17，开工前定稿）
 - S3-S7：随开工前补（来源设计 §6 行）

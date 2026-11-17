@@ -13,6 +13,23 @@ interface PermissionRuleView {
   specifier: string
 }
 
+// ADR-018：问题台账同步载荷（main 权威；snapshot 结构透传）
+interface ProblemLedgerView {
+  id: string
+  title: string
+  status: string
+  updatedAt: string
+  updatedAtIso?: string
+  revision?: number
+  deletedAt?: string
+  snapshot?: {
+    goal: string
+    decisions: string[]
+    authorized: Array<{ tool: string; file: string }>
+    pending: string[]
+  }
+}
+
 // bridge：gateway + config + workspace（IPC 收敛，renderer 不直接碰 node/electron）
 contextBridge.exposeInMainWorld('neonforge', {
   version: process.env.npm_package_version ?? '0.1.0',
@@ -394,6 +411,64 @@ contextBridge.exposeInMainWorld('neonforge', {
       ipcRenderer.invoke('rag:search', { query }) as Promise<{
         hits: Array<{ path: string; line: number; snippet: string }>
         note?: string
+      }>,
+  },
+  problems: {
+    load: () =>
+      ipcRenderer.invoke('problems:load') as Promise<{
+        problems: ProblemLedgerView[]
+        error?: string
+      }>,
+    save: (problems: ProblemLedgerView[]) =>
+      ipcRenderer.invoke('problems:save', { problems }) as Promise<{
+        ok: boolean
+        problems: ProblemLedgerView[]
+        error?: string
+      }>,
+    syncStatus: () =>
+      ipcRenderer.invoke('problems:sync-status') as Promise<{
+        deviceId: string
+        folder: string | null
+        lastSyncAt: string | null
+        snapshotPath: string
+        passphraseSource: 'env' | 'file' | 'none'
+      }>,
+    chooseSyncFolder: () =>
+      ipcRenderer.invoke('problems:choose-sync-folder') as Promise<{
+        ok: boolean
+        canceled?: boolean
+        error?: string
+        status?: {
+          deviceId: string
+          folder: string | null
+          lastSyncAt: string | null
+          snapshotPath: string
+          passphraseSource: 'env' | 'file' | 'none'
+        }
+      }>,
+    setSyncFolder: (folder: string | null) =>
+      ipcRenderer.invoke('problems:set-sync-folder', { folder }) as Promise<{
+        ok: boolean
+        error?: string
+        status?: {
+          deviceId: string
+          folder: string | null
+          lastSyncAt: string | null
+          snapshotPath: string
+          passphraseSource: 'env' | 'file' | 'none'
+        }
+      }>,
+    syncNow: () =>
+      ipcRenderer.invoke('problems:sync-now') as Promise<{
+        ok: boolean
+        error?: string
+        message?: string
+        syncedAt?: string
+        merged?: number
+        localOnly?: number
+        remoteOnly?: number
+        conflicts?: number
+        total?: number
       }>,
   },
   plugins: {

@@ -5,7 +5,14 @@ import SettingsPanel from './SettingsPanel'
 import OutputPanel from './OutputPanel'
 import ConversationPanel from './ConversationPanel'
 import type { DeliveryPackage, ProblemInstance, QueueEntry, QueueResult, QueueState } from './types'
-import { createProblem, loadProblems, saveProblems, updateProblemSnapshot } from './problemStore'
+import {
+  createProblem,
+  loadProblems,
+  loadProblemsAuthoritative,
+  saveProblems,
+  saveProblemsMain,
+  updateProblemSnapshot,
+} from './problemStore'
 import { clearSession, loadWorkspaceSessionId, saveWorkspaceSessionId } from './sessionStore'
 import { IconSettings } from './icons'
 // 2026-08-15 Q10：demo 注入通道类型化单例
@@ -467,6 +474,20 @@ export default function MainWorkspace({
   }, [])
   const [deliveryPkg, setDeliveryPkg] = useState<DeliveryPackage | null>(initDeliveryPkg())
   const [problems, setProblems] = useState<ProblemInstance[]>(initProblems)
+  const [problemsHydrated, setProblemsHydrated] = useState(false)
+  const demoProblemsRef = useRef<ProblemInstance[] | null>(null)
+  useEffect(() => {
+    const demo = getDemoBridge()?.problems
+    if (demo) {
+      demoProblemsRef.current = demo
+      setProblems(demo)
+      setProblemsHydrated(true)
+      return
+    }
+    void loadProblemsAuthoritative(loadProblems())
+      .then(setProblems)
+      .finally(() => setProblemsHydrated(true))
+  }, [])
   const [activeProblem, setActiveProblem] = useState<string | null>(null)
   // 13 交付包联动：真实工具执行（write/edit）成功 → 收集变更 → 生成真实交付包（覆盖 demo）
   const [realChanges, setRealChanges] = useState<Array<{ file: string; op: string }>>([])
@@ -636,10 +657,11 @@ export default function MainWorkspace({
       return [inst, ...prev]
     })
   }
-  // 06 问题台账：台账持久化
+  // 06 问题台账：台账持久化（localStorage 降级；main 为同步权威——ADR-018）
   useEffect(() => {
     saveProblems(problems)
-  }, [problems])
+    if (problemsHydrated && !demoProblemsRef.current) void saveProblemsMain(problems)
+  }, [problems, problemsHydrated])
   // 06 问题台账：选中问题——closed 复开 → 复跑（「上次那个再跑一遍」）
   const handleSelectProblem = (id: string) => {
     setActiveProblem(id)

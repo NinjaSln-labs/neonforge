@@ -26,3 +26,4 @@
 | 015 | 信任模式预设与低危委托边界（三档模式，main 持久化 + 执行边界二次校验）           | accepted | 2026-11-16 |
 | 016 | 机制拒绝事件 gate.denied（canExecute 结构化拒绝来源 + timeline 领域事件）          | accepted | 2026-11-17 |
 | 017 | 多模型网关与扩展能力治理（显式模型选择 + ModelProfile 扩展 + 能力指纹信任重审）   | accepted | 2026-11-17 |
+| 018 | 问题台账 local-first 同步（main 权威 + 加密快照 + 多设备确定性合并）             | accepted | 2026-11-17 |
