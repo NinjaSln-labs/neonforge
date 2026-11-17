@@ -62,6 +62,11 @@ bash evals/sandbox/run-bfcl-categories.sh
 # 单类别（例如先跑 400 题 simple_python）
 NF_EVAL_TARGET=magpie NF_EVAL_BFCL_CATEGORIES=simple_python \
   bash evals/sandbox/run-bfcl-categories.sh .scratch/evals/bfcl-simple-python-full
+
+# 扩展七类（与核心四类合计 1704 题）
+NF_EVAL_TARGET=magpie \
+NF_EVAL_BFCL_CATEGORIES=parallel_multiple,simple_java,simple_javascript,live_simple,live_parallel,live_parallel_multiple,live_relevance \
+  bash evals/sandbox/run-bfcl-categories.sh .scratch/evals/bfcl-extra-categories-full
 ```
 
 - 使用 `bfcl generate --test-category ...` + `bfcl evaluate`，不带 `--run-ids` / `--partial-eval`；结果是类别全量分数，但仍不能与官方总榜直接横比。

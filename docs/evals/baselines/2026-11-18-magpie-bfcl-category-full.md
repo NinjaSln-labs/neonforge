@@ -1,22 +1,22 @@
-# 能力卡：BFCL v4 四类单轮全量（Magpie DSV4.1F，NeonForge 适配器）
+# 能力卡：BFCL v4 十一类单轮全量（Magpie DSV4.1F，NeonForge 适配器）
 
-> 本卡把 BFCL 从 24 题子集扩展到四个单轮类别的**全量**题目（共 1040 题），使用非 partial-eval 的类别分数。
-> 仍不是 BFCL v4 全量 4706 题，也不等同于官方榜单排名。
+> 本卡把 BFCL 从 24 题子集扩展到十一个单轮/实时类别的**全量**题目（共 1704 题），使用非 partial-eval 的类别分数。
+> 仍不是 BFCL v4 全量 4706 题（缺 live_multiple、live_irrelevance、multi-turn、memory、web_search 等），也不等同于官方榜单排名。
 
 ## 基本信息
 
 | 字段 | 值 |
 |------|----|
-| 产品版本 / commit | NeonForge `465d160` + BFCL 类别全量脚本（commit 见 PR） |
+| 产品版本 / commit | NeonForge `7db30df` + BFCL 类别全量脚本（commit 见 PR） |
 | 模型 / Provider | 本机 Magpie（`http://127.0.0.1:3425/v1`）；API model id `opendesign/deepseek-v4.1-flash` |
 | 适配器 | NeonForge 无头适配器 v0（`prompt=product`） |
 | Harness 版本 | `bfcl-eval==2026.3.23`（BFCL v4） |
 | 评估日期（UTC） | 2026-11-18 |
 | 沙箱镜像 | `nf-eval-bfcl@sha256:0aeb737c70ec3519d955b3cf31e79ef951274d8291515ee6c820ceed6333b2c1` |
-| 类别与题量 | `simple_python` 400；`multiple` 200；`parallel` 200；`irrelevance` 240；合计 1040 |
+| 类别与题量 | `simple_python` 400；`multiple` 200；`parallel` 200；`irrelevance` 240；`parallel_multiple` 200；`simple_java` 100；`simple_javascript` 50；`live_simple` 258；`live_parallel` 16；`live_parallel_multiple` 24；`live_relevance` 16；合计 1704 |
 | 运行方式 | `bfcl generate --test-category ... --num-threads 1` + `bfcl evaluate`；无 `--run-ids`，无 `--partial-eval` |
-| 运行次数 | 每个类别 1 次（`simple_python` 单独一次；其余三类别合并一次） |
-| 运行成本 | 本地模型无外部 API 计费；输入约 2,446,105 tokens、输出约 229,810 tokens |
+| 运行次数 | 每个类别 1 次（分两批：核心四类；扩展七类） |
+| 运行成本 | 本地模型无外部 API 计费；输入约 4,084,678 tokens、输出约 399,472 tokens |
 
 ## 结果
 
@@ -26,36 +26,47 @@
 | `multiple` | 177/200 | **88.50%** | 510,042 | 24,853 | 2.11s |
 | `parallel` | 180/200 | **90.00%** | 466,641 | 52,304 | 2.55s |
 | `irrelevance` | 171/240 | **71.25%** | 550,229 | 103,260 | 4.49s |
-| **四类合计** | **897/1040** | **86.25%** | 2,446,105 | 229,810 | — |
+| `parallel_multiple` | 161/200 | **80.50%** | 516,145 | 57,198 | 2.76s |
+| `simple_java` | 57/100 | **57.00%** | 235,799 | 29,636 | 3.10s |
+| `simple_javascript` | 22/50 | **44.00%** | 118,419 | 23,683 | 4.23s |
+| `live_simple` | 198/258 | **76.74%** | 611,742 | 44,566 | 2.39s |
+| `live_parallel` | 12/16 | **75.00%** | 37,849 | 3,923 | 2.60s |
+| `live_parallel_multiple` | 15/24 | **62.50%** | 72,395 | 5,137 | 2.52s |
+| `live_relevance` | 13/16 | **81.25%** | 46,224 | 5,519 | 3.70s |
+| **十一类合计** | **1375/1704** | **80.69%** | 4,084,678 | 399,472 | — |
 
-- `simple_python` 单题平均 2.02s（p95 2.70s），生成阶段 13 分 28 秒。
-- `irrelevance` 是四类中最低项（71.25%），同时输出 token 与延迟最高；模型在“不应调用函数”的判定上更弱。
-- `parallel` 准确率 90.00%，但输出 token 明显高于 `multiple`，说明多函数调用的输出更长。
-- 四类合计按题量加权，不是官方 leaderboard 的 Non-Live Overall（后者还包含 Java/JavaScript 等类别）。
+- 核心四类（1040 题）合计 897/1040 = 86.25%；扩展七类（664 题）合计 478/664 = 71.99%。
+- 最强项：`simple_python` 92.25%、`parallel` 90.00%、`multiple` 88.50%、`live_relevance` 81.25%。
+- 最弱项：`simple_javascript` 44.00%、`simple_java` 57.00%、`live_parallel_multiple` 62.50%、`irrelevance` 71.25%。
+- `parallel_multiple`（80.50%）低于 `parallel`（90.00%），说明同时处理多个函数和多个调用点仍更难。
+- `irrelevance` 输出 token 与延迟最高，模型在“不应调用函数”的判定上更弱。
 
 ## 与 24 题子集基线的关系
 
-- 24 题子集（`simple_python` 10 + `multiple` 4 + `parallel` 5 + `irrelevance` 5）此前记录 product 模式 87.5-91.7%；本次四类全量为 86.25%，量级接近但不能直接比较（题集不同、单次运行、不同日期）。
+- 24 题子集（`simple_python` 10 + `multiple` 4 + `parallel` 5 + `irrelevance` 5）此前记录 product 模式 87.5-91.7%；本次十一类全量为 80.69%，量级差异主要来自新增的 Java/JavaScript/live/parallel_multiple 类别，不能直接比较（题集不同、单次运行、不同日期）。
 - 子集使用 `--run-ids` + `--partial-eval`；本卡为类别全量、非 partial-eval，因此本卡分数更适合作为类别级能力信号。
 
 ## 失败/边界样例
 
 | 现象 | 归因 | 是否产品问题 |
 |------|------|--------------|
-| `irrelevance` 71.25% | 模型对“无需调用工具”的抑制较弱 | 模型能力信号，非适配器故障 |
-| 未跑 Java/JavaScript/live/multi-turn/web_search/memory | 需要额外类别、外部服务或多轮环境 | 未覆盖，不能外推 |
-| 单次运行、单模型 | 无重复与置信区间 | 只能作方向性参考 |
+| `simple_javascript` 44.00% | 模型对 JavaScript 参数/类型生成明显弱于 Python | 模型能力信号，非适配器故障 |
+| `simple_java` 57.00% | 同上；Java 类型与调用格式更复杂 | 模型能力信号 |
+| `live_parallel_multiple` 62.50% | 实时多函数、多调用点组合更难 | 模型能力信号 |
+| `irrelevance` 71.25% | “无需调用工具”的抑制较弱 | 模型能力信号 |
+| 未跑 `live_multiple`/`live_irrelevance`/multi-turn/web_search/memory | 需额外时间、外部服务或多轮环境 | 未覆盖，不能外推 |
 
 ## 安全与限制
 
 - 评估容器：只读根、非 root、`--cap-drop=ALL`、`no-new-privileges`、PID/内存/CPU 限制；只加入 `nf-eval-internal`；Magpie 仍经单目标适配器中继。
 - 适配器只覆盖产品系统提示、provider 传输与工具参数修复；不是完整 Electron 工具注册表。
-- BFCL 类别全量仍可能受数据集污染、模型版本漂移与单次采样影响。
+- 每个类别仅 1 次运行，无重复与置信区间；模型版本、Magpie 路由与本地负载均可能影响分数。
 - `format_sensitivity` 对 FC 模型会被 BFCL 跳过；本卡未包含该类别。
 - 未与官方榜单横比：模型别名、适配器和本地 Magpie 路由均与官方评测不同。
+- 十一类覆盖 1704/4706 题；剩余未覆盖类别不能由本卡推断。
 
 ## 结论
 
-- 可用结论：在四个单轮类别全量上，模型 + 产品适配器取得 86.25%（897/1040）；`simple_python` 92.25%、`multiple` 88.50%、`parallel` 90.00%、`irrelevance` 71.25%。可作为类别级能力信号。
-- 不可用结论：不能称为“完整 BFCL v4 成绩”（仅 4/20 类、1040/4706 题）；不能与官方榜单直接横比；不能由单次运行推断统计显著性；不能把适配器结果当作完整产品能力认证。
-- 下一步：重复四类全量 ≥3 次；再评估 `parallel_multiple`、Java/JavaScript、live 系列与 multi-turn；最后才讨论是否值得跑完整 4706 题。
+- 可用结论：在十一个单轮/实时类别全量上，模型 + 产品适配器取得 80.69%（1375/1704）；Python 工具调用与并行调用较强（92.25%、90.00%），Java/JavaScript 与实时多函数组合明显较弱（57.00%、44.00%、62.50%）。可作为类别级能力信号与后续优化方向。
+- 不可用结论：不能称为“完整 BFCL v4 成绩”（仅 11/20 类、1704/4706 题）；不能与官方榜单直接横比；不能由单次运行推断统计显著性；不能把适配器结果当作完整产品能力认证。
+- 下一步：补 `live_multiple`（1053）与 `live_irrelevance`（884），再评估 multi-turn、memory、web_search；重复十一类全量 ≥3 次；最后才讨论是否值得跑完整 4706 题。
