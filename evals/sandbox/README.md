@@ -50,8 +50,24 @@ bash evals/sandbox/run-magpie-baseline.sh
 - 适配器只监听 Docker bridge 网关地址（默认 `172.17.0.1:18080`），由 `nf-eval-adapter-relay` 单目标中继进 `nf-eval-internal`；评估容器拿不到 `MAGPIE_GATEWAY_KEY`。
 - 中继镜像默认 `python:3.11-slim`（首次需拉取，可用 `NF_EVAL_RELAY_IMAGE` 覆盖）；适配器单元测试：`bash evals/adapter/test.sh`。
 - `NF_EVAL_PROMPT=product` 注入 NeonForge 产品系统提示；`none` 是不注入的对照。
-- **v0 边界**：适配器覆盖产品系统提示、provider 传输语义、工具参数修复；**尚未**把工具授权/审批门接入 harness。能力卡不得把本结果称为“完整产品级安全认证”。
+- **v0 边界**：适配器覆盖产品系统提示、provider 传输语义、工具参数修复；策略门 v1 已在下节接入 AgentDojo 执行点，但完整审批 UI/持久化规则仍未接入。能力卡不得把结果称为“完整产品级安全认证”。
 - 不写入仓库：适配器 bundle 在 `evals/adapter/dist/`（gitignore），原始日志在 `.scratch/evals/`。
+
+## 策略门 v1（AgentDojo）
+
+```bash
+# strict / standard / delegated 三档；默认 prompt=product、defense=none
+bash evals/sandbox/run-agentdojo-gate.sh
+
+# 单档
+NF_EVAL_TARGET=magpie NF_GATE_MODE=standard NF_EVAL_DEFENSE=none \
+  bash evals/sandbox/run-agentdojo-subset.sh .scratch/evals/gate-standard
+```
+
+- `neonforge_gate.py` 在 AgentDojo 进程内包装 `FunctionsRuntime.run_function`；`deny > ask > allow`，`ask` 在无人类审批的基准中 fail-closed 为拒绝。
+- 策略预设：`neonforge-policy.json`；只读 allow，本地写入按 strict/standard/delegated 区分，外部副作用 ask→deny，破坏性 deny，未知工具 fail-closed。
+- 审计：每组结果目录下 `neonforge-gate.jsonl`，记录 `gate.decided`（工具名、决策、原因、参数名；不记录正文/收件人值）。
+- 单元测试：`python3 -m unittest evals/sandbox/test_neonforge_gate.py`。
 
 ## 版本固定
 

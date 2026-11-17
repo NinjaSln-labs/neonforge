@@ -77,6 +77,21 @@ DEFENSE_ARGS=()
 if [ "$DEFENSE" != "none" ]; then
   DEFENSE_ARGS=(--defense "$DEFENSE")
 fi
+
+GATE_MODE="${NF_GATE_MODE:-off}"
+GATE_ARGS=()
+if [ "$GATE_MODE" != "off" ]; then
+  echo "[eval] NeonForge policy gate: $GATE_MODE"
+  GATE_ARGS=(
+    -e NF_GATE_MODE="$GATE_MODE"
+    -e NF_GATE_RUNNER=/eval/neonforge_gate_runner.py
+    -e NF_GATE_POLICY=/eval/neonforge-policy.json
+    -e NF_GATE_LOG=/eval/out/neonforge-gate.jsonl
+    -v "$ROOT/evals/sandbox/neonforge_gate.py:/eval/neonforge_gate.py:ro"
+    -v "$ROOT/evals/sandbox/neonforge_gate_runner.py:/eval/neonforge_gate_runner.py:ro"
+    -v "$ROOT/evals/sandbox/neonforge-policy.json:/eval/neonforge-policy.json:ro"
+  )
+fi
 "${DOCKER_BIN[@]}" run --rm \
   --name nf-eval-agentdojo \
   --network "$NET" \
@@ -90,6 +105,7 @@ fi
   --user "$(id -u):$(id -g)" \
   -e HOME=/tmp \
   "${RUN_ENV[@]}" \
+  "${GATE_ARGS[@]}" \
   -v "$OUT_ABS:/eval/out" \
   -v "$ROOT/evals/sandbox/agentdojo_with_proxy.py:/eval/agentdojo_with_proxy.py:ro" \
   "$IMAGE" \
