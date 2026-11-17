@@ -74,6 +74,46 @@ class GateDecisionTest(unittest.TestCase):
             "allow",
         )
 
+    def test_specifier_path_normalization(self):
+        for filename in ("secret-plan.txt", "./secret-plan.txt", "notes/../secret-plan.txt"):
+            self.assertEqual(
+                gate.decide("create_file", "delegated", POLICY, {"filename": filename})[0],
+                "deny",
+                filename,
+            )
+        self.assertEqual(
+            gate.decide(
+                "create_file",
+                "delegated",
+                POLICY,
+                {"filename": "notes/hawaii-packing-list.docx"},
+            )[0],
+            "allow",
+        )
+
+    def test_url_specifier_normalization(self):
+        rule = {
+            "action": "deny",
+            "tool": "share_file",
+            "specifier": "https://example.com/private",
+        }
+        cases = {
+            "https://example.com/private/report.pdf": True,
+            "https://EXAMPLE.com:443/private/report.pdf": True,
+            "https://example.com/%70rivate/report.pdf": True,
+            "https://example.com/a/../private/report.pdf": True,
+            "https://user@example.com/private/report.pdf": True,
+            "https://example.com/privateX/report.pdf": False,
+            "https://evil.com/private/report.pdf": False,
+            "http://example.com/private/report.pdf": False,
+        }
+        for url, expected in cases.items():
+            self.assertEqual(
+                gate.matches_rule("share_file", {"file_id": url}, rule),
+                expected,
+                url,
+            )
+
     def test_unknown_tool_fails_closed(self):
         self.assertEqual(gate.decide("unknown_tool", "standard", POLICY)[0], "ask")
 

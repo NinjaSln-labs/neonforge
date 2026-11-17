@@ -70,7 +70,7 @@ NF_EVAL_USER_TASKS=user_task_0,user_task_1,user_task_2,user_task_15,user_task_29
 
 - `neonforge_gate.py` 在 AgentDojo 进程内包装 `FunctionsRuntime.run_function`；`deny > ask > allow`，`ask` 在无人类审批的基准中 fail-closed 为拒绝。
 - 策略预设：`neonforge-policy.json`（v2）；`strict` 仅只读，`standard` 放行 `create_file`/无参与者日历创建，`delegated` 额外放行 `append_to_file`；外部副作用 ask→deny，破坏性 deny，未知工具 fail-closed。
-- `PermissionRule(tool, specifier)`：`create_file` 的 `secret-` 前缀示例在全部模式 deny。
+- `PermissionRule(tool, specifier)`：`create_file` 的 `secret-` 前缀示例在全部模式 deny；文件路径做 NFC/分隔符/`.`/`..` 规范化，URL 做 scheme/host 小写、默认端口、百分号解码与点段折叠。
 - `NF_GATE_APPROVAL_URL`：可选 HTTP 审批回调；超时/异常 fail-closed。基准默认不启用。
 - `GroundTruthPipeline` 通过 ContextVar 绕过执行门，避免合法任务的 ground truth 被当作 agent 工具调用拦截。
 - 任务集：`NF_EVAL_USER_TASKS` / `NF_EVAL_INJECTION_TASKS`（逗号分隔）；策略文件：`NF_GATE_POLICY_FILE`。

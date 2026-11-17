@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import json
 import os
+import posixpath
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -90,20 +92,56 @@ def _values(tool: str, args: dict[str, Any], for_deny: bool) -> list[str]:
     return [v for v in values if v]
 
 
-def _url_prefix_matches(value: str, specifier: str) -> bool:
-    if not (value.startswith("http://") or value.startswith("https://")):
-        return False
+def _normalize_path(value: str) -> str:
+    """NFC + 统一分隔符 + 折叠 . / ..；不做 base 目录解析。"""
+    text = unicodedata.normalize("NFC", str(value)).replace("\\", "/")
+    normalized = posixpath.normpath(text)
+    return "" if normalized == "." else normalized
+
+
+def _normalize_url(value: str) -> tuple[str, str, int | None, str] | None:
+    """返回 (scheme, host, port, normalized_path)；非 http(s) 或非法 URL 返回 None。"""
     try:
-        base = urllib.parse.urlparse(specifier)
-        target = urllib.parse.urlparse(value)
+        parsed = urllib.parse.urlsplit(value)
     except ValueError:
+        return None
+    scheme = parsed.scheme.lower()
+    if scheme not in ("http", "https"):
+        return None
+    host = (parsed.hostname or "").lower().rstrip(".")
+    if not host:
+        return None
+    try:
+        port = parsed.port
+    except ValueError:
+        return None
+    if (scheme == "http" and port == 80) or (scheme == "https" and port == 443):
+        port = None
+    path = urllib.parse.unquote(parsed.path or "/")
+    path = posixpath.normpath(path)
+    if not path.startswith("/"):
+        path = "/" + path
+    return scheme, host, port, path
+
+
+def _url_prefix_matches(value: str, specifier: str) -> bool:
+    base = _normalize_url(specifier)
+    target = _normalize_url(value)
+    if base is None or target is None:
         return False
-    if not base.scheme or base.scheme != target.scheme:
+    if base[:3] != target[:3]:
         return False
-    if base.netloc != target.netloc:
+    base_path = base[3].rstrip("/")
+    target_path = target[3]
+    return not base_path or target_path == base_path or target_path.startswith(base_path + "/")
+
+
+def _path_prefix_matches(value: str, specifier: str) -> bool:
+    base = _normalize_path(specifier)
+    target = _normalize_path(value)
+    if not base:
         return False
-    base_path = base.path.rstrip("/")
-    return not base_path or target.path == base_path or target.path.startswith(base_path + "/")
+    return target == base or target.startswith(base)
 
 
 def matches_rule(tool: str, args: dict[str, Any], rule: dict[str, Any]) -> bool:
@@ -113,10 +151,12 @@ def matches_rule(tool: str, args: dict[str, Any], rule: dict[str, Any]) -> bool:
     if not specifier:
         return True
     action = str(rule.get("action") or "")
+    is_url_specifier = specifier.lower().startswith(("http://", "https://"))
     for value in _values(tool, args, for_deny=(action == "deny")):
-        if value == specifier or value.startswith(specifier):
-            return True
-        if _url_prefix_matches(value, specifier):
+        if is_url_specifier:
+            if _url_prefix_matches(value, specifier):
+                return True
+        elif _path_prefix_matches(value, specifier):
             return True
     return False
 

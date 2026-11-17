@@ -79,7 +79,7 @@ bash evals/sandbox/run-agentdojo-subset.sh
 2. **策略门 v1（已完成，子集）**：AgentDojo 工具执行点的 `ask`/`deny`/信任预设与 `gate.decided` 审计；基线见 `baselines/2026-11-17-magpie-policy-gate-v1.md`。
 3. **策略门 v2（已完成，扩展子集）**：加入本地创建/编辑/日历任务区分 strict/standard/delegated；`PermissionRule(specifier)` 与 HTTP 审批回调已实现；基线见 `baselines/2026-11-18-magpie-policy-gate-v2.md`。
 4. **审批回调基准（已完成，扩展子集）**：容器内模拟 `approve-local`/`deny-all`/`approve-all`，10 个用户任务 × 2 注入，`approve-local` 3 次；基线见 `baselines/2026-11-18-magpie-policy-gate-v2-approval.md`。
-5. **策略门 v2 补强**：完整 `PermissionRule(specifier)` 路径/URL 规范化、`deny-all`/`approve-all` ≥3 次重复、真实审批 UI / 人类审批链路接入。
+5. **策略门 v2 补强（部分完成）**：`PermissionRule(specifier)` 路径/URL 规范化已实现（NFC、分隔符、`.`/`..`、scheme/host、默认端口、百分号解码）；剩余 `deny-all`/`approve-all` ≥3 次重复与真实审批 UI / 人类审批链路接入。
 6. **全量 BFCL**：子集稳定后再决定是否跑全量。
 7. **Terminal-Bench / SWE-bench**：独立 VM + Docker-in-Docker；固定数据集与镜像摘要。
 8. **用户体验与治理**：ISO/IEC 25010 质量评审 + SUS/HEART；NIST AI RMF / ISO/IEC 42001 差距评估。

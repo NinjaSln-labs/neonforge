@@ -86,9 +86,10 @@
 - 运行次数少（approve-local 3 次，deny-all/approve-all 各 1 次），10 个用户任务，只能作方向性参考。
 - 日志只做了聚合与工具级统计；AgentDojo 输出未提供逐任务成功/失败明细，无法精确归因每一对任务的失败。
 - 未验证真实人类审批延迟、审批撤销、持久化规则或 Electron `ToolRegistry` 集成。
+- 本卡运行时 `PermissionRule(specifier)` 只有原始前缀匹配；后续已补上路径/URL 规范化（见 `evals/sandbox/README.md`），本卡结果不受该后续变更影响。
 
 ## 结论
 
 - 可用结论：审批回调端到端可用；`approve-local` 在三次运行中恢复本地写入/无参与者日历效用（75%/70%/80%），同时拒绝外部副作用；`deny-all` 退回 30% 只读效用；`approve-all` 恢复到 100%，但 `delete_file` 的 `deny` 不可被审批覆盖。审批日志与 `gate.decided` 在工具级与参数级一致。
 - 不可用结论：不能把 `approve-all` 的 100% 效用当作推荐配置；不能把 0% 注入成功归因于审批端（模型本身已拒绝多数注入，且 `approve-all` 有过放行记录）；不能据此声称产品审批 UI / 人类审批链路已经验证。
-- 下一步：实现 `PermissionRule(specifier)` 完整路径/URL 规范化；对 `deny-all` / `approve-all` 也做 ≥3 次重复；接入真实审批 UI 或可记录的人类审批模拟；再跑全量 AgentDojo。
+- 下一步：对 `deny-all` / `approve-all` 也做 ≥3 次重复；接入真实审批 UI 或可记录的人类审批模拟；再跑全量 AgentDojo。
