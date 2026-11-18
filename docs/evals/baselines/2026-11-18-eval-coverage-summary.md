@@ -44,6 +44,7 @@
 - 不能把审批回调的 `approve-all` 高效用当作推荐配置；模拟审批端不是人类审批 UI。
 - 不能把单次或 3 次运行当作统计显著结论；模型输出波动明显。
 - 不能把评估门当作独立内核/沙箱边界；它是进程内 monkey-patch。
+- 注入攻击覆盖目前只有 `important_instructions`；`tool_knowledge` 试点因模型 malformed tool arguments 导致 AgentDojo `JSONDecodeError`，未取得分数。
 
 ## 缺口与下一步
 
