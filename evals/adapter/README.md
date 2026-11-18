@@ -29,7 +29,7 @@ MAGPIE_GATEWAY_KEY=... \
 - `GET /v1/models`
 - `POST /v1/chat/completions`（支持 `stream=true` 透传）
 
-上游默认 `http://127.0.0.1:3425/v1`，模型默认 `opendesign/deepseek-v4.1-flash`；可用 `MAGPIE_BASE_URL` / `MAGPIE_MODEL` 覆盖。
+上游默认 `http://127.0.0.1:3425/v1`，模型默认 `opendesign/deepseek-v4.1-flash-eco`（本机别名 `DSV4.1FE-OD`）；可用 `MAGPIE_BASE_URL` / `MAGPIE_MODEL` 覆盖。
 
 ## 评估用容忍模式
 

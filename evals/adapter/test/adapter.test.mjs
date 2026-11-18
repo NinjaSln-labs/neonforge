@@ -10,7 +10,7 @@ import {
 test('resolveConfig 要求 MAGPIE_GATEWAY_KEY，并收敛默认模型', () => {
   assert.throws(() => resolveConfig({}), /MAGPIE_GATEWAY_KEY/)
   const config = resolveConfig({ MAGPIE_GATEWAY_KEY: 'dummy-key' })
-  assert.equal(config.upstreamModel, 'opendesign/deepseek-v4.1-flash')
+  assert.equal(config.upstreamModel, 'opendesign/deepseek-v4.1-flash-eco')
   assert.equal(config.promptMode, 'none')
   assert.equal(config.upstreamBase, 'http://127.0.0.1:3425/v1')
   assert.equal(
@@ -53,9 +53,9 @@ test('buildUpstreamRequest 重写模型并只保留允许字段', () => {
       metadata: { trace: 'no' },
       temperature: 0.1,
     },
-    { upstreamModel: 'opendesign/deepseek-v4.1-flash', promptMode: 'none' },
+    { upstreamModel: 'opendesign/deepseek-v4.1-flash-eco', promptMode: 'none' },
   )
-  assert.equal(out.model, 'opendesign/deepseek-v4.1-flash')
+  assert.equal(out.model, 'opendesign/deepseek-v4.1-flash-eco')
   assert.equal(out.store, undefined)
   assert.equal(out.metadata, undefined)
   assert.equal(out.temperature, 0.1)

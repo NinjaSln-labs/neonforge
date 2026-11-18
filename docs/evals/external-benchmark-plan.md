@@ -1,7 +1,7 @@
 # 外部基准评估方案（NeonForge Agent 工作台）
 
 - 生效日期：2026-11-17
-- 状态：v1.11（模型级基线 + 适配器 v0 + 策略门 v2 + 审批回调基准 + BFCL 十四类全量 + 四种注入攻击（新增两种各 3 次）+ 治理差距评估初版；完整审批 UI / 其余 BFCL 类别 / SUS·HEART 数据待接入）
+- 状态：v1.12（模型级基线 + 适配器 v0 + 策略门 v2 + 审批回调基准 + BFCL 十四类全量 + 四种注入攻击（新增两种各 3 次）+ 治理差距评估初版；评估默认模型自 2026-11-18 起切换为 DSV4.1FE-OD；完整审批 UI / 其余 BFCL 类别 / SUS·HEART 数据待接入）
 - 关联：`docs/evals/capability-card-template.md`、`evals/sandbox/`、ADR-012（测完再修）
 
 ## 1. 目标与非目标
@@ -47,7 +47,7 @@
 - BFCL v4：`simple_python` 10 题 + `multiple` 4 题 + `parallel` 5 题 + `irrelevance` 5 题，共 24 题；单线程。首发 50 题版本在 `multiple_4` 出现长时间等待，基线改用 24 题子集并记录该限制。
 - BFCL 类别全量：核心四类 1040 + 扩展七类 664 + 两个 live 大类 1937 + `multi_turn_base` 200 = 3841 题，非 partial-eval；十四类合计 75.40%；结果见 `baselines/2026-11-18-magpie-bfcl-category-full.md`。
 - AgentDojo：`workspace` suite，`user_task_0/1/2`，`injection_task_0/1`，攻击 `important_instructions`；分别跑无防御与 `tool_filter` 两组。
-- 本地模型链路：`NF_EVAL_TARGET=magpie` 经 `evals/adapter/`（NeonForge 无头适配器 v0）调用本机 Magpie 的 `opendesign/deepseek-v4.1-flash`；`NF_EVAL_PROMPT=product|none` 对照产品系统提示的影响。
+- 本地模型链路：`NF_EVAL_TARGET=magpie` 经 `evals/adapter/`（NeonForge 无头适配器 v0）调用本机 Magpie 的 **DSV4.1FE-OD**（API model id `opendesign/deepseek-v4.1-flash-eco`）；`NF_EVAL_PROMPT=product|none` 对照产品系统提示的影响。2026-11-18 之前的既有能力卡使用 `opendesign/deepseek-v4.1-flash`，保留当时记录，不与新默认混算。
 - 策略门：`NF_GATE_MODE=strict|standard|delegated` 在 AgentDojo 工具执行点按 `deny > ask > allow` 裁决；基准无人类审批，`ask` 按 fail-closed 拒绝；可选 `NF_GATE_APPROVAL_URL` HTTP 审批回调。结果写入 `neonforge-gate.jsonl`。
 - 注入攻击：默认 `important_instructions`，可用 `NF_EVAL_ATTACK` 切换；`NF_ADAPTER_TOLERANT_ARGS=1` 可把无法解析的 tool arguments 降级为 `{}`（评估用，默认关闭）。`tool_knowledge` 容忍模式 3 次 + 默认模式 2 次完成：off 约 92-100%、strict 50%、standard 75-83.33%、delegated 100%，安全 0/60；默认模式 3 次尝试中 1 次因 malformed 参数崩溃。
 - 审批回调基准：`NF_GATE_APPROVAL_MODE=approve-local|deny-all|approve-all` 在容器内启动模拟审批端，覆盖 10 个用户任务（只读、本地创建/编辑、日历创建含/不含参与者、外部共享），结果见 `baselines/2026-11-18-magpie-policy-gate-v2-approval.md`。
