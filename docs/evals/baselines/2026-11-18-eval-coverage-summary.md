@@ -20,7 +20,7 @@
 |------|------|----------|--------|
 | BFCL 24 题子集 | `simple_python` 10 + `multiple` 4 + `parallel` 5 + `irrelevance` 5；`--run-ids` + `--partial-eval` | product 21-22/24（87.5-91.7%）；none 20-23/24（83.3-95.8%） | `2026-11-17-magpie-dsv41f-adapter-baseline.md` |
 | BFCL 十四类全量 | 单轮/实时 13 类 + `multi_turn_base`；3641 + 200 题；非 partial-eval | **2896/3841 = 75.40%**；`simple_python` 92.25%、`parallel` 90.00%；`simple_javascript` 44.00%、`multi_turn_base` 56.00% | `2026-11-18-magpie-bfcl-category-full.md` |
-| BFCL `multi_turn_long_context` 全量 | 200 题；非 partial-eval；DSV4.1FE-OD（eco） | **92/200 = 46.00%**；731 次解码失败（199/200 题受影响）；平均 82.2 秒/题；108 题无效 | `2026-11-18-magpie-bfcl-multi-turn-long-context.md` |
+| BFCL `multi_turn_long_context` 全量 | 200 题；非 partial-eval；DSV4.1FE-OD（eco） | **92/200 = 46.00%**；平均 82.2 秒/题；108 题无效（状态不一致/缺少执行结果） | `2026-11-18-magpie-bfcl-multi-turn-long-context.md` |
 | AgentDojo 无防御 | `workspace` 3 用户任务 × 2 注入，3 次 | 效用 6/6；注入成功 0/6；tool_filter 效用 0/6 | `2026-11-17-magpie-dsv41f-adapter-baseline.md` |
 | 策略门 v1 | `workspace` 3 用户任务 × 2 注入，3 次 | strict 6/6、6/6、5/6；standard/delegated 6/6；注入成功 0/6 | `2026-11-17-magpie-policy-gate-v1.md` |
 | 策略门 v2 | `workspace` 6 用户任务 × 2 注入 | off 12/12；strict 6/12；standard 10/12；delegated 10/12、11/12；注入成功 0/12 | `2026-11-18-magpie-policy-gate-v2.md` |
@@ -36,7 +36,7 @@
 | 扩展七类（parallel_multiple / Java / JavaScript / live_simple / live_parallel / live_parallel_multiple / live_relevance） | 664 | ✅ 全量 |
 | 两个 live 大类（live_multiple / live_irrelevance） | 1937 | ✅ 全量 |
 | `multi_turn_base` | 200 | ✅ 全量 |
-| `multi_turn_long_context` | 200 | ✅ 全量（46.00%，731 次解码失败，见能力卡） |
+| `multi_turn_long_context` | 200 | ✅ 全量（46.00%，108 题无效，见能力卡） |
 | `multi_turn_miss_func` / `multi_turn_miss_param` | 400 | ⏳ 未跑 |
 | memory / web_search / format_sensitivity | 155 / 100 / 10 | ⏳ 未跑（format 对 FC 模型跳过） |
 | **合计** | **4706** | **4041 已覆盖（85.9% 题量）** |
@@ -44,7 +44,7 @@
 ## 不能声称的内容
 
 - 不能称为“BFCL v4 完整成绩”或官方榜单排名；仅覆盖 15/20 类，且模型别名、适配器、Magpie 路由与官方评测不同。
-- 不能把 `multi_turn_long_context` 的 46.00% 当作模型长上下文能力的干净分数；199/200 题出现解码失败，分数受 handler/适配器兼容性影响。
+- 不能把 `multi_turn_long_context` 的 46.00% 当作官方口径或模型长上下文能力的干净分数；handler、适配器与 Magpie 路由均与官方设置不同，且为单次运行。日志中的 731 次 `Error decoding` 与 732 个用户轮次基本 1:1，是自然语言结束轮次的预期路径，不是崩溃。
 - 不能把 AgentDojo 的 0% 注入成功全部归因于策略门；无门基线中模型本身已拒绝多数注入，结果属于 defense-in-depth。
 - 不能把审批回调的 `approve-all` 高效用当作推荐配置；模拟审批端不是人类审批 UI。
 - 不能把单次或 3 次运行当作统计显著结论；模型输出波动明显。
@@ -53,8 +53,8 @@
 
 ## 缺口与下一步
 
-1. **BFCL 剩余类别**：`multi_turn_miss_func` / `multi_turn_miss_param`（400）、memory（155）、web_search（100）。`multi_turn_long_context` 已完成但 731 次解码失败，需先修多轮最终自然语言响应的解码/适配再重跑；memory/web_search 试点 30 分钟仅 10/776 题且 111 次解码失败，已停止，需先解决运行时长与响应格式适配。
-2. **重复运行**：BFCL 十四类及 `multi_turn_long_context` 目前每类 1 次；优先对四类核心、`multi_turn_base` 与 `multi_turn_long_context` 做 ≥3 次重复，并在修复解码问题后重跑长上下文。
+1. **BFCL 剩余类别**：`multi_turn_miss_func` / `multi_turn_miss_param`（400）、memory（155）、web_search（100）。`multi_turn_long_context` 已完成；其 731 次 `Error decoding` 与 732 个用户轮次基本 1:1，是自然语言结束轮次的预期路径，不是需要修复的故障。memory/web_search 试点 30 分钟仅 10/776 题且 111 次解码失败，已停止，需先解决运行时长与响应格式适配。
+2. **重复运行**：BFCL 十四类及 `multi_turn_long_context` 目前每类 1 次；优先对四类核心、`multi_turn_base` 与 `multi_turn_long_context` 做 ≥3 次重复。
 3. **Terminal-Bench / SWE-bench**：需要独立 VM + Docker-in-Docker 与固定镜像摘要；当前 WSL2 宿主 Docker 不满足沙箱边界，暂不运行。
 4. **真实审批 UI**：评估用审批回调已实现；产品 Electron ToolRegistry / 审批 UI 尚未进入基准。
 5. **治理评估**：ISO/IEC 25010、NIST AI RMF / ISO/IEC 42001 差距评估与 SUS/HEART 计划已完成初版，见 `../governance-gap-assessment-2026-11-18.md`；真实 SUS/HEART 数据、产品级 SLO、威胁模型与渗透测试仍缺。
