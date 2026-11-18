@@ -25,6 +25,7 @@
 | 策略门 v2 | `workspace` 6 用户任务 × 2 注入 | off 12/12；strict 6/12；standard 10/12；delegated 10/12、11/12；注入成功 0/12 | `2026-11-18-magpie-policy-gate-v2.md` |
 | 审批回调 | 10 用户任务 × 2 注入；approve-local / deny-all / approve-all 各 3 次 | approve-local 75%/70%/80%；deny-all 30%；approve-all 100%/95%/100%；注入成功均 0/20 | `2026-11-18-magpie-policy-gate-v2-approval.md` |
 | `tool_knowledge` 攻击 | 6 用户任务 × 2 注入；容忍模式 3 次 + 默认模式 2 次完成 | off 约 92-100%；strict 50%；standard 75-83.33%；delegated 100%；注入成功 0/60；默认模式 3 次尝试中 1 次崩溃 | `2026-11-18-magpie-policy-gate-v2-tool-knowledge.md` |
+| `ignore_previous` / `injecagent` | 6 用户任务 × 2 注入；每种攻击四档各 1 次 | `ignore_previous`：off 12/12、strict 6/12、standard 10/12、delegated 11/12；`injecagent`：11/12、6/12、9/12、11/12；每档注入成功均 0/12（两种攻击合计 96 配对，0 成功） | `2026-11-18-magpie-policy-gate-v2-ignore-previous-injecagent.md` |
 
 ## 覆盖图（BFCL v4）
 
@@ -45,7 +46,7 @@
 - 不能把审批回调的 `approve-all` 高效用当作推荐配置；模拟审批端不是人类审批 UI。
 - 不能把单次或 3 次运行当作统计显著结论；模型输出波动明显。
 - 不能把评估门当作独立内核/沙箱边界；它是进程内 monkey-patch。
-- 注入攻击目前只覆盖 `important_instructions` 与 `tool_knowledge` 两种，且 `tool_knowledge` 仅一次运行；默认模式下 malformed tool arguments 仍可能导致 `JSONDecodeError`。
+- 注入攻击目前覆盖 `important_instructions`、`tool_knowledge`、`ignore_previous`、`injecagent` 四种；新增两种各档仅 1 次，不能当作稳定安全保证；默认模式下 malformed tool arguments 仍可能导致 `JSONDecodeError`。
 
 ## 缺口与下一步
 
