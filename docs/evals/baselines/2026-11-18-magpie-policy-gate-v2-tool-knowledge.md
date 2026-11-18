@@ -72,4 +72,4 @@
 
 - 可用结论：`tool_knowledge` 攻击下，容忍模式 3 次与默认模式 2 次完成的效用方向一致（off 约 92-100%、strict 50%、standard 75-83.33%、delegated 100%）；60 个配对注入成功均为 0；门日志显示本地写入与外部副作用按预设拦截。默认模式 3 次尝试中 1 次因 malformed 参数崩溃，容忍模式 3 次均完成。
 - 不可用结论：不能把 0/60 归因于策略门（off 组模型本身也未执行注入成功）；不能声称适配器已稳定修复 malformed 参数；不能把 2-3 次运行当作统计显著结论。
-- 下一步：再测 `ignore_previous`/`injecagent`；把 `coerced` 计数持久化到每次运行的能力卡；评估默认模式崩溃率需要更多重复。
+- 下一步：`ignore_previous`/`injecagent` 首轮已完成（见 `2026-11-18-magpie-policy-gate-v2-ignore-previous-injecagent.md`）；把 `coerced` 计数持久化到每次运行的能力卡；评估默认模式崩溃率需要更多重复。
