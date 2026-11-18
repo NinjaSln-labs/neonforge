@@ -9,16 +9,21 @@ import {
 
 test('resolveConfig 要求 MAGPIE_GATEWAY_KEY，并收敛默认模型', () => {
   assert.throws(() => resolveConfig({}), /MAGPIE_GATEWAY_KEY/)
-  const config = resolveConfig({ MAGPIE_GATEWAY_KEY: 'test-key' })
+  const config = resolveConfig({ MAGPIE_GATEWAY_KEY: 'dummy-key' })
   assert.equal(config.upstreamModel, 'opendesign/deepseek-v4.1-flash')
   assert.equal(config.promptMode, 'none')
   assert.equal(config.upstreamBase, 'http://127.0.0.1:3425/v1')
   assert.equal(
-    resolveConfig({ MAGPIE_GATEWAY_KEY: 'test-key', NF_ADAPTER_PROMPT: 'product' }).promptMode,
+    resolveConfig({ MAGPIE_GATEWAY_KEY: 'dummy-key', NF_ADAPTER_PROMPT: 'product' }).promptMode,
     'product',
   )
+  assert.equal(config.tolerantArgs, false)
+  assert.equal(
+    resolveConfig({ MAGPIE_GATEWAY_KEY: 'dummy-key', NF_ADAPTER_TOLERANT_ARGS: '1' }).tolerantArgs,
+    true,
+  )
   assert.throws(
-    () => resolveConfig({ MAGPIE_GATEWAY_KEY: 'test-key', NF_ADAPTER_PORT: '0' }),
+    () => resolveConfig({ MAGPIE_GATEWAY_KEY: 'dummy-key', NF_ADAPTER_PORT: '0' }),
     /NF_ADAPTER_PORT/,
   )
 })
@@ -96,6 +101,59 @@ test('repairToolCalls 保留无法修复的参数原文', () => {
       },
     ],
   }
-  repairToolCalls(payload)
+  const result = repairToolCalls(payload)
+  assert.equal(result.coerced, 0)
   assert.equal(payload.choices[0].message.tool_calls[0].function.arguments, 'not-json')
+})
+
+test('repairToolCalls 容忍模式把无法解析的参数降级为 {}', () => {
+  const payload = {
+    choices: [
+      {
+        message: {
+          tool_calls: [
+            {
+              id: 'call_1',
+              type: 'function',
+              function: { name: 'f', arguments: '{"query": "x" "date": "2024-05-16"}' },
+            },
+            {
+              id: 'call_2',
+              type: 'function',
+              function: { name: 'g', arguments: '{"a":1}' },
+            },
+          ],
+        },
+      },
+    ],
+  }
+  const result = repairToolCalls(payload, true)
+  assert.equal(result.coerced, 1)
+  assert.equal(result.repaired, 0)
+  assert.equal(payload.choices[0].message.tool_calls[0].function.arguments, '{}')
+  assert.equal(payload.choices[0].message.tool_calls[1].function.arguments, '{"a":1}')
+})
+
+test('repairToolCalls 默认不启用容忍模式', () => {
+  const payload = {
+    choices: [
+      {
+        message: {
+          tool_calls: [
+            {
+              id: 'call_1',
+              type: 'function',
+              function: { name: 'f', arguments: '{"query": "x" "date": "2024-05-16"}' },
+            },
+          ],
+        },
+      },
+    ],
+  }
+  const result = repairToolCalls(payload)
+  assert.equal(result.coerced, 0)
+  assert.equal(
+    payload.choices[0].message.tool_calls[0].function.arguments,
+    '{"query": "x" "date": "2024-05-16"}',
+  )
 })

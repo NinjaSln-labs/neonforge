@@ -102,7 +102,7 @@ NF_EVAL_USER_TASKS=user_task_0,user_task_1,user_task_2,user_task_15,user_task_29
 - `NF_GATE_APPROVAL_URL`：可选 HTTP 审批回调；超时/异常 fail-closed。基准默认不启用。
 - `GroundTruthPipeline` 通过 ContextVar 绕过执行门，避免合法任务的 ground truth 被当作 agent 工具调用拦截。
 - 任务集：`NF_EVAL_USER_TASKS` / `NF_EVAL_INJECTION_TASKS`（逗号分隔）；策略文件：`NF_GATE_POLICY_FILE`。
-- 注入攻击：`NF_EVAL_ATTACK`（默认 `important_instructions`）。`tool_knowledge` 试点会触发模型输出 malformed tool arguments，AgentDojo 的严格 JSON 解析直接抛 `JSONDecodeError`，未取得结果；需先增强适配器修复/容忍模式。
+- 注入攻击：`NF_EVAL_ATTACK`（默认 `important_instructions`）。`tool_knowledge` 可触发模型输出 malformed tool arguments；`NF_ADAPTER_TOLERANT_ARGS=1` 会把无法解析的参数降级为 `{}` 并计数（评估用，默认关闭），容忍模式下已完成一次四组对照。
 - 审计：每组结果目录下 `neonforge-gate.jsonl`，记录 `gate.decided`（工具名、决策、原因、参数名；不记录正文/收件人值）。
 - 单元测试：`python3 -m unittest evals/sandbox/test_neonforge_gate.py`。
 
