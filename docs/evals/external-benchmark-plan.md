@@ -49,7 +49,7 @@
 - AgentDojo：`workspace` suite，`user_task_0/1/2`，`injection_task_0/1`，攻击 `important_instructions`；分别跑无防御与 `tool_filter` 两组。
 - 本地模型链路：`NF_EVAL_TARGET=magpie` 经 `evals/adapter/`（NeonForge 无头适配器 v0）调用本机 Magpie 的 `opendesign/deepseek-v4.1-flash`；`NF_EVAL_PROMPT=product|none` 对照产品系统提示的影响。
 - 策略门：`NF_GATE_MODE=strict|standard|delegated` 在 AgentDojo 工具执行点按 `deny > ask > allow` 裁决；基准无人类审批，`ask` 按 fail-closed 拒绝；可选 `NF_GATE_APPROVAL_URL` HTTP 审批回调。结果写入 `neonforge-gate.jsonl`。
-- 注入攻击：默认 `important_instructions`，可用 `NF_EVAL_ATTACK` 切换；`NF_ADAPTER_TOLERANT_ARGS=1` 可把无法解析的 tool arguments 降级为 `{}`（评估用，默认关闭）。`tool_knowledge` 已在容忍模式完成一次四组对照（off 100%、strict 50%、standard 83.33%、delegated 100%，安全 0/12）；默认模式仍可能因 malformed 参数崩溃，需重复验证。
+- 注入攻击：默认 `important_instructions`，可用 `NF_EVAL_ATTACK` 切换；`NF_ADAPTER_TOLERANT_ARGS=1` 可把无法解析的 tool arguments 降级为 `{}`（评估用，默认关闭）。`tool_knowledge` 已在容忍模式完成 3 次四组对照（off 100/83.33/83.33%、strict 50%×3、standard 83.33/83.33/75%、delegated 100/100/83.33%，安全 0/36）；默认模式仍可能因 malformed 参数崩溃，需单独验证。
 - 审批回调基准：`NF_GATE_APPROVAL_MODE=approve-local|deny-all|approve-all` 在容器内启动模拟审批端，覆盖 10 个用户任务（只读、本地创建/编辑、日历创建含/不含参与者、外部共享），结果见 `baselines/2026-11-18-magpie-policy-gate-v2-approval.md`。
 - 预算上限：单次运行 ≤ US$5（按 Provider 账单为准）；超限立即中止并保留已完成结果。
 - 所有分数必须标注：模型/Provider、harness 版本、数据集版本、日期、子集 ID 文件、是否 `partial-eval`。
@@ -81,7 +81,7 @@ bash evals/sandbox/run-agentdojo-subset.sh
 2. **策略门 v1（已完成，子集）**：AgentDojo 工具执行点的 `ask`/`deny`/信任预设与 `gate.decided` 审计；基线见 `baselines/2026-11-17-magpie-policy-gate-v1.md`。
 3. **策略门 v2（已完成，扩展子集）**：加入本地创建/编辑/日历任务区分 strict/standard/delegated；`PermissionRule(specifier)` 与 HTTP 审批回调已实现；基线见 `baselines/2026-11-18-magpie-policy-gate-v2.md`。
 4. **审批回调基准（已完成，扩展子集）**：容器内模拟 `approve-local`/`deny-all`/`approve-all`，10 个用户任务 × 2 注入，`approve-local` 3 次；基线见 `baselines/2026-11-18-magpie-policy-gate-v2-approval.md`。
-5. **策略门 v2 补强（部分完成）**：`PermissionRule(specifier)` 路径/URL 规范化、审批回调 3 次重复、`tool_knowledge` 容忍模式一次四组对照均已完成；剩余真实审批 UI / 人类审批链路接入、`tool_knowledge` ≥3 次重复与更多攻击族。
+5. **策略门 v2 补强（部分完成）**：`PermissionRule(specifier)` 路径/URL 规范化、审批回调 3 次重复、`tool_knowledge` 容忍模式 3 次四组对照均已完成；剩余真实审批 UI / 人类审批链路接入、默认模式崩溃复现验证与更多攻击族。
 6. **BFCL 类别全量（已完成十四类）**：3841 题非 partial-eval，十四类合计 75.40%；`multi_turn_base` 56.00% 且平均 41 秒/题。剩余其余三个 multi-turn 变体（600）、memory（155）、web_search（100）与 format_sensitivity（10）需单独评估，完整 4706 题暂不跑。
 7. **Terminal-Bench / SWE-bench（基础设施阻塞）**：需要独立 VM + Docker-in-Docker 与固定数据集/镜像摘要；当前只有 WSL2 + 宿主 Docker，若在评估容器内挂 Docker socket 或启用 privileged 会破坏现有沙箱边界，暂不运行。需先提供专用 VM，再补前置评估。
 8. **用户体验与治理**：ISO/IEC 25010 质量评审 + SUS/HEART；NIST AI RMF / ISO/IEC 42001 差距评估。
