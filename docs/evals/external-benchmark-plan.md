@@ -46,7 +46,7 @@
 
 - BFCL v4：`simple_python` 10 题 + `multiple` 4 题 + `parallel` 5 题 + `irrelevance` 5 题，共 24 题；单线程。首发 50 题版本在 `multiple_4` 出现长时间等待，基线改用 24 题子集并记录该限制。
 - BFCL 类别全量：核心四类 1040 + 扩展七类 664 + 两个 live 大类 1937 + `multi_turn_base` 200 = 3841 题，非 partial-eval；十四类合计 75.40%；结果见 `baselines/2026-11-18-magpie-bfcl-category-full.md`。
-- BFCL `multi_turn_long_context`：200 题，非 partial-eval；DSV4.1FE-OD（eco）得 92/200（46.00%），平均 82.2 秒/题；199/200 题出现解码失败（共 731 次），分数受 handler/适配器兼容性影响；结果见 `baselines/2026-11-18-magpie-bfcl-multi-turn-long-context.md`。
+- BFCL `multi_turn_long_context`：200 题，非 partial-eval；DSV4.1FE-OD（eco）得 92/200（46.00%），平均 82.2 秒/题；108 题无效（状态不一致/缺少执行结果）。日志中的 731 次 `Error decoding` 与 732 个用户轮次基本 1:1，是自然语言结束轮次的预期路径，不是崩溃；结果见 `baselines/2026-11-18-magpie-bfcl-multi-turn-long-context.md`。
 - AgentDojo：`workspace` suite，`user_task_0/1/2`，`injection_task_0/1`，攻击 `important_instructions`；分别跑无防御与 `tool_filter` 两组。
 - 本地模型链路：`NF_EVAL_TARGET=magpie` 经 `evals/adapter/`（NeonForge 无头适配器 v0）调用本机 Magpie 的 **DSV4.1FE-OD**（API model id `opendesign/deepseek-v4.1-flash-eco`）；`NF_EVAL_PROMPT=product|none` 对照产品系统提示的影响。DSV4.1FE-OD 与原 `opendesign/deepseek-v4.1-flash` 是**同一模型，仅 eco/慢速模式**；既有能力卡仍按同一模型解释，但比较时需注明模式与速度差异。
 - 策略门：`NF_GATE_MODE=strict|standard|delegated` 在 AgentDojo 工具执行点按 `deny > ask > allow` 裁决；基准无人类审批，`ask` 按 fail-closed 拒绝；可选 `NF_GATE_APPROVAL_URL` HTTP 审批回调。结果写入 `neonforge-gate.jsonl`。
@@ -84,6 +84,6 @@ bash evals/sandbox/run-agentdojo-subset.sh
 3. **策略门 v2（已完成，扩展子集）**：加入本地创建/编辑/日历任务区分 strict/standard/delegated；`PermissionRule(specifier)` 与 HTTP 审批回调已实现；基线见 `baselines/2026-11-18-magpie-policy-gate-v2.md`。
 4. **审批回调基准（已完成，扩展子集）**：容器内模拟 `approve-local`/`deny-all`/`approve-all`，10 个用户任务 × 2 注入，`approve-local` 3 次；基线见 `baselines/2026-11-18-magpie-policy-gate-v2-approval.md`。
 5. **策略门 v2 补强（部分完成）**：`PermissionRule(specifier)` 路径/URL 规范化、审批回调 3 次重复、`tool_knowledge` 容忍模式 3 次 + 默认模式 2 次四组对照、`ignore_previous`/`injecagent` 四档各 3 次均已完成；剩余真实审批 UI / 人类审批链路接入、自适应/多轮攻击与更多攻击族（默认模式仍有 1/3 崩溃样本）。
-6. **BFCL 类别全量（已完成十五类）**：3841 题十四类 + `multi_turn_long_context` 200 题，共 4041/4706（85.9%）非 partial-eval；`multi_turn_base` 56.00%、`multi_turn_long_context` 46.00%（731 次解码失败，需修复后重跑）。剩余 `multi_turn_miss_func`/`multi_turn_miss_param`（400）、memory（155）、web_search（100）与 format_sensitivity（10）需单独评估，完整 4706 题暂不跑。
+6. **BFCL 类别全量（已完成十五类）**：3841 题十四类 + `multi_turn_long_context` 200 题，共 4041/4706（85.9%）非 partial-eval；`multi_turn_base` 56.00%、`multi_turn_long_context` 46.00%（108 题无效；731 次轮次结束日志不是崩溃）。剩余 `multi_turn_miss_func`/`multi_turn_miss_param`（400）、memory（155）、web_search（100）与 format_sensitivity（10）需单独评估，完整 4706 题暂不跑。
 7. **Terminal-Bench / SWE-bench（基础设施阻塞）**：需要独立 VM + Docker-in-Docker 与固定数据集/镜像摘要；当前只有 WSL2 + 宿主 Docker，若在评估容器内挂 Docker socket 或启用 privileged 会破坏现有沙箱边界，暂不运行。需先提供专用 VM，再补前置评估。
 8. **用户体验与治理（初版完成）**：ISO/IEC 25010 质量映射、NIST AI RMF / ISO/IEC 42001 差距评估与 SUS/HEART 计划见 `governance-gap-assessment-2026-11-18.md`。已识别的主要缺口：无产品级 SLO/性能回归、无正式威胁模型与渗透测试、无真实 SUS/HEART 数据、无风险登记册与事件响应演练；均未声称认证或符合性。
