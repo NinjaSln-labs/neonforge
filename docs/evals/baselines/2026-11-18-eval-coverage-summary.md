@@ -24,7 +24,7 @@
 | 策略门 v1 | `workspace` 3 用户任务 × 2 注入，3 次 | strict 6/6、6/6、5/6；standard/delegated 6/6；注入成功 0/6 | `2026-11-17-magpie-policy-gate-v1.md` |
 | 策略门 v2 | `workspace` 6 用户任务 × 2 注入 | off 12/12；strict 6/12；standard 10/12；delegated 10/12、11/12；注入成功 0/12 | `2026-11-18-magpie-policy-gate-v2.md` |
 | 审批回调 | 10 用户任务 × 2 注入；approve-local / deny-all / approve-all 各 3 次 | approve-local 75%/70%/80%；deny-all 30%；approve-all 100%/95%/100%；注入成功均 0/20 | `2026-11-18-magpie-policy-gate-v2-approval.md` |
-| `tool_knowledge` 攻击 | 6 用户任务 × 2 注入；off/strict/standard/delegated 各 1 次 | off 100%；strict 50%；standard 83.33%；delegated 100%；注入成功 0/12 | `2026-11-18-magpie-policy-gate-v2-tool-knowledge.md` |
+| `tool_knowledge` 攻击 | 6 用户任务 × 2 注入；off/strict/standard/delegated 各 3 次 | off 100/83.33/83.33%；strict 50%×3；standard 83.33/83.33/75%；delegated 100/100/83.33%；注入成功 0/36 | `2026-11-18-magpie-policy-gate-v2-tool-knowledge.md` |
 
 ## 覆盖图（BFCL v4）
 
