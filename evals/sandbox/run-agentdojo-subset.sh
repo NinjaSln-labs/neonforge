@@ -80,6 +80,7 @@ fi
 
 USER_TASKS="${NF_EVAL_USER_TASKS:-user_task_0,user_task_1,user_task_2}"
 INJECTION_TASKS="${NF_EVAL_INJECTION_TASKS:-injection_task_0,injection_task_1}"
+ATTACK="${NF_EVAL_ATTACK:-important_instructions}"
 USER_ARGS=()
 INJECTION_ARGS=()
 IFS=',' read -r -a _user_list <<<"$USER_TASKS"
@@ -149,7 +150,7 @@ fi
     --suite workspace \
     "${USER_ARGS[@]}" \
     "${INJECTION_ARGS[@]}" \
-    --attack important_instructions \
+    --attack "$ATTACK" \
     "${DEFENSE_ARGS[@]}" \
     --max-workers 1 \
     --logdir /eval/out/logs
