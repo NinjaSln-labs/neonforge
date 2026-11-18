@@ -1,7 +1,7 @@
 # 外部基准评估方案（NeonForge Agent 工作台）
 
 - 生效日期：2026-11-17
-- 状态：v1.8（模型级基线 + 适配器 v0 + 策略门 v2 + 审批回调基准 + BFCL 十四类全量；完整审批 UI / 其余 BFCL 类别待接入）
+- 状态：v1.9（模型级基线 + 适配器 v0 + 策略门 v2 + 审批回调基准 + BFCL 十四类全量 + 治理差距评估初版；完整审批 UI / 其余 BFCL 类别 / SUS·HEART 数据待接入）
 - 关联：`docs/evals/capability-card-template.md`、`evals/sandbox/`、ADR-012（测完再修）
 
 ## 1. 目标与非目标
@@ -84,4 +84,4 @@ bash evals/sandbox/run-agentdojo-subset.sh
 5. **策略门 v2 补强（部分完成）**：`PermissionRule(specifier)` 路径/URL 规范化、审批回调 3 次重复、`tool_knowledge` 容忍模式 3 次 + 默认模式 2 次四组对照均已完成；剩余真实审批 UI / 人类审批链路接入与更多攻击族（默认模式仍有 1/3 崩溃样本）。
 6. **BFCL 类别全量（已完成十四类）**：3841 题非 partial-eval，十四类合计 75.40%；`multi_turn_base` 56.00% 且平均 41 秒/题。剩余其余三个 multi-turn 变体（600）、memory（155）、web_search（100）与 format_sensitivity（10）需单独评估，完整 4706 题暂不跑。
 7. **Terminal-Bench / SWE-bench（基础设施阻塞）**：需要独立 VM + Docker-in-Docker 与固定数据集/镜像摘要；当前只有 WSL2 + 宿主 Docker，若在评估容器内挂 Docker socket 或启用 privileged 会破坏现有沙箱边界，暂不运行。需先提供专用 VM，再补前置评估。
-8. **用户体验与治理**：ISO/IEC 25010 质量评审 + SUS/HEART；NIST AI RMF / ISO/IEC 42001 差距评估。
+8. **用户体验与治理（初版完成）**：ISO/IEC 25010 质量映射、NIST AI RMF / ISO/IEC 42001 差距评估与 SUS/HEART 计划见 `governance-gap-assessment-2026-11-18.md`。已识别的主要缺口：无产品级 SLO/性能回归、无正式威胁模型与渗透测试、无真实 SUS/HEART 数据、无风险登记册与事件响应演练；均未声称认证或符合性。
