@@ -53,4 +53,4 @@
 2. **重复运行**：BFCL 十四类目前每类 1 次；优先对四类核心与 multi_turn_base 做 ≥3 次重复。
 3. **Terminal-Bench / SWE-bench**：需要独立 VM + Docker-in-Docker 与固定镜像摘要；当前 WSL2 宿主 Docker 不满足沙箱边界，暂不运行。
 4. **真实审批 UI**：评估用审批回调已实现；产品 Electron ToolRegistry / 审批 UI 尚未进入基准。
-5. **治理评估**：ISO/IEC 25010、SUS/HEART、NIST AI RMF / ISO/IEC 42001 差距评估仍待安排。
+5. **治理评估**：ISO/IEC 25010、NIST AI RMF / ISO/IEC 42001 差距评估与 SUS/HEART 计划已完成初版，见 `../governance-gap-assessment-2026-11-18.md`；真实 SUS/HEART 数据、产品级 SLO、威胁模型与渗透测试仍缺。
