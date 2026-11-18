@@ -47,7 +47,7 @@
 
 ## 缺口与下一步
 
-1. **BFCL 剩余类别**：三个 multi-turn 变体（600）、memory（155）、web_search（100）；multi-turn 成本约 41 秒/题，需单独安排。
+1. **BFCL 剩余类别**：三个 multi-turn 变体（600）、memory（155）、web_search（100）；multi-turn 成本约 41 秒/题。memory/web_search 试点 30 分钟仅 10/776 题且 111 次解码失败，已停止，需先解决运行时长与响应格式适配。
 2. **重复运行**：BFCL 十四类目前每类 1 次；优先对四类核心与 multi_turn_base 做 ≥3 次重复。
 3. **Terminal-Bench / SWE-bench**：需要独立 VM + Docker-in-Docker 与固定镜像摘要；当前 WSL2 宿主 Docker 不满足沙箱边界，暂不运行。
 4. **真实审批 UI**：评估用审批回调已实现；产品 Electron ToolRegistry / 审批 UI 尚未进入基准。
