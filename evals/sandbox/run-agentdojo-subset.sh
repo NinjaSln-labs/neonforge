@@ -57,7 +57,7 @@ if [ "$TARGET" = "magpie" ]; then
     -e OPENAI_API_KEY=unused
     -e NF_EVAL_UPSTREAM_BASE="$NF_EVAL_ADAPTER_URL"
     -e NF_EVAL_UPSTREAM_KEY=unused
-    -e NF_EVAL_MODEL_ID=opendesign/deepseek-v4.1-flash
+    -e NF_EVAL_MODEL_ID=opendesign/deepseek-v4.1-flash-eco
     -e NO_PROXY="localhost,127.0.0.1,$NF_EVAL_ADAPTER_HOSTNAME"
   )
 else

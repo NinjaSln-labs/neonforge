@@ -58,7 +58,7 @@ export function resolveConfig(env: NodeJS.ProcessEnv): AdapterConfig {
     host: env.NF_ADAPTER_HOST ?? '127.0.0.1',
     port,
     upstreamBase: (env.MAGPIE_BASE_URL ?? 'http://127.0.0.1:3425/v1').replace(/\/+$/, ''),
-    upstreamModel: env.MAGPIE_MODEL ?? 'opendesign/deepseek-v4.1-flash',
+    upstreamModel: env.MAGPIE_MODEL ?? 'opendesign/deepseek-v4.1-flash-eco',
     promptMode: env.NF_ADAPTER_PROMPT === 'product' ? 'product' : 'none',
     timeoutMs,
     apiKey,

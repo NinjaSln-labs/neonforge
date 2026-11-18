@@ -56,7 +56,7 @@ adapter_start() {
     NF_ADAPTER_PROMPT="$ADAPTER_PROMPT" \
     NF_ADAPTER_TOLERANT_ARGS="${NF_ADAPTER_TOLERANT_ARGS:-0}" \
     MAGPIE_BASE_URL="${MAGPIE_BASE_URL:-http://127.0.0.1:3425/v1}" \
-    MAGPIE_MODEL="${MAGPIE_MODEL:-opendesign/deepseek-v4.1-flash}" \
+    MAGPIE_MODEL="${MAGPIE_MODEL:-opendesign/deepseek-v4.1-flash-eco}" \
       nohup node "$ROOT/evals/adapter/dist/adapter.mjs" >"$ADAPTER_LOG" 2>&1 &
   echo $! >"$ADAPTER_PID"
   local i
