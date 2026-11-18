@@ -7,7 +7,7 @@
 
 | 项 | 值 |
 |----|----|
-| 模型 / Provider | 本机 Magpie；本页已汇总卡片多数使用 `opendesign/deepseek-v4.1-flash`；2026-11-18 起后续评估默认 **DSV4.1FE-OD**（API model id `opendesign/deepseek-v4.1-flash-eco`） |
+| 模型 / Provider | 本机 Magpie；本页已汇总卡片多数使用 `opendesign/deepseek-v4.1-flash`；2026-11-18 起后续评估默认 **DSV4.1FE-OD**（API model id `opendesign/deepseek-v4.1-flash-eco`）。二者是同一模型，后者为 eco/慢速模式，分数按同一模型解释，但需注明模式差异 |
 | 适配器 | NeonForge 无头适配器 v0（`prompt=product`） |
 | BFCL harness | `bfcl-eval==2026.3.23`（BFCL v4） |
 | AgentDojo harness | `agentdojo==0.1.35`（benchmark v1.2.2） |

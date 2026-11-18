@@ -36,7 +36,7 @@ NF_EVAL_DEFENSE=none bash evals/sandbox/run-agentdojo-subset.sh
 
 ## 本地 Magpie / opendesign DSV4.1FE-OD
 
-`NF_EVAL_TARGET=magpie` 时，harness 经 **NeonForge 无头评估适配器**（`evals/adapter/`）调用本机 Magpie；默认模型为 DSV4.1FE-OD（API model id `opendesign/deepseek-v4.1-flash-eco`），可用 `MAGPIE_MODEL` 覆盖：
+`NF_EVAL_TARGET=magpie` 时，harness 经 **NeonForge 无头评估适配器**（`evals/adapter/`）调用本机 Magpie；默认模型为 DSV4.1FE-OD（API model id `opendesign/deepseek-v4.1-flash-eco`，与原 flash 是同一模型的 eco/慢速模式），可用 `MAGPIE_MODEL` 覆盖：
 
 ```bash
 # 前置：Magpie 在 127.0.0.1:3425；MAGPIE_GATEWAY_KEY 已在环境中
