@@ -24,6 +24,7 @@ export interface AdapterConfig {
   promptMode: PromptMode
   timeoutMs: number
   apiKey: string
+  tolerantArgs: boolean
 }
 
 const PRODUCT_PROMPT = buildSysHint('', '', '').content
@@ -61,6 +62,7 @@ export function resolveConfig(env: NodeJS.ProcessEnv): AdapterConfig {
     promptMode: env.NF_ADAPTER_PROMPT === 'product' ? 'product' : 'none',
     timeoutMs,
     apiKey,
+    tolerantArgs: env.NF_ADAPTER_TOLERANT_ARGS === '1',
   }
 }
 
@@ -99,12 +101,27 @@ export function buildUpstreamRequest(
   return out
 }
 
-/** 对返回的 tool_calls 参数做 NeonForge 同源修复；返回修复条数。 */
-export function repairToolCalls(payload: unknown): { payload: unknown; repaired: number } {
-  if (payload === null || typeof payload !== 'object') return { payload, repaired: 0 }
+/** 对返回的 tool_calls 参数做 NeonForge 同源修复；返回修复/容忍条数。 */
+export function repairToolCalls(
+  payload: unknown,
+  tolerantArgs = false,
+): { payload: unknown; repaired: number; coerced: number } {
+  if (payload === null || typeof payload !== 'object')
+    return { payload, repaired: 0, coerced: 0 }
   const choices = (payload as { choices?: unknown }).choices
-  if (!Array.isArray(choices)) return { payload, repaired: 0 }
+  if (!Array.isArray(choices)) return { payload, repaired: 0, coerced: 0 }
   let repaired = 0
+  let coerced = 0
+  const apply = (
+    target: { arguments?: unknown },
+    args: unknown,
+  ): void => {
+    const fixed = repairArguments(args, tolerantArgs)
+    if (fixed === undefined) return
+    target.arguments = fixed.arguments
+    if (fixed.coerced) coerced++
+    else repaired++
+  }
   for (const choice of choices) {
     if (choice === null || typeof choice !== 'object') continue
     const message = (choice as { message?: unknown }).message
@@ -115,38 +132,41 @@ export function repairToolCalls(payload: unknown): { payload: unknown; repaired:
         if (call === null || typeof call !== 'object') continue
         const fn = (call as { function?: unknown }).function
         if (fn === null || typeof fn !== 'object') continue
-        const args = (fn as { arguments?: unknown }).arguments
-        const fixed = repairArguments(args)
-        if (fixed !== undefined) {
-          ;(fn as { arguments: string }).arguments = fixed
-          repaired++
-        }
+        apply(fn as { arguments?: unknown }, (fn as { arguments?: unknown }).arguments)
       }
     }
     // 旧式 function_call（部分 harness 仍会读取）
     const legacy = (message as { function_call?: unknown }).function_call
     if (legacy !== null && typeof legacy === 'object') {
-      const args = (legacy as { arguments?: unknown }).arguments
-      const fixed = repairArguments(args)
-      if (fixed !== undefined) {
-        ;(legacy as { arguments: string }).arguments = fixed
-        repaired++
-      }
+      apply(legacy as { arguments?: unknown }, (legacy as { arguments?: unknown }).arguments)
     }
   }
-  return { payload, repaired }
+  return { payload, repaired, coerced }
 }
 
-function repairArguments(args: unknown): string | undefined {
+function repairArguments(
+  args: unknown,
+  tolerantArgs: boolean,
+): { arguments: string; coerced: boolean } | undefined {
   if (args !== null && typeof args === 'object') {
-    return JSON.stringify(args)
+    return { arguments: JSON.stringify(args), coerced: false }
   }
   if (typeof args !== 'string') return undefined
   const fixed = toolCallRepair(args, 0) ?? toolCallRepair(args, 1)
-  if (fixed === null || fixed === undefined) return undefined
-  if (typeof fixed !== 'object') return undefined
-  const serialized = JSON.stringify(fixed)
-  return serialized === args ? undefined : serialized
+  if (fixed !== null && fixed !== undefined && typeof fixed === 'object') {
+    const serialized = JSON.stringify(fixed)
+    return serialized === args ? undefined : { arguments: serialized, coerced: false }
+  }
+  if (tolerantArgs) {
+    try {
+      JSON.parse(args)
+      return undefined
+    } catch {
+      // 评估用容忍模式：保留调用但把无法解析的参数降级为 {}；不记录参数内容
+      return { arguments: '{}', coerced: true }
+    }
+  }
+  return undefined
 }
 
 function readBody(req: http.IncomingMessage): Promise<string> {
@@ -265,8 +285,9 @@ async function handleChat(
     return
   }
   if (upstream.ok) {
-    const repaired = repairToolCalls(payload)
+    const repaired = repairToolCalls(payload, config.tolerantArgs)
     if (repaired.repaired > 0) console.log(`[adapter] repaired tool_calls=${repaired.repaired}`)
+    if (repaired.coerced > 0) console.log(`[adapter] coerced tool_calls=${repaired.coerced}`)
   }
   sendJson(res, upstream.status, payload)
 }
@@ -280,6 +301,7 @@ export function createServer(config: AdapterConfig): http.Server {
         provider: 'magpie',
         model: config.upstreamModel,
         prompt: config.promptMode,
+        tolerantArgs: config.tolerantArgs,
       })
       return
     }

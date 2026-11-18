@@ -31,6 +31,10 @@ MAGPIE_GATEWAY_KEY=... \
 
 上游默认 `http://127.0.0.1:3425/v1`，模型默认 `opendesign/deepseek-v4.1-flash`；可用 `MAGPIE_BASE_URL` / `MAGPIE_MODEL` 覆盖。
 
+## 评估用容忍模式
+
+`NF_ADAPTER_TOLERANT_ARGS=1` 时，`toolCallRepair` 仍无法解析的参数会被降级为 `{}`，并在适配器日志记录 `coerced tool_calls=N`（不记录参数内容）。默认关闭；它会改变工具调用语义，不能与其他基线的分数混用，也不是产品行为。
+
 ## 测试
 
 ```bash

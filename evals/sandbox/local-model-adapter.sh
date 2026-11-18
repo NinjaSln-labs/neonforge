@@ -54,6 +54,7 @@ adapter_start() {
   NF_ADAPTER_HOST="$bridge_ip" \
     NF_ADAPTER_PORT="$ADAPTER_PORT" \
     NF_ADAPTER_PROMPT="$ADAPTER_PROMPT" \
+    NF_ADAPTER_TOLERANT_ARGS="${NF_ADAPTER_TOLERANT_ARGS:-0}" \
     MAGPIE_BASE_URL="${MAGPIE_BASE_URL:-http://127.0.0.1:3425/v1}" \
     MAGPIE_MODEL="${MAGPIE_MODEL:-opendesign/deepseek-v4.1-flash}" \
       nohup node "$ROOT/evals/adapter/dist/adapter.mjs" >"$ADAPTER_LOG" 2>&1 &
