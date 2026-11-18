@@ -68,6 +68,7 @@
 - `format_sensitivity` 对 FC 模型会被 BFCL 跳过；本卡未包含该类别。
 - 未与官方榜单横比：模型别名、适配器和本地 Magpie 路由均与官方评测不同。
 - 十四类覆盖 3841/4706 题；剩余 865 题（multi_turn 三个变体 600、memory 155、web_search 100、format 10）不能由本卡推断。
+- `memory`/`web_search` 试点在 30 分钟仅完成 10/776 题，并出现 111 次 `Failed to decode the model response`；已停止，未计入任何分数。该两类需要更长运行窗口与格式适配。
 
 ## 结论
 
