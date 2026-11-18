@@ -2,6 +2,7 @@
 
 - [外部基准评估方案](external-benchmark-plan.md)
 - [能力卡模板](capability-card-template.md)
+- [2026-11-18 评估覆盖总览](baselines/2026-11-18-eval-coverage-summary.md)
 - [2026-11-17 DeepSeek 沙箱基线](baselines/2026-11-17-deepseek-sandbox-baseline.md)
 - [2026-11-17 Magpie DSV4.1F 适配器 v0 基线](baselines/2026-11-17-magpie-dsv41f-adapter-baseline.md)
 - [2026-11-17 Magpie 策略门 v1](baselines/2026-11-17-magpie-policy-gate-v1.md)

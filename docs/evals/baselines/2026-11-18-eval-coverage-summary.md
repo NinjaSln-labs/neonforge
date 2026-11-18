@@ -1,0 +1,54 @@
+# 外部评估覆盖总览（截至 2026-11-18）
+
+本页汇总当前已完成的外部基准能力卡，便于快速查看“测了什么、得到什么、还不能说什么”。
+所有结果均为 **模型 + 固定 harness / 适配器** 的评估信号，不是 NeonForge 完整产品认证。
+
+## 运行环境
+
+| 项 | 值 |
+|----|----|
+| 模型 / Provider | 本机 Magpie；API model id `opendesign/deepseek-v4.1-flash` |
+| 适配器 | NeonForge 无头适配器 v0（`prompt=product`） |
+| BFCL harness | `bfcl-eval==2026.3.23`（BFCL v4） |
+| AgentDojo harness | `agentdojo==0.1.35`（benchmark v1.2.2） |
+| 沙箱 | 一次性 Docker；只读根、非 root、cap-drop、no-new-privileges、PID/内存/CPU 限制、`nf-eval-internal` 内部网络 |
+| 凭据 | 只从宿主环境变量注入；Magpie Key 不进入评估容器 |
+
+## 覆盖与关键结果
+
+| 评估 | 范围 | 关键结果 | 能力卡 |
+|------|------|----------|--------|
+| BFCL 24 题子集 | `simple_python` 10 + `multiple` 4 + `parallel` 5 + `irrelevance` 5；`--run-ids` + `--partial-eval` | product 21-22/24（87.5-91.7%）；none 20-23/24（83.3-95.8%） | `2026-11-17-magpie-dsv41f-adapter-baseline.md` |
+| BFCL 十四类全量 | 单轮/实时 13 类 + `multi_turn_base`；3641 + 200 题；非 partial-eval | **2896/3841 = 75.40%**；`simple_python` 92.25%、`parallel` 90.00%；`simple_javascript` 44.00%、`multi_turn_base` 56.00% | `2026-11-18-magpie-bfcl-category-full.md` |
+| AgentDojo 无防御 | `workspace` 3 用户任务 × 2 注入，3 次 | 效用 6/6；注入成功 0/6；tool_filter 效用 0/6 | `2026-11-17-magpie-dsv41f-adapter-baseline.md` |
+| 策略门 v1 | `workspace` 3 用户任务 × 2 注入，3 次 | strict 6/6、6/6、5/6；standard/delegated 6/6；注入成功 0/6 | `2026-11-17-magpie-policy-gate-v1.md` |
+| 策略门 v2 | `workspace` 6 用户任务 × 2 注入 | off 12/12；strict 6/12；standard 10/12；delegated 10/12、11/12；注入成功 0/12 | `2026-11-18-magpie-policy-gate-v2.md` |
+| 审批回调 | 10 用户任务 × 2 注入；approve-local / deny-all / approve-all 各 3 次 | approve-local 75%/70%/80%；deny-all 30%；approve-all 100%/95%/100%；注入成功均 0/20 | `2026-11-18-magpie-policy-gate-v2-approval.md` |
+
+## 覆盖图（BFCL v4）
+
+| 类别组 | 题量 | 状态 |
+|--------|------|------|
+| 核心四类（simple_python / multiple / parallel / irrelevance） | 1040 | ✅ 全量 |
+| 扩展七类（parallel_multiple / Java / JavaScript / live_simple / live_parallel / live_parallel_multiple / live_relevance） | 664 | ✅ 全量 |
+| 两个 live 大类（live_multiple / live_irrelevance） | 1937 | ✅ 全量 |
+| `multi_turn_base` | 200 | ✅ 全量 |
+| 其余 multi-turn 变体（long_context / miss_func / miss_param） | 600 | ⏳ 未跑 |
+| memory / web_search / format_sensitivity | 155 / 100 / 10 | ⏳ 未跑（format 对 FC 模型跳过） |
+| **合计** | **4706** | **3841 已覆盖（81.6% 题量）** |
+
+## 不能声称的内容
+
+- 不能称为“BFCL v4 完整成绩”或官方榜单排名；仅覆盖 14/20 类，且模型别名、适配器、Magpie 路由与官方评测不同。
+- 不能把 AgentDojo 的 0% 注入成功全部归因于策略门；无门基线中模型本身已拒绝多数注入，结果属于 defense-in-depth。
+- 不能把审批回调的 `approve-all` 高效用当作推荐配置；模拟审批端不是人类审批 UI。
+- 不能把单次或 3 次运行当作统计显著结论；模型输出波动明显。
+- 不能把评估门当作独立内核/沙箱边界；它是进程内 monkey-patch。
+
+## 缺口与下一步
+
+1. **BFCL 剩余类别**：三个 multi-turn 变体（600）、memory（155）、web_search（100）；multi-turn 成本约 41 秒/题，需单独安排。
+2. **重复运行**：BFCL 十四类目前每类 1 次；优先对四类核心与 multi_turn_base 做 ≥3 次重复。
+3. **Terminal-Bench / SWE-bench**：需要独立 VM + Docker-in-Docker 与固定镜像摘要；当前 WSL2 宿主 Docker 不满足沙箱边界，暂不运行。
+4. **真实审批 UI**：评估用审批回调已实现；产品 Electron ToolRegistry / 审批 UI 尚未进入基准。
+5. **治理评估**：ISO/IEC 25010、SUS/HEART、NIST AI RMF / ISO/IEC 42001 差距评估仍待安排。
