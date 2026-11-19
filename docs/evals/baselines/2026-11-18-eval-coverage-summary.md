@@ -34,7 +34,7 @@
 | Terminal-Bench 2.0 试点 | 专用 KVM VM；`terminal-bench@2.0`；oracle 自检；内置 `terminus-2` + 自定义 `neonforge-terminal`；5 个任务 | 内置 agent 3/3 有效运行通过；自定义 agent 2/2 有效运行通过；`gpt2-codegolf` 60 分钟超时、`regex-log` 一次 setup 异常，均不计分；4/5 个任务至少在一种 agent 下干净通过 | `2026-11-19-terminal-bench-pilot.md` |
 | Terminal-Bench 2.0 pilot 重复 | 4 个 pilot 任务 × 3 次尝试（12 trials，2 并发）；自定义 agent | 11/12 reward 1.0；唯一 0.0 是验证器 apt/curl 网络失败、未评估模型；11/11 可评估尝试通过；3/4 任务 3/3 | `2026-11-19-terminal-bench-pilot.md`（追加节） |
 | Terminal-Bench 2.0 扩展重复 | 10 个新任务 × 3 次尝试（30 trials，2 并发）；仅自定义 `neonforge-terminal` | 有效运行 25/29 = 86.2%；Harbor mean 0.833（异常按 0）；10/10 任务至少一次通过，6/10 任务 3/3 通过；1 次命令超时异常 | `2026-11-19-terminal-bench-expanded.md` |
-| Terminal-Bench 2.0 广度批次 | 另外 10 个新任务 × 1 次尝试（2 并发）；自定义 agent | 5 个通过、3 个有效 0.0、2 个异常（300 秒命令超时与 502 上游）；有效通过 5/8 = 62.5%；累计 25/89 个任务 | `2026-11-19-terminal-bench-breadth.md` |
+| Terminal-Bench 2.0 广度批次 | 另外 10 个新任务 × 1 次尝试（2 并发）；自定义 agent；3 个失败任务追加 ×3 重复 | 初轮 5 通过、3 个有效 0.0、2 个异常（300 秒命令超时与 502 上游），有效通过 5/8 = 62.5%；追加重复 6/9 = 66.7%（`git-multibranch` 3/3、`polyglot-rust-c` 2/3、`sanitize-git-repo` 1/3）；累计 25/89 个任务 | `2026-11-19-terminal-bench-breadth.md` |
 
 ## 覆盖图（BFCL v4）
 
@@ -71,6 +71,6 @@
    - `format_sensitivity`（10）对 FC 模型跳过。
    - 不以离线 mock 或替换搜索后端凑覆盖率；如需评估产品 `web_search`，应另建产品级测试。
 2. **重复运行**：BFCL 十七类目前每类 1 次；优先对四类核心与四个 multi-turn 类别做 ≥3 次重复。
-3. **Terminal-Bench 2.0（试点 + 扩展重复 + 广度批次完成）/ SWE-bench（仍缺）**：pilot 见 `2026-11-19-terminal-bench-pilot.md`（含 4 任务 ×3 重复，11/11 可评估通过）；扩展批次 10 个新任务 × 3 次尝试见 `2026-11-19-terminal-bench-expanded.md`（有效运行 25/29 = 86.2%，10/10 任务至少一次通过，6/10 任务 3/3 通过）；广度批次 10 个新任务 × 1 次尝试见 `2026-11-19-terminal-bench-breadth.md`（5/8 有效通过，2 个配置/基础设施异常）。下一步：对广度批次的 3 个有效失败任务重复运行；`gpt2-codegolf` 已做放宽预算尝试（60 轮、600 秒单命令），仍在 35m37s 因单条推理命令超时结束，需更长单命令上限或改用 terminus-2 长超时；自定义 agent 的 300 秒命令上限需修正后作为新配置重跑。SWE-bench 仍需独立的每实例容器执行适配器与固定镜像摘要。
+3. **Terminal-Bench 2.0（试点 + 扩展重复 + 广度批次完成）/ SWE-bench（仍缺）**：pilot 见 `2026-11-19-terminal-bench-pilot.md`（含 4 任务 ×3 重复，11/11 可评估通过）；扩展批次 10 个新任务 × 3 次尝试见 `2026-11-19-terminal-bench-expanded.md`（有效运行 25/29 = 86.2%，10/10 任务至少一次通过，6/10 任务 3/3 通过）；广度批次 10 个新任务 × 1 次尝试见 `2026-11-19-terminal-bench-breadth.md`（5/8 有效通过，2 个配置/基础设施异常；3 个失败任务追加 ×3 重复，6/9 通过）。下一步：对 `sanitize-git-repo` 增加重复或分析失败轨迹；`gpt2-codegolf` 已做放宽预算尝试（60 轮、600 秒单命令），仍在 35m37s 因单条推理命令超时结束，需更长单命令上限或改用 terminus-2 长超时；自定义 agent 的 300 秒命令上限需修正后作为新配置重跑。SWE-bench 仍需独立的每实例容器执行适配器与固定镜像摘要。
 4. **真实审批 UI（部分完成）**：产品 ToolRegistry 44 项单测 + trustModes UI 3 项通过，见 `2026-11-19-neonforge-approval-boundary.md`；`decide` 裁决入口已抽出。外部基准仍用模拟审批端；桥接设计见 `../product-toolregistry-bridge-design.md`：阶段 2 sidecar 经复核暂不做（synthetic 工具映射会取代产品真实语义），执行桥暂不做；尚无人类审批链路。
 5. **治理评估**：ISO/IEC 25010、NIST AI RMF / ISO/IEC 42001 差距评估与 SUS/HEART 计划已完成初版，见 `../governance-gap-assessment-2026-11-18.md`；AI 风险登记册初版见 `../ai-risk-register-2026-11-19.md`；威胁模型初版见 `../threat-model-2026-11-19.md`；事件响应 Runbook 初版见 `../incident-response-runbook-2026-11-19.md`；SLO 测量计划初版见 `../slo-and-performance-plan-2026-11-19.md`；SUS/HEART 研究套件初版见 `../sus-heart-study-kit-2026-11-19.md`；AI 管理方针初版见 `../ai-management-policy-2026-11-19.md`；AI 辅助可用性走查（3/3 脚本场景、8 张截图、6 项启发式发现，非人类研究）见 `../ai-walkthrough-2026-11-19.md`。真实 SUS/HEART 数据、产品级性能基线、渗透测试、真实演练与正式角色任命仍缺。
