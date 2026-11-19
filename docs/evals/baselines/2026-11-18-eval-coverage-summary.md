@@ -65,5 +65,5 @@
    - 不以离线 mock 或替换搜索后端凑覆盖率；如需评估产品 `web_search`，应另建产品级测试。
 2. **重复运行**：BFCL 十七类目前每类 1 次；优先对四类核心与四个 multi-turn 类别做 ≥3 次重复。
 3. **Terminal-Bench / SWE-bench**：需要独立 VM + Docker-in-Docker 与固定镜像摘要；当前 WSL2 宿主 Docker 不满足沙箱边界，暂不运行。
-4. **真实审批 UI**：评估用审批回调已实现；产品 Electron ToolRegistry / 审批 UI 尚未进入基准。
+4. **真实审批 UI（部分完成）**：产品 ToolRegistry 40 项单测 + trustModes UI 3 项通过，见 `2026-11-19-neonforge-approval-boundary.md`；外部基准仍用模拟审批端，尚未把 AgentDojo 工具执行桥接到 Electron ToolRegistry，也无人类审批链路。
 5. **治理评估**：ISO/IEC 25010、NIST AI RMF / ISO/IEC 42001 差距评估与 SUS/HEART 计划已完成初版，见 `../governance-gap-assessment-2026-11-18.md`；真实 SUS/HEART 数据、产品级 SLO、威胁模型与渗透测试仍缺。
