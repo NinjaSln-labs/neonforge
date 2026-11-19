@@ -85,7 +85,7 @@
 - **有效模型通过率**：4/7 = **57.1%**（排除 3 个异常）；异常按 0 计为 4/10 = 40.0%。
 - Harbor 内置统计显示 9 trials、3 exceptions、mean 0.444；其 `reward_stats` 未包含 `regex-chess`，但 `exception_stats` 同时把两个 `RuntimeError` 任务计入异常与 0.0，trial/exception 计数与原始 `result.json` 的 10 个任务不一致；本卡以逐项分类为准，不引用该 mean。
 - 总 token：6,526,042 输入 / 187,793 输出；三个异常 trial 的 `agent_result` 为 0（agent 异常退出前未汇总用量），因此总 token 低于实际调用量；无缓存计数。
-- 累计已尝试任务：pilot 5 + 扩展 10 + 首批广度 10 + 第二批广度 10 = **35/89** 个 Terminal-Bench 2.0 任务（不同批次的任务不合并计算总体通过率）。
+- 累计已尝试任务：pilot 5 + 扩展 10 + 首批广度 10 + 第二批广度 10 = **35/89** 个 Terminal-Bench 2.0 任务（不同批次的任务不合并计算总体通过率）；第三批广度后再加 10 个新任务，累计 **45/89**，见 `2026-11-19-terminal-bench-breadth-3.md`。
 
 - 失败/异常归因：`crack-7z-hash` 与 `extract-elf` 的 300 秒命令超时是自定义 agent 配置限制，不是模型失败；`regex-chess` 的 502 是适配器/上游瞬时错误（同一时段适配器只出现一次 `upstream error: TypeError`，随后请求 200），不计入模型通过率；三个有效 0.0 均为验证器返回，无异常，但自定义 agent 未持久化命令轨迹，本卡不做逐命令归因。
 - 单次尝试、单 VM、无重复；4/7 只能作为方向性信号，不能估计总体通过率，也不能与首批广度的 5/8 直接合并或平均。
