@@ -16,6 +16,7 @@
 - [2026-11-18 Magpie BFCL multi_turn_miss_func（DSV4.1FE-OD）](baselines/2026-11-18-magpie-bfcl-multi-turn-miss-func.md)
 - [2026-11-18 Magpie BFCL multi_turn_miss_param（DSV4.1FE-OD）](baselines/2026-11-18-magpie-bfcl-multi-turn-miss-param.md)
 - [2026-11-19 NeonForge 产品审批边界（L1 + L3 UI）](baselines/2026-11-19-neonforge-approval-boundary.md)
+- [2026-11-19 外部基准 → 产品 ToolRegistry 桥接设计](product-toolregistry-bridge-design.md)
 - [2026-11-18 用户体验与治理差距评估（初版）](governance-gap-assessment-2026-11-18.md)
 - [2026-11-19 AI 风险登记册（初版）](ai-risk-register-2026-11-19.md)
 - [2026-11-19 NeonForge 威胁模型（初版）](threat-model-2026-11-19.md)
