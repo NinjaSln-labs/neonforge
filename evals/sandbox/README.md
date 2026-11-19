@@ -122,6 +122,58 @@ bash evals/sandbox/run-agentdojo-gate-v2-approval.sh
 - 审批端不暴露到容器外，也不改变 `nf-eval-internal` 网络边界。
 - 单元测试：`python3 -m unittest evals/sandbox/test_neonforge_approval_server.py`。
 
+## Terminal-Bench 2.0（专用 KVM VM）
+
+Terminal-Bench 的任务会在容器内执行任意命令，因此**不在宿主 Docker 中运行**；使用一次性 QEMU/KVM VM，VM 内再运行 Docker + Harbor。拓扑：
+
+```text
+WSL2 host: NeonForge adapter (0.0.0.0:$NF_EVAL_ADAPTER_PORT) + Magpie
+   │  QEMU user networking (10.0.2.2)
+   ▼
+KVM VM: Ubuntu 24.04, Docker 29.x, Harbor 0.26.0, socat relays
+   │  docker bridge
+   ▼
+task container: terminus-2 agent / verifier; proxy only for apt/uv
+```
+
+构造步骤（脚本放在本机 `.scratch/evals/terminal-bench-vm/`，不入库；SSH 私钥也只留在该目录）：
+
+1. 宿主安装 `qemu-system-x86 qemu-utils cloud-image-utils openssh-client`；下载 Ubuntu Noble cloud image，生成一次性 SSH key。
+2. cloud-init 创建非 root 用户、安装 `docker.io`、`docker-compose-v2`、`socat`；VM 规格建议 6 vCPU / 8GB / 100GB。
+3. QEMU 启动：`-enable-kvm -cpu host -netdev user,hostfwd=tcp:127.0.0.1:$SSH_PORT-:22`；VM 内 Docker 的镜像拉取走宿主代理。
+4. VM 内安装 Harbor：`uv tool install harbor`（当前验证版本 0.26.0）。
+5. 宿主启动 NeonForge 适配器并绑定 `0.0.0.0`；VM 内用 `socat` 把适配器端口和宿主代理端口转到 Docker bridge，任务容器只拿 `HTTP(S)_PROXY` 与 `NO_PROXY`，不拿 `MAGPIE_GATEWAY_KEY`。
+6. 先跑 oracle 验证：`harbor run --dataset terminal-bench@2.0 --agent oracle --n-tasks 1`；再跑模型：
+   `--agent terminus-2 --model openai/$MAGPIE_MODEL --base-url http://<vm-bridge>:<adapter-port>/v1 --api-key-name OPENAI_API_KEY --api-format openai_chat_completions`。
+7. 结果写入 Harbor 的任务目录（默认 `jobs/`，可用 `--jobs-dir ~/harbor-jobs` 固定）；摘要写入 `docs/evals/baselines/`，不提交原始轨迹、代理地址或任何 Key。
+
+### 自定义最小 agent（无 tmux/asciinema）
+
+`terminus-2` 会在每个任务容器内安装 tmux/asciinema；网络受限时可能在 setup 阶段抛 `RuntimeError`，这是基础设施异常，不是模型分数。`evals/harbor/neonforge_terminal_agent.py` 提供无容器侧安装的最小 agent（单个 `execute_bash` 工具，经 NeonForge 适配器调用模型）：
+
+```bash
+ssh -p $SSH_PORT -i <key> nf@127.0.0.1 'mkdir -p ~/harbor-agents'
+scp -P $SSH_PORT -i <key> evals/harbor/neonforge_terminal_agent.py \
+  nf@127.0.0.1:~/harbor-agents/neonforge_terminal_agent.py
+
+ssh -p $SSH_PORT -i <key> nf@127.0.0.1 \
+  'cd ~ && PYTHONPATH=$HOME/harbor-agents \
+   NEONFORGE_BASE_URL=http://172.17.0.1:18082/v1 \
+   NEONFORGE_MODEL=opendesign/deepseek-v4.1-flash-eco \
+   harbor run --dataset terminal-bench@2.0 --include-task-name regex-log --n-tasks 1 \
+     --agent neonforge_terminal_agent:NeonForgeTerminalAgent \
+     --model openai/$MAGPIE_MODEL --agent-timeout-multiplier 4'
+```
+
+- Agent 只从 VM 进程环境读取 `NEONFORGE_BASE_URL` / `NEONFORGE_MODEL`；`MAGPIE_GATEWAY_KEY` 仍只留在宿主适配器进程。
+- 它不是 `terminus-2`，也不含 NeonForge GUI/审批链；结果只能代表“适配器 + 最小 shell 循环”，不能与 `terminus-2` 或官方榜单合并比较。
+
+注意：
+
+- Harbor 进程自身需要代理访问 GitHub/镜像；但模型请求必须绕过代理（`NO_PROXY` 必须包含 VM 内适配器中继地址），否则本地模型端点会被宿主代理当作外网并返回 502。
+- 内置 `terminus-2` 每个 task 会重新安装 tmux/asciinema 与 verifier 依赖；首轮较慢，不能把环境安装时间当作 agent 时间。自定义 agent 无容器侧安装。
+- 当前只验证 `terminal-bench@2.0` 的少量任务；单次运行、子集分数，不能称为官方 Terminal-Bench 完整成绩。试点结果见 `docs/evals/baselines/2026-11-19-terminal-bench-pilot.md`。
+
 ## 版本固定
 
 - BFCL：`bfcl-eval==2026.3.23`（DeepSeek handler 构造基类 client 需要 `OPENAI_API_KEY`；脚本注入 dummy `unused`，实际请求使用 `DEEPSEEK_API_KEY`）
