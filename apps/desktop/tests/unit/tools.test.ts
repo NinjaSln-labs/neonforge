@@ -507,6 +507,60 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
 })
 
 // ADR-015（GitHub #12）：低危委托的 main 执行边界二次校验
+describe('ToolRegistry decide：只裁决不执行（评估桥复用）', () => {
+  beforeEach(() => {
+    markPlanApproved()
+    if (!existsSync(TMP)) mkdirSync(TMP, { recursive: true })
+    initTools()
+    toolRegistry.setRules([])
+  })
+  afterEach(() => {
+    toolRegistry.setRules([])
+    rmSync(TMP, { recursive: true, force: true })
+  })
+
+  it('write 未授权 → needApproval，且不创建文件', async () => {
+    const file = path.join(TMP, 'decide-write.txt')
+    const r = await toolRegistry.decide('write', { path: file, content: 'x' }, {})
+    expect(r?.ok).toBe(false)
+    expect(r?.needApproval).toBe(true)
+    expect(existsSync(file)).toBe(false)
+  })
+
+  it('allow 规则 → 返回 null，且不执行 edit', async () => {
+    const file = path.join(TMP, 'decide-allow.txt')
+    writeFileSync(file, 'hello')
+    toolRegistry.setRules([{ action: 'allow', tool: 'edit', specifier: TMP }])
+    const r = await toolRegistry.decide(
+      'edit',
+      { path: file, old: 'hello', new: 'world' },
+      { rootPath: TMP },
+    )
+    expect(r).toBeNull()
+    expect(readFileSync(file, 'utf-8')).toBe('hello')
+  })
+
+  it('deny 规则 → policy 拦截，且不执行 edit', async () => {
+    const file = path.join(TMP, 'decide-deny.txt')
+    writeFileSync(file, 'hello')
+    toolRegistry.setRules([{ action: 'deny', tool: 'edit', specifier: TMP }])
+    const r = await toolRegistry.decide(
+      'edit',
+      { path: file, old: 'hello', new: 'world' },
+      { rootPath: TMP },
+    )
+    expect(r?.ok).toBe(false)
+    expect(r?.policy).toBe(true)
+    expect(readFileSync(file, 'utf-8')).toBe('hello')
+  })
+
+  it('未知工具 → 错误，不抛异常', async () => {
+    const r = await toolRegistry.decide('not-a-tool', {}, {})
+    expect(r?.ok).toBe(false)
+    expect(r?.error).toContain('未知工具')
+  })
+})
+
 describe('ToolRegistry 委托边界（ADR-015）', () => {
   beforeEach(() => {
     markPlanApproved()

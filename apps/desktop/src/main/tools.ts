@@ -403,7 +403,12 @@ class ToolRegistry {
     }))
   }
 
-  async execute(
+  /**
+   * 授权裁决：只决定 allow/ask/deny，不执行工具。
+   * 返回 null = 允许执行；否则返回拦截结果（needApproval/policy/error）。
+   * 供评估桥/策略预览复用，避免复制 deny > allow > ask 逻辑。
+   */
+  async decide(
     name: string,
     args: Record<string, unknown>,
     opts: {
@@ -412,17 +417,7 @@ class ToolRegistry {
       rootPath?: string
       sessionId?: string
     } = {},
-  ): Promise<ToolResult> {
-    console.log('[tools] execute', name, 'rootPath=' + (opts.rootPath ?? 'NONE'))
-    // 2026-08-07 会话时间线（Session Timeline BC——main 侧工具执行记录兜底：renderer 崩溃也有工具时间线）
-    // 2026-08-08 会话归属：sessionId（会话 UUID）优先——工具执行写入对应会话文件
-    // ADR-015：approvalSource 入审计（自动批准来源可回溯）
-    logTimeline({
-      session: opts.sessionId ?? opts.rootPath ?? undefined,
-      type: 'tool.executing',
-      role: 'tool',
-      detail: { name, args, approved: opts.approved, approvalSource: opts.approvalSource },
-    })
+  ): Promise<ToolResult | null> {
     const tool = this.tools.get(name)
     if (!tool) return { ok: false, error: `未知工具：${name}` }
     // 2026-08-04 规划级授权强制（用户实测：模型说了调 approve-files 但没调——指令不可靠，机制兜底）：
@@ -509,6 +504,33 @@ class ToolRegistry {
         }
       }
     }
+    return null
+  }
+
+  async execute(
+    name: string,
+    args: Record<string, unknown>,
+    opts: {
+      approved?: boolean
+      approvalSource?: 'user' | 'auto' | 'delegate'
+      rootPath?: string
+      sessionId?: string
+    } = {},
+  ): Promise<ToolResult> {
+    console.log('[tools] execute', name, 'rootPath=' + (opts.rootPath ?? 'NONE'))
+    // 2026-08-07 会话时间线（Session Timeline BC——main 侧工具执行记录兜底：renderer 崩溃也有工具时间线）
+    // 2026-08-08 会话归属：sessionId（会话 UUID）优先——工具执行写入对应会话文件
+    // ADR-015：approvalSource 入审计（自动批准来源可回溯）
+    logTimeline({
+      session: opts.sessionId ?? opts.rootPath ?? undefined,
+      type: 'tool.executing',
+      role: 'tool',
+      detail: { name, args, approved: opts.approved, approvalSource: opts.approvalSource },
+    })
+    const blocked = await this.decide(name, args, opts)
+    if (blocked) return blocked
+    const tool = this.tools.get(name)
+    if (!tool) return { ok: false, error: `未知工具：${name}` }
     try {
       const data = await tool.execute(args, {
         rootPath: opts.rootPath,
