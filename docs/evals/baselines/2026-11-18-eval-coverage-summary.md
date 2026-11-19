@@ -12,6 +12,7 @@
 | BFCL harness | `bfcl-eval==2026.3.23`（BFCL v4） |
 | AgentDojo harness | `agentdojo==0.1.35`（benchmark v1.2.2） |
 | 沙箱 | 一次性 Docker；只读根、非 root、cap-drop、no-new-privileges、PID/内存/CPU 限制、`nf-eval-internal` 内部网络 |
+| Terminal-Bench 沙箱 | 一次性 QEMU/KVM VM：Ubuntu 24.04.5、6 vCPU/8 GB/100 GB、Docker 29.1.3 + Harbor 0.26.0；任务容器不挂宿主 Docker socket；VM 用完即弃 |
 | 凭据 | 只从宿主环境变量注入；Magpie Key 不进入评估容器 |
 
 ## 覆盖与关键结果
@@ -30,6 +31,7 @@
 | `tool_knowledge` 攻击 | 6 用户任务 × 2 注入；容忍模式 3 次 + 默认模式 2 次完成 | off 约 92-100%；strict 50%；standard 75-83.33%；delegated 100%；注入成功 0/60；默认模式 3 次尝试中 1 次崩溃 | `2026-11-18-magpie-policy-gate-v2-tool-knowledge.md` |
 | `ignore_previous` / `injecagent` | 6 用户任务 × 2 注入；每种攻击四档各 3 次 | `ignore_previous` 均值：off 11.33/12、strict 6/12、standard 9.67/12、delegated 10/12；`injecagent`：11.33/12、6/12、9.67/12、11.67/12；两种攻击合计 288 配对，注入成功 0 | `2026-11-18-magpie-policy-gate-v2-ignore-previous-injecagent.md` |
 | `system_message` / `direct` | 6 用户任务 × 2 注入；每种攻击四档各 3 次 | `system_message` 均值：off 12/12、strict 6/12、standard 9.67/12、delegated 11.67/12；`direct`：11.67/12、6/12、9.67/12、11.33/12；两种攻击合计 288 配对，注入成功 0 | `2026-11-19-magpie-policy-gate-v2-system-message-direct.md` |
+| Terminal-Bench 2.0 试点 | 专用 KVM VM；`terminal-bench@2.0`；oracle 自检；内置 `terminus-2` + 自定义 `neonforge-terminal`；5 个任务 | 内置 agent 3/3 有效运行通过；自定义 agent 2/2 有效运行通过；`gpt2-codegolf` 60 分钟超时、`regex-log` 一次 setup 异常，均不计分；4/5 个任务至少在一种 agent 下干净通过 | `2026-11-19-terminal-bench-pilot.md` |
 
 ## 覆盖图（BFCL v4）
 
@@ -43,7 +45,7 @@
 | `multi_turn_miss_func` | 200 | ✅ 全量（44.50%，111 题无效，见能力卡） |
 | `multi_turn_miss_param` | 200 | ✅ 全量（39.50%，121 题无效，见能力卡） |
 | `memory` | 155 | ⏳ 不跑：BFCL 合成 memory API 与 NeonForge 产品无对应工具；576 个 checkpoint、串行约 7-10 小时 |
-| `web_search` | 100 | ⏳ 阻塞：BFCL 需 SerpAPI 包与 `SERPAPI_API_KEY`；NeonForge 自有 web_search 走 `NEONFORGE_SEARCH_KEY` 端点，不等价 |
+| `web_search` | 100 | ⏭ 按范围取消：用户明确不做 SerpAPI 依赖；BFCL 合成搜索 API 与 NeonForge 自有 `web_search`（`NEONFORGE_SEARCH_KEY` 端点）不等价 |
 | `format_sensitivity` | 10 | ⏭ 跳过：对 FC 模型不适用 |
 | **合计** | **4706** | **4441 已覆盖（94.4% 题量）** |
 
@@ -56,15 +58,16 @@
 - 不能把单次或 3 次运行当作统计显著结论；模型输出波动明显。
 - 不能把评估门当作独立内核/沙箱边界；它是进程内 monkey-patch。
 - 注入攻击目前覆盖 `important_instructions`、`tool_knowledge`、`ignore_previous`、`injecagent`、`system_message`、`direct` 六种；每种至少 3 次或 60 配对，但仍不足以给出置信区间，不能当作稳定安全保证；默认模式下 malformed tool arguments 仍可能导致 `JSONDecodeError`。
+- Terminal-Bench 2.0 只有 5 个任务、单次运行，且同时使用内置 `terminus-2` 与自定义 `neonforge-terminal` 两个不同 agent；不能称其为完整 Terminal-Bench 成绩，不能合并两个 agent 的平均分，也不能把 `gpt2-codegolf` 的 60 分钟 `AgentTimeoutError` 当作模型必然失败。
 
 ## 缺口与下一步
 
 1. **BFCL 剩余 265 题**：四个 multi-turn 类别均已完成；轮次结束日志与用户轮次基本 1:1，不是需要修复的故障；`miss_param` 的 12 题首轮空响应仍需抽查。
    - `memory`（155）不跑：BFCL 测试的是合成 Core/Archival Memory 工具，NeonForge 没有对应产品工具（仅有拒绝记忆与会话状态）；4 线程实测 7 分钟仅 6/576，成本高且不代表产品能力。
-   - `web_search`（100）阻塞：BFCL 依赖 SerpAPI 包与 `SERPAPI_API_KEY`；NeonForge 的 `web_search` 使用自有搜索端点（`NEONFORGE_SEARCH_KEY`），不能拿 BFCL 合成搜索 API 冒充产品能力。
+   - `web_search`（100）按范围取消：用户明确不做 SerpAPI 依赖；NeonForge 的 `web_search` 使用自有搜索端点（`NEONFORGE_SEARCH_KEY`），不能拿 BFCL 合成搜索 API 冒充产品能力。
    - `format_sensitivity`（10）对 FC 模型跳过。
    - 不以离线 mock 或替换搜索后端凑覆盖率；如需评估产品 `web_search`，应另建产品级测试。
 2. **重复运行**：BFCL 十七类目前每类 1 次；优先对四类核心与四个 multi-turn 类别做 ≥3 次重复。
-3. **Terminal-Bench / SWE-bench**：需要独立 VM + Docker-in-Docker 与固定镜像摘要；当前 WSL2 宿主 Docker 不满足沙箱边界，暂不运行。
+3. **Terminal-Bench 2.0（试点完成）/ SWE-bench（仍缺）**：专用 QEMU/KVM VM 试点已完成，见 `2026-11-19-terminal-bench-pilot.md`；下一步扩大任务数并对每个任务重复 ≥3 次，`gpt2-codegolf` 需更长超时或更大 episode 预算单独评估。SWE-bench 仍需独立的每实例容器执行适配器与固定镜像摘要。
 4. **真实审批 UI（部分完成）**：产品 ToolRegistry 44 项单测 + trustModes UI 3 项通过，见 `2026-11-19-neonforge-approval-boundary.md`；`decide` 裁决入口已抽出。外部基准仍用模拟审批端；桥接设计见 `../product-toolregistry-bridge-design.md`：阶段 2 sidecar 经复核暂不做（synthetic 工具映射会取代产品真实语义），执行桥暂不做；尚无人类审批链路。
 5. **治理评估**：ISO/IEC 25010、NIST AI RMF / ISO/IEC 42001 差距评估与 SUS/HEART 计划已完成初版，见 `../governance-gap-assessment-2026-11-18.md`；AI 风险登记册初版见 `../ai-risk-register-2026-11-19.md`；威胁模型初版见 `../threat-model-2026-11-19.md`；事件响应 Runbook 初版见 `../incident-response-runbook-2026-11-19.md`；SLO 测量计划初版见 `../slo-and-performance-plan-2026-11-19.md`；SUS/HEART 研究套件初版见 `../sus-heart-study-kit-2026-11-19.md`；AI 管理方针初版见 `../ai-management-policy-2026-11-19.md`；AI 辅助可用性走查（3/3 脚本场景、8 张截图、6 项启发式发现，非人类研究）见 `../ai-walkthrough-2026-11-19.md`。真实 SUS/HEART 数据、产品级性能基线、渗透测试、真实演练与正式角色任命仍缺。
