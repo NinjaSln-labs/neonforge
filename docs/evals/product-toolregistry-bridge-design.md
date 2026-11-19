@@ -34,6 +34,8 @@
 
 ### 阶段 1：抽取纯决策函数（产品重构）
 
+**实现进度（2026-11-19）**：已在 `ToolRegistry` 增加 `decide(name, args, opts)`，把 planning 门、`deny > allow > ask`、delegate 边界、read 根外与 `preApproval` 裁决从 `execute` 抽出；`execute` 先裁决后执行，行为与文案不变。新增 4 项 `decide` 单测，工具单测 44/44、全量 943/943、双 tsconfig、ESLint、trustModes UI 3/3 通过（PR #60，main `9701291`）。尚未抽成模块级纯函数，也未实现 sidecar。
+
 把 `ToolRegistry.execute` 中的裁决部分抽成纯函数，例如：
 
 ```ts
@@ -103,5 +105,6 @@ decideToolCall(input: {
 ## 8. 结论
 
 - 当前外部基准仍是 Python 门 + synthetic 工具；产品 ToolRegistry 有独立测试证据，但未接入外部 harness。
-- 建议先做阶段 1（纯决策函数 + 测试）与阶段 2（策略-only sidecar）；阶段 3 暂不做。
+- 阶段 1 已完成 `decide` 方法抽取与回归测试（2026-11-19）；仍未抽成模块级纯函数。
+- 建议下一步做阶段 2（策略-only sidecar）；阶段 3 执行桥暂不做。
 - 在阶段 2 完成前，不更新“真实审批 UI 已接入外部基准”的表述。
