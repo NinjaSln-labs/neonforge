@@ -92,11 +92,16 @@ harbor run --dataset terminal-bench@2.0 --include-task-name regex-log \
 - 这仍不是干净分数：既不是 1.0，也不能据此断言模型无法完成；应作为“agent 命令超时配置限制”记录。
 - 若继续评估，需要把单命令上限进一步提高，或改用能长时间运行单条命令的 agent/harness；单纯增加 agent timeout 不足以避免本类失败。
 
+第二次放宽 `tbench2-gpt2-long2`：`NEONFORGE_MAX_ITERATIONS=60`、`NEONFORGE_COMMAND_TIMEOUT_SEC=1200`、agent timeout multiplier 4。15:46:02 → 16:29:04（43m01s），**reward 0.0，无异常**，执行 60 条命令，token 1,679,632 输入 / 57,373 输出。
+
+- 这次没有命令超时；模型用完了 60 轮预算仍未通过验证器，是更干净的“预算耗尽的 0.0”。
+- 结论：单纯把单命令上限从 600 秒提高到 1200 秒不足以让当前模型完成 `gpt2-codegolf`；该任务需更长轮次/更强 agent 或专门方案，不能把 0.0 归因于 harness 崩溃。
+
 ## 失败与异常
 
 | 用例 | 现象 | 归因 | 是否产品问题 |
 |------|------|------|--------------|
-| `gpt2-codegolf` | `AgentTimeoutError`，35 episodes 后到达 60 分钟上限；日志显示模型仍在调试 GPT-2 张量/分词布局，未见明显重复循环 | 任务难度 + 时间上限 + 本地 eco 模式速度 | 待定：需要更长超时或更多 episode 重跑后才能判断 |
+| `gpt2-codegolf` | 首轮 terminus-2 `AgentTimeoutError`（35 episodes、60 分钟）；追加自定义 agent 600 秒单命令尝试 `RuntimeError`；再追加 60 轮/1200 秒单命令尝试，43m01s 后 **reward 0.0、无异常、60 条命令** | 任务难度 + 预算耗尽；最后一次是干净的有效 0.0 | 否（模型能力/预算，不是产品问题） |
 | `regex-log`（terminus-2） | `Failed to install tmux from source`、`Failed to install asciinema using pip`、`Failed to start tmux session` | 任务环境内 apt/pip 网络与 agent setup，不是模型输出 | 否（基础设施） |
 
 ## 安全与边界
@@ -110,13 +115,13 @@ harbor run --dataset terminal-bench@2.0 --include-task-name regex-log \
 
 - **不是官方 Terminal-Bench 2.0 成绩**：仅 5 个任务 ID，未跑完整数据集；初轮为单次运行，追加节仅重复其中 4 个任务，仍无置信区间。
 - **不能把两个 agent 合并**：`terminus-2` 是 Harbor 内置 agent；`neonforge-terminal` 是本次自建的最小 shell 循环（一个 `execute_bash` 工具、无 tmux/asciinema、无 NeonForge 审批链）。两者分数不能相加或平均后与官方榜单横比。
-- **超时不是失败分数**：`gpt2-codegolf` 的 0.0 是 Harbor 在 `AgentTimeoutError` 下的记录值，不代表模型在完整时限内无法完成。
+- **区分超时与干净 0.0**：`gpt2-codegolf` 首轮 `terminus-2` 的 0.0 是 `AgentTimeoutError` 记录值，不代表模型在完整时限内无法完成；追加的 60 轮/1200 秒单命令自定义 agent 尝试得到**无异常的 0.0**（预算耗尽），这才是在该预算下的有效失败。
 - **基础设施异常不是模型失败**：`regex-log` 首次失败发生在 agent setup，自定义 agent 补跑通过，说明原因在 terminus-2 的容器侧安装路径。
 - **不代表产品能力**：适配器 v0 覆盖产品系统提示/传输语义/工具参数修复；自定义 agent 只验证“适配器 + 最小终端循环”，不覆盖 NeonForge 的 ToolRegistry、审批 UI、计划门或交付链路。
 - 本地 Magpie 的 eco/慢速模式会影响长任务的墙钟时间与超时概率；token 数来自 Harbor `agent_result`，缓存计数在自定义 agent 中不可用。
 
 ## 结论
 
-- **可用结论**：专用 QEMU/KVM VM 能稳定运行 `terminal-bench@2.0` 的 oracle 与模型任务；oracle 在 `gpt2-codegolf` 通过；试点中 5 次有效模型运行全部 reward 1.0（3 次 `terminus-2` + 2 次 `neonforge-terminal`），4/5 个任务至少在一种 agent 下干净通过。
-- **不可用结论**：不能称为 Terminal-Bench 2.0 完整成绩或官方排名；不能把 `gpt2-codegolf` 超时当作模型必然失败；不能把本卡结果归因于 NeonForge 产品审批/工具链；不能用单次试点估计总体通过率。
-- **下一步**：为 `gpt2-codegolf` 单独评估更长超时或更大 episode 预算；扩展批次已覆盖 10 个新任务 ×3 次（见 `2026-11-19-terminal-bench-expanded.md`）；继续分别报告内置与自定义 agent；SWE-bench 仍需独立的每实例容器执行适配器。
+- **可用结论**：专用 QEMU/KVM VM 能稳定运行 `terminal-bench@2.0` 的 oracle 与模型任务；oracle 在 `gpt2-codegolf` 通过；试点中 5 次有效模型运行全部 reward 1.0（3 次 `terminus-2` + 2 次 `neonforge-terminal`），4/5 个任务至少在一种 agent 下干净通过；`gpt2-codegolf` 在 60 轮/1200 秒单命令预算下得到无异常的 0.0，说明当前预算内未完成。
+- **不可用结论**：不能称为 Terminal-Bench 2.0 完整成绩或官方排名；不能把首轮 `gpt2-codegolf` 超时当作模型必然失败；也不能把 60 轮/1200 秒预算下的 0.0 外推到更强预算或不同 agent；不能把本卡结果归因于 NeonForge 产品审批/工具链；不能用单次试点估计总体通过率。
+- **下一步**：`gpt2-codegolf` 需要更强 agent/更长轮次或专门方案，单纯放宽命令超时不足；扩展批次已覆盖 10 个新任务 ×3 次（见 `2026-11-19-terminal-bench-expanded.md`）；广度批次与失败重复见 `2026-11-19-terminal-bench-breadth.md`；继续分别报告内置与自定义 agent；SWE-bench 仍需独立的每实例容器执行适配器。
