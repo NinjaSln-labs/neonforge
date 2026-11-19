@@ -6,6 +6,8 @@
 - `gateway.toolCallRepair` 同源工具参数修复
 - 固定的上游模型 / Provider 鉴权（`MAGPIE_GATEWAY_KEY` 只从环境变量读取）
 
+传输可靠性：对 `fetch` 抛出的 `TypeError`（本地网关关闭 keep-alive 连接等）做一次 250 ms 后的重试，并在日志记录 `upstream fetch attempt=N error=...`；仅重试这一类无 HTTP 响应的连接错误，不重试超时、HTTP 错误或无效 JSON。这样基础设施抖动不会被记成模型 502。
+
 不做的事（v0 边界）：
 
 - 不执行工具，不接管 harness 的工具循环
