@@ -16,5 +16,6 @@
 - [2026-11-18 Magpie BFCL multi_turn_miss_param（DSV4.1FE-OD）](baselines/2026-11-18-magpie-bfcl-multi-turn-miss-param.md)
 - [2026-11-19 NeonForge 产品审批边界（L1 + L3 UI）](baselines/2026-11-19-neonforge-approval-boundary.md)
 - [2026-11-18 用户体验与治理差距评估（初版）](governance-gap-assessment-2026-11-18.md)
+- [2026-11-19 AI 风险登记册（初版）](ai-risk-register-2026-11-19.md)
 
 运行脚本与沙箱定义在 `evals/sandbox/`。所有外部基准必须在一次性容器中运行；不要在本机直接执行。
