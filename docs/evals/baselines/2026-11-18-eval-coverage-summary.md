@@ -41,7 +41,9 @@
 | `multi_turn_long_context` | 200 | ✅ 全量（46.00%，108 题无效，见能力卡） |
 | `multi_turn_miss_func` | 200 | ✅ 全量（44.50%，111 题无效，见能力卡） |
 | `multi_turn_miss_param` | 200 | ✅ 全量（39.50%，121 题无效，见能力卡） |
-| memory / web_search / format_sensitivity | 155 / 100 / 10 | ⏳ 未跑（format 对 FC 模型跳过） |
+| `memory` | 155 | ⏳ 不跑：BFCL 合成 memory API 与 NeonForge 产品无对应工具；576 个 checkpoint、串行约 7-10 小时 |
+| `web_search` | 100 | ⏳ 阻塞：BFCL 需 SerpAPI 包与 `SERPAPI_API_KEY`；NeonForge 自有 web_search 走 `NEONFORGE_SEARCH_KEY` 端点，不等价 |
+| `format_sensitivity` | 10 | ⏭ 跳过：对 FC 模型不适用 |
 | **合计** | **4706** | **4441 已覆盖（94.4% 题量）** |
 
 ## 不能声称的内容
@@ -56,7 +58,11 @@
 
 ## 缺口与下一步
 
-1. **BFCL 剩余类别**：memory（155）、web_search（100）、format_sensitivity（10）。四个 multi-turn 类别均已完成；轮次结束日志与用户轮次基本 1:1，是自然语言结束轮次的预期路径，不是需要修复的故障；`miss_param` 的 12 题首轮空响应需抽查。memory/web_search 试点 30 分钟仅 10/776 题且 111 次解码失败，已停止，需先解决运行时长与响应格式适配。
+1. **BFCL 剩余 265 题**：四个 multi-turn 类别均已完成；轮次结束日志与用户轮次基本 1:1，不是需要修复的故障；`miss_param` 的 12 题首轮空响应仍需抽查。
+   - `memory`（155）不跑：BFCL 测试的是合成 Core/Archival Memory 工具，NeonForge 没有对应产品工具（仅有拒绝记忆与会话状态）；4 线程实测 7 分钟仅 6/576，成本高且不代表产品能力。
+   - `web_search`（100）阻塞：BFCL 依赖 SerpAPI 包与 `SERPAPI_API_KEY`；NeonForge 的 `web_search` 使用自有搜索端点（`NEONFORGE_SEARCH_KEY`），不能拿 BFCL 合成搜索 API 冒充产品能力。
+   - `format_sensitivity`（10）对 FC 模型跳过。
+   - 不以离线 mock 或替换搜索后端凑覆盖率；如需评估产品 `web_search`，应另建产品级测试。
 2. **重复运行**：BFCL 十七类目前每类 1 次；优先对四类核心与四个 multi-turn 类别做 ≥3 次重复。
 3. **Terminal-Bench / SWE-bench**：需要独立 VM + Docker-in-Docker 与固定镜像摘要；当前 WSL2 宿主 Docker 不满足沙箱边界，暂不运行。
 4. **真实审批 UI**：评估用审批回调已实现；产品 Electron ToolRegistry / 审批 UI 尚未进入基准。
