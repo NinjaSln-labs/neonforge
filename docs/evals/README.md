@@ -23,6 +23,7 @@
 - [2026-11-19 事件响应 Runbook（初版）](incident-response-runbook-2026-11-19.md)
 - [2026-11-19 产品级 SLO 与性能测量计划（初版）](slo-and-performance-plan-2026-11-19.md)
 - [2026-11-19 SUS / HEART 用户研究套件（初版）](sus-heart-study-kit-2026-11-19.md)
+- [2026-11-19 AI 辅助可用性走查报告（非人类研究）](ai-walkthrough-2026-11-19.md)
 - [2026-11-19 NeonForge AI 管理方针（初版）](ai-management-policy-2026-11-19.md)
 
 运行脚本与沙箱定义在 `evals/sandbox/`。所有外部基准必须在一次性容器中运行；不要在本机直接执行。
