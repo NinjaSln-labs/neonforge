@@ -1,7 +1,7 @@
 # 外部基准评估方案（NeonForge Agent 工作台）
 
 - 生效日期：2026-11-17
-- 状态：v1.20（模型级基线 + 适配器 v0 + 策略门 v2 + 审批回调基准 + BFCL 十七类全量（4441/4706）+ 六种注入攻击（合计 648 配对）+ 产品审批边界证据 + ToolRegistry 桥接设计 + 治理差距评估/风险登记册/威胁模型/事件响应 Runbook 初版；评估默认模型已改用 DSV4.1FE-OD（同一模型的 eco/慢速模式）；memory 不跑、web_search 阻塞、format 跳过；外部基准接真实审批 UI / SUS·HEART 数据待接入）
+- 状态：v1.21（模型级基线 + 适配器 v0 + 策略门 v2 + 审批回调基准 + BFCL 十七类全量（4441/4706）+ 六种注入攻击（合计 648 配对）+ 产品审批边界证据 + ToolRegistry 桥接设计 + 治理差距评估/风险登记册/威胁模型/事件响应 Runbook/SLO 计划初版；评估默认模型已改用 DSV4.1FE-OD（同一模型的 eco/慢速模式）；memory 不跑、web_search 阻塞、format 跳过；外部基准接真实审批 UI / SUS·HEART 数据待接入）
 - 关联：`docs/evals/capability-card-template.md`、`evals/sandbox/`、ADR-012（测完再修）
 
 ## 1. 目标与非目标
