@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
+import http from 'node:http'
 import { test } from 'node:test'
 import {
   buildMessages,
   buildUpstreamRequest,
+  createServer,
   repairToolCalls,
   resolveConfig,
 } from '../dist/adapter.mjs'
@@ -156,4 +158,57 @@ test('repairToolCalls 默认不启用容忍模式', () => {
     payload.choices[0].message.tool_calls[0].function.arguments,
     '{"query": "x" "date": "2024-05-16"}',
   )
+})
+
+test('createServer 对首次 fetch TypeError 重试一次', async () => {
+  let upstreamRequests = 0
+  const upstream = http.createServer((req, res) => {
+    upstreamRequests += 1
+    req.resume()
+    if (upstreamRequests === 1) {
+      req.socket.destroy()
+      return
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(
+      JSON.stringify({
+        id: 'chatcmpl-test',
+        object: 'chat.completion',
+        choices: [
+          { index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' },
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      }),
+    )
+  })
+  await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve))
+  const upstreamPort = (upstream.address()).port
+
+  const adapter = createServer(
+    resolveConfig({
+      MAGPIE_GATEWAY_KEY: 'dummy-eval-key',
+      MAGPIE_BASE_URL: `http://127.0.0.1:${upstreamPort}/v1`,
+      NF_ADAPTER_TIMEOUT_MS: '5000',
+    }),
+  )
+  await new Promise((resolve) => adapter.listen(0, '127.0.0.1', resolve))
+  const adapterPort = (adapter.address()).port
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${adapterPort}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'test',
+        messages: [{ role: 'user', content: 'hi' }],
+      }),
+    })
+    assert.equal(response.status, 200)
+    const payload = await response.json()
+    assert.equal(payload.choices[0].message.content, 'ok')
+    assert.equal(upstreamRequests, 2)
+  } finally {
+    await new Promise((resolve) => adapter.close(resolve))
+    await new Promise((resolve) => upstream.close(resolve))
+  }
 })

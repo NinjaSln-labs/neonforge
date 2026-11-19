@@ -207,6 +207,39 @@ function upstreamHeaders(config: AdapterConfig): Record<string, string> {
   }
 }
 
+/**
+ * 转发到 Magpie。对一次 fetch 的 TypeError 做单次重试：
+ * 本地网关偶发关闭 keep-alive 连接时，undici 会以 TypeError（fetch failed）拒绝，
+ * 而请求并未得到 HTTP 响应；重试可避免把这类基础设施抖动记成模型 502。
+ * 只重试 TypeError，不重试超时、HTTP 错误或无效 JSON。
+ */
+async function fetchUpstream(
+  config: AdapterConfig,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      return await fetch(`${config.upstreamBase}/chat/completions`, {
+        method: 'POST',
+        headers: upstreamHeaders(config),
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(config.timeoutMs),
+      })
+    } catch (e) {
+      const name = e instanceof Error ? e.name : 'unknown'
+      const cause =
+        e instanceof Error && 'cause' in e && e.cause instanceof Error ? `: ${e.cause.message}` : ''
+      console.log(`[adapter] upstream fetch attempt=${attempt} error=${name}${cause}`)
+      if (attempt === 1 && name === 'TypeError') {
+        await new Promise((resolve) => setTimeout(resolve, 250))
+        continue
+      }
+      throw e
+    }
+  }
+  throw new Error('unreachable')
+}
+
 async function handleChat(
   req: http.IncomingMessage,
   res: http.ServerResponse,
@@ -238,12 +271,7 @@ async function handleChat(
 
   let upstream: Response
   try {
-    upstream = await fetch(`${config.upstreamBase}/chat/completions`, {
-      method: 'POST',
-      headers: upstreamHeaders(config),
-      body: JSON.stringify(upstreamBody),
-      signal: AbortSignal.timeout(config.timeoutMs),
-    })
+    upstream = await fetchUpstream(config, upstreamBody)
   } catch (e) {
     console.log(`[adapter] upstream error: ${e instanceof Error ? e.name : 'unknown'}`)
     sendJson(res, 502, { error: { message: 'upstream request failed' } })
