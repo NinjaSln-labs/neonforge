@@ -171,7 +171,7 @@ ssh -p $SSH_PORT -i <key> nf@127.0.0.1 \
 
 注意：
 
-- Harbor 进程自身需要代理访问 GitHub/镜像；但模型请求必须绕过代理（`NO_PROXY` 必须包含 VM 内适配器中继地址），否则本地模型端点会被宿主代理当作外网并返回 502。
+- Harbor 进程自身需要代理访问 GitHub/镜像；但模型请求必须绕过代理。VM 的 `/etc/environment` 通常设置全局 `HTTP_PROXY`，因此必须在 **Harbor 进程环境本身**（不只是 verifier 的 `--ve`）同时设置 `NO_PROXY`/`no_proxy` 并包含 VM 内适配器中继地址（如 `172.17.0.1`）；否则 agent 的 OpenAI 客户端会把本地模型端点当作外网，首次调用即返回 502。`tbench2-breadth-10d` 的 10/10 `InternalServerError: 502` 即由此配置错误导致，整轮未进入模型评估。
 - 内置 `terminus-2` 每个 task 会重新安装 tmux/asciinema 与 verifier 依赖；首轮较慢，不能把环境安装时间当作 agent 时间。自定义 agent 无容器侧安装。
 - 当前只验证 `terminal-bench@2.0` 的少量任务；单次运行、子集分数，不能称为官方 Terminal-Bench 完整成绩。试点结果见 `docs/evals/baselines/2026-11-19-terminal-bench-pilot.md`。
 

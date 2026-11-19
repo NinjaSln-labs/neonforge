@@ -18,7 +18,7 @@
 - [2026-11-19 NeonForge 产品审批边界（L1 + L3 UI）](baselines/2026-11-19-neonforge-approval-boundary.md)
 - [2026-11-19 Terminal-Bench 2.0 专用 VM 试点](baselines/2026-11-19-terminal-bench-pilot.md)
 - [2026-11-19 Terminal-Bench 2.0 十任务 × 3 次重复](baselines/2026-11-19-terminal-bench-expanded.md)
-- [2026-11-19 Terminal-Bench 2.0 十任务广度批次](baselines/2026-11-19-terminal-bench-breadth.md)
+- [2026-11-19 Terminal-Bench 2.0 两批十任务广度（第二批追加）](baselines/2026-11-19-terminal-bench-breadth.md)
 - [2026-11-19 外部基准 → 产品 ToolRegistry 桥接设计](product-toolregistry-bridge-design.md)
 - [2026-11-18 用户体验与治理差距评估（初版）](governance-gap-assessment-2026-11-18.md)
 - [2026-11-19 AI 风险登记册（初版）](ai-risk-register-2026-11-19.md)
