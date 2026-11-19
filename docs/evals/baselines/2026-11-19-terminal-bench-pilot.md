@@ -70,6 +70,20 @@ harbor run --dataset terminal-bench@2.0 --include-task-name regex-log \
 - 有效运行 token 合计：**201,624 输入 / 48,241 输出 / 53,120 缓存**（缓存仅 terminus-2 可读；自定义 agent 未上报缓存）。
 - 超时那次 `gpt2-codegolf` 单独消耗 778,363 / 248,197 / 731,520，不计入有效运行。
 
+## 追加：pilot 4 任务的 3 次重复（同日）
+
+`tbench2-pilot-repeat-3x` job：`openssl-selfsigned-cert`、`log-summary-date-ranges`、`sqlite-db-truncate`、`regex-log` 各 3 次尝试，共 12 trials；仅自定义 `neonforge-terminal`，2 并发，同一 VM / 适配器 / 模型。job 11:34:32 → 12:18:50（44m18s），总 token **1,716,269 输入 / 157,220 输出**。
+
+| 任务 | 尝试数 | 通过 | Reward 序列 |
+|------|-------:|-----:|-------------|
+| `log-summary-date-ranges` | 3 | 3 | 1.0 / 1.0 / 1.0 |
+| `openssl-selfsigned-cert` | 3 | 3 | 1.0 / 1.0 / 1.0 |
+| `sqlite-db-truncate` | 3 | 3 | 1.0 / 1.0 / 1.0 |
+| `regex-log` | 3 | 2/2 可评估 | 1.0 / 1.0 / 0.0（验证器网络失败） |
+
+- 结果：11/12 reward 1.0；唯一 0.0 是 `regex-log` 的验证器在 `apt-get update`/`curl` 安装阶段网络失败（`Unable to locate package curl`、`curl: command not found`、`uvx: command not found`），测试脚本未真正评估模型输出。排除该次后，11/11 可评估尝试通过；4/4 任务至少一次通过，3/4 任务 3 次全部通过。
+- 该次验证器失败属于基础设施问题，不是模型 0 分；不应计入模型通过率。
+
 ## 失败与异常
 
 | 用例 | 现象 | 归因 | 是否产品问题 |
@@ -86,7 +100,7 @@ harbor run --dataset terminal-bench@2.0 --include-task-name regex-log \
 
 ## 解释与限制
 
-- **不是官方 Terminal-Bench 2.0 成绩**：仅 5 个任务 ID，未跑完整数据集，单次运行，无重复与置信区间。
+- **不是官方 Terminal-Bench 2.0 成绩**：仅 5 个任务 ID，未跑完整数据集；初轮为单次运行，追加节仅重复其中 4 个任务，仍无置信区间。
 - **不能把两个 agent 合并**：`terminus-2` 是 Harbor 内置 agent；`neonforge-terminal` 是本次自建的最小 shell 循环（一个 `execute_bash` 工具、无 tmux/asciinema、无 NeonForge 审批链）。两者分数不能相加或平均后与官方榜单横比。
 - **超时不是失败分数**：`gpt2-codegolf` 的 0.0 是 Harbor 在 `AgentTimeoutError` 下的记录值，不代表模型在完整时限内无法完成。
 - **基础设施异常不是模型失败**：`regex-log` 首次失败发生在 agent setup，自定义 agent 补跑通过，说明原因在 terminus-2 的容器侧安装路径。
@@ -97,4 +111,4 @@ harbor run --dataset terminal-bench@2.0 --include-task-name regex-log \
 
 - **可用结论**：专用 QEMU/KVM VM 能稳定运行 `terminal-bench@2.0` 的 oracle 与模型任务；oracle 在 `gpt2-codegolf` 通过；试点中 5 次有效模型运行全部 reward 1.0（3 次 `terminus-2` + 2 次 `neonforge-terminal`），4/5 个任务至少在一种 agent 下干净通过。
 - **不可用结论**：不能称为 Terminal-Bench 2.0 完整成绩或官方排名；不能把 `gpt2-codegolf` 超时当作模型必然失败；不能把本卡结果归因于 NeonForge 产品审批/工具链；不能用单次试点估计总体通过率。
-- **下一步**：扩大任务数（建议先 10-20 个任务）并对每个任务至少重复 3 次；为 `gpt2-codegolf` 单独评估更长超时或更大 episode 预算；继续分别报告内置与自定义 agent；SWE-bench 仍需独立的每实例容器执行适配器。
+- **下一步**：为 `gpt2-codegolf` 单独评估更长超时或更大 episode 预算；扩展批次已覆盖 10 个新任务 ×3 次（见 `2026-11-19-terminal-bench-expanded.md`）；继续分别报告内置与自定义 agent；SWE-bench 仍需独立的每实例容器执行适配器。

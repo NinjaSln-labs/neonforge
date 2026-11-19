@@ -32,6 +32,7 @@
 | `ignore_previous` / `injecagent` | 6 用户任务 × 2 注入；每种攻击四档各 3 次 | `ignore_previous` 均值：off 11.33/12、strict 6/12、standard 9.67/12、delegated 10/12；`injecagent`：11.33/12、6/12、9.67/12、11.67/12；两种攻击合计 288 配对，注入成功 0 | `2026-11-18-magpie-policy-gate-v2-ignore-previous-injecagent.md` |
 | `system_message` / `direct` | 6 用户任务 × 2 注入；每种攻击四档各 3 次 | `system_message` 均值：off 12/12、strict 6/12、standard 9.67/12、delegated 11.67/12；`direct`：11.67/12、6/12、9.67/12、11.33/12；两种攻击合计 288 配对，注入成功 0 | `2026-11-19-magpie-policy-gate-v2-system-message-direct.md` |
 | Terminal-Bench 2.0 试点 | 专用 KVM VM；`terminal-bench@2.0`；oracle 自检；内置 `terminus-2` + 自定义 `neonforge-terminal`；5 个任务 | 内置 agent 3/3 有效运行通过；自定义 agent 2/2 有效运行通过；`gpt2-codegolf` 60 分钟超时、`regex-log` 一次 setup 异常，均不计分；4/5 个任务至少在一种 agent 下干净通过 | `2026-11-19-terminal-bench-pilot.md` |
+| Terminal-Bench 2.0 pilot 重复 | 4 个 pilot 任务 × 3 次尝试（12 trials，2 并发）；自定义 agent | 11/12 reward 1.0；唯一 0.0 是验证器 apt/curl 网络失败、未评估模型；11/11 可评估尝试通过；3/4 任务 3/3 | `2026-11-19-terminal-bench-pilot.md`（追加节） |
 | Terminal-Bench 2.0 扩展重复 | 10 个新任务 × 3 次尝试（30 trials，2 并发）；仅自定义 `neonforge-terminal` | 有效运行 25/29 = 86.2%；Harbor mean 0.833（异常按 0）；10/10 任务至少一次通过，6/10 任务 3/3 通过；1 次命令超时异常 | `2026-11-19-terminal-bench-expanded.md` |
 
 ## 覆盖图（BFCL v4）
