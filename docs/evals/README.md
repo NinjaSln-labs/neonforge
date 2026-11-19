@@ -10,6 +10,7 @@
 - [2026-11-18 Magpie 策略门 v2 审批回调](baselines/2026-11-18-magpie-policy-gate-v2-approval.md)
 - [2026-11-18 Magpie 策略门 v2 + tool_knowledge 攻击](baselines/2026-11-18-magpie-policy-gate-v2-tool-knowledge.md)
 - [2026-11-18 Magpie 策略门 v2 + ignore_previous / injecagent](baselines/2026-11-18-magpie-policy-gate-v2-ignore-previous-injecagent.md)
+- [2026-11-19 Magpie 策略门 v2 + system_message / direct](baselines/2026-11-19-magpie-policy-gate-v2-system-message-direct.md)
 - [2026-11-18 Magpie BFCL 十四类全量（含 multi_turn_base）](baselines/2026-11-18-magpie-bfcl-category-full.md)
 - [2026-11-18 Magpie BFCL multi_turn_long_context（DSV4.1FE-OD）](baselines/2026-11-18-magpie-bfcl-multi-turn-long-context.md)
 - [2026-11-18 Magpie BFCL multi_turn_miss_func（DSV4.1FE-OD）](baselines/2026-11-18-magpie-bfcl-multi-turn-miss-func.md)
