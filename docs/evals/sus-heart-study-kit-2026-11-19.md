@@ -3,6 +3,7 @@
 > 状态：**尚未执行**；本文是可复用的研究脚本与问卷，不是用户数据。
 > 目的：为 NeonForge 桌面工作台建立可用性基线（SUS）与产品指标（HEART）。
 > 关联：`governance-gap-assessment-2026-11-18.md` 第 4 项、`ai-risk-register-2026-11-19.md` R-07/R-14。
+> 另见：`ai-walkthrough-2026-11-19.md` 是 **AI 辅助启发式走查 + 脚本化 UI 断言**，只覆盖界面路径，不产生 SUS/HEART 数据，不能替代本套件。
 
 ## 1. 研究设计
 
