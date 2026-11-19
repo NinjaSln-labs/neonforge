@@ -1,7 +1,7 @@
 # 外部基准评估方案（NeonForge Agent 工作台）
 
 - 生效日期：2026-11-17
-- 状态：v1.21（模型级基线 + 适配器 v0 + 策略门 v2 + 审批回调基准 + BFCL 十七类全量（4441/4706）+ 六种注入攻击（合计 648 配对）+ 产品审批边界证据 + ToolRegistry 桥接设计 + 治理差距评估/风险登记册/威胁模型/事件响应 Runbook/SLO 计划初版；评估默认模型已改用 DSV4.1FE-OD（同一模型的 eco/慢速模式）；memory 不跑、web_search 阻塞、format 跳过；外部基准接真实审批 UI / SUS·HEART 数据待接入）
+- 状态：v1.22（模型级基线 + 适配器 v0 + 策略门 v2 + 审批回调基准 + BFCL 十七类全量（4441/4706）+ 六种注入攻击（合计 648 配对）+ 产品审批边界证据（`decide` 已抽出）+ ToolRegistry 桥接设计 + 治理差距评估/风险登记册/威胁模型/事件响应 Runbook/SLO 计划初版；评估默认模型已改用 DSV4.1FE-OD（同一模型的 eco/慢速模式）；memory 不跑、web_search 阻塞、format 跳过；外部基准接真实审批 UI / SUS·HEART 数据待接入）
 - 关联：`docs/evals/capability-card-template.md`、`evals/sandbox/`、ADR-012（测完再修）
 
 ## 1. 目标与非目标
@@ -86,7 +86,7 @@ bash evals/sandbox/run-agentdojo-subset.sh
 2. **策略门 v1（已完成，子集）**：AgentDojo 工具执行点的 `ask`/`deny`/信任预设与 `gate.decided` 审计；基线见 `baselines/2026-11-17-magpie-policy-gate-v1.md`。
 3. **策略门 v2（已完成，扩展子集）**：加入本地创建/编辑/日历任务区分 strict/standard/delegated；`PermissionRule(specifier)` 与 HTTP 审批回调已实现；基线见 `baselines/2026-11-18-magpie-policy-gate-v2.md`。
 4. **审批回调基准（已完成，扩展子集）**：容器内模拟 `approve-local`/`deny-all`/`approve-all`，10 个用户任务 × 2 注入，`approve-local` 3 次；基线见 `baselines/2026-11-18-magpie-policy-gate-v2-approval.md`。
-5. **策略门 v2 补强（部分完成）**：`PermissionRule(specifier)` 路径/URL 规范化、审批回调 3 次重复、`tool_knowledge` 容忍模式 3 次 + 默认模式 2 次四组对照、`ignore_previous`/`injecagent`/`system_message`/`direct` 四档各 3 次、产品 ToolRegistry 40 项单测 + trustModes UI 3 项均已完成，见 `baselines/2026-11-19-neonforge-approval-boundary.md`；六种攻击合计 648 配对，注入成功 0。桥接设计见 `product-toolregistry-bridge-design.md`：先做纯决策函数 + 策略-only sidecar，执行桥暂不做。剩余人类审批链路、自适应/多轮攻击与更多攻击族。
+5. **策略门 v2 补强（部分完成）**：`PermissionRule(specifier)` 路径/URL 规范化、审批回调 3 次重复、`tool_knowledge` 容忍模式 3 次 + 默认模式 2 次四组对照、`ignore_previous`/`injecagent`/`system_message`/`direct` 四档各 3 次、产品 ToolRegistry 44 项单测 + trustModes UI 3 项、`decide` 裁决入口均已完成，见 `baselines/2026-11-19-neonforge-approval-boundary.md`；六种攻击合计 648 配对，注入成功 0。桥接设计见 `product-toolregistry-bridge-design.md`：阶段 1 已完成，阶段 2 策略-only sidecar 未实现，执行桥暂不做。剩余人类审批链路、自适应/多轮攻击与更多攻击族。
 6. **BFCL 类别全量（已完成十七类）**：3841 题十四类 + `multi_turn_long_context` / `multi_turn_miss_func` / `multi_turn_miss_param` 各 200 题，共 4441/4706（94.4%）非 partial-eval；`multi_turn_base` 56.00%、`multi_turn_long_context` 46.00%、`multi_turn_miss_func` 44.50%、`multi_turn_miss_param` 39.50%；轮次结束日志不是崩溃。剩余 265 题明确处理：memory（155）不跑（BFCL 合成 memory 工具与产品无对应，成本高）；web_search（100）阻塞（需 SerpAPI 包与 `SERPAPI_API_KEY`，与产品自有 `web_search` 端点不等价）；format_sensitivity（10）对 FC 模型跳过。不以 mock/替换后端凑覆盖率。
 7. **Terminal-Bench / SWE-bench（基础设施阻塞）**：需要独立 VM + Docker-in-Docker 与固定数据集/镜像摘要；当前只有 WSL2 + 宿主 Docker，若在评估容器内挂 Docker socket 或启用 privileged 会破坏现有沙箱边界，暂不运行。需先提供专用 VM，再补前置评估。
 8. **用户体验与治理（初版完成）**：ISO/IEC 25010 质量映射、NIST AI RMF / ISO/IEC 42001 差距评估与 SUS/HEART 计划见 `governance-gap-assessment-2026-11-18.md`；AI 风险登记册初版见 `ai-risk-register-2026-11-19.md`（14 项风险）；威胁模型初版见 `threat-model-2026-11-19.md`（13 项威胁）；事件响应 Runbook 初版见 `incident-response-runbook-2026-11-19.md`。已识别的主要缺口：无产品级 SLO/性能回归、无独立渗透测试、无真实 SUS/HEART 数据、无真实事件响应演练；均未声称认证或符合性。
