@@ -84,6 +84,14 @@ harbor run --dataset terminal-bench@2.0 --include-task-name regex-log \
 - 结果：11/12 reward 1.0；唯一 0.0 是 `regex-log` 的验证器在 `apt-get update`/`curl` 安装阶段网络失败（`Unable to locate package curl`、`curl: command not found`、`uvx: command not found`），测试脚本未真正评估模型输出。排除该次后，11/11 可评估尝试通过；4/4 任务至少一次通过，3/4 任务 3 次全部通过。
 - 该次验证器失败属于基础设施问题，不是模型 0 分；不应计入模型通过率。
 
+## 追加：gpt2 放宽预算尝试（同日）
+
+`tbench2-gpt2-long` job：单个 `gpt2-codegolf` trial，自定义 `neonforge-terminal`，`NEONFORGE_MAX_ITERATIONS=60`、`NEONFORGE_COMMAND_TIMEOUT_SEC=600`、agent timeout multiplier 4。13:49:18 → 14:24:55（35m37s），最终 `RuntimeError: Command timed out after 600 seconds`，无 token 统计。
+
+- 模型确实在推进：容器命令显示它生成了 `/tmp/v1`、`/tmp/cbin` 等变体并反复运行 GPT-2 checkpoint 推理；失败点是单条推理/测试命令超过 600 秒上限。
+- 这仍不是干净分数：既不是 1.0，也不能据此断言模型无法完成；应作为“agent 命令超时配置限制”记录。
+- 若继续评估，需要把单命令上限进一步提高，或改用能长时间运行单条命令的 agent/harness；单纯增加 agent timeout 不足以避免本类失败。
+
 ## 失败与异常
 
 | 用例 | 现象 | 归因 | 是否产品问题 |
