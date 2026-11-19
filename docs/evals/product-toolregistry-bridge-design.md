@@ -62,6 +62,10 @@ decideToolCall(input: {
 
 ### 阶段 2：策略-only sidecar
 
+**可行性复核（2026-11-19，暂不做）**：AgentDojo/BFCL 的工具名与参数是 synthetic 的（`create_file`、`send_email`、`share_file`、`create_calendar_event` 等），产品 `ToolRegistry` 只认识已注册的 `write/edit/read/bash/...`，且 `delegationBoundaryViolation`/`isInSandboxRealpath` 依赖真实路径。若做 sidecar，需要额外写一层“synthetic 工具 → 产品工具/规则”的映射；该映射本身会决定裁决结果，测到的是新映射而不是产品真实行为。`send_email`/`share_file` 等外部副作用在产品中没有等价工具，只能模拟。
+
+**结论**：暂不为 AgentDojo/BFCL 实现阶段 2 sidecar。保留 Python 门作为外部基准的独立控制，产品侧以 `ToolRegistry` 单测 + UI 测试为证据；两者在能力卡中分开表述。若未来有“直接调用 NeonForge 产品工具”的 native 基准，再按本设计实现 sidecar。
+
 - 宿主 Node 进程加载构建后的决策函数，暴露 `POST /decide`。
 - 输入只接受：tool name、args（JSON 大小上限）、rootPath（必须是专用 fixture 目录）、规则快照。
 - 输出：`allow/ask/deny + reason`；不返回文件内容、不执行工具。
@@ -106,5 +110,6 @@ decideToolCall(input: {
 
 - 当前外部基准仍是 Python 门 + synthetic 工具；产品 ToolRegistry 有独立测试证据，但未接入外部 harness。
 - 阶段 1 已完成 `decide` 方法抽取与回归测试（2026-11-19）；仍未抽成模块级纯函数。
-- 建议下一步做阶段 2（策略-only sidecar）；阶段 3 执行桥暂不做。
-- 在阶段 2 完成前，不更新“真实审批 UI 已接入外部基准”的表述。
+- 阶段 2 经复核暂不做：synthetic 工具映射会取代产品真实语义，sidecar 测到的是映射层而不是产品行为。
+- 阶段 3 执行桥暂不做。
+- 因此不更新“真实审批 UI 已接入外部基准”的表述；外部基准继续使用 Python 门。
