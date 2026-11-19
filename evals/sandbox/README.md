@@ -166,7 +166,8 @@ ssh -p $SSH_PORT -i <key> nf@127.0.0.1 \
 ```
 
 - Agent 只从 VM 进程环境读取 `NEONFORGE_BASE_URL` / `NEONFORGE_MODEL`；`MAGPIE_GATEWAY_KEY` 仍只留在宿主适配器进程。
-- 它不是 `terminus-2`，也不含 NeonForge GUI/审批链；结果只能代表“适配器 + 最小 shell 循环”，不能与 `terminus-2` 或官方榜单合并比较。
+- 可调配置：`NEONFORGE_MAX_ITERATIONS`（默认 40）、`NEONFORGE_COMMAND_TIMEOUT_SEC`（默认 300）、`OPENAI_API_KEY`（默认占位值）。单条命令超过 300 秒会以 `RuntimeError` 结束，属于 agent 配置限制，不是模型分数；需要时用环境变量单独放宽后作为新配置重跑。
+- 它不是 `terminus-2`，也不含 NeonForge GUI/审批链；结果只能代表“适配器 + 最小 shell 循环”，不能与 `terminus-2` 或官方榜单合并比较。扩展重复结果见 `docs/evals/baselines/2026-11-19-terminal-bench-expanded.md`。
 
 注意：
 
