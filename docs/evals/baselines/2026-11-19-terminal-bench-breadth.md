@@ -122,6 +122,20 @@
 - **解读**：`crack-7z-hash` 的失败原因是 300 秒单命令上限，提高到 600 秒后通过；`extract-elf` 即使 600 秒仍超时，需要更长单命令上限、不同 agent/策略或任务特定分析，不能简单归因于模型失败。
 - 这是**新配置的单独重跑**，不能混入 `tbench2-breadth-10e` 的 4/10 或 4/7 统计；总 token 74,245 / 2,919（异常 trial 未汇总）。
 
+### 追加：`filter-js-from-html` / `fix-ocaml-gc` 的 600 秒重跑（`tbench2-timeout600-zero-4`）
+
+`tbench2-timeout600-zero-4` job：对第二批另外两个 0.0/超时任务各做 2 次尝试（4 trials，2 并发，`NEONFORGE_COMMAND_TIMEOUT_SEC=600`，其余配置不变）。21:58:55 → 23:02:00 UTC（1h03m05s），**无异常**，Harbor mean 0.5。
+
+| 任务 | Reward 序列 | 命令数 | Agent 用时 | 输入 / 输出 tokens |
+|------|-------------|-------:|----------|-------------------|
+| `filter-js-from-html` | 0.0 / 0.0 | 39 / 36 | 19m11s / 35m30s | 2,402,487 + 2,467,560 / 80,097 + 100,172 |
+| `fix-ocaml-gc` | 1.0 / 1.0 | 33 / 30 | 12m32s / 9m30s | 991,586 + 761,919 / 12,012 + 6,004 |
+
+- **结果**：4 个有效尝试，2/4 = 50% 通过；`fix-ocaml-gc` 2/2 干净通过，`filter-js-from-html` 0/2、无异常。
+- **解读**：`fix-ocaml-gc` 的失败确与单命令上限相关——300 秒配置下 1/2 干净通过、1 次超时异常（验证器仍 1.0），600 秒配置下 2/2 干净通过。`filter-js-from-html` 在 300 秒与 600 秒下均为 0/2 且无异常，说明其失败不是命令超时，而是任务/模型行为。
+- 总 token：6,623,552 输入 / 198,285 输出；该轮同样使用带 `fetch` TypeError 重试的适配器，无 502。
+- 这是**新配置的单独重跑**，不能混入 300 秒批次的通过率。
+
 ## 失败与异常
 
 | 用例 | 现象 | 归因 | 是否产品问题 |
@@ -141,13 +155,13 @@
 
 - **不是官方 Terminal-Bench 2.0 成绩**：前后两批各 10 个新任务、每任务初轮 1 次尝试；首批 3 个有效失败任务与第二批 3 个有效 0.0 任务各追加了 3 次重复，另对 2 个命令超时任务做了 600 秒新配置重跑；单 VM；不能与官方榜单或 pilot/扩展批次合并。
 - **仅自定义 agent**：不含 NeonForge GUI、审批链、ToolRegistry 或计划门；结果只代表“适配器 + 最小 shell 循环”。
-- **异常不是模型分数**：`chess-best-move`、`crack-7z-hash`、`extract-elf`、第二批重复中的 `filter-js-from-html`/`fix-ocaml-gc` 的 300 秒命令超时是 agent 配置；`circuit-fibsqrt` 与 `regex-chess` 的 502 是模型端点/适配器基础设施错误。均不应计入模型通过率。`crack-7z-hash` 在 600 秒新配置下已干净通过；`extract-elf` 即使 600 秒仍超时。
-- **有效 0.0 是模型/agent 行为，但存在明显波动**：首批三个验证失败均来自任务测试断言，不是 harness 崩溃；追加重复显示 `git-multibranch` 3/3、`polyglot-rust-c` 2/3、`sanitize-git-repo` 1/3。第二批三个有效 0.0 的 3 次重复显示 `gcode-to-text` 0/3、`filter-js-from-html` 0/2 有效尝试通过、`fix-ocaml-gc` 1/2 干净有效尝试通过；这些任务应按“大多稳定失败或高波动”处理，而不是简单波动。
-- **样本小**：每任务初轮仅 1 次，追加重复各覆盖 3 个任务（每任务 3 次）；不能估计总体通过率或置信区间；任务难度差异大，跨批次平均无意义。
+- **异常不是模型分数**：`chess-best-move`、`crack-7z-hash`、`extract-elf`、第二批重复中的 `filter-js-from-html`/`fix-ocaml-gc` 的 300 秒命令超时是 agent 配置；`circuit-fibsqrt` 与 `regex-chess` 的 502 是模型端点/适配器基础设施错误。均不应计入模型通过率。`crack-7z-hash` 与 `fix-ocaml-gc` 在 600 秒新配置下已干净通过；`extract-elf` 即使 600 秒仍超时。
+- **有效 0.0 是模型/agent 行为，但存在明显波动**：首批三个验证失败均来自任务测试断言，不是 harness 崩溃；追加重复显示 `git-multibranch` 3/3、`polyglot-rust-c` 2/3、`sanitize-git-repo` 1/3。第二批三个有效 0.0 的 3 次重复显示 `gcode-to-text` 0/3、`filter-js-from-html` 0/2 有效尝试通过、`fix-ocaml-gc` 1/2 干净有效尝试通过；600 秒重跑后 `fix-ocaml-gc` 2/2 干净通过，`filter-js-from-html` 仍 0/2。`gcode-to-text` 与 `filter-js-from-html` 应按稳定失败处理，`fix-ocaml-gc` 主要受 300 秒命令上限影响。
+- **样本小**：每任务初轮仅 1 次，追加重复各覆盖 3 个任务（每任务 3 次），600 秒重跑覆盖 4 个任务（1-2 次）；不能估计总体通过率或置信区间；任务难度差异大，跨批次平均无意义。
 - **产品能力未覆盖**：本卡没有运行 NeonForge Electron UI、真实审批或真实工具注册表。
 
 ## 结论
 
-- **可用结论**：自定义最小 agent 在首批 10 个新 Terminal-Bench 任务中初轮 5/8 有效评估通过（62.5%）；追加重复后，3 个失败任务合计 6/9 通过（66.7%）。第二批 10 个新任务中 4/7 有效评估通过（57.1%）；对 3 个有效 0.0 做 3 次重复后，干净有效尝试仅 1/7（14.3%）通过，`gcode-to-text`（0/3）与 `filter-js-from-html`（0/2 有效）基本稳定失败，`fix-ocaml-gc`（1/2 干净有效，另有 1 次超时但验证器 1.0）高波动。`crack-7z-hash` 在 600 秒单命令配置下干净通过；`extract-elf` 600 秒仍超时。
+- **可用结论**：自定义最小 agent 在首批 10 个新 Terminal-Bench 任务中初轮 5/8 有效评估通过（62.5%）；追加重复后，3 个失败任务合计 6/9 通过（66.7%）。第二批 10 个新任务中 4/7 有效评估通过（57.1%）；对 3 个有效 0.0 做 3 次重复后，干净有效尝试仅 1/7（14.3%）通过，`gcode-to-text`（0/3）与 `filter-js-from-html`（0/2 有效）基本稳定失败，`fix-ocaml-gc`（1/2 干净有效，另有 1 次超时但验证器 1.0）高波动。600 秒单命令重跑中，`crack-7z-hash` 通过、`fix-ocaml-gc` 2/2 干净通过，`filter-js-from-html` 仍 0/2（无异常），`extract-elf` 仍超时。因此 `filter-js-from-html`、`gcode-to-text` 是稳定失败，`fix-ocaml-gc` 的失败主要来自 300 秒命令上限，`extract-elf` 需要 >600 秒或不同方案。
 - **不可用结论**：不能称为 Terminal-Bench 2.0 完整成绩或官方排名；不能把首批 62.5%/66.7%、第二批 57.1% 或重复 14.3% 当作模型总体能力；不能把 300 秒/600 秒命令超时或 502 上游错误当作模型失败；不能把结果归因于 NeonForge 产品审批/工具链。
-- **下一步**：`gcode-to-text`、`filter-js-from-html` 已按稳定/近稳定失败记录，除非引入新 agent/提示/预算，不再重复；可对 `filter-js-from-html`、`fix-ocaml-gc` 的超时尝试用 600 秒新配置各重跑 1-3 次；`extract-elf` 需 >600 秒单命令、不同 agent/策略或任务特定分析；`crack-7z-hash` 的 600 秒结果已单独记录；排查适配器偶发 `TypeError`（已加一次重试）；对 `sanitize-git-repo` 再增加重复或分析失败轨迹；继续扩大任务覆盖；`gpt2-codegolf` 仍需更长超时/轮次预算的单独评估。
+- **下一步**：`gcode-to-text`、`filter-js-from-html` 已按稳定失败记录，除非引入新 agent/提示/预算，不再重复；`fix-ocaml-gc` 在 600 秒配置下 2/2 通过，后续统一使用 600 秒或记录为配置差异；`extract-elf` 需 >600 秒单命令、不同 agent/策略或任务特定分析；`crack-7z-hash` 的 600 秒结果已单独记录；继续观察适配器是否仍有 502（已加一次 `fetch` TypeError 重试）；对 `sanitize-git-repo` 再增加重复或分析失败轨迹；继续扩大任务覆盖；`gpt2-codegolf` 仍需更长超时/轮次预算的单独评估。
