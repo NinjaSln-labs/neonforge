@@ -59,6 +59,27 @@
 - **解读**：`torch-pipeline-parallelism` 的 300 秒失败是单命令预算限制，600 秒下完成执行但验证器 0.0；`torch-tensor-parallelism` 的验证器 900 秒超时由 `verifier-timeout-multiplier 4` 解决，干净通过。这是**新配置**的单独重跑，不能混入第七批 300 秒的 4/10 或 4/8。
 - 总 token：2,415,772 输入 / 80,528 输出。
 
+## 追加：4 个有效 0.0 的 3 次重复（`tbench2-b7zero-repeat-3x`）
+
+对第七批 4 个有效 0.0 各做 3 次重复，300 秒基准配置、40 轮、2 并发（12 trials）。21:10:19 → 22:54:23 UTC（1h44m04），5 个 300 秒命令超时异常。
+
+| 任务 | 3 次结果 | 干净有效 trials | 异常 | 通过 | 备注 |
+|------|----------|----------------|------|------|------|
+| `protein-assembly` | 1 × 有效 0.0、2 × RuntimeError | 1 | 2 | 0 | 有效 trial：39 条命令，15m11s，1,606,336 / 40,967 |
+| `sam-cell-seg` | 2 × 有效 0.0、1 × RuntimeError | 2 | 1 | 0 | 有效 trials：47 条命令 31m32s；45 条命令 22m31s |
+| `schemelike-metacircular-eval` | 1 × 有效 0.0、2 × RuntimeError（**验证器均 1.0**） | 1 | 2 | 2（异常 trial） | 两个超时 trial 的验证器给出 1.0（13m15s / 11m03s），说明任务已基本完成；干净 trial 为 0.0（39 条命令，12m19s） |
+| `video-processing` | 3 × 有效 0.0 | 3 | 0 | 0 | 42 / 39 / 41 条命令；18m24s / 6m57s / 9m11s |
+
+### 汇总
+
+- **12 trials**：2 × 1.0（均来自 `schemelike-metacircular-eval` 的异常 trial）、10 × 0.0；Harbor mean 0.167。
+- **干净有效尝试**：7 个（无异常）；干净通过 0/7 = **0.0%**。
+- **异常**：5 个，均为 300 秒命令超时；其中 2 个验证器仍为 1.0（`schemelike-metacircular-eval`），3 个为 0.0。
+- **异常按 0**：2/12 = 16.7%；若把“异常但验证器 1.0”视为完成，则 2/12；若只算干净有效，则 0/7。
+- 总 token：12,562,344 输入 / 287,094 输出；5 个异常 trial 未汇总用量，实际更高。
+- **解读**：`video-processing` 3/3 干净 0.0，`protein-assembly`/`sam-cell-seg` 的干净尝试也都是 0.0，初轮失败在重复中保持稳定；`schemelike-metacircular-eval` 出现明显波动——2 次在命令超时前后已完成任务且验证器通过，1 次为干净 0.0，不能称为稳定失败。
+- 这是**相同 300 秒配置**的重复，不是新配置；不能与第七批初轮的 4/8 合并为总体通过率，只能作为各任务的稳定性信号。
+
 ## 失败与异常
 
 | 用例 | 现象 | 归因 | 是否产品问题 |
@@ -89,4 +110,4 @@
 
 - **可用结论**：自定义最小 agent 在第七批 10 个 Terminal-Bench 任务中 4/10 首次尝试通过；排除 2 个异常后，有效尝试 4/8 = 50.0%；累计评估 84/89 个任务。
 - **不可用结论**：不能称为 Terminal-Bench 2.0 完整成绩或官方排名；不能把 50.0% 或 40.0% 与前几批直接比较或合并；不能把命令超时或验证器超时归因于模型失败或 NeonForge 产品审批/工具链；不能据此估计总体通过率。
-- **下一步**：第七批 2 个异常已按 600 秒单命令 + `verifier-timeout-multiplier 4` 重跑（`torch-tensor-parallelism` 通过，`torch-pipeline-parallelism` 无异常但验证器 0.0）；对 4 个有效 0.0（`protein-assembly`、`sam-cell-seg`、`schemelike-metacircular-eval`、`video-processing`）各增加重复或分析测试断言；继续评估剩余 5 个任务（`caffe-cifar-10`、`compile-compcert`、`install-windows-3.11`、`mteb-leaderboard`、`mteb-retrieve`，后者需先解决镜像拉取）。
+- **下一步**：第七批 2 个异常已按 600 秒单命令 + `verifier-timeout-multiplier 4` 重跑（`torch-tensor-parallelism` 通过，`torch-pipeline-parallelism` 无异常但验证器 0.0）；4 个有效 0.0 已各做 3 次重复（干净有效 0/7；`video-processing` 3/3 有效 0.0，`protein-assembly` 1/3 有效 0.0 + 2 个超时异常，`sam-cell-seg` 2/3 有效 0.0 + 1 个超时异常，`schemelike-metacircular-eval` 1/3 有效 0.0 + 2 个超时但验证器 1.0）；剩余任务已由第八批与 `mteb-retrieve` 补跑覆盖（89/89）。
