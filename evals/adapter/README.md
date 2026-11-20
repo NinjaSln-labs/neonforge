@@ -6,7 +6,11 @@
 - `gateway.toolCallRepair` 同源工具参数修复
 - 固定的上游模型 / Provider 鉴权（`MAGPIE_GATEWAY_KEY` 只从环境变量读取）
 
-传输可靠性：对 `fetch` 抛出的 `TypeError`（本地网关关闭 keep-alive 连接等）做一次 250 ms 后的重试，并在日志记录 `upstream fetch attempt=N error=...`；仅重试这一类无 HTTP 响应的连接错误，不重试超时、HTTP 错误或无效 JSON。这样基础设施抖动不会被记成模型 502。
+传输可靠性：上游请求改用 `node:http`/`node:https`，避免全局 `fetch`（undici）默认 300 秒 `headersTimeout` 在 Magpie 慢启动/长思考时提前触发并误报 502。适配器显式支持：
+
+- `NF_ADAPTER_TIMEOUT_MS`：请求总超时（默认 180000；Terminal-Bench VM 使用 900000）。
+- `NF_ADAPTER_HEADERS_TIMEOUT_MS`：等待响应头的上限（默认等于总超时），超时返回 502，不重试。
+- 仅对上游关闭连接（`ECONNRESET`/`EPIPE`）做一次 250 ms 后的重试，并在日志记录 `upstream request attempt=N error=...`；不重试 HTTP 错误、超时或无效 JSON。
 
 不做的事（v0 边界）：
 

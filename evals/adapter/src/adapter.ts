@@ -9,7 +9,7 @@
 // 注意：v0 尚未把工具授权/审批门接入 harness；能力卡必须注明这一点。
 
 import http from 'node:http'
-import { Readable } from 'node:stream'
+import https from 'node:https'
 import { pathToFileURL } from 'node:url'
 import { toolCallRepair } from '../../../apps/desktop/src/main/gateway.js'
 import { buildSysHint } from '../../../apps/desktop/src/renderer/sysPrompt.js'
@@ -23,6 +23,7 @@ export interface AdapterConfig {
   upstreamModel: string
   promptMode: PromptMode
   timeoutMs: number
+  headersTimeoutMs: number
   apiKey: string
   tolerantArgs: boolean
 }
@@ -54,6 +55,10 @@ export function resolveConfig(env: NodeJS.ProcessEnv): AdapterConfig {
   if (!Number.isFinite(timeoutMs) || timeoutMs < 1000) {
     throw new Error(`invalid NF_ADAPTER_TIMEOUT_MS: ${env.NF_ADAPTER_TIMEOUT_MS}`)
   }
+  const headersTimeoutMs = Number(env.NF_ADAPTER_HEADERS_TIMEOUT_MS ?? String(timeoutMs))
+  if (!Number.isFinite(headersTimeoutMs) || headersTimeoutMs < 1) {
+    throw new Error(`invalid NF_ADAPTER_HEADERS_TIMEOUT_MS: ${env.NF_ADAPTER_HEADERS_TIMEOUT_MS}`)
+  }
   return {
     host: env.NF_ADAPTER_HOST ?? '127.0.0.1',
     port,
@@ -61,6 +66,7 @@ export function resolveConfig(env: NodeJS.ProcessEnv): AdapterConfig {
     upstreamModel: env.MAGPIE_MODEL ?? 'opendesign/deepseek-v4.1-flash-eco',
     promptMode: env.NF_ADAPTER_PROMPT === 'product' ? 'product' : 'none',
     timeoutMs,
+    headersTimeoutMs,
     apiKey,
     tolerantArgs: env.NF_ADAPTER_TOLERANT_ARGS === '1',
   }
@@ -208,29 +214,65 @@ function upstreamHeaders(config: AdapterConfig): Record<string, string> {
 }
 
 /**
- * 转发到 Magpie。对一次 fetch 的 TypeError 做单次重试：
- * 本地网关偶发关闭 keep-alive 连接时，undici 会以 TypeError（fetch failed）拒绝，
- * 而请求并未得到 HTTP 响应；重试可避免把这类基础设施抖动记成模型 502。
- * 只重试 TypeError，不重试超时、HTTP 错误或无效 JSON。
+ * 转发到 Magpie。使用 node:http/https 而不是全局 fetch：
+ * undici 的默认 headersTimeout 是 300 秒，会早于适配器的 900 秒总超时触发，
+ * 在 Magpie 慢启动/长思考时被误报为 502（"Headers Timeout Error"）。
+ * 这里显式区分 headers 超时、socket 空闲超时与总超时；
+ * 只对连接被上游关闭（ECONNRESET/EPIPE）做一次重试。
  */
+function upstreamRequestOnce(
+  config: AdapterConfig,
+  body: Record<string, unknown>,
+): Promise<http.IncomingMessage> {
+  return new Promise((resolve, reject) => {
+    const url = new URL(`${config.upstreamBase}/chat/completions`)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      reject(new Error(`unsupported upstream protocol: ${url.protocol}`))
+      return
+    }
+    const transport = url.protocol === 'https:' ? https : http
+    let headersTimer: NodeJS.Timeout | undefined
+    const finish = (): void => {
+      if (headersTimer) clearTimeout(headersTimer)
+    }
+    const req = transport.request(
+      url,
+      {
+        method: 'POST',
+        headers: upstreamHeaders(config),
+        signal: AbortSignal.timeout(config.timeoutMs),
+      },
+      (upstreamRes) => {
+        finish()
+        resolve(upstreamRes)
+      },
+    )
+    headersTimer = setTimeout(() => {
+      req.destroy(Object.assign(new Error('upstream headers timeout'), { code: 'ETIMEDOUT' }))
+    }, config.headersTimeoutMs)
+    req.setTimeout(config.timeoutMs, () => {
+      req.destroy(Object.assign(new Error('upstream socket timeout'), { code: 'ETIMEDOUT' }))
+    })
+    req.on('error', (e) => {
+      finish()
+      reject(e)
+    })
+    req.end(JSON.stringify(body))
+  })
+}
+
 async function fetchUpstream(
   config: AdapterConfig,
   body: Record<string, unknown>,
-): Promise<Response> {
+): Promise<http.IncomingMessage> {
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
-      return await fetch(`${config.upstreamBase}/chat/completions`, {
-        method: 'POST',
-        headers: upstreamHeaders(config),
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(config.timeoutMs),
-      })
+      return await upstreamRequestOnce(config, body)
     } catch (e) {
+      const code = e instanceof Error && 'code' in e ? String(e.code) : ''
       const name = e instanceof Error ? e.name : 'unknown'
-      const cause =
-        e instanceof Error && 'cause' in e && e.cause instanceof Error ? `: ${e.cause.message}` : ''
-      console.log(`[adapter] upstream fetch attempt=${attempt} error=${name}${cause}`)
-      if (attempt === 1 && name === 'TypeError') {
+      console.log(`[adapter] upstream request attempt=${attempt} error=${name}${code ? ` code=${code}` : ''}`)
+      if (attempt === 1 && (code === 'ECONNRESET' || code === 'EPIPE')) {
         await new Promise((resolve) => setTimeout(resolve, 250))
         continue
       }
@@ -269,7 +311,7 @@ async function handleChat(
     } tools=${tools} stream=${stream}`,
   )
 
-  let upstream: Response
+  let upstream: http.IncomingMessage
   try {
     upstream = await fetchUpstream(config, upstreamBody)
   } catch (e) {
@@ -278,25 +320,38 @@ async function handleChat(
     return
   }
 
-  console.log(`[adapter] upstream http=${upstream.status}`)
+  const status = upstream.statusCode ?? 502
+  console.log(`[adapter] upstream http=${status}`)
+  const contentTypeHeader = upstream.headers['content-type']
+  const contentType = Array.isArray(contentTypeHeader)
+    ? contentTypeHeader.join(', ')
+    : (contentTypeHeader ?? '')
 
   if (stream) {
-    res.writeHead(upstream.status, {
-      'Content-Type': upstream.headers.get('Content-Type') ?? 'text/event-stream',
+    res.writeHead(status, {
+      'Content-Type': contentType || 'text/event-stream',
       'Cache-Control': 'no-store',
     })
-    if (!upstream.body) {
-      res.end()
-      return
-    }
-    Readable.fromWeb(upstream.body as Parameters<typeof Readable.fromWeb>[0]).pipe(res)
+    upstream.on('error', () => res.destroy())
+    upstream.pipe(res)
     return
   }
 
-  const text = await upstream.text()
-  const contentType = upstream.headers.get('Content-Type') ?? ''
+  let text: string
+  try {
+    const chunks: Buffer[] = []
+    for await (const chunk of upstream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+    }
+    text = Buffer.concat(chunks).toString('utf8')
+  } catch (e) {
+    console.log(`[adapter] upstream body error: ${e instanceof Error ? e.name : 'unknown'}`)
+    sendJson(res, 502, { error: { message: 'upstream response failed' } })
+    return
+  }
+
   if (!contentType.includes('application/json')) {
-    res.writeHead(upstream.status, {
+    res.writeHead(status, {
       'Content-Type': contentType || 'text/plain; charset=utf-8',
       'Content-Length': Buffer.byteLength(text),
       'Cache-Control': 'no-store',
@@ -312,12 +367,12 @@ async function handleChat(
     sendJson(res, 502, { error: { message: 'upstream returned invalid JSON' } })
     return
   }
-  if (upstream.ok) {
+  if (status >= 200 && status < 300) {
     const repaired = repairToolCalls(payload, config.tolerantArgs)
     if (repaired.repaired > 0) console.log(`[adapter] repaired tool_calls=${repaired.repaired}`)
     if (repaired.coerced > 0) console.log(`[adapter] coerced tool_calls=${repaired.coerced}`)
   }
-  sendJson(res, upstream.status, payload)
+  sendJson(res, status, payload)
 }
 
 export function createServer(config: AdapterConfig): http.Server {
