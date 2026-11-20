@@ -11,21 +11,21 @@ import {
 
 test('resolveConfig 要求 MAGPIE_GATEWAY_KEY，并收敛默认模型', () => {
   assert.throws(() => resolveConfig({}), /MAGPIE_GATEWAY_KEY/)
-  const config = resolveConfig({ MAGPIE_GATEWAY_KEY: 'dummy-key' })
+  const config = resolveConfig({ MAGPIE_GATEWAY_KEY: 'test-key' })
   assert.equal(config.upstreamModel, 'opendesign/deepseek-v4.1-flash-eco')
   assert.equal(config.promptMode, 'none')
   assert.equal(config.upstreamBase, 'http://127.0.0.1:3425/v1')
   assert.equal(
-    resolveConfig({ MAGPIE_GATEWAY_KEY: 'dummy-key', NF_ADAPTER_PROMPT: 'product' }).promptMode,
+    resolveConfig({ MAGPIE_GATEWAY_KEY: 'test-key', NF_ADAPTER_PROMPT: 'product' }).promptMode,
     'product',
   )
   assert.equal(config.tolerantArgs, false)
   assert.equal(
-    resolveConfig({ MAGPIE_GATEWAY_KEY: 'dummy-key', NF_ADAPTER_TOLERANT_ARGS: '1' }).tolerantArgs,
+    resolveConfig({ MAGPIE_GATEWAY_KEY: 'test-key', NF_ADAPTER_TOLERANT_ARGS: '1' }).tolerantArgs,
     true,
   )
   assert.throws(
-    () => resolveConfig({ MAGPIE_GATEWAY_KEY: 'dummy-key', NF_ADAPTER_PORT: '0' }),
+    () => resolveConfig({ MAGPIE_GATEWAY_KEY: 'test-key', NF_ADAPTER_PORT: '0' }),
     /NF_ADAPTER_PORT/,
   )
 })
@@ -160,7 +160,7 @@ test('repairToolCalls 默认不启用容忍模式', () => {
   )
 })
 
-test('createServer 对首次 fetch TypeError 重试一次', async () => {
+test('createServer 对首次连接重置重试一次', async () => {
   let upstreamRequests = 0
   const upstream = http.createServer((req, res) => {
     upstreamRequests += 1
@@ -186,7 +186,7 @@ test('createServer 对首次 fetch TypeError 重试一次', async () => {
 
   const adapter = createServer(
     resolveConfig({
-      MAGPIE_GATEWAY_KEY: 'dummy-eval-key',
+      MAGPIE_GATEWAY_KEY: 'test-key',
       MAGPIE_BASE_URL: `http://127.0.0.1:${upstreamPort}/v1`,
       NF_ADAPTER_TIMEOUT_MS: '5000',
     }),
@@ -209,6 +209,48 @@ test('createServer 对首次 fetch TypeError 重试一次', async () => {
     assert.equal(upstreamRequests, 2)
   } finally {
     await new Promise((resolve) => adapter.close(resolve))
+    await new Promise((resolve) => upstream.close(resolve))
+  }
+})
+
+test('createServer 用 headersTimeout 覆盖 undici 默认 300 秒', { timeout: 2000 }, async () => {
+  let upstreamRequests = 0
+  // 永不发送响应头：适配器应在 50 毫秒 headersTimeout 后快速返回 502，
+  // 而不是等待 undici 默认的 300 秒（或适配器总超时 5 秒）。
+  const upstream = http.createServer((req) => {
+    upstreamRequests += 1
+    req.resume()
+  })
+  await new Promise((resolve) => upstream.listen(0, '127.0.0.1', resolve))
+  const upstreamPort = (upstream.address()).port
+
+  const adapter = createServer(
+    resolveConfig({
+      MAGPIE_GATEWAY_KEY: 'test-key',
+      MAGPIE_BASE_URL: `http://127.0.0.1:${upstreamPort}/v1`,
+      NF_ADAPTER_TIMEOUT_MS: '5000',
+      NF_ADAPTER_HEADERS_TIMEOUT_MS: '50',
+    }),
+  )
+  await new Promise((resolve) => adapter.listen(0, '127.0.0.1', resolve))
+  const adapterPort = (adapter.address()).port
+
+  try {
+    const started = Date.now()
+    const response = await fetch(`http://127.0.0.1:${adapterPort}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'test',
+        messages: [{ role: 'user', content: 'hi' }],
+      }),
+    })
+    assert.equal(response.status, 502)
+    assert.equal(upstreamRequests, 1)
+    assert.ok(Date.now() - started < 1500, 'headers timeout should fire quickly')
+  } finally {
+    await new Promise((resolve) => adapter.close(resolve))
+    upstream.closeAllConnections()
     await new Promise((resolve) => upstream.close(resolve))
   }
 })
