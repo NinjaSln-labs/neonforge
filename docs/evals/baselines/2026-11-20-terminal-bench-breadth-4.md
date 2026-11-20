@@ -99,6 +99,6 @@
 
 ## 结论
 
-- **可用结论**：自定义最小 agent 在第四批 10 个新 Terminal-Bench 任务中 7/10 首次尝试通过；排除 3 个 300 秒命令超时异常后，有效尝试 7/7 = 100%。600 秒重跑显示 `bn-fit-modify`/`code-from-image` 仍超时、`dna-assembly` 为有效 0.0；1200 秒重跑显示 `bn-fit-modify` 可通过、`code-from-image` 为有效 0.0。累计覆盖 55/89 个任务。
+- **可用结论**：自定义最小 agent 在第四批 10 个新 Terminal-Bench 任务中 7/10 首次尝试通过；排除 3 个 300 秒命令超时异常后，有效尝试 7/7 = 100%。600 秒重跑显示 `bn-fit-modify`/`code-from-image` 仍超时、`dna-assembly` 为有效 0.0；1200 秒重跑显示 `bn-fit-modify` 可通过、`code-from-image` 为有效 0.0。累计覆盖 55/89 个任务；第五批广度后再加 10 个新任务，累计 65/89，见 `2026-11-20-terminal-bench-breadth-5.md`。
 - **不可用结论**：不能称为 Terminal-Bench 2.0 完整成绩或官方排名；不能把 7/7、70% 或 1200 秒结果与前几批直接比较或合并；不能把命令超时异常归因于模型失败或 NeonForge 产品审批/工具链；不能据此估计总体通过率。
 - **下一步**：对 `dna-assembly`、`code-from-image` 的有效 0.0 增加重复；`bn-fit-modify` 的 1200 秒通过可作为新配置结果；继续选择未测任务扩大覆盖；保留 300 秒基准配置用于跨批判度对照。
