@@ -88,6 +88,6 @@
 
 ## 结论
 
-- **可用结论**：自定义最小 agent 在第五批 10 个新 Terminal-Bench 任务中 4/10 首次尝试通过；排除 2 个 300 秒命令超时异常后，有效尝试 4/8 = 50.0%；600 秒重跑显示 `model-extraction-relu-logits` 可通过、`extract-moves-from-video` 为有效 0.0；累计覆盖 65/89 个任务。
+- **可用结论**：自定义最小 agent 在第五批 10 个新 Terminal-Bench 任务中 4/10 首次尝试通过；排除 2 个 300 秒命令超时异常后，有效尝试 4/8 = 50.0%；600 秒重跑显示 `model-extraction-relu-logits` 可通过、`extract-moves-from-video` 为有效 0.0；累计覆盖 65/89 个任务；第六批再评估 9 个新任务（`mteb-retrieve` 镜像失败未评估），累计 74/89，见 `2026-11-20-terminal-bench-breadth-6.md`。
 - **不可用结论**：不能称为 Terminal-Bench 2.0 完整成绩或官方排名；不能把 50% 或 40% 与前几批直接比较或合并；不能把命令超时异常归因于模型失败或 NeonForge 产品审批/工具链；不能据此估计总体通过率。
 - **下一步**：对 4 个有效 0.0（`mailman`、`make-doom-for-mips`、`make-mips-interpreter`、`qemu-startup`）各增加重复或分析测试断言；`extract-moves-from-video` 可按 600 秒配置重复；`model-extraction-relu-logits` 的 600 秒通过单独记录；继续选择未测任务扩大覆盖。
