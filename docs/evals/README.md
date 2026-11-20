@@ -24,6 +24,7 @@
 - [2026-11-20 Terminal-Bench 2.0 第五批十任务广度](baselines/2026-11-20-terminal-bench-breadth-5.md)
 - [2026-11-20 Terminal-Bench 2.0 第六批九任务广度（mteb 镜像未评估）](baselines/2026-11-20-terminal-bench-breadth-6.md)
 - [2026-11-20 Terminal-Bench 2.0 第七批十任务广度（含验证器超时）](baselines/2026-11-20-terminal-bench-breadth-7.md)
+- [2026-11-21 Terminal-Bench 2.0 第八批四任务广度（3 个命令超时异常）](baselines/2026-11-21-terminal-bench-breadth-8.md)
 - [2026-11-19 外部基准 → 产品 ToolRegistry 桥接设计](product-toolregistry-bridge-design.md)
 - [2026-11-18 用户体验与治理差距评估（初版）](governance-gap-assessment-2026-11-18.md)
 - [2026-11-19 AI 风险登记册（初版）](ai-risk-register-2026-11-19.md)
