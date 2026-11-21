@@ -25,6 +25,21 @@ Work in /app unless the task says otherwise. Commands are executed verbatim with
 When the task is complete, reply without calling any tool and briefly state what you did.
 If a command fails, inspect the error and adjust the next command."""
 
+_SYSTEM_PROMPT_V2 = """You are a terminal agent solving a command-line task in a Linux container.
+Use the execute_bash tool to inspect the environment, run commands, and create files.
+Work in /app unless the task says otherwise. Commands are executed verbatim with a shell.
+
+Delivery discipline (required):
+1. Before acting, extract the exact deliverables from the task: file paths, formats, service/port states, and any checker commands.
+2. Do not stop after writing an implementation. Verify the deliverable from a shell: check existence, permissions, and content/format.
+3. If the task requires a service or daemon, leave it running and verify it answers on the required port.
+4. If a command fails, inspect stderr and fix the cause; do not assume success.
+5. Only reply without calling a tool after every deliverable has been verified. In the final reply, state the paths checked and the verification commands used.
+"""
+
+_FINAL_CHECK_PROMPT = """Before finalizing, run a last verification pass. Re-read the task's required outputs and test each with shell commands (existence, format/content, and service/port state). If any required file or service is missing or incorrect, continue fixing it. Only reply without a tool call after all deliverables pass."""
+
+
 _BASH_TOOL: dict[str, Any] = {
     "type": "function",
     "function": {
@@ -49,6 +64,10 @@ _BASH_TOOL: dict[str, Any] = {
 
 class NeonForgeTerminalAgent(BaseAgent):
     """Minimal Harbor agent using NeonForge's adapter as the model endpoint."""
+
+    system_prompt_text = _SYSTEM_PROMPT
+    final_check = False
+    strategy = "baseline"
 
     @staticmethod
     def name() -> str:
@@ -78,14 +97,15 @@ class NeonForgeTerminalAgent(BaseAgent):
         max_iterations = int(os.environ.get("NEONFORGE_MAX_ITERATIONS", "40"))
         command_timeout = int(os.environ.get("NEONFORGE_COMMAND_TIMEOUT_SEC", "300"))
         messages: list[dict[str, Any]] = [
-            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "system", "content": self.system_prompt_text},
             {"role": "user", "content": instruction},
         ]
         input_tokens = 0
         output_tokens = 0
         commands = 0
+        nudged = False
 
-        for _ in range(max_iterations):
+        for iteration in range(max_iterations):
             response = await client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -99,6 +119,14 @@ class NeonForgeTerminalAgent(BaseAgent):
             message = response.choices[0].message
             messages.append(message.model_dump(exclude_none=True))
             if not message.tool_calls:
+                if (
+                    self.final_check
+                    and not nudged
+                    and iteration < max_iterations - 1
+                ):
+                    messages.append({"role": "user", "content": _FINAL_CHECK_PROMPT})
+                    nudged = True
+                    continue
                 break
             for call in message.tool_calls:
                 if call.function.name != "execute_bash":
@@ -153,4 +181,22 @@ class NeonForgeTerminalAgent(BaseAgent):
 
         context.n_input_tokens = input_tokens
         context.n_output_tokens = output_tokens
-        context.metadata = {"commands_executed": commands}
+        metadata: dict[str, Any] = {"commands_executed": commands}
+        if self.strategy != "baseline":
+            metadata["strategy"] = self.strategy
+        context.metadata = metadata
+
+
+class NeonForgeTerminalAgentV2(NeonForgeTerminalAgent):
+    """Variant requiring explicit deliverable verification before finishing."""
+
+    system_prompt_text = _SYSTEM_PROMPT_V2
+    final_check = True
+    strategy = "deliverable-check"
+
+    @staticmethod
+    def name() -> str:
+        return "neonforge-terminal-v2"
+
+    def version(self) -> str | None:
+        return "0.2.0"
