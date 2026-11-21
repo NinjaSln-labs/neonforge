@@ -39,6 +39,8 @@ Delivery discipline (required):
 
 _FINAL_CHECK_PROMPT = """Before finalizing, run a last verification pass. Re-read the task's required outputs and test each with shell commands (existence, format/content, and service/port state). If any required file or service is missing or incorrect, continue fixing it. Only reply without a tool call after all deliverables pass."""
 
+_VERIFICATION_PHASE_PROMPT = """The main execution phase is over. Verification phase: re-read the original task and verify every required deliverable (file paths, formats, services/ports) using execute_bash. If anything is missing or incorrect, fix it now. You have {iterations} additional turns; use them to check and repair the deliverables. Only reply without a tool call after the required outputs have been verified or you have exhausted the repair attempts."""
+
 
 _BASH_TOOL: dict[str, Any] = {
     "type": "function",
@@ -68,6 +70,7 @@ class NeonForgeTerminalAgent(BaseAgent):
     system_prompt_text = _SYSTEM_PROMPT
     final_check = False
     strategy = "baseline"
+    verification_iterations = 0
 
     @staticmethod
     def name() -> str:
@@ -80,26 +83,16 @@ class NeonForgeTerminalAgent(BaseAgent):
         # No container-side agent installation; the shell tool uses the task image.
         return None
 
-    async def run(
+    async def _run_phase(
         self,
-        instruction: str,
+        client: AsyncOpenAI,
+        model: str,
+        messages: list[dict[str, Any]],
+        max_iterations: int,
+        allow_final_check: bool,
+        command_timeout: int,
         environment: BaseEnvironment,
-        context: AgentContext,
-    ) -> None:
-        base_url = os.environ.get("NEONFORGE_BASE_URL", "http://172.17.0.1:18082/v1")
-        model = os.environ.get("NEONFORGE_MODEL", self.model_name or "opendesign/deepseek-v4.1-flash-eco")
-        client = AsyncOpenAI(
-            base_url=base_url,
-            api_key=os.environ.get("OPENAI_API_KEY", "nf-eval"),
-            timeout=900.0,
-            max_retries=0,
-        )
-        max_iterations = int(os.environ.get("NEONFORGE_MAX_ITERATIONS", "40"))
-        command_timeout = int(os.environ.get("NEONFORGE_COMMAND_TIMEOUT_SEC", "300"))
-        messages: list[dict[str, Any]] = [
-            {"role": "system", "content": self.system_prompt_text},
-            {"role": "user", "content": instruction},
-        ]
+    ) -> tuple[int, int, int]:
         input_tokens = 0
         output_tokens = 0
         commands = 0
@@ -120,7 +113,7 @@ class NeonForgeTerminalAgent(BaseAgent):
             messages.append(message.model_dump(exclude_none=True))
             if not message.tool_calls:
                 if (
-                    self.final_check
+                    allow_final_check
                     and not nudged
                     and iteration < max_iterations - 1
                 ):
@@ -178,12 +171,72 @@ class NeonForgeTerminalAgent(BaseAgent):
                         "content": output,
                     }
                 )
+        return input_tokens, output_tokens, commands
+
+    async def run(
+        self,
+        instruction: str,
+        environment: BaseEnvironment,
+        context: AgentContext,
+    ) -> None:
+        base_url = os.environ.get("NEONFORGE_BASE_URL", "http://172.17.0.1:18082/v1")
+        model = os.environ.get("NEONFORGE_MODEL", self.model_name or "opendesign/deepseek-v4.1-flash-eco")
+        client = AsyncOpenAI(
+            base_url=base_url,
+            api_key=os.environ.get("OPENAI_API_KEY", "nf-eval"),
+            timeout=900.0,
+            max_retries=0,
+        )
+        max_iterations = int(os.environ.get("NEONFORGE_MAX_ITERATIONS", "40"))
+        command_timeout = int(os.environ.get("NEONFORGE_COMMAND_TIMEOUT_SEC", "300"))
+        verification_iterations = self.verification_iterations
+        if verification_iterations > 0:
+            verification_iterations = int(
+                os.environ.get("NEONFORGE_VERIFY_ITERATIONS", str(verification_iterations))
+            )
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": self.system_prompt_text},
+            {"role": "user", "content": instruction},
+        ]
+        input_tokens, output_tokens, phase1_commands = await self._run_phase(
+            client,
+            model,
+            messages,
+            max_iterations,
+            self.final_check,
+            command_timeout,
+            environment,
+        )
+        total_commands = phase1_commands
+        phase2_commands = 0
+        if verification_iterations > 0:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": _VERIFICATION_PHASE_PROMPT.format(iterations=verification_iterations),
+                }
+            )
+            extra_in, extra_out, phase2_commands = await self._run_phase(
+                client,
+                model,
+                messages,
+                verification_iterations,
+                False,
+                command_timeout,
+                environment,
+            )
+            input_tokens += extra_in
+            output_tokens += extra_out
+            total_commands += phase2_commands
 
         context.n_input_tokens = input_tokens
         context.n_output_tokens = output_tokens
-        metadata: dict[str, Any] = {"commands_executed": commands}
+        metadata: dict[str, Any] = {"commands_executed": total_commands}
         if self.strategy != "baseline":
             metadata["strategy"] = self.strategy
+        if self.verification_iterations > 0:
+            metadata["phase1_commands"] = phase1_commands
+            metadata["phase2_commands"] = phase2_commands
         context.metadata = metadata
 
 
@@ -200,3 +253,18 @@ class NeonForgeTerminalAgentV2(NeonForgeTerminalAgent):
 
     def version(self) -> str | None:
         return "0.2.0"
+
+
+class NeonForgeTerminalAgentV3(NeonForgeTerminalAgentV2):
+    """Two-phase variant: main loop, then a dedicated verification/fix phase."""
+
+    final_check = False
+    strategy = "two-phase-10"
+    verification_iterations = 10
+
+    @staticmethod
+    def name() -> str:
+        return "neonforge-terminal-v3"
+
+    def version(self) -> str | None:
+        return "0.3.0"
