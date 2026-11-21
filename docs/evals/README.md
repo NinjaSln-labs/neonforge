@@ -28,6 +28,7 @@
 - [2026-11-21 Terminal-Bench 2.0 `mteb-retrieve` 补跑（89/89 覆盖）](baselines/2026-11-21-terminal-bench-mteb-retrieve.md)
 - [2026-11-22 Terminal-Bench 2.0 verifier 失败断言分析（回溯与更正）](baselines/2026-11-22-terminal-bench-verifier-failure-analysis.md)
 - [2026-11-22 Terminal-Bench 2.0 agent v2（交付物自检）对照](baselines/2026-11-22-terminal-bench-agent-v2-comparison.md)
+- [2026-11-22 Terminal-Bench 2.0 agent v3（两阶段验证）对照](baselines/2026-11-22-terminal-bench-agent-v3-two-phase.md)
 - [2026-11-19 外部基准 → 产品 ToolRegistry 桥接设计](product-toolregistry-bridge-design.md)
 - [2026-11-18 用户体验与治理差距评估（初版）](governance-gap-assessment-2026-11-18.md)
 - [2026-11-19 AI 风险登记册（初版）](ai-risk-register-2026-11-19.md)
