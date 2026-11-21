@@ -88,15 +88,15 @@
 
 ## 追加：`code-from-image` 1200 秒配置的 3 次重复（两个 job）
 
-`code-from-image` 在 600/1200 秒均为有效 0.0；用 1200 秒配置重复 3 次（2 并发）。首次 job `tbench2-b4-code-from-image-repeat-3x-1200`（06:41:06Z 启动）在主机暂停时中断：2 个已完成 trial 均为有效 0.0，第 3 个为 `CancelledError`；恢复后用 `tbench2-b4-code-from-image-repeat-3x-1200-rerun1` 补跑第 3 个 trial（10:21:37 → 10:57:27 UTC，35m50，0 异常）。
+`code-from-image` 在 600/1200 秒均为有效 0.0；用 1200 秒配置重复 3 次（2 并发）。首次 job `tbench2-b4-code-from-image-repeat-3x-1200`（06:41:06Z 启动）在主机暂停时中断：2 个已完成 trial 中 1 个为有效 0.0、1 个为 verifier 依赖安装失败（测试未执行），第 3 个为 `CancelledError`；恢复后用 `tbench2-b4-code-from-image-repeat-3x-1200-rerun1` 补跑第 3 个 trial（10:21:37 → 10:57:27 UTC，35m50，0 异常，有效 0.0）。
 
 | trial 来源 | 结果 | Reward | 输入 / 输出 tokens | 命令数 | Agent 用时 |
 |------------|------|-------:|-------------------|-------:|----------|
-| 首次 job（2 个完成） | 2 × 有效 0.0 | 0.0 | 848,372 / 36,738；1,179,775 / 43,690 | 28 / 40 | 20m08s / 17m47s |
+| 首次 job（2 个完成） | 1 × 有效 0.0、1 × verifier 依赖失败（Harbor 0.0） | 0.0 | 有效：1,179,775 / 43,690；verifier 失败：848,372 / 36,738 | 有效 40 / 失败 28 | 有效 17m47s / 失败 20m08s |
 | `-rerun1`（1 个） | 有效 0.0 | 0.0 | 766,064 / 27,114 | 39 | 34m51s（验证器 47s） |
 
-- **结果**：3/3 完成的 trial 均为有效 0.0、0 异常；被取消的 trial 不计入。三个 trial 合计 token 2,794,211 / 107,542。
-- **解读**：`code-from-image` 的 1200 秒有效 0.0 稳定复现，不是单次波动或单命令预算问题；需要不同 agent/策略或任务特定分析。
+- **结果**：3 个**模型可验证** trial（首次 job 1 个 + `-rerun1` 1 个 + 此前 1200 秒重跑 1 个）均为有效 0.0；首次 job 的另一个完成 trial 是 verifier 依赖安装失败（apt/curl/uvx 缺失，测试未执行），被取消的 trial 不计入。重复 + 补跑的模型可验证 token 合计 **1,945,839 / 70,804**（不含 verifier 失败 trial 的 848,372 / 36,738）；此前 `tbench2-breadth-4-timeout1200` 的 `code-from-image` trial 另有 835,913 / 29,856。
+- **解读**：`code-from-image` 的 1200 秒有效 0.0 稳定复现，不是单次波动或单命令预算问题；3 个模型可验证 trial 的断言均为 `/app/output.txt` 不存在；需要不同 agent/策略或任务特定分析。verifier 依赖失败 trial 不计入模型结论。
 - 这是**1200 秒配置**的重复，不能与第四批初轮 300 秒的 7/10 或 1200 秒重跑的 1/2 合并。
 
 ## 失败与异常
@@ -126,4 +126,12 @@
 
 - **可用结论**：自定义最小 agent 在第四批 10 个新 Terminal-Bench 任务中 7/10 首次尝试通过；排除 3 个 300 秒命令超时异常后，有效尝试 7/7 = 100%。600 秒重跑显示 `bn-fit-modify`/`code-from-image` 仍超时、`dna-assembly` 为有效 0.0；1200 秒重跑显示 `bn-fit-modify` 可通过、`code-from-image` 为有效 0.0。累计覆盖 55/89 个任务；第五批广度后再加 10 个新任务，累计 65/89，见 `2026-11-20-terminal-bench-breadth-5.md`。
 - **不可用结论**：不能称为 Terminal-Bench 2.0 完整成绩或官方排名；不能把 7/7、70% 或 1200 秒结果与前几批直接比较或合并；不能把命令超时异常归因于模型失败或 NeonForge 产品审批/工具链；不能据此估计总体通过率。
-- **下一步**：`dna-assembly` 已在 600 秒配置下 3/3 有效 0.0；`code-from-image` 已在 1200 秒配置下 3/3 完成 trial 均为有效 0.0（稳定失败）；`bn-fit-modify` 的 1200 秒通过可作为新配置结果；terminal-bench@2.0 已达到 89/89 覆盖，继续扩大任务数已无必要。
+- **下一步**：`dna-assembly` 已在 600 秒配置下 3/3 有效 0.0；`code-from-image` 已在 1200 秒配置下 3 个模型可验证 trial 均为有效 0.0（稳定失败；另有 1 个 verifier 依赖失败、1 个取消，不计入）；`bn-fit-modify` 的 1200 秒通过可作为新配置结果；terminal-bench@2.0 已达到 89/89 覆盖，继续扩大任务数已无必要；失败断言分析见 `2026-11-22-terminal-bench-verifier-failure-analysis.md`。
+
+## 更正（2026-11-22）：`code-from-image` 的 1 个完成 trial 为 verifier 依赖失败
+
+回溯检查（`2026-11-22-terminal-bench-verifier-failure-analysis.md`）发现，首次 job 中 `code-from-image__4PvhgkL`（28 条命令、20m08s、848,372 / 36,738 tokens）没有 `ctrf.json`；`verifier/test-stdout.txt` 显示 `curl: (18) HTTP/2 stream 1 was not closed cleanly`、`uvx: command not found`，测试未执行。Harbor 仍记录 reward 0.0、`reward_valid=True`。
+
+- 该 trial 不计入模型可验证的稳定失败样本；本卡前述“2 个已完成 trial 均为有效 0.0”和“3/3 完成 trial 均为有效 0.0”的表述作废。
+- 修正后，1200 秒配置共有 **3 个模型可验证 trial**（此前 1200 秒重跑 1 个 + 首次 job 1 个 + `-rerun1` 1 个），均为有效 0.0，断言均为 `/app/output.txt` 不存在；稳定失败结论仍成立，但样本构成不同。
+- 被取消的 trial 与 verifier 依赖失败 trial 均不计入模型通过率或 token 汇总。
