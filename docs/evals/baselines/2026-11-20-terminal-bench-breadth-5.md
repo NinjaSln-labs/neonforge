@@ -80,6 +80,24 @@
 - **解读**：`mailman` 初轮 0.0 是波动——2 次干净运行全部通过（另 1 次命令超时）；`make-mips-interpreter` 1/3 干净通过，也非稳定失败；`make-doom-for-mips` 与 `qemu-startup` 3/3 干净 0.0，失败稳定。
 - 这是**相同 300 秒配置**的重复，不能与第五批初轮的 4/10 或 4/8 合并为总体通过率，只作各任务稳定性信号。
 
+## 追加：2 个 600 秒任务的 3 次重复（`tbench2-600s-zero-repeat-3x`）
+
+`qemu-alpine-ssh`（第六批 600 秒有效 0.0）与 `extract-moves-from-video`（第五批 600 秒有效 0.0）各重复 3 次，600 秒配置、2 并发、40 轮。11:52:55 → 12:36:53 UTC（43m57），1 个 600 秒命令超时异常。
+
+| 任务 | 3 次结果 | 干净有效 trials | 异常 | 通过 | 备注 |
+|------|----------|----------------|------|------|------|
+| `qemu-alpine-ssh` | 3 × 有效 0.0 | 3 | 0 | 0 | 29 / 33 / 32 条命令；9m15s / 6m44s / 9m24s；1,228,185 / 38,870 tokens |
+| `extract-moves-from-video` | 1 × 1.0、1 × 有效 0.0、1 × RuntimeError | 2 | 1 | 1 | 通过 trial：28 条命令，13m34s，409,014 / 7,735；有效 0.0：40 条命令，20m08s，628,648 / 10,293 |
+
+### 汇总
+
+- **6 trials**：1 × 1.0（`extract-moves-from-video`）、5 × 0.0；1 个 600 秒命令超时异常；Harbor mean 0.167。
+- **干净有效尝试**：5 个；干净通过 1/5 = **20.0%**。
+- **异常按 0**：1/6 = 16.7%。
+- 总 token：2,265,847 输入 / 56,898 输出；异常 trial 无用量汇总。
+- **解读**：`qemu-alpine-ssh` 在 600 秒下 3/3 有效 0.0，稳定失败；`extract-moves-from-video` 出现 1 次干净通过、1 次有效 0.0 和 1 次命令超时，600 秒下的有效 0.0 不是稳定失败，波动明显。
+- 这是**600 秒配置**的重复，不能与第五批初轮的 4/10 或 600 秒重跑的 1/2 合并。
+
 ## 失败与异常
 
 | 用例 | 现象 | 归因 | 是否产品问题 |
@@ -110,4 +128,4 @@
 
 - **可用结论**：自定义最小 agent 在第五批 10 个新 Terminal-Bench 任务中 4/10 首次尝试通过；排除 2 个 300 秒命令超时异常后，有效尝试 4/8 = 50.0%；600 秒重跑显示 `model-extraction-relu-logits` 可通过、`extract-moves-from-video` 为有效 0.0；累计覆盖 65/89 个任务；第六批再评估 9 个新任务（`mteb-retrieve` 镜像失败未评估），累计 74/89，见 `2026-11-20-terminal-bench-breadth-6.md`。
 - **不可用结论**：不能称为 Terminal-Bench 2.0 完整成绩或官方排名；不能把 50% 或 40% 与前几批直接比较或合并；不能把命令超时异常归因于模型失败或 NeonForge 产品审批/工具链；不能据此估计总体通过率。
-- **下一步**：4 个有效 0.0 已各做 3 次重复（干净有效 3/11；`mailman` 2/2 干净通过，`make-mips-interpreter` 1/3 干净通过，`make-doom-for-mips` 与 `qemu-startup` 3/3 稳定 0.0）；`extract-moves-from-video` 可按 600 秒配置重复；`model-extraction-relu-logits` 的 600 秒通过单独记录；terminal-bench@2.0 已达到 89/89 覆盖。
+- **下一步**：4 个有效 0.0 已各做 3 次重复（干净有效 3/11；`mailman` 2/2 干净通过，`make-mips-interpreter` 1/3 干净通过，`make-doom-for-mips` 与 `qemu-startup` 3/3 稳定 0.0）；`qemu-alpine-ssh` 在 600 秒下 3/3 有效 0.0；`extract-moves-from-video` 在 600 秒下 1 次干净通过、1 次有效 0.0、1 次超时，波动明显；`model-extraction-relu-logits` 的 600 秒通过单独记录；terminal-bench@2.0 已达到 89/89 覆盖。
