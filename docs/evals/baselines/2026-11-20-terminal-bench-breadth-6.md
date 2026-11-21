@@ -92,6 +92,20 @@
 - **解读**：300/600/1200 秒均为单命令超时；该任务需要 >1200 秒预算或不同 agent/策略，不能按现有配置判为模型失败。
 - 这是**新配置**的单独重跑，不混入第六批 300 秒的 3/9 或 600 秒重跑结果。
 
+## 追加：2 个任务的 600 秒 3 次重复（`tbench2-b6-600s-repeat-3x`）
+
+`raman-fitting` 与 `winning-avg-corewars` 在 300 秒重复中各有 2 次命令超时；用 600 秒配置各重复 3 次（2 并发、40 轮）。11:00:33 → 11:49:00 UTC（48m27），3 个 600 秒命令超时异常。
+
+| 任务 | 3 次结果 | 干净有效 trials | 异常 | 通过 | 备注 |
+|------|----------|----------------|------|------|------|
+| `raman-fitting` | 3 × RuntimeError | 0 | 3 | 0 | 三次均为 `Command timed out after 600 seconds` |
+| `winning-avg-corewars` | 3 × 有效 0.0 | 3 | 0 | 0 | 39 / 43 / 40 条命令；8m33s / 16m31s / 7m14s；3,330,109 / 98,188 tokens |
+
+- `winning-avg-corewars` 三个 trial 的 token 合计 3,330,109 / 98,188；`raman-fitting` 异常 trial 无用量汇总。
+- **汇总**：6 trials、0 通过、3 个异常；干净有效尝试 3 个，均为 0.0。
+- **解读**：`winning-avg-corewars` 的 300 秒超时主要来自单命令预算，600 秒下可完成但稳定 0.0；`raman-fitting` 即使 600 秒仍 3/3 超时，需要 >600 秒或不同 agent/策略。
+- 这是**600 秒配置**的重复，不能与第六批 300 秒初轮的 3/9 或 3 次 300 秒重复合并。
+
 ## 失败与异常
 
 | 用例 | 现象 | 归因 | 是否产品问题 |
@@ -123,4 +137,4 @@
 
 - **可用结论**：自定义最小 agent 在第六批 9 个可运行 Terminal-Bench 任务中 3/9 首次尝试通过；排除 2 个 300 秒命令超时异常后，有效尝试 3/7 = 42.9%；600 秒重跑显示 `qemu-alpine-ssh` 为有效 0.0、`train-fasttext` 仍超时；累计评估 74/89 个任务（`mteb-retrieve` 因镜像拉取失败未评估）。
 - **不可用结论**：不能称为 Terminal-Bench 2.0 完整成绩或官方排名；不能把 42.9% 或 33.3% 与前几批直接比较或合并；不能把命令超时或镜像拉取失败归因于模型失败或 NeonForge 产品审批/工具链；不能据此估计总体通过率。
-- **下一步**：4 个有效 0.0 已各做 3 次重复（干净有效 2/8；`dna-insert` 2/3 干净通过，`pytorch-model-cli` 3/3 稳定 0.0，`raman-fitting`/`winning-avg-corewars` 各有 2 次命令超时且无干净通过）；`qemu-alpine-ssh` 可按 600 秒配置重复；`train-fasttext` 在 1200 秒仍超时，需 >1200 秒或不同 agent/策略；`mteb-retrieve` 已补跑通过，terminal-bench@2.0 达到 89/89 覆盖。
+- **下一步**：4 个有效 0.0 已各做 3 次重复（干净有效 2/8；`dna-insert` 2/3 干净通过，`pytorch-model-cli` 3/3 稳定 0.0，`raman-fitting`/`winning-avg-corewars` 各有 2 次命令超时且无干净通过）；`qemu-alpine-ssh` 可按 600 秒配置重复；`train-fasttext` 在 1200 秒仍超时，需 >1200 秒或不同 agent/策略；`raman-fitting` 在 600 秒 ×3 仍 3/3 超时，需更长预算或不同 agent/策略；`winning-avg-corewars` 在 600 秒 ×3 为 3/3 有效 0.0（预算相关，稳定失败）；`mteb-retrieve` 已补跑通过，terminal-bench@2.0 达到 89/89 覆盖。
