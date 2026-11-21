@@ -80,6 +80,18 @@
 - **解读**：`dna-insert` 初轮 0.0 是波动——重复中 2/3 干净通过；`pytorch-model-cli` 3/3 干净 0.0，失败稳定；`raman-fitting` 与 `winning-avg-corewars` 无干净通过且各出现 2 次命令超时，仍需更长预算或不同策略。
 - 这是**相同 300 秒配置**的重复，不能与第六批初轮的 3/9 或 3/7 合并为总体通过率，只作各任务稳定性信号。
 
+## 追加：`train-fasttext` 1200 秒重跑（`tbench2-train-fasttext-1200`）
+
+`train-fasttext` 在 300 秒与 600 秒均为命令超时；继续放宽到 1200 秒（另加 verifier ×4）：
+
+| 配置 | 结果 | Reward | 输入 / 输出 tokens | 命令数 | Agent 用时 | 备注 |
+|------|------|-------:|-------------------|-------:|----------|------|
+| 1200 秒（`tbench2-train-fasttext-1200`） | **RuntimeError** | 0.0（异常） | 0 / 0（未汇总） | — | 51m35s | 仍 `Command timed out after 1200 seconds` |
+
+- Job：2026-11-21T05:05:54 → 06:00:18 UTC（54m23）。
+- **解读**：300/600/1200 秒均为单命令超时；该任务需要 >1200 秒预算或不同 agent/策略，不能按现有配置判为模型失败。
+- 这是**新配置**的单独重跑，不混入第六批 300 秒的 3/9 或 600 秒重跑结果。
+
 ## 失败与异常
 
 | 用例 | 现象 | 归因 | 是否产品问题 |
@@ -111,4 +123,4 @@
 
 - **可用结论**：自定义最小 agent 在第六批 9 个可运行 Terminal-Bench 任务中 3/9 首次尝试通过；排除 2 个 300 秒命令超时异常后，有效尝试 3/7 = 42.9%；600 秒重跑显示 `qemu-alpine-ssh` 为有效 0.0、`train-fasttext` 仍超时；累计评估 74/89 个任务（`mteb-retrieve` 因镜像拉取失败未评估）。
 - **不可用结论**：不能称为 Terminal-Bench 2.0 完整成绩或官方排名；不能把 42.9% 或 33.3% 与前几批直接比较或合并；不能把命令超时或镜像拉取失败归因于模型失败或 NeonForge 产品审批/工具链；不能据此估计总体通过率。
-- **下一步**：4 个有效 0.0 已各做 3 次重复（干净有效 2/8；`dna-insert` 2/3 干净通过，`pytorch-model-cli` 3/3 稳定 0.0，`raman-fitting`/`winning-avg-corewars` 各有 2 次命令超时且无干净通过）；`qemu-alpine-ssh` 可按 600 秒配置重复；`train-fasttext` 用 1200 秒或不同 agent/策略单独评估；`mteb-retrieve` 已补跑通过，terminal-bench@2.0 达到 89/89 覆盖。
+- **下一步**：4 个有效 0.0 已各做 3 次重复（干净有效 2/8；`dna-insert` 2/3 干净通过，`pytorch-model-cli` 3/3 稳定 0.0，`raman-fitting`/`winning-avg-corewars` 各有 2 次命令超时且无干净通过）；`qemu-alpine-ssh` 可按 600 秒配置重复；`train-fasttext` 在 1200 秒仍超时，需 >1200 秒或不同 agent/策略；`mteb-retrieve` 已补跑通过，terminal-bench@2.0 达到 89/89 覆盖。
