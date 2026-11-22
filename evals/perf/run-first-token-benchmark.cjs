@@ -25,6 +25,8 @@ function parseArgs(argv) {
     mode: 'mock',
     delayMs: 0,
     delayMock: false,
+    remote: false,
+    remoteModel: null,
     runs: 3,
     iterations: 10,
     warmup: 3,
@@ -36,6 +38,9 @@ function parseArgs(argv) {
     if (a === '--mode') opts.mode = argv[++i]
     else if (a === '--delay-ms') opts.delayMs = Number(argv[++i])
     else if (a === '--delay-mock') opts.delayMock = true
+    else if (a === '--remote') opts.remote = true
+    else if (a === '--remote-model') opts.remoteModel = argv[++i]
+    else if (a === '--key-env') opts.keyEnv = argv[++i]
     else if (a === '--runs') opts.runs = Number(argv[++i])
     else if (a === '--iterations') opts.iterations = Number(argv[++i])
     else if (a === '--warmup') opts.warmup = Number(argv[++i])
@@ -43,7 +48,8 @@ function parseArgs(argv) {
     else if (a === '--out') opts.out = argv[++i]
     else throw new Error(`unknown arg ${a}`)
   }
-  if (!['mock', 'real'].includes(opts.mode)) throw new Error(`unknown mode ${opts.mode}`)
+  if (!['mock', 'real', 'remote'].includes(opts.mode)) throw new Error(`unknown mode ${opts.mode}`)
+  if (opts.mode === 'remote') opts.remote = true
   return opts
 }
 
@@ -105,6 +111,18 @@ function childEnv(runDir, opts) {
     NF_FIRST_TOKEN_ITERATIONS: String(opts.iterations),
     NF_FIRST_TOKEN_WARMUP: String(opts.warmup),
     NF_FIRST_TOKEN_DELAY_MS: String(opts.delayMs),
+  }
+  if (opts.remote) {
+    // 远端路径：key 只从指定环境变量进入探针进程，不写文件、不写日志。
+    const keyEnv = opts.keyEnv || 'DEEPSEEK_API_KEY'
+    const key = process.env[keyEnv]
+    if (!key) throw new Error(`${keyEnv} missing for remote mode`)
+    env[keyEnv] = key
+    env.NF_FIRST_TOKEN_REAL = '1'
+    env.NF_FIRST_TOKEN_REAL_KEY_ENV = keyEnv
+    env.NF_FIRST_TOKEN_REMOTE = '1'
+    if (opts.remoteModel) env.NF_FIRST_TOKEN_REMOTE_MODEL = opts.remoteModel
+    return env
   }
   if (opts.mode === 'real') {
     // 凭据只从环境变量进入探针进程，不写文件、不写日志。
@@ -260,7 +278,7 @@ async function main() {
   }
   mkdirSync(scratchDir, { recursive: true })
   const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-  const tag = `${opts.mode}-${opts.delayMs}ms`
+  const tag = `${opts.remote ? 'remote' : opts.mode}-${opts.delayMs}ms`
   const outPath = opts.out || path.join(scratchDir, `first-token-${tag}-${stamp}.jsonl`)
   mkdirSync(path.dirname(outPath), { recursive: true })
   const g = gitInfo()
@@ -281,6 +299,9 @@ async function main() {
     },
     options: {
       mode: opts.mode,
+      remote: opts.remote,
+      remoteModel: opts.remoteModel,
+      keyEnv: opts.remote ? opts.keyEnv || 'DEEPSEEK_API_KEY' : null,
       delayMs: opts.delayMs,
       runs: opts.runs,
       iterations: opts.iterations,
