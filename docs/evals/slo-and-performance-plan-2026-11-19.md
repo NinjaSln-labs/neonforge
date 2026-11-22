@@ -1,6 +1,6 @@
 # 产品级 SLO 与性能测量计划（初版，2026-11-19）
 
-> 性质：指标定义与测量计划，不是已验证的 SLO；已有 WSL2+xvfb 启动与核心工具执行基线，其余指标仍无产品级基线。
+> 性质：指标定义与测量计划，不是已验证的 SLO；已有 WSL2+xvfb 启动、主进程工具与端到端工具基线，其余指标仍无产品级基线。
 > 关联：`governance-gap-assessment-2026-11-18.md` 第 2 项、`ai-risk-register-2026-11-19.md` R-12、`baselines/2026-11-22-product-startup-baseline.md`。
 
 ## 1. 目标
@@ -11,22 +11,22 @@
 
 ## 2. 指标定义
 
-| 指标          | 定义                                   | 采集点                                | 现状                                                           |
-| ------------- | -------------------------------------- | ------------------------------------- | -------------------------------------------------------------- |
-| 冷启动时间    | 进程启动到主窗口可交互                 | Electron main 时间戳 + renderer ready | 已有 WSL2+xvfb 基线（20 冷 + 10 热；非 macOS 目标机）          |
-| 首 token 延迟 | 用户发送到首个流式 token               | renderer 请求时间 → gateway 首块      | 未测（BFCL 延迟是模型级，不是产品）                            |
-| 工具执行延迟  | 工具调用进入到结果返回                 | ToolRegistry 执行前后                 | 已有 WSL2+xvfb 主进程内基线（read p95 9.6 ms / write 23.4 ms） |
-| 审批等待时间  | 授权卡出现到用户决定                   | renderer 授权卡事件                   | 未测                                                           |
-| 空载启动内存  | 启动页可见后各进程 PSS/RSS             | Electron 进程指标 + `/proc` PSS       | 已有 WSL2+xvfb 基线（约 272 MB PSS）                           |
-| 长会话内存    | 30/60/120 分钟会话的 renderer/main RSS | Electron 进程指标                     | 未测                                                           |
-| 任务成功率    | 目标确认 → 交付包 → 解决确认完成率     | timeline/状态机                       | 未测                                                           |
-| 错误率        | 工具失败/模型失败/崩溃占比             | timeline + 日志                       | 未测                                                           |
+| 指标          | 定义                                   | 采集点                                | 现状                                                                        |
+| ------------- | -------------------------------------- | ------------------------------------- | --------------------------------------------------------------------------- |
+| 冷启动时间    | 进程启动到主窗口可交互                 | Electron main 时间戳 + renderer ready | 已有 WSL2+xvfb 基线（20 冷 + 10 热；非 macOS 目标机）                       |
+| 首 token 延迟 | 用户发送到首个流式 token               | renderer 请求时间 → gateway 首块      | 未测（BFCL 延迟是模型级，不是产品）                                         |
+| 工具执行延迟  | 工具调用进入到结果返回                 | ToolRegistry 执行前后                 | 已有 WSL2+xvfb 主进程内与渲染器 IPC 基线（read p95 8.8 ms / write 24.0 ms） |
+| 审批等待时间  | 授权卡出现到用户决定                   | renderer 授权卡事件                   | 未测                                                                        |
+| 空载启动内存  | 启动页可见后各进程 PSS/RSS             | Electron 进程指标 + `/proc` PSS       | 已有 WSL2+xvfb 基线（约 272 MB PSS）                                        |
+| 长会话内存    | 30/60/120 分钟会话的 renderer/main RSS | Electron 进程指标                     | 未测                                                                        |
+| 任务成功率    | 目标确认 → 交付包 → 解决确认完成率     | timeline/状态机                       | 未测                                                                        |
+| 错误率        | 工具失败/模型失败/崩溃占比             | timeline + 日志                       | 未测                                                                        |
 
 ## 3. 测量方法
 
 - **冷启动**：在 macOS 目标机重复 20 次，记录 p50/p95；区分首次安装与热启动。2026-11-22 已先在 WSL2+xvfb 完成 20 冷 + 10 热的开发机基线（`baselines/2026-11-22-product-startup-baseline.md`），macOS 目标机复测仍未做。
 - **首 token**：本地 Magpie 与远端 DeepSeek 分开记录；流式与非流式分开；记录模型/Provider/日期。
-- **工具延迟**：固定 fixture 项目，read/write/edit/search/bash 各 30 次；记录 p50/p95 与失败。2026-11-22 已完成主进程内基线（3 进程 × 30 次；`baselines/2026-11-22-product-tool-execution-baseline.md`），尚未覆盖渲染器 IPC/审批卡与真实大项目。
+- **工具延迟**：固定 fixture 项目，read/write/edit/search/bash 各 30 次；记录 p50/p95 与失败。2026-11-22 已完成主进程内基线（3 进程 × 30 次；`baselines/2026-11-22-product-tool-execution-baseline.md`）与渲染器 IPC 端到端基线（`baselines/2026-11-22-product-tool-ipc-baseline.md`），尚未覆盖审批卡等待与真实大项目。
 - **审批等待**：受控用户研究或模拟点击；记录卡出现到决定的时间与误解点（与 SUS/HEART 共用）。
 - **长会话**：固定脚本 30/60/120 分钟，记录 RSS、事件循环延迟、工具失败。
 - **任务成功率**：用固定任务集（目标/方案/授权/交付）做端到端运行；当前只有 L1/L3 测试，不是产品级任务成功率。
@@ -54,6 +54,7 @@
 
 - 已有：BFCL 单题延迟、AgentDojo 单题延迟、部分工具单测耗时；这些是模型/评估信号，不是产品 SLO。
 - 已有（2026-11-22）：WSL2+xvfb 下真实 Electron 的冷/热启动与空载 PSS/IPC 基线；冷启动首屏 p50 449 ms / p95 512 ms，空载 PSS 约 272 MB。该数据不是 macOS 目标机，也不是 SLO 达成声明。
-- 已有（2026-11-22）：5 个核心工具（read/search/write/edit/bash）的主进程内基线，每工具 90 次、0 失败；read p95 9.6 ms、write 23.4 ms、edit 26.9 ms、bash 11.7 ms。仍缺渲染器/审批卡与真实项目场景。
+- 已有（2026-11-22）：5 个核心工具（read/search/write/edit/bash）的主进程内基线，每工具 90 次、0 失败；read p95 9.6 ms、write 23.4 ms、edit 26.9 ms、bash 11.7 ms。
+- 已有（2026-11-22）：同一 fixture/tools:execute 路径的渲染器 IPC 端到端基线，每工具 90 次、0 失败；read p95 8.8 ms、write 24.0 ms、edit 23.6 ms、bash 10.7 ms。仍未覆盖审批卡等待、网络/MCP、大项目。
 - 缺失：macOS 目标机冷启动、首 token、审批等待、长会话内存、产品级任务成功率。
 - 下一步：补 macOS 目标机复测与固定 fixture 的工具/首 token 基准；未采到基线前不对外承诺 SLO。
