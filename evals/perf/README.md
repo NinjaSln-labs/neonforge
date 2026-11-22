@@ -107,6 +107,19 @@ node evals/perf/run-long-session-benchmark.cjs --minutes 120 --sample-ms 60000 -
 - **脚本驱动，非人类研究**；mock 短消息不带工具、文件上下文或 reasoning。
 - 数据只写 `.scratch/evals/perf/long-session-*.jsonl` 与 `long-session-*-summary.json`。
 
+## 性能回归门
+
+```bash
+node evals/perf/run-perf-regression-gate.cjs              # 串行跑启动/工具/mock 首 token
+node evals/perf/run-perf-regression-gate.cjs --only startup,tools
+node evals/perf/run-perf-regression-gate.cjs --dry-run    # 只打印将执行的命令
+```
+
+- 按当前平台（可用 `--host` 显式指定）选择阈值；退出码 `0` 通过、`1` 超限/运行失败、`2` 参数错误。
+- 阈值是 2–4 倍余量的**回归上限**，不是 SLO；样本少于正式基线，仅同平台同探针形状可用。
+- 报告写 `.scratch/evals/perf/perf-gate-<时间戳>/report.json`；全部场景用假 Key 与本地 mock，不发起外部模型调用。
+- 详见 `docs/evals/perf-regression-gate-2026-11-23.md`。
+
 ## 限制
 
 - 头部启动数字是 **headless + 软件渲染 + xvfb**，不等于 macOS/Windows 桌面 GPU 路径；只作同环境纵向对比。
@@ -116,4 +129,5 @@ node evals/perf/run-long-session-benchmark.cjs --minutes 120 --sample-ms 60000 -
 - fixture 很小且文件缓存已热，不代表大文件、冷缓存、并发或网络工具。
 - 首 token 只测本机 Magpie（`opendesign/deepseek-v4.1-flash-eco`）、远端 DeepSeek flash/pro 与单一 macOS 机型；mock 上游形状固定，不含远端网络抖动、工具首轮或长上下文。
 - 长会话只测 mock 短消息（无工具/文件上下文），WSL2+xvfb 与单一 2018 MacBook Pro；macOS 无 PSS，working set 含共享页。
+- 回归门只覆盖启动/工具/mock 首 token，尚未接入 CI，且阈值与当前机型/负载绑定。
 - 不是官方基准，也不代表用户感知的端到端时延。
