@@ -53,6 +53,18 @@ node evals/perf/run-tool-ipc-benchmark.cjs --runs 3 --iterations 30 --warmup 3
 - 同时校验返回载荷；不包含审批卡显示或用户点击等待。
 - 结果只统计渲染器内测得的端到端 invoke 往返。
 
+## 审批卡 UI 基准（mock，非人类）
+
+```bash
+node evals/perf/run-renderer-ui-benchmark.cjs --cycles 20
+```
+
+- 通过 `apps/desktop/playwright.perf.config.ts` 启动 Vite 渲染器 + Chromium；`tests/perf/approval.perf.ts` 使用 mock bridge。
+- 先用“目标确认 → 执行确认”进入可授权状态，再连续注入 `write` tool-call。
+- `MutationObserver` 记录 tool-call → `.nf-toolcall--need-approval` 出现；页面内脚本 `button.click()` 记录点击 → `.nf-toolcall--done`。
+- **非人类数据**：不含阅读/理解/犹豫/误点，不能用于 SUS/HEART 或人类审批等待结论。
+- 不经过真实 Electron preload/IPC/main/文件系统；mock `tools.execute` 立即返回。
+
 ## 限制
 
 - 头部启动数字是 **headless + 软件渲染 + xvfb**，不等于 macOS/Windows 桌面 GPU 路径；只作同环境纵向对比。
