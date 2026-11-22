@@ -3,6 +3,7 @@
 // 输出一行 NF_PERF_RESULT JSON 到 stdout，其余日志被运行器收集。
 
 const path = require('node:path')
+const { readFileSync } = require('node:fs')
 const { pathToFileURL } = require('node:url')
 const { app } = require('electron')
 
@@ -14,6 +15,19 @@ let finished = false
 
 function msSinceStart() {
   return Number(process.hrtime.bigint() - t0) / 1e6
+}
+
+// Linux 下用 PSS（/proc/<pid>/smaps_rollup）比 working set 更接近唯一驻留内存；
+// working set 在各进程间包含共享页，直接相加会重复计数。
+function pssKB(pid) {
+  if (process.platform !== 'linux') return null
+  try {
+    const text = readFileSync(`/proc/${pid}/smaps_rollup`, 'utf8')
+    const match = text.match(/^Pss:\s+(\d+)\s+kB/m)
+    return match ? Number(match[1]) : null
+  } catch {
+    return null
+  }
 }
 
 function mark(name) {
@@ -172,12 +186,23 @@ async function measure(window, wc) {
     const mainMemory = process.memoryUsage()
     const metrics = await app.getAppMetrics()
     const byType = {}
+    let totalPssKB = 0
+    let pssProcessCount = 0
+    let pssMissingCount = 0
     for (const m of metrics) {
       const t = m.type || 'unknown'
-      byType[t] = byType[t] || { count: 0, workingSetKB: 0, cpuPercent: 0 }
+      const pss = pssKB(m.pid)
+      byType[t] = byType[t] || { count: 0, workingSetKB: 0, pssKB: 0, cpuPercent: 0 }
       byType[t].count += 1
       byType[t].workingSetKB += (m.memory && m.memory.workingSetSize) || 0
       byType[t].cpuPercent += (m.cpu && m.cpu.percentCPUUsage) || 0
+      if (pss !== null) {
+        byType[t].pssKB += pss
+        totalPssKB += pss
+        pssProcessCount += 1
+      } else {
+        pssMissingCount += 1
+      }
     }
     const totalWorkingSetKB = metrics.reduce(
       (sum, m) => sum + ((m.memory && m.memory.workingSetSize) || 0),
@@ -200,6 +225,9 @@ async function measure(window, wc) {
         mainRssBytes: mainMemory.rss,
         mainHeapUsedBytes: mainMemory.heapUsed,
         totalWorkingSetKB,
+        totalPssKB,
+        pssProcessCount,
+        pssMissingCount,
         byType,
       },
     })

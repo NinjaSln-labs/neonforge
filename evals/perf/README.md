@@ -18,16 +18,17 @@ node evals/perf/run-startup-benchmark.cjs --cold 5 --warm 3
 
 ## 指标
 
-| 指标                               | 含义                                                                             |
-| ---------------------------------- | -------------------------------------------------------------------------------- |
-| `wallMs`                           | 运行器从 spawn `xvfb-run`/Electron 到进程退出的墙钟时间（含 Xvfb 启动）          |
-| `app_ready`                        | 主进程从入口到 `app.whenReady` 解析                                              |
-| `window_created`                   | 首个 `browser-window-created`                                                    |
-| `did_finish_load`                  | 渲染器 `did-finish-load`                                                         |
-| `ready_screen`                     | 渲染器出现 `.nf-start` 或 `.nf-config`（首屏可交互判定）                         |
-| IPC `config.hasKey` / `budget.get` | 渲染器→主进程 30 次 `invoke` 的 median / p95（3 次预热）                         |
-| `totalWorkingSetMB`                | `app.getAppMetrics()` 各进程 working set 之和；另报 Browser/GPU/Utility/Tab 分解 |
-| `renderer.heap`                    | `performance.memory` 的 JS heap（仅作为观测值）                                  |
+| 指标                               | 含义                                                                                                               |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `wallMs`                           | 运行器从 spawn `xvfb-run`/Electron 到进程退出的墙钟时间（含 Xvfb 启动）                                            |
+| `app_ready`                        | 主进程从入口到 `app.whenReady` 解析                                                                                |
+| `window_created`                   | 首个 `browser-window-created`                                                                                      |
+| `did_finish_load`                  | 渲染器 `did-finish-load`                                                                                           |
+| `ready_screen`                     | 渲染器出现 `.nf-start` 或 `.nf-config`（首屏可交互判定）                                                           |
+| IPC `config.hasKey` / `budget.get` | 渲染器→主进程 30 次 `invoke` 的 median / p95（3 次预热）                                                           |
+| `totalWorkingSetMB`                | `app.getAppMetrics()` 各进程 working set 之和（含共享页，**不可当作唯一内存**）；另报 Browser/GPU/Utility/Tab 分解 |
+| `totalPssMB`                       | Linux `/proc/<pid>/smaps_rollup` 的 PSS 之和（更接近唯一驻留内存）；文档记录时优先使用                             |
+| `renderer.heap`                    | `performance.memory` 的 JS heap（仅作为观测值）                                                                    |
 
 ## 限制
 

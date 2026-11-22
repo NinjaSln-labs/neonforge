@@ -188,6 +188,7 @@ function summarize(rows) {
         r.result.ipc && r.result.ipc.calls && r.result.ipc.calls[1] && r.result.ipc.calls[1].median,
     ),
     totalWorkingSetMBMedian: pick((r) => r.result.memory.totalWorkingSetKB / 1024),
+    totalPssMBMedian: pick((r) => r.result.memory.totalPssKB / 1024),
     screen: ok.length ? ok[0].result.screen : null,
   }
 }
