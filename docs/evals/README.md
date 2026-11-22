@@ -38,6 +38,7 @@
 - [2026-11-22 macOS 目标机核心工具与端到端工具基线](baselines/2026-11-22-macos-tool-baseline.md)
 - [2026-11-22 产品级首 token 延迟基线（WSL2+xvfb 与单一 macOS 目标机）](baselines/2026-11-22-product-first-token-baseline.md)
 - [2026-11-22 远端 DeepSeek 首 token 延迟基线](baselines/2026-11-22-remote-provider-first-token-baseline.md)
+- [2026-11-23 长会话内存与事件循环基线（WSL2+xvfb 与单一 macOS 目标机）](baselines/2026-11-23-long-session-memory-baseline.md)
 - [2026-11-19 外部基准 → 产品 ToolRegistry 桥接设计](product-toolregistry-bridge-design.md)
 - [2026-11-18 用户体验与治理差距评估（初版）](governance-gap-assessment-2026-11-18.md)
 - [2026-11-19 AI 风险登记册（初版）](ai-risk-register-2026-11-19.md)

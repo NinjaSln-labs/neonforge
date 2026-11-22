@@ -1,7 +1,7 @@
 # 产品级 SLO 与性能测量计划（初版，2026-11-19）
 
-> 性质：指标定义与测量计划，不是已验证的 SLO；已有 WSL2+xvfb 启动、主进程/端到端工具、mock 审批卡渲染、本地 Magpie 与远端 DeepSeek 首 token 基线，长会话内存与真实用户数据仍无产品级基线。
-> 关联：`governance-gap-assessment-2026-11-18.md` 第 2 项、`ai-risk-register-2026-11-19.md` R-12、`baselines/2026-11-22-product-startup-baseline.md`、`baselines/2026-11-22-product-first-token-baseline.md`。
+> 性质：指标定义与测量计划，不是已验证的 SLO；已有 WSL2+xvfb 启动、主进程/端到端工具、mock 审批卡渲染、本地 Magpie 与远端 DeepSeek 首 token，以及 120 分钟长会话内存基线；真实用户审批数据与产品级任务成功率仍无基线。
+> 关联：`governance-gap-assessment-2026-11-18.md` 第 2 项、`ai-risk-register-2026-11-19.md` R-12、`baselines/2026-11-22-product-startup-baseline.md`、`baselines/2026-11-22-product-first-token-baseline.md`、`baselines/2026-11-23-long-session-memory-baseline.md`。
 
 ## 1. 目标
 
@@ -11,16 +11,16 @@
 
 ## 2. 指标定义
 
-| 指标          | 定义                                   | 采集点                                | 现状                                                                                        |
-| ------------- | -------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------- |
-| 冷启动时间    | 进程启动到主窗口可交互                 | Electron main 时间戳 + renderer ready | 已有 WSL2+xvfb 与 macOS 目标机基线（20 冷 + 10 热；单一 MacBook）                           |
-| 首 token 延迟 | 用户发送到首个流式 token               | renderer 请求时间 → gateway 首块      | 已有 WSL2+xvfb 与单一 macOS 目标机基线（本地 Magpie + 远端 DeepSeek flash/pro）             |
-| 工具执行延迟  | 工具调用进入到结果返回                 | ToolRegistry 执行前后                 | 已有 WSL2+xvfb 与 macOS 主进程内/渲染器 IPC 基线（macOS read p95 66.7 ms / write 239.8 ms） |
-| 审批等待时间  | 授权卡出现到用户决定                   | renderer 授权卡事件                   | 仅 mock 渲染器脚本化事件（卡出现 p95 13.9 ms、点击→done p95 36.4 ms；**非人类**）           |
-| 空载启动内存  | 启动页可见后各进程 PSS/RSS             | Electron 进程指标 + `/proc` PSS       | 已有 WSL2+xvfb 基线（约 272 MB PSS）                                                        |
-| 长会话内存    | 30/60/120 分钟会话的 renderer/main RSS | Electron 进程指标                     | 未测                                                                                        |
-| 任务成功率    | 目标确认 → 交付包 → 解决确认完成率     | timeline/状态机                       | 未测                                                                                        |
-| 错误率        | 工具失败/模型失败/崩溃占比             | timeline + 日志                       | 未测                                                                                        |
+| 指标          | 定义                                   | 采集点                                | 现状                                                                                             |
+| ------------- | -------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 冷启动时间    | 进程启动到主窗口可交互                 | Electron main 时间戳 + renderer ready | 已有 WSL2+xvfb 与 macOS 目标机基线（20 冷 + 10 热；单一 MacBook）                                |
+| 首 token 延迟 | 用户发送到首个流式 token               | renderer 请求时间 → gateway 首块      | 已有 WSL2+xvfb 与单一 macOS 目标机基线（本地 Magpie + 远端 DeepSeek flash/pro）                  |
+| 工具执行延迟  | 工具调用进入到结果返回                 | ToolRegistry 执行前后                 | 已有 WSL2+xvfb 与 macOS 主进程内/渲染器 IPC 基线（macOS read p95 66.7 ms / write 239.8 ms）      |
+| 审批等待时间  | 授权卡出现到用户决定                   | renderer 授权卡事件                   | 仅 mock 渲染器脚本化事件（卡出现 p95 13.9 ms、点击→done p95 36.4 ms；**非人类**）                |
+| 空载启动内存  | 启动页可见后各进程 PSS/RSS             | Electron 进程指标 + `/proc` PSS       | 已有 WSL2+xvfb 基线（约 272 MB PSS）                                                             |
+| 长会话内存    | 30/60/120 分钟会话的 renderer/main RSS | Electron 进程指标                     | 已有 WSL2+xvfb（PSS）与单一 macOS 目标机（working set）120 分钟基线；**mock 短消息、脚本非人类** |
+| 任务成功率    | 目标确认 → 交付包 → 解决确认完成率     | timeline/状态机                       | 未测                                                                                             |
+| 错误率        | 工具失败/模型失败/崩溃占比             | timeline + 日志                       | 未测                                                                                             |
 
 ## 3. 测量方法
 
@@ -28,7 +28,7 @@
 - **首 token**：本地 Magpie 与远端 Provider 分开记录；流式与非流式分开；记录模型/Provider/日期。2026-11-22 已完成本地 Magpie（`baselines/2026-11-22-product-first-token-baseline.md`）与远端 DeepSeek 官方 flash/pro（`baselines/2026-11-22-remote-provider-first-token-baseline.md`）的网关/渲染器基线；必须同时报告三种口径：首流式块、首个正文 content、渲染器首个可见正文。其他 Provider/跨地域网络仍未测。
 - **工具延迟**：固定 fixture 项目，read/write/edit/search/bash 各 30 次；记录 p50/p95 与失败。2026-11-22 已完成主进程内基线（3 进程 × 30 次；`baselines/2026-11-22-product-tool-execution-baseline.md`）与渲染器 IPC 端到端基线（`baselines/2026-11-22-product-tool-ipc-baseline.md`），尚未覆盖审批卡等待与真实大项目。
 - **审批等待**：受控用户研究或模拟点击；记录卡出现到决定的时间与误解点（与 SUS/HEART 共用）。2026-11-22 已完成 mock 渲染器的脚本化事件基线（`baselines/2026-11-22-product-approval-ui-baseline.md`；**非人类**），真实用户决策时间仍待受控研究。
-- **长会话**：固定脚本 30/60/120 分钟，记录 RSS、事件循环延迟、工具失败。
+- **长会话**：固定脚本 30/60/120 分钟，记录 RSS、事件循环延迟、工具失败。2026-11-22 已完成 120 分钟基线（`baselines/2026-11-23-long-session-memory-baseline.md`）：WSL 逐分钟采样 113 个（111 轮）、Mac 119 个（117 轮），全部 0 失败；mock 短消息、脚本非人类、无工具/文件上下文。
 - **任务成功率**：用固定任务集（目标/方案/授权/交付）做端到端运行；当前只有 L1/L3 测试，不是产品级任务成功率。
 
 ## 4. 待验证的 SLO 提案
@@ -61,5 +61,6 @@
 - 已有（2026-11-22）：单一 MacBook Pro（macOS 15.8.3、i9-8950HK、默认 GPU）启动页 p50 1321 ms / p95 1344 ms（20 冷 + 10 热）；其他 Mac 机型/版本、项目/会话场景仍缺。
 - 已有（2026-11-22）：本地 Magpie（`opendesign/deepseek-v4.1-flash-eco`）首 token 基线。网关路径首流式块 p50/p95 **1.52/1.99 s（WSL）**、**1.60/1.98 s（Mac）**；首个 content 块 **1.91/3.45 s**、**2.06/3.28 s**；渲染器首个可见正文 **2.20/2.89 s**、**2.87/3.12 s**。mock 0 ms 下 UI 固定开销 **121 ms（WSL）/ 554 ms（Mac）**，网关固定开销约 3 ms；首 content 块到 DOM 更新 p95 ≤ 2.4 ms。按「首流式块」口径落在提案内；按「可见正文」口径 p50 超出 2 s，**不能声称首 token SLO 达成**（`baselines/2026-11-22-product-first-token-baseline.md`）。
 - 已有（2026-11-22）：远端 DeepSeek 官方 API 首 token 基线（`baselines/2026-11-22-remote-provider-first-token-baseline.md`）。默认档位解析选出 `deepseek-flash`：网关首流式块 p50/p95 **392/738 ms（WSL）**、**614/1283 ms（Mac）**，首个可见正文 **673/945 ms**、**1284/1322 ms**；显式 `deepseek-v4-pro`：网关首流式块 **740/1033 ms**、**913/2208 ms**，可见正文 **1121/1558 ms**、**1627/3523 ms**。全部 0 失败、落在提案 p50 ≤2 s / p95 ≤5 s 内；但只测单一 Provider、短回复、单一网络位置，**不构成 SLO 达成声明**。
-- 缺失：真实用户审批等待、长会话内存、产品级任务成功率、多机型 macOS 矩阵、多 Provider/跨地域网络首 token。
-- 下一步：补真实审批卡端到端与长会话内存；未采到基线前不对外承诺 SLO。
+- 已有（2026-11-23）：长会话内存基线（`baselines/2026-11-23-long-session-memory-baseline.md`；mock 短消息、脚本非人类）。WSL PSS 179–319 MB 区间（10 分钟后平均约 217 MB，120 分钟 218 MB），10–90 分钟拟合 +0.50 MB/分钟、90–120 分钟 −0.25 MB/分钟；Mac 工作集 383 → 571 MB（+188），10–90 分钟 +1.41 MB/分钟、90–120 分钟 +0.14 MB/分钟（macOS 无 PSS，含共享页）。主/渲染器事件循环 p95 分别 ≤27/≤13.9 ms（WSL）、≤3/≤9.2 ms（Mac），未见随轮次恶化；产品压缩与 `SESSION_MAX=50` 让 localStorage 封顶 184 KB。整体进入平台而非无界增长，但只覆盖 mock 短消息。
+- 缺失：真实用户审批等待、产品级任务成功率、多机型 macOS 矩阵、多 Provider/跨地域网络首 token。
+- 下一步：补真实审批卡端到端（受控人类研究）与产品级任务成功率；未采到基线前不对外承诺 SLO。

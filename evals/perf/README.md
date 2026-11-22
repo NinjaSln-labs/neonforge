@@ -90,6 +90,23 @@ DEEPSEEK_API_KEY=... node evals/perf/run-first-token-benchmark.cjs --mode remote
 - 结果必须写清口径：首流式块（reasoning/content 任一）、首个 content 块、渲染器首个可见正文。
 - 数据只写 `.scratch/evals/perf/first-token-*.jsonl` 与 `first-token-*-summary.json`。
 
+## 长会话内存基准
+
+```bash
+# 30 分钟（默认）：1 进程、每分钟采样并发送一轮，mock 上游
+node evals/perf/run-long-session-benchmark.cjs --minutes 30
+
+# 120 分钟，显式采样/轮次间隔与输出路径
+node evals/perf/run-long-session-benchmark.cjs --minutes 120 --sample-ms 60000 --out .scratch/evals/perf/run.jsonl
+```
+
+- `long-session.cjs` 加载真实 `dist/main/main.js`，隔离 `userData`/`HOME`/`XDG`，假 Key + 本机 mock SSE（默认每轮 60 块 ×120 字符 ≈ 7.2 KB）。
+- 启动页首句 → 「从零开始」→ `initialPrompt` 自动发送第 1 轮；之后每分钟在真实 composer 填入第 N 轮并点发送，等待产品自身 `done` chunk（最多 60 s；连续 3 轮失败中止）。
+- 每分钟采样：`app.getAppMetrics()` 各进程 working set、Linux `/proc/<pid>/smaps_rollup` PSS（macOS 无 PSS）、主进程 RSS/heap、渲染器 `performance.memory`、DOM 消息数/正文字符、`localStorage` 体积、主/渲染器事件循环延迟。
+- 产品压缩（`history.length > 100`）与 `SESSION_MAX = 50` 会被真实触发；结论必须同时给行前/行后分段斜率，避免只看首尾差值。
+- **脚本驱动，非人类研究**；mock 短消息不带工具、文件上下文或 reasoning。
+- 数据只写 `.scratch/evals/perf/long-session-*.jsonl` 与 `long-session-*-summary.json`。
+
 ## 限制
 
 - 头部启动数字是 **headless + 软件渲染 + xvfb**，不等于 macOS/Windows 桌面 GPU 路径；只作同环境纵向对比。
@@ -97,5 +114,6 @@ DEEPSEEK_API_KEY=... node evals/perf/run-first-token-benchmark.cjs --mode remote
 - 假 Key 会进入启动页，不进入配置/工作区；启动基准未覆盖项目打开或会话流式输出。
 - 工具基准是**主进程 ToolRegistry 内部耗时**；端到端基准增加渲染器 IPC，但两者都不含审批卡显示/点击等待。
 - fixture 很小且文件缓存已热，不代表大文件、冷缓存、并发或网络工具。
-- 首 token 只测本机 Magpie（`opendesign/deepseek-v4.1-flash-eco`）与单一 macOS 机型；mock 上游形状固定，不含远端网络抖动、工具首轮或长上下文。
+- 首 token 只测本机 Magpie（`opendesign/deepseek-v4.1-flash-eco`）、远端 DeepSeek flash/pro 与单一 macOS 机型；mock 上游形状固定，不含远端网络抖动、工具首轮或长上下文。
+- 长会话只测 mock 短消息（无工具/文件上下文），WSL2+xvfb 与单一 2018 MacBook Pro；macOS 无 PSS，working set 含共享页。
 - 不是官方基准，也不代表用户感知的端到端时延。
