@@ -30,6 +30,7 @@
 - [2026-11-22 Terminal-Bench 2.0 agent v2（交付物自检）对照](baselines/2026-11-22-terminal-bench-agent-v2-comparison.md)
 - [2026-11-22 Terminal-Bench 2.0 agent v3（两阶段验证）对照](baselines/2026-11-22-terminal-bench-agent-v3-two-phase.md)
 - [2026-11-22 Terminal-Bench 2.0 失败轨迹分析（v4 trace）](baselines/2026-11-22-terminal-bench-trajectory-analysis.md)
+- [2026-11-22 产品级启动性能基线（WSL2+xvfb）](baselines/2026-11-22-product-startup-baseline.md)
 - [2026-11-19 外部基准 → 产品 ToolRegistry 桥接设计](product-toolregistry-bridge-design.md)
 - [2026-11-18 用户体验与治理差距评估（初版）](governance-gap-assessment-2026-11-18.md)
 - [2026-11-19 AI 风险登记册（初版）](ai-risk-register-2026-11-19.md)
