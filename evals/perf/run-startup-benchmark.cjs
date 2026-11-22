@@ -162,33 +162,49 @@ function runElectron({ runDir, timeoutMs }) {
   })
 }
 
-function median(values) {
+function quantile(values, q) {
   if (!values.length) return null
   const s = [...values].sort((a, b) => a - b)
-  return s[Math.floor(s.length / 2)]
+  return s[Math.min(s.length - 1, Math.max(0, Math.floor(q * s.length)))]
+}
+
+function median(values) {
+  return quantile(values, 0.5)
 }
 
 function summarize(rows) {
   const ok = rows.filter((r) => r.result && r.result.ok)
   const pick = (fn) => median(ok.map(fn).filter((v) => typeof v === 'number'))
+  const pick95 = (fn) =>
+    quantile(
+      ok.map(fn).filter((v) => typeof v === 'number'),
+      0.95,
+    )
+  const phase = (name) => (r) => r.result.phases[name]
+  const ipcMedian = (i) => (r) =>
+    r.result.ipc && r.result.ipc.calls && r.result.ipc.calls[i] && r.result.ipc.calls[i].median
+  const ipcP95 = (i) => (r) =>
+    r.result.ipc && r.result.ipc.calls && r.result.ipc.calls[i] && r.result.ipc.calls[i].p95
   return {
     runs: rows.length,
     ok: ok.length,
     wallMsMedian: pick((r) => r.wallMs),
-    appReadyMsMedian: pick((r) => r.result.phases.app_ready),
-    windowCreatedMsMedian: pick((r) => r.result.phases.window_created),
-    didFinishLoadMsMedian: pick((r) => r.result.phases.did_finish_load),
-    readyScreenMsMedian: pick((r) => r.result.phases.ready_screen),
-    ipcHasKeyMedianMs: pick(
-      (r) =>
-        r.result.ipc && r.result.ipc.calls && r.result.ipc.calls[0] && r.result.ipc.calls[0].median,
-    ),
-    ipcBudgetMedianMs: pick(
-      (r) =>
-        r.result.ipc && r.result.ipc.calls && r.result.ipc.calls[1] && r.result.ipc.calls[1].median,
-    ),
+    wallMsP95: pick95((r) => r.wallMs),
+    appReadyMsMedian: pick(phase('app_ready')),
+    appReadyMsP95: pick95(phase('app_ready')),
+    windowCreatedMsMedian: pick(phase('window_created')),
+    windowCreatedMsP95: pick95(phase('window_created')),
+    didFinishLoadMsMedian: pick(phase('did_finish_load')),
+    didFinishLoadMsP95: pick95(phase('did_finish_load')),
+    readyScreenMsMedian: pick(phase('ready_screen')),
+    readyScreenMsP95: pick95(phase('ready_screen')),
+    ipcHasKeyMedianMs: pick(ipcMedian(0)),
+    ipcHasKeyP95OfP95Ms: pick95(ipcP95(0)),
+    ipcBudgetMedianMs: pick(ipcMedian(1)),
+    ipcBudgetP95OfP95Ms: pick95(ipcP95(1)),
     totalWorkingSetMBMedian: pick((r) => r.result.memory.totalWorkingSetKB / 1024),
     totalPssMBMedian: pick((r) => r.result.memory.totalPssKB / 1024),
+    totalPssMBP95: pick95((r) => r.result.memory.totalPssKB / 1024),
     screen: ok.length ? ok[0].result.screen : null,
   }
 }
