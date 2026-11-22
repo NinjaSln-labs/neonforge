@@ -42,10 +42,22 @@ node evals/perf/run-tool-benchmark.cjs --runs 3 --iterations 30 --warmup 3
 - `search` 在 `write`/`edit` 之前执行，避免快照 `.nf-bak` 污染检索 fixture。
 - 记录每次调用主进程内耗时、失败数，并校验返回值（read 字符数、write bytes/snapshot、edit snapshot、search hits、bash stdout）。
 
+## 端到端工具执行基准
+
+```bash
+node evals/perf/run-tool-ipc-benchmark.cjs --runs 3 --iterations 30 --warmup 3
+```
+
+- 启动真实 Electron 应用与启动页，渲染器通过 `window.neonforge.tools.execute` 发起调用，经过 preload → `tools:execute` IPC → `ToolRegistry.decide/execute`。
+- 与主进程基准使用同一 fixture/工具参数/授权路径，便于直接比较 IPC 固定开销。
+- 同时校验返回载荷；不包含审批卡显示或用户点击等待。
+- 结果只统计渲染器内测得的端到端 invoke 往返。
+
 ## 限制
 
 - 头部启动数字是 **headless + 软件渲染 + xvfb**，不等于 macOS/Windows 桌面 GPU 路径；只作同环境纵向对比。
 - 冷启动的“冷”仅指应用用户数据为空，不清理操作系统文件缓存；首次构建后首次运行通常更慢，需单独记录。
 - 假 Key 会进入启动页，不进入配置/工作区；启动基准未覆盖项目打开或会话流式输出。
-- 工具基准是**主进程 ToolRegistry 内部耗时**，不含渲染器 IPC/审批卡；fixture 很小且文件缓存已热，不代表大文件、冷缓存或网络工具。
+- 工具基准是**主进程 ToolRegistry 内部耗时**；端到端基准增加渲染器 IPC，但两者都不含审批卡显示/点击等待。
+- fixture 很小且文件缓存已热，不代表大文件、冷缓存、并发或网络工具。
 - 不是官方基准，也不代表用户感知的端到端时延。
