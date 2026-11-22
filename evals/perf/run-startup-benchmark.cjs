@@ -183,6 +183,9 @@ function summarize(rows) {
     r.result.ipc && r.result.ipc.calls && r.result.ipc.calls[i] && r.result.ipc.calls[i].median
   const ipcP95 = (i) => (r) =>
     r.result.ipc && r.result.ipc.calls && r.result.ipc.calls[i] && r.result.ipc.calls[i].p95
+  // PSS 仅 Linux 有 /proc/<pid>/smaps_rollup；macOS 上 pssMissingCount>0，报告 null 而不是 0。
+  const pssRows = ok.filter((r) => r.result.memory.pssMissingCount === 0)
+  const pssValues = pssRows.map((r) => r.result.memory.totalPssKB / 1024)
   return {
     runs: rows.length,
     ok: ok.length,
@@ -201,8 +204,8 @@ function summarize(rows) {
     ipcBudgetMedianMs: pick(ipcMedian(1)),
     ipcBudgetP95OfP95Ms: pick95(ipcP95(1)),
     totalWorkingSetMBMedian: pick((r) => r.result.memory.totalWorkingSetKB / 1024),
-    totalPssMBMedian: pick((r) => r.result.memory.totalPssKB / 1024),
-    totalPssMBP95: pick95((r) => r.result.memory.totalPssKB / 1024),
+    totalPssMBMedian: pssValues.length ? quantile(pssValues, 0.5) : null,
+    totalPssMBP95: pssValues.length ? quantile(pssValues, 0.95) : null,
     screen: ok.length ? ok[0].result.screen : null,
   }
 }
