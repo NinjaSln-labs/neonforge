@@ -71,6 +71,7 @@ class NeonForgeTerminalAgent(BaseAgent):
     final_check = False
     strategy = "baseline"
     verification_iterations = 0
+    trace_commands = False
 
     @staticmethod
     def name() -> str:
@@ -92,10 +93,12 @@ class NeonForgeTerminalAgent(BaseAgent):
         allow_final_check: bool,
         command_timeout: int,
         environment: BaseEnvironment,
-    ) -> tuple[int, int, int]:
+        phase: int,
+    ) -> tuple[int, int, int, list[dict[str, Any]]]:
         input_tokens = 0
         output_tokens = 0
         commands = 0
+        trace: list[dict[str, Any]] = []
         nudged = False
 
         for iteration in range(max_iterations):
@@ -154,6 +157,17 @@ class NeonForgeTerminalAgent(BaseAgent):
                     continue
                 commands += 1
                 result = await environment.exec(command, timeout_sec=command_timeout)
+                if self.trace_commands:
+                    entry: dict[str, Any] = {
+                        "i": commands,
+                        "phase": phase,
+                        "command": command[:2000],
+                        "exit": result.return_code,
+                    }
+                    if result.return_code != 0:
+                        combined = f"{result.stdout or ''}{result.stderr or ''}"
+                        entry["output_tail"] = combined[-800:]
+                    trace.append(entry)
                 parts = []
                 if result.stdout:
                     parts.append(result.stdout)
@@ -171,7 +185,7 @@ class NeonForgeTerminalAgent(BaseAgent):
                         "content": output,
                     }
                 )
-        return input_tokens, output_tokens, commands
+        return input_tokens, output_tokens, commands, trace
 
     async def run(
         self,
@@ -198,7 +212,7 @@ class NeonForgeTerminalAgent(BaseAgent):
             {"role": "system", "content": self.system_prompt_text},
             {"role": "user", "content": instruction},
         ]
-        input_tokens, output_tokens, phase1_commands = await self._run_phase(
+        input_tokens, output_tokens, phase1_commands, trace1 = await self._run_phase(
             client,
             model,
             messages,
@@ -206,9 +220,11 @@ class NeonForgeTerminalAgent(BaseAgent):
             self.final_check,
             command_timeout,
             environment,
+            1,
         )
         total_commands = phase1_commands
         phase2_commands = 0
+        trace2: list[dict[str, Any]] = []
         if verification_iterations > 0:
             messages.append(
                 {
@@ -216,7 +232,7 @@ class NeonForgeTerminalAgent(BaseAgent):
                     "content": _VERIFICATION_PHASE_PROMPT.format(iterations=verification_iterations),
                 }
             )
-            extra_in, extra_out, phase2_commands = await self._run_phase(
+            extra_in, extra_out, phase2_commands, trace2 = await self._run_phase(
                 client,
                 model,
                 messages,
@@ -224,6 +240,7 @@ class NeonForgeTerminalAgent(BaseAgent):
                 False,
                 command_timeout,
                 environment,
+                2,
             )
             input_tokens += extra_in
             output_tokens += extra_out
@@ -237,6 +254,8 @@ class NeonForgeTerminalAgent(BaseAgent):
         if self.verification_iterations > 0:
             metadata["phase1_commands"] = phase1_commands
             metadata["phase2_commands"] = phase2_commands
+        if self.trace_commands:
+            metadata["commands_log"] = trace1 + trace2
         context.metadata = metadata
 
 
@@ -268,3 +287,17 @@ class NeonForgeTerminalAgentV3(NeonForgeTerminalAgentV2):
 
     def version(self) -> str | None:
         return "0.3.0"
+
+
+class NeonForgeTerminalAgentV4(NeonForgeTerminalAgent):
+    """Baseline 40-round agent with bounded per-command trajectory metadata."""
+
+    strategy = "trace-baseline"
+    trace_commands = True
+
+    @staticmethod
+    def name() -> str:
+        return "neonforge-terminal-v4-trace"
+
+    def version(self) -> str | None:
+        return "0.4.0"
