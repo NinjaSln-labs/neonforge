@@ -65,6 +65,26 @@ node evals/perf/run-renderer-ui-benchmark.cjs --cycles 20
 - **非人类数据**：不含阅读/理解/犹豫/误点，不能用于 SUS/HEART 或人类审批等待结论。
 - 不经过真实 Electron preload/IPC/main/文件系统；mock `tools.execute` 立即返回。
 
+## 首 token 基准
+
+```bash
+# mock 上游（无需真实 Key）：3 进程 × 每进程 8 次网关迭代 + 每进程 1 次渲染器首句
+node evals/perf/run-first-token-benchmark.cjs --mode mock --delay-ms 0 --runs 3 --iterations 8
+
+# 注入固定 800 ms 上游延迟（只测 UI/网关固定开销的可加性）
+node evals/perf/run-first-token-benchmark.cjs --mode mock --delay-ms 800 --runs 3 --iterations 5
+
+# 真实本机 Magpie（Key 只从环境变量进入，不写文件）
+MAGPIE_GATEWAY_KEY=... node evals/perf/run-first-token-benchmark.cjs --mode real --runs 10 --iterations 5
+```
+
+- `first-token.cjs` 在主进程内直接调用真实 `dist/main/gateway.js`，记请求开始 → 首个 reasoning/content/`done` 回调。
+- `first-token-renderer.cjs` 脚本化走启动页「从零开始」→ `initialPrompt` 自动发送 → `gateway:stream-chat`，用 `MutationObserver` 记首个可见正文；**脚本驱动，非人类研究**。
+- mock 场景用本机 OpenAI 兼容 SSE 服务，探针进程内只改写三个产品 provider 固定 origin 的 `fetch` 路由；不改产品代码/注册表。
+- 真实场景指向 `http://127.0.0.1:3425/v1` 的本机 Magpie；跨机时需自行建立 localhost 隧道，不把远端网络混入本机基线。
+- 结果必须写清口径：首流式块（reasoning/content 任一）、首个 content 块、渲染器首个可见正文。
+- 数据只写 `.scratch/evals/perf/first-token-*.jsonl` 与 `first-token-*-summary.json`。
+
 ## 限制
 
 - 头部启动数字是 **headless + 软件渲染 + xvfb**，不等于 macOS/Windows 桌面 GPU 路径；只作同环境纵向对比。
@@ -72,4 +92,5 @@ node evals/perf/run-renderer-ui-benchmark.cjs --cycles 20
 - 假 Key 会进入启动页，不进入配置/工作区；启动基准未覆盖项目打开或会话流式输出。
 - 工具基准是**主进程 ToolRegistry 内部耗时**；端到端基准增加渲染器 IPC，但两者都不含审批卡显示/点击等待。
 - fixture 很小且文件缓存已热，不代表大文件、冷缓存、并发或网络工具。
+- 首 token 只测本机 Magpie（`opendesign/deepseek-v4.1-flash-eco`）与单一 macOS 机型；mock 上游形状固定，不含远端网络抖动、工具首轮或长上下文。
 - 不是官方基准，也不代表用户感知的端到端时延。
