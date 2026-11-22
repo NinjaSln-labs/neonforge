@@ -72,6 +72,7 @@ class NeonForgeTerminalAgent(BaseAgent):
     strategy = "baseline"
     verification_iterations = 0
     trace_commands = False
+    exception_safe = False
 
     @staticmethod
     def name() -> str:
@@ -94,11 +95,12 @@ class NeonForgeTerminalAgent(BaseAgent):
         command_timeout: int,
         environment: BaseEnvironment,
         phase: int,
+        progress: dict[str, Any] | None = None,
     ) -> tuple[int, int, int, list[dict[str, Any]]]:
         input_tokens = 0
         output_tokens = 0
         commands = 0
-        trace: list[dict[str, Any]] = []
+        trace: list[dict[str, Any]] = [] if progress is None else progress.setdefault("trace", [])
         nudged = False
 
         for iteration in range(max_iterations):
@@ -112,6 +114,9 @@ class NeonForgeTerminalAgent(BaseAgent):
             if usage is not None:
                 input_tokens += usage.prompt_tokens
                 output_tokens += usage.completion_tokens
+                if progress is not None:
+                    progress["input_tokens"] = input_tokens
+                    progress["output_tokens"] = output_tokens
             message = response.choices[0].message
             messages.append(message.model_dump(exclude_none=True))
             if not message.tool_calls:
@@ -156,18 +161,23 @@ class NeonForgeTerminalAgent(BaseAgent):
                     )
                     continue
                 commands += 1
-                result = await environment.exec(command, timeout_sec=command_timeout)
+                entry: dict[str, Any] | None = None
                 if self.trace_commands:
-                    entry: dict[str, Any] = {
+                    entry = {
                         "i": commands,
                         "phase": phase,
                         "command": command[:2000],
-                        "exit": result.return_code,
+                        "exit": None,
                     }
+                    trace.append(entry)
+                    if progress is not None:
+                        progress["commands"] = commands
+                result = await environment.exec(command, timeout_sec=command_timeout)
+                if entry is not None:
+                    entry["exit"] = result.return_code
                     if result.return_code != 0:
                         combined = f"{result.stdout or ''}{result.stderr or ''}"
                         entry["output_tail"] = combined[-800:]
-                    trace.append(entry)
                 parts = []
                 if result.stdout:
                     parts.append(result.stdout)
@@ -212,51 +222,66 @@ class NeonForgeTerminalAgent(BaseAgent):
             {"role": "system", "content": self.system_prompt_text},
             {"role": "user", "content": instruction},
         ]
-        input_tokens, output_tokens, phase1_commands, trace1 = await self._run_phase(
-            client,
-            model,
-            messages,
-            max_iterations,
-            self.final_check,
-            command_timeout,
-            environment,
-            1,
-        )
-        total_commands = phase1_commands
-        phase2_commands = 0
-        trace2: list[dict[str, Any]] = []
-        if verification_iterations > 0:
-            messages.append(
-                {
-                    "role": "user",
-                    "content": _VERIFICATION_PHASE_PROMPT.format(iterations=verification_iterations),
-                }
-            )
-            extra_in, extra_out, phase2_commands, trace2 = await self._run_phase(
+        completed = False
+        progress: dict[str, Any] | None = {} if self.exception_safe else None
+        try:
+            input_tokens, output_tokens, phase1_commands, trace1 = await self._run_phase(
                 client,
                 model,
                 messages,
-                verification_iterations,
-                False,
+                max_iterations,
+                self.final_check,
                 command_timeout,
                 environment,
-                2,
+                1,
+                progress,
             )
-            input_tokens += extra_in
-            output_tokens += extra_out
-            total_commands += phase2_commands
+            total_commands = phase1_commands
+            phase2_commands = 0
+            trace2: list[dict[str, Any]] = []
+            if verification_iterations > 0:
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": _VERIFICATION_PHASE_PROMPT.format(iterations=verification_iterations),
+                    }
+                )
+                extra_in, extra_out, phase2_commands, trace2 = await self._run_phase(
+                    client,
+                    model,
+                    messages,
+                    verification_iterations,
+                    False,
+                    command_timeout,
+                    environment,
+                    2,
+                )
+                input_tokens += extra_in
+                output_tokens += extra_out
+                total_commands += phase2_commands
 
-        context.n_input_tokens = input_tokens
-        context.n_output_tokens = output_tokens
-        metadata: dict[str, Any] = {"commands_executed": total_commands}
-        if self.strategy != "baseline":
-            metadata["strategy"] = self.strategy
-        if self.verification_iterations > 0:
-            metadata["phase1_commands"] = phase1_commands
-            metadata["phase2_commands"] = phase2_commands
-        if self.trace_commands:
-            metadata["commands_log"] = trace1 + trace2
-        context.metadata = metadata
+            context.n_input_tokens = input_tokens
+            context.n_output_tokens = output_tokens
+            metadata: dict[str, Any] = {"commands_executed": total_commands}
+            if self.strategy != "baseline":
+                metadata["strategy"] = self.strategy
+            if self.verification_iterations > 0:
+                metadata["phase1_commands"] = phase1_commands
+                metadata["phase2_commands"] = phase2_commands
+            if self.trace_commands:
+                metadata["commands_log"] = trace1 + trace2
+            context.metadata = metadata
+            completed = True
+        finally:
+            if not completed and progress is not None:
+                context.n_input_tokens = progress.get("input_tokens", 0)
+                context.n_output_tokens = progress.get("output_tokens", 0)
+                context.metadata = {
+                    "commands_executed": progress.get("commands", 0),
+                    "strategy": self.strategy,
+                    "commands_log": progress.get("trace", []),
+                    "terminated_by_exception": True,
+                }
 
 
 class NeonForgeTerminalAgentV2(NeonForgeTerminalAgent):
@@ -301,3 +326,16 @@ class NeonForgeTerminalAgentV4(NeonForgeTerminalAgent):
 
     def version(self) -> str | None:
         return "0.4.0"
+
+
+class NeonForgeTerminalAgentV5(NeonForgeTerminalAgentV4):
+    """Trace variant that persists partial metadata even when a command raises."""
+
+    exception_safe = True
+
+    @staticmethod
+    def name() -> str:
+        return "neonforge-terminal-v5-trace"
+
+    def version(self) -> str | None:
+        return "0.5.0"
