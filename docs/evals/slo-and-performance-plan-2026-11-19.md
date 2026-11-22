@@ -11,16 +11,16 @@
 
 ## 2. 指标定义
 
-| 指标          | 定义                                   | 采集点                                | 现状                                                                              |
-| ------------- | -------------------------------------- | ------------------------------------- | --------------------------------------------------------------------------------- |
-| 冷启动时间    | 进程启动到主窗口可交互                 | Electron main 时间戳 + renderer ready | 已有 WSL2+xvfb 与 macOS 目标机基线（20 冷 + 10 热；单一 MacBook）                 |
-| 首 token 延迟 | 用户发送到首个流式 token               | renderer 请求时间 → gateway 首块      | 未测（BFCL 延迟是模型级，不是产品）                                               |
-| 工具执行延迟  | 工具调用进入到结果返回                 | ToolRegistry 执行前后                 | 已有 WSL2+xvfb 主进程内与渲染器 IPC 基线（read p95 8.8 ms / write 24.0 ms）       |
-| 审批等待时间  | 授权卡出现到用户决定                   | renderer 授权卡事件                   | 仅 mock 渲染器脚本化事件（卡出现 p95 13.9 ms、点击→done p95 36.4 ms；**非人类**） |
-| 空载启动内存  | 启动页可见后各进程 PSS/RSS             | Electron 进程指标 + `/proc` PSS       | 已有 WSL2+xvfb 基线（约 272 MB PSS）                                              |
-| 长会话内存    | 30/60/120 分钟会话的 renderer/main RSS | Electron 进程指标                     | 未测                                                                              |
-| 任务成功率    | 目标确认 → 交付包 → 解决确认完成率     | timeline/状态机                       | 未测                                                                              |
-| 错误率        | 工具失败/模型失败/崩溃占比             | timeline + 日志                       | 未测                                                                              |
+| 指标          | 定义                                   | 采集点                                | 现状                                                                                        |
+| ------------- | -------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------- |
+| 冷启动时间    | 进程启动到主窗口可交互                 | Electron main 时间戳 + renderer ready | 已有 WSL2+xvfb 与 macOS 目标机基线（20 冷 + 10 热；单一 MacBook）                           |
+| 首 token 延迟 | 用户发送到首个流式 token               | renderer 请求时间 → gateway 首块      | 未测（BFCL 延迟是模型级，不是产品）                                                         |
+| 工具执行延迟  | 工具调用进入到结果返回                 | ToolRegistry 执行前后                 | 已有 WSL2+xvfb 与 macOS 主进程内/渲染器 IPC 基线（macOS read p95 66.7 ms / write 239.8 ms） |
+| 审批等待时间  | 授权卡出现到用户决定                   | renderer 授权卡事件                   | 仅 mock 渲染器脚本化事件（卡出现 p95 13.9 ms、点击→done p95 36.4 ms；**非人类**）           |
+| 空载启动内存  | 启动页可见后各进程 PSS/RSS             | Electron 进程指标 + `/proc` PSS       | 已有 WSL2+xvfb 基线（约 272 MB PSS）                                                        |
+| 长会话内存    | 30/60/120 分钟会话的 renderer/main RSS | Electron 进程指标                     | 未测                                                                                        |
+| 任务成功率    | 目标确认 → 交付包 → 解决确认完成率     | timeline/状态机                       | 未测                                                                                        |
+| 错误率        | 工具失败/模型失败/崩溃占比             | timeline + 日志                       | 未测                                                                                        |
 
 ## 3. 测量方法
 
@@ -54,7 +54,8 @@
 
 - 已有：BFCL 单题延迟、AgentDojo 单题延迟、部分工具单测耗时；这些是模型/评估信号，不是产品 SLO。
 - 已有（2026-11-22）：WSL2+xvfb 下真实 Electron 的冷/热启动与空载 PSS/IPC 基线；冷启动首屏 p50 449 ms / p95 512 ms，空载 PSS 约 272 MB。该数据不是 macOS 目标机，也不是 SLO 达成声明。
-- 已有（2026-11-22）：5 个核心工具（read/search/write/edit/bash）的主进程内基线，每工具 90 次、0 失败；read p95 9.6 ms、write 23.4 ms、edit 26.9 ms、bash 11.7 ms。
+- 已有（2026-11-22）：5 个核心工具（read/search/write/edit/bash）的主进程内基线（WSL 与 macOS 各每工具 90 次、0 失败）；WSL read p95 9.6 ms、write 23.4 ms；macOS read 66.9 ms、write 221.7 ms。
+- 已有（2026-11-22）：WSL 与 macOS 的同一 fixture `tools:execute` 端到端基线；WSL read p95 8.8 ms、write 24.0 ms；macOS read 66.7 ms、write 239.8 ms（`baselines/2026-11-22-macos-tool-baseline.md`）。macOS 固定开销约为 WSL 的 7–10 倍，但仍是小 fixture、热缓存。
 - 已有（2026-11-22）：同一 fixture/tools:execute 路径的渲染器 IPC 端到端基线，每工具 90 次、0 失败；read p95 8.8 ms、write 24.0 ms、edit 23.6 ms、bash 10.7 ms。仍未覆盖审批卡等待、网络/MCP、大项目。
 - 已有（2026-11-22，**非人类**）：mock 渲染器审批卡出现 p95 13.9 ms、脚本化批准往返 p95 36.4 ms（20 周期）；只代表 DOM 更新与 mock 执行，不代表真人决策时间。
 - 已有（2026-11-22）：单一 MacBook Pro（macOS 15.8.3、i9-8950HK、默认 GPU）启动页 p50 1321 ms / p95 1344 ms（20 冷 + 10 热）；其他 Mac 机型/版本、项目/会话场景仍缺。
