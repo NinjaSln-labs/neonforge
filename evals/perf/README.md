@@ -13,7 +13,7 @@ node evals/perf/run-startup-benchmark.cjs --cold 5 --warm 3
 - 冷启动：每次新建独立 `HOME`、`XDG_*`、Electron `userData` 与短 `TMPDIR`。
 - 热启动：复用第 1 次冷启动的同一用户数据目录。
 - 无显示环境自动使用 `xvfb-run`；固定 `--disable-gpu --no-sandbox`，保证软件渲染下的可比性。
-- 每次运行注入假 Key `nf-perf-dummy-not-a-key`，并剔除所有 `*KEY*`/`*SECRET*`/`*TOKEN*` 等环境变量；不读取真实凭据。
+- 每次运行注入假 Key `dummy-not-a-key`，并剔除所有 `*KEY*`/`*SECRET*`/`*TOKEN*` 等环境变量；不读取真实凭据。
 - 原始 JSONL 与构建日志只写 `.scratch/evals/perf/`，不进入仓库。
 
 ## 启动指标

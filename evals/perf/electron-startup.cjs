@@ -63,7 +63,7 @@ if (!process.env.NF_TEST_USERDATA) {
   )
 }
 // 假 Key：让 App 进入启动页；不读取、不写入任何真实凭据。
-process.env.NEONFORGE_API_KEY = process.env.NEONFORGE_API_KEY || 'nf-perf-dummy-not-a-key'
+process.env.NEONFORGE_API_KEY = process.env.NEONFORGE_API_KEY || 'dummy-not-a-key'
 process.env.NEONFORGE_API_KEY_FILE = ''
 process.env.NEONFORGE_SEARCH_KEY_FILE = ''
 process.env.NEONFORGE_KEENABLE_API_KEY_FILE = ''

@@ -60,7 +60,7 @@ if (!userDataDir) fail(new Error('NF_TEST_USERDATA missing'))
 
 if (!finished) {
   app.setPath('userData', userDataDir)
-  process.env.NEONFORGE_API_KEY = process.env.NEONFORGE_API_KEY || 'nf-perf-dummy-not-a-key'
+  process.env.NEONFORGE_API_KEY = process.env.NEONFORGE_API_KEY || 'dummy-not-a-key'
   app
     .whenReady()
     .then(() => run())

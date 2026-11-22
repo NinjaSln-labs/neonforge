@@ -72,7 +72,7 @@ function sanitizedEnv(runDir, fixtureDir) {
     TMPDIR: shortDir('nf-perf-tmp', runDir),
     NF_TEST_USERDATA: path.join(runDir, 'userdata'),
     NF_PERF_FIXTURE_DIR: fixtureDir,
-    NEONFORGE_API_KEY: 'dummy',
+    NEONFORGE_API_KEY: 'dummy-not-a-key',
     NEONFORGE_API_KEY_FILE: '',
     NEONFORGE_SEARCH_KEY: '',
     NEONFORGE_SEARCH_KEY_FILE: '',
