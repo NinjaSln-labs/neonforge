@@ -9,10 +9,11 @@ const { spawn, execFileSync } = require('node:child_process')
 const { mkdirSync, rmSync, writeFileSync, appendFileSync, existsSync } = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { resolveElectronBin, electronCommand, displayMode } = require('./electron-bin.cjs')
 
 const repoRoot = path.resolve(__dirname, '../..')
 const desktopDir = path.join(repoRoot, 'apps/desktop')
-const electronBin = path.join(desktopDir, 'node_modules/electron/dist/electron')
+const electronBin = resolveElectronBin(repoRoot)
 const harness = path.join(__dirname, 'electron-startup.cjs')
 const scratchDir = path.join(repoRoot, '.scratch/evals/perf')
 
@@ -89,10 +90,7 @@ function runElectron({ runDir, timeoutMs }) {
   mkdirSync(path.join(runDir, 'tmp'), { recursive: true })
   mkdirSync(path.join(runDir, 'userdata'), { recursive: true })
   const env = sanitizedEnv(runDir)
-  const displayPrefix = process.env.DISPLAY
-    ? [electronBin]
-    : ['xvfb-run', '-a', '-s', '-screen 0 1280x800x24', electronBin]
-  const args = [...displayPrefix, '--disable-gpu', '--no-sandbox', harness]
+  const args = [...electronCommand(electronBin), harness]
   const started = Date.now()
   return new Promise((resolve) => {
     const child = spawn(args[0], args.slice(1), {
@@ -185,6 +183,9 @@ function summarize(rows) {
     r.result.ipc && r.result.ipc.calls && r.result.ipc.calls[i] && r.result.ipc.calls[i].median
   const ipcP95 = (i) => (r) =>
     r.result.ipc && r.result.ipc.calls && r.result.ipc.calls[i] && r.result.ipc.calls[i].p95
+  // PSS 仅 Linux 有 /proc/<pid>/smaps_rollup；macOS 上 pssMissingCount>0，报告 null 而不是 0。
+  const pssRows = ok.filter((r) => r.result.memory.pssMissingCount === 0)
+  const pssValues = pssRows.map((r) => r.result.memory.totalPssKB / 1024)
   return {
     runs: rows.length,
     ok: ok.length,
@@ -203,8 +204,8 @@ function summarize(rows) {
     ipcBudgetMedianMs: pick(ipcMedian(1)),
     ipcBudgetP95OfP95Ms: pick95(ipcP95(1)),
     totalWorkingSetMBMedian: pick((r) => r.result.memory.totalWorkingSetKB / 1024),
-    totalPssMBMedian: pick((r) => r.result.memory.totalPssKB / 1024),
-    totalPssMBP95: pick95((r) => r.result.memory.totalPssKB / 1024),
+    totalPssMBMedian: pssValues.length ? quantile(pssValues, 0.5) : null,
+    totalPssMBP95: pssValues.length ? quantile(pssValues, 0.95) : null,
     screen: ok.length ? ok[0].result.screen : null,
   }
 }
@@ -232,8 +233,8 @@ async function main() {
     cpuCount: os.cpus().length,
     totalMemMB: Math.round(os.totalmem() / 1048576),
     loadAvg: os.loadavg().map((n) => Number(n.toFixed(2))),
-    display: process.env.DISPLAY ? 'host' : 'xvfb',
-    electronArgs: ['--disable-gpu', '--no-sandbox'],
+    display: displayMode(),
+    electronArgs: electronCommand(electronBin).filter((a) => a.startsWith('--')),
   }
   const meta = {
     type: 'meta',

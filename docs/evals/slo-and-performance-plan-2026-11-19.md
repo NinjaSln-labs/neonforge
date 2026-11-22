@@ -13,7 +13,7 @@
 
 | 指标          | 定义                                   | 采集点                                | 现状                                                                              |
 | ------------- | -------------------------------------- | ------------------------------------- | --------------------------------------------------------------------------------- |
-| 冷启动时间    | 进程启动到主窗口可交互                 | Electron main 时间戳 + renderer ready | 已有 WSL2+xvfb 基线（20 冷 + 10 热；非 macOS 目标机）                             |
+| 冷启动时间    | 进程启动到主窗口可交互                 | Electron main 时间戳 + renderer ready | 已有 WSL2+xvfb 与 macOS 目标机基线（20 冷 + 10 热；单一 MacBook）                 |
 | 首 token 延迟 | 用户发送到首个流式 token               | renderer 请求时间 → gateway 首块      | 未测（BFCL 延迟是模型级，不是产品）                                               |
 | 工具执行延迟  | 工具调用进入到结果返回                 | ToolRegistry 执行前后                 | 已有 WSL2+xvfb 主进程内与渲染器 IPC 基线（read p95 8.8 ms / write 24.0 ms）       |
 | 审批等待时间  | 授权卡出现到用户决定                   | renderer 授权卡事件                   | 仅 mock 渲染器脚本化事件（卡出现 p95 13.9 ms、点击→done p95 36.4 ms；**非人类**） |
@@ -24,7 +24,7 @@
 
 ## 3. 测量方法
 
-- **冷启动**：在 macOS 目标机重复 20 次，记录 p50/p95；区分首次安装与热启动。2026-11-22 已先在 WSL2+xvfb 完成 20 冷 + 10 热的开发机基线（`baselines/2026-11-22-product-startup-baseline.md`），macOS 目标机复测仍未做。
+- **冷启动**：在 macOS 目标机重复 20 次，记录 p50/p95；区分首次安装与热启动。2026-11-22 已先在 WSL2+xvfb 完成 20 冷 + 10 热的开发机基线（`baselines/2026-11-22-product-startup-baseline.md`），并在单一 MacBook Pro（macOS 15.8.3、默认 GPU）完成 20 冷 + 10 热目标机基线（`baselines/2026-11-22-macos-startup-baseline.md`）；其他 Mac 机型/版本仍未覆盖。
 - **首 token**：本地 Magpie 与远端 DeepSeek 分开记录；流式与非流式分开；记录模型/Provider/日期。
 - **工具延迟**：固定 fixture 项目，read/write/edit/search/bash 各 30 次；记录 p50/p95 与失败。2026-11-22 已完成主进程内基线（3 进程 × 30 次；`baselines/2026-11-22-product-tool-execution-baseline.md`）与渲染器 IPC 端到端基线（`baselines/2026-11-22-product-tool-ipc-baseline.md`），尚未覆盖审批卡等待与真实大项目。
 - **审批等待**：受控用户研究或模拟点击；记录卡出现到决定的时间与误解点（与 SUS/HEART 共用）。2026-11-22 已完成 mock 渲染器的脚本化事件基线（`baselines/2026-11-22-product-approval-ui-baseline.md`；**非人类**），真实用户决策时间仍待受控研究。
@@ -57,5 +57,6 @@
 - 已有（2026-11-22）：5 个核心工具（read/search/write/edit/bash）的主进程内基线，每工具 90 次、0 失败；read p95 9.6 ms、write 23.4 ms、edit 26.9 ms、bash 11.7 ms。
 - 已有（2026-11-22）：同一 fixture/tools:execute 路径的渲染器 IPC 端到端基线，每工具 90 次、0 失败；read p95 8.8 ms、write 24.0 ms、edit 23.6 ms、bash 10.7 ms。仍未覆盖审批卡等待、网络/MCP、大项目。
 - 已有（2026-11-22，**非人类**）：mock 渲染器审批卡出现 p95 13.9 ms、脚本化批准往返 p95 36.4 ms（20 周期）；只代表 DOM 更新与 mock 执行，不代表真人决策时间。
-- 缺失：macOS 目标机冷启动、首 token、真实用户审批等待、长会话内存、产品级任务成功率。
+- 已有（2026-11-22）：单一 MacBook Pro（macOS 15.8.3、i9-8950HK、默认 GPU）启动页 p50 1321 ms / p95 1344 ms（20 冷 + 10 热）；其他 Mac 机型/版本、项目/会话场景仍缺。
+- 缺失：首 token、真实用户审批等待、长会话内存、产品级任务成功率、多机型 macOS 矩阵。
 - 下一步：补 macOS 目标机复测与固定 fixture 的工具/首 token 基准；未采到基线前不对外承诺 SLO。
