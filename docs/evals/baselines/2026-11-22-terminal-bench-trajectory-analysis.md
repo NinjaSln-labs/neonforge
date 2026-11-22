@@ -23,7 +23,7 @@
 | `make-doom-for-mips` | 0.0 | 0/3 | 52 | 2 | 2,418,743 / 20,041 | 11m32 | 有 |
 | `pytorch-model-cli` | 0.0 | 5/6 | 32 | 2 | 262,964 / 17,477 | 5m40 | 有 |
 | `video-processing` | 0.0 | 2/5 | 39 | 4 | 2,721,622 / 38,345 | 14m27 | 有 |
-| `mteb-leaderboard` | 0.0（异常） | 0/2 | 未记录 | — | 未记录 | 13m40 | **无**（300 秒命令超时） |
+| `mteb-leaderboard` | 0.0（异常） | 0/2 | 未记录 | — | 未记录 | 13m40 | **无**（300 秒命令超时；v5 补跑见追加节） |
 
 - Job：4 trials、1 个 `RuntimeError`（mteb 单命令 300 秒超时）、0 通过；总运行 29m31。
 - 已知 3 个 trial 合计 5,403,329 / 75,863 tokens；mteb 异常 trial 的用量未汇总。
@@ -61,14 +61,28 @@
 - 该 trial 在某个单命令上超过 300 秒，抛出 `RuntimeError`；由于 metadata 只在 `run()` 末尾写入，`commands_log` 为空。
 - verifier 仍运行并确认 `/app/result.txt` 不存在（0/2）。
 - 归因：至少有一个长命令；无法从现有数据判断是网络抓取、数据处理还是其他操作。不能把该 trial 当作模型可验证失败，也不能从中得出任务根因。
+- 后续用 v5 exception-safe trace 在 600 秒配置下补跑 1 次，见下节。
+
+### 追加：`mteb-leaderboard` 600 秒 v5 trace
+
+`tbench2-v5-mteb-trace-600`：600 秒单命令、1 并发、1 次；0 异常、reward 0.0；39 条命令（3 条失败），950,372 / 16,395 tokens，agent 11m23，job 12m02。
+
+- 第 1–3 条：尝试 `curl`/`wget`/`urllib` 访问 huggingface、Google、DuckDuckGo，并查找本地 `mteb` 包与依赖。
+- 第 4–10 条：在 `site-packages/mteb` 中搜索 Scandinavian/Nordic/leaderboard/results，阅读 `load_results`/`table.py`。
+- 第 11–22 条：搜索 pip 缓存、环境变量/代理、DNS/路由、socket、`host.docker.internal` 端口、`.git` 目录、本机 wheel/tar 包。
+- 第 23–29 条：检查模型定义、release date、模型名，检查 pip 配置，继续查找结果文件。
+- 第 30–39 条：再次尝试 huggingface 直连 IP、代理/端口探测、磁盘与 pip cache、shell history、`git ls-remote` 到 GitHub 的 `embeddings-benchmark/results` 仓库、GitHub API。
+- **没有任何命令写出 `/app/result.txt`**；没有找到可用的本地 leaderboard 数据。轨迹指向“任务所需结果数据不可达/未找到”这一类环境或数据依赖问题，而不是缺少收尾自检。
+- 该 trial 无异常，说明 v5 的 exception-safe 路径没有在本轮触发；v5 的代码路径与 v4 在成功时一致。
 
 ## 横向结论
 
 1. **主要失败模式不是“缺少收尾验证”**：`make-doom-for-mips` 的 52 条命令全部围绕工具链构建，`video-processing` 的 39 条命令全部是探索，二者都没有创建必需产物。v2/v3 的验证阶段无法修复这一点。
 2. **任务规划/范围控制是主要瓶颈**：make-doom 在已有 `vm.js` 的情况下选择构建 newlib 工具链；video 在没有落地脚本前反复做帧分析。二者都在 40 轮内耗尽预算。
 3. **局部正确性失败需要任务特定实现**：`pytorch-model-cli` 已有产物，只差预测值；`video-processing` 即使接近阈值也需要正确的跳跃检测算法。单纯加轮次或加自检不解决。
-4. **instrumentation 缺口**：异常 trial 丢失轨迹。后续 trace agent 应在 `finally` 中写入 metadata，或增量写入；否则 timeout/异常样本无法分析。
-5. 这与 v2/v3 的负结果一致：提示/验证阶段没有带来 reward 提升；失败是模型规划、实现与数值正确性问题。
+4. **instrumentation 缺口已部分修复**：v4 的异常 trial 丢失轨迹；v5 在 `finally`/progress 路径写回 metadata，并用 600 秒补跑 mteb 获得 39 条命令轨迹。异常样本应在 metadata 中记录 `terminated_by_exception` 与执行中命令（`exit=null`）。
+5. **mteb 指向外部数据依赖**：600 秒补跑仍未写出 `/app/result.txt`；轨迹显示 agent 反复检查网络、pip 缓存、site-packages 和 GitHub 结果仓库，但没有找到可用 leaderboard 数据。该失败更像任务数据/网络依赖或数据发现失败，不是“缺最后一步验证”。
+6. 这与 v2/v3 的负结果一致：提示/验证阶段没有带来 reward 提升；失败是模型规划、实现与数值正确性问题。
 
 ## 后续建议
 
@@ -87,7 +101,7 @@
 - **无模型推理**：只能看到命令与输出，不知道模型为何选择该计划。
 - **每任务 1 次**：不能估计稳定性或置信区间。
 - **输出只留失败命令尾部**：成功命令的完整输出未保存；可能遗漏关键上下文。
-- **mteb 无轨迹**：异常路径 metadata 丢失；不能给出 mteb 的命令级根因。
+- **mteb 轨迹补充**：v4 异常 trial 的 metadata 丢失；v5 600 秒补跑已获得 39 条命令轨迹，但仍未写出 `result.txt`，且无法判定任务期望的本地数据位置。不能把该次轨迹当作完整根因。
 - **不是官方成绩**：Harbor 版本、数据集 commit、自定义 agent 与 Magpie 路由均与官方评测不同。
 </content>
 </file_path>
