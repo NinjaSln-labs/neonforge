@@ -76,12 +76,17 @@ node evals/perf/run-first-token-benchmark.cjs --mode mock --delay-ms 800 --runs 
 
 # 真实本机 Magpie（Key 只从环境变量进入，不写文件）
 MAGPIE_GATEWAY_KEY=... node evals/perf/run-first-token-benchmark.cjs --mode real --runs 10 --iterations 5
+
+# 远端 DeepSeek 官方 API（真实网络；默认模型由产品 /models 档位解析）
+DEEPSEEK_API_KEY=... node evals/perf/run-first-token-benchmark.cjs --mode remote --runs 10 --iterations 5
+DEEPSEEK_API_KEY=... node evals/perf/run-first-token-benchmark.cjs --mode remote --remote-model deepseek-v4-pro
 ```
 
 - `first-token.cjs` 在主进程内直接调用真实 `dist/main/gateway.js`，记请求开始 → 首个 reasoning/content/`done` 回调。
 - `first-token-renderer.cjs` 脚本化走启动页「从零开始」→ `initialPrompt` 自动发送 → `gateway:stream-chat`，用 `MutationObserver` 记首个可见正文；**脚本驱动，非人类研究**。
 - mock 场景用本机 OpenAI 兼容 SSE 服务，探针进程内只改写三个产品 provider 固定 origin 的 `fetch` 路由；不改产品代码/注册表。
 - 真实场景指向 `http://127.0.0.1:3425/v1` 的本机 Magpie；跨机时需自行建立 localhost 隧道，不把远端网络混入本机基线。
+- 远端场景 `--mode remote` 不改写 `fetch`，走产品 descriptor 的真实 API；`--remote-model` 可显式指定模型（默认留空由产品 `/models` 档位解析）；`--key-env` 可换凭据环境变量名。
 - 结果必须写清口径：首流式块（reasoning/content 任一）、首个 content 块、渲染器首个可见正文。
 - 数据只写 `.scratch/evals/perf/first-token-*.jsonl` 与 `first-token-*-summary.json`。
 

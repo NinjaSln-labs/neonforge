@@ -65,6 +65,9 @@ const REAL_BASE_URL = process.env.NF_FIRST_TOKEN_REAL_BASE_URL || 'http://127.0.
 const REAL_MODEL = process.env.NF_FIRST_TOKEN_REAL_MODEL || 'opendesign/deepseek-v4.1-flash-eco'
 const REAL_KEY_ENV = process.env.NF_FIRST_TOKEN_REAL_KEY_ENV || 'MAGPIE_GATEWAY_KEY'
 const USE_MOCK_TARGET = !REAL_MODE || process.env.NF_FIRST_TOKEN_REAL_DELAY_MOCK === '1'
+// 远端路径：产品自己的 descriptor origin（不路由 fetch）；模型未指定时走产品 /models 档位解析。
+const REMOTE = process.env.NF_FIRST_TOKEN_REMOTE === '1'
+const REMOTE_MODEL = process.env.NF_FIRST_TOKEN_REMOTE_MODEL?.trim() || null
 
 let mainWindow = null
 app.on('browser-window-created', (_event, created) => {
@@ -233,13 +236,17 @@ async function run() {
     mock = await startMockServer()
     const mockBase = `http://127.0.0.1:${mock.address().port}/v1`
     restoreFetch = installFetchRouter(mockBase)
-  } else {
+  } else if (!REMOTE) {
     restoreFetch = installFetchRouter(REAL_BASE_URL)
   }
 
-  // providerId/model：mock 目标固定 deepseek + mock 模型；真实目标用环境变量模型。
+  // providerId/model：mock 目标固定 deepseek + mock 模型；本机 Magpie 用环境变量模型；
+  // 远端路径不改写 fetch，模型留空时由产品自身 /models 档位解析（与用户配置一致）。
   const providerId = 'deepseek'
-  const manualModelId = REAL_MODE && !USE_MOCK_TARGET ? REAL_MODEL : 'nf-mock-model'
+  let manualModelId = null
+  if (USE_MOCK_TARGET) manualModelId = 'nf-mock-model'
+  else if (!REMOTE) manualModelId = REAL_MODEL
+  else manualModelId = REMOTE_MODEL
   const apiKey = USE_MOCK_TARGET ? 'dummy-not-a-key' : process.env[REAL_KEY_ENV]
 
   if (configStore) {
@@ -324,14 +331,17 @@ async function run() {
   emit({
     ok: failures.length === 0,
     human: false,
-    mode: USE_MOCK_TARGET
-      ? REAL_MODE
-        ? 'real-ui-mock-upstream'
-        : 'mock-sse-upstream'
-      : 'real-provider',
-    target: USE_MOCK_TARGET ? 'mock-sse' : 'real-provider',
+    mode: REMOTE
+      ? 'remote-provider'
+      : USE_MOCK_TARGET
+        ? REAL_MODE
+          ? 'real-ui-mock-upstream'
+          : 'mock-sse-upstream'
+        : 'real-provider',
+    target: REMOTE ? 'remote-provider' : USE_MOCK_TARGET ? 'mock-sse' : 'real-provider',
     providerId,
-    model: manualModelId,
+    model: gateway.peekActiveModel(providerId, manualModelId, 'flash').upstream,
+    modelExplicit: manualModelId,
     firstDeltaDelayMs: USE_MOCK_TARGET ? FIRST_DELAY_MS : null,
     iterations: ITERATIONS,
     warmup: WARMUP,
