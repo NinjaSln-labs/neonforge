@@ -74,7 +74,7 @@ function sanitizedEnv(runDir) {
     XDG_DATA_HOME: path.join(xdg, 'data'),
     TMPDIR: shortTmpDir(runDir),
     NF_TEST_USERDATA: path.join(runDir, 'userdata'),
-    NEONFORGE_API_KEY: 'nf-perf-dummy-not-a-key',
+    NEONFORGE_API_KEY: 'dummy-not-a-key',
     NEONFORGE_API_KEY_FILE: '',
     NEONFORGE_SEARCH_KEY: '',
     NEONFORGE_SEARCH_KEY_FILE: '',
