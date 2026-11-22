@@ -9,10 +9,11 @@ const { mkdirSync, rmSync, writeFileSync, appendFileSync, existsSync } = require
 const crypto = require('node:crypto')
 const os = require('node:os')
 const path = require('node:path')
+const { resolveElectronBin, electronCommand, displayMode } = require('./electron-bin.cjs')
 
 const repoRoot = path.resolve(__dirname, '../..')
 const desktopDir = path.join(repoRoot, 'apps/desktop')
-const electronBin = path.join(desktopDir, 'node_modules/electron/dist/electron')
+const electronBin = resolveElectronBin(repoRoot)
 const harness = path.join(__dirname, 'tool-execution.cjs')
 const scratchDir = path.join(repoRoot, '.scratch/evals/perf')
 
@@ -91,10 +92,7 @@ function runElectron({ runDir, fixtureDir, timeoutMs, iterations, warmup }) {
     NF_PERF_ITERATIONS: String(iterations),
     NF_PERF_WARMUP: String(warmup),
   }
-  const base = process.env.DISPLAY
-    ? [electronBin]
-    : ['xvfb-run', '-a', '-s', '-screen 0 1280x800x24', electronBin]
-  const args = [...base, '--disable-gpu', '--no-sandbox', harness]
+  const args = [...electronCommand(electronBin), harness]
   const started = Date.now()
   return new Promise((resolve) => {
     const child = spawn(args[0], args.slice(1), {
@@ -224,8 +222,8 @@ async function main() {
       cpuCount: os.cpus().length,
       totalMemMB: Math.round(os.totalmem() / 1048576),
       loadAvg: os.loadavg().map((n) => Number(n.toFixed(2))),
-      display: process.env.DISPLAY ? 'host' : 'xvfb',
-      electronArgs: ['--disable-gpu', '--no-sandbox'],
+      display: displayMode(),
+      electronArgs: electronCommand(electronBin).filter((a) => a.startsWith('--')),
     },
     options: opts,
   }
