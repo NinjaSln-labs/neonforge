@@ -33,6 +33,7 @@
 - [2026-11-22 产品级启动性能基线（WSL2+xvfb）](baselines/2026-11-22-product-startup-baseline.md)
 - [2026-11-22 核心工具执行延迟基线（WSL2+xvfb）](baselines/2026-11-22-product-tool-execution-baseline.md)
 - [2026-11-22 端到端工具调用基线（渲染器 IPC，WSL2+xvfb）](baselines/2026-11-22-product-tool-ipc-baseline.md)
+- [2026-11-22 审批卡出现与脚本化批准（mock 渲染器，非人类）](baselines/2026-11-22-product-approval-ui-baseline.md)
 - [2026-11-19 外部基准 → 产品 ToolRegistry 桥接设计](product-toolregistry-bridge-design.md)
 - [2026-11-18 用户体验与治理差距评估（初版）](governance-gap-assessment-2026-11-18.md)
 - [2026-11-19 AI 风险登记册（初版）](ai-risk-register-2026-11-19.md)
