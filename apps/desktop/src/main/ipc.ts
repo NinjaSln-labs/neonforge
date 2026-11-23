@@ -953,10 +953,7 @@ ipcMain.handle(
 // 2026-11-24 真机：bash 创建计划内文件后 diff 恒 planned-not-produced → 已解决卡不可达）
 ipcMain.handle(
   'completion:verify',
-  async (
-    _e,
-    opts: { commands: string[]; rootPath?: string | null; files?: string[] },
-  ) => {
+  async (_e, opts: { commands: string[]; rootPath?: string | null; files?: string[] }) => {
     const valid = validateIpc(opts, IPC_SCHEMAS.completionVerify)
     if (!valid.ok) return { results: {}, existing: [] }
     const results = await runVerificationCommands(opts.commands, {
