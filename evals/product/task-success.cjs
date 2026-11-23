@@ -42,6 +42,8 @@ if (!TASK_ID || !task) {
 // 排名靠前于 dist/main 的 import，确保能观察到 gateway 的「transient — retrying」行。
 let gatewayRetries = 0
 let networkFailuresInjected = 0
+let midstreamDropsInjected = 0
+let streamResets = 0
 {
   const baseLog = console.log.bind(console)
   console.log = (...args) => {
@@ -49,6 +51,7 @@ let networkFailuresInjected = 0
     if (text.includes('[gateway]') && text.includes('transient') && text.includes('retrying')) {
       gatewayRetries++
     }
+    if (text.includes('[ipc] SEND stream-reset')) streamResets++
     baseLog(...args)
   }
 }
@@ -203,6 +206,36 @@ function startMockServer() {
       ) {
         networkFailuresInjected++
         req.destroy()
+        return
+      }
+      // 流中途断开注入：先写若干 content delta（网关已 emitted=true）再销毁连接，
+      // 触发 gateway 的 stream-reset + 重试分支（与连接前失败不同）。
+      if (
+        req.method === 'POST' &&
+        req.url.startsWith('/v1/chat/completions') &&
+        task.midstreamDropOnce &&
+        midstreamDropsInjected === 0
+      ) {
+        midstreamDropsInjected++
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+          'X-Accel-Buffering': 'no',
+        })
+        res.write(
+          'data: ' +
+            JSON.stringify({
+              id: 'nf-task-mock',
+              object: 'chat.completion.chunk',
+              model: MODEL_ID,
+              choices: [{ index: 0, delta: { content: '（流中途输出）' }, finish_reason: null }],
+            }) +
+            '\n\n',
+        )
+        setTimeout(() => {
+          res.destroy()
+        }, 10)
         return
       }
       if (req.method === 'GET' && req.url.startsWith('/v1/models')) {
@@ -571,6 +604,10 @@ async function scanUi(wc) {
           const last = bodies[bodies.length - 1];
           return last ? (last.textContent || '').slice(0, 240) : '';
         })(),
+        // 流中途断网残留检测：stream-reset 必须把半截输出从消息里清掉（否则会残留拼接）。
+        partialResidue: [...document.querySelectorAll('.nf-msg--assistant .nf-msg__body')].some(
+          (el) => (el.textContent || '').includes('（流中途输出）'),
+        ),
         doneCount: state.doneCount,
         chunkCount: state.chunkCount,
         toolCallsSeen: state.toolCalls,
@@ -999,6 +1036,9 @@ async function run() {
     gatewayRetries,
     networkFailuresInjected,
     networkRetryClicks: driven?.stages?.networkRetryClicks ?? 0,
+    midstreamDropsInjected,
+    streamResets,
+    partialResidue: driven?.ui?.partialResidue ?? false,
   })
   const checksOk = checks.length > 0 && checks.every((c) => c.ok)
   const ok = !driveError && checksOk
