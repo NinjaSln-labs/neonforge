@@ -95,7 +95,7 @@
   - mock：15 任务 ×3 轮 **45/45**（WSL `.../2026-11-23T17-26-36-622Z.jsonl`；`remember-edit` 5 s、3/3 检查）；Mac 重建后 15 任务 ×2 轮 **30/30**（Mac `.../2026-11-23T17-33-28-838Z.jsonl`，`remember-edit` 13 s）；真实模型 **通过** 52 s（记住 1 次、auto(trusted) 1 次、need-approval 1 次，README 两处检查通过；`.../2026-11-23T17-25-25-691Z.jsonl`）。
 - **工具失败恢复任务（2026-11-24 01:45–02:00 UTC，任务集扩为 16）**：
   - 新增 `tool-failure-recovery`（mock-only 失败注入）：首个 `edit` 指向不存在的 failed.txt（必然失败），模型收到失败结果后改用 `write` 创建文件 → 完成声明与证据对账通过。检查：产物精确 + 时间线 `tool.failed ≥1`（证明失败被记录并恢复，而非直通）。
-  - mock：16 任务 ×3 轮 **48/48**（WSL `.../2026-11-23T17-56-57-196Z.jsonl`；`tool-failure-recovery` 5–8 s、2/2 检查）。单跑时间线实证：`edit 需授权 → 批准 → edit 执行失败（找不到文件）→ write 成功 → report_completion → 已解决`。
+  - mock：16 任务 ×3 轮 **48/48**（WSL `.../2026-11-23T17-56-57-196Z.jsonl`；`tool-failure-recovery` 5–8 s、2/2 检查）；Mac 重建后 16 任务 ×2 轮 **32/32**（Mac `.../2026-11-23T18-08-26-805Z.jsonl`，`tool-failure-recovery` 13 s）。单跑时间线实证：`edit 需授权 → 批准 → edit 执行失败（找不到文件）→ write 成功 → report_completion → 已解决`。
   - 真实模式单跑 `tool-failure-recovery` 39 s 到达已解决卡且产物正确，但模型首次即用 write（未触发失败）——如实记录，任务标记 mockOnly。
 - **拒绝路径任务（2026-11-23 11:50–13:00 UTC，任务集扩为 10）**：
   - 新增 `reject-goal`（目标被否 → 重新描述 → 确认 → 执行 → 已解决）、`reject-plan`（首个方案故意偏离 → 修改方案 → 修正方案执行，检查「偏离文件未创建」）、`reject-approval`（`bash` 写文件弹授权卡 → 拒绝 → 用户「继续」→ `approve-files` 批次批准 → `write` → 已解决）。
