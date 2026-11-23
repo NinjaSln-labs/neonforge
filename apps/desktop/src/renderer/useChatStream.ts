@@ -816,7 +816,9 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
         {
           name: tc.name,
           command: String(tc.args?.command ?? ''),
-          path: String(tc.args?.path ?? tc.args?.filePath ?? ''),
+          // 2026-11-24：动作路径统一 trustPath 规范化——sessionGate 内部用 action.path 直接与
+          // plannedFiles 比较；根外/相对形态（'../escaped.txt'）与已批准的绝对清单不一致会被误拦。
+          path: trustPath(tc.args?.path ?? tc.args?.filePath ?? ''),
         },
         inPlannedFiles(tc.args?.path ?? tc.args?.filePath),
       )
@@ -963,6 +965,8 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
         planConfirmed: stateRef.current.planConfirmed,
         plannedFiles: [...stateRef.current.plannedFiles].map((p) => trustPath(p)),
         trusted: isTrusted(tc.args),
+        // 根外写入永不自动放行（V2：清单外/根外始终弹卡）
+        rootPath: rootPath ?? null,
       })
       const autoApproved = autoSource !== null
       void (

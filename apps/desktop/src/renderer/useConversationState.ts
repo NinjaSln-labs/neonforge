@@ -50,6 +50,8 @@ export interface UseConversationStateOpts {
   onPlanConfirmed?: (plan: PlanProposal) => void
   // 任务边界（goal 确认）：清理上一任务的验收记录等跨任务数据
   onTaskBoundary?: () => void
+  // 项目根（可选）：方案清单派生时过滤根外条目（根外文件永不进入自动批准清单——V2 信任模式约束）
+  rootPath?: string | null
 }
 
 export function useConversationState(opts?: UseConversationStateOpts) {
@@ -99,7 +101,7 @@ export function useConversationState(opts?: UseConversationStateOpts) {
     confirm: async (point: ConfirmPoint) => {
       const before = stateRef.current
       const target = effectivePoint(point, before)
-      const r = transition((s) => userConfirmed(s, point))
+      const r = transition((s) => userConfirmed(s, point, opts?.rootPath))
       if (target === 'plan') {
         await syncPlanMirror(true)
         // BC-14：确认前的 decisionContent 是方案快照；确认时派生验收记录（无来源则记录为空）

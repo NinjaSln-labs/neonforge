@@ -14,6 +14,9 @@
 // 值对象（设计 §3.2）
 // ============================================================================
 
+// 路径解析单源（renderer trustPath / main resolvePath 共用；纯字符串无 node 依赖）
+import { resolveSandboxPath } from './sandboxPath.js'
+
 /** 假设来源（ADR-014）——确认卡可追溯「用户确认过」与「模型自行假定」 */
 export type AssumptionSource = 'model_inference' | 'user_choice' | 'clarification'
 
@@ -162,6 +165,7 @@ export function userDecided(
   s: ConversationState,
   point: DecisionKind,
   decision: { confirm: true } | { confirm: false; reason: RejectReason },
+  rootPath?: string | null,
 ): ConversationState {
   if (!decision.confirm && !decision.reason) {
     throw new TypeError('拒绝决策必须携带 RejectReason（不变量 8）')
@@ -178,7 +182,7 @@ export function userDecided(
     }
     // 强制卡 = 升级梯度终点：点卡上「我要重新描述」是明确的新一轮协商——由调用方（强制卡按钮）
     // 经 resetRejectStreak 重置；pending 期间的打字拒绝仍走 C2 累积（A-024 循环形态，不重置）
-    return userDecided(s, underlying, decision)
+    return userDecided(s, underlying, decision, rootPath)
   }
   const next: ConversationState = { ...s, pending: 'none', decisionContent: undefined }
   // ADR-010：任何用户决策都终结「无进展对话」状态——两类计数清零
@@ -209,7 +213,7 @@ export function userDecided(
         dc.proposal &&
         Array.isArray((dc.proposal as PlanProposal).files)
       ) {
-        next.plannedFiles = derivePlannedFiles(s, dc.proposal as PlanProposal)
+        next.plannedFiles = derivePlannedFiles(s, dc.proposal as PlanProposal, rootPath)
       }
     }
     if (point === 'resolution') {
@@ -298,8 +302,9 @@ export function approvalDecided(
 export function userConfirmed(
   s: ConversationState,
   point: 'goal' | 'plan' | 'resolution' | 'system_clarify',
+  rootPath?: string | null,
 ): ConversationState {
-  return userDecided(s, point, { confirm: true })
+  return userDecided(s, point, { confirm: true }, rootPath)
 }
 
 export function userRejected(
@@ -684,6 +689,13 @@ export function normalizeComparePath(p: unknown): string {
 }
 
 // 清单匹配判定（Q5 单源——S3 统一：renderer 引用本函数，消除双实现；相对/绝对/目录尾斜杠兼容）
+export function isPathInsideRoot(path: string, rootPath: string): boolean {
+  const p = normalizeComparePath(path)
+  const r = normalizeComparePath(rootPath)
+  if (!p || !r || !p.startsWith('/')) return false
+  return p === r || p.startsWith(r + '/')
+}
+
 export function inPlannedFiles(s: ConversationState, action: ExecAction): boolean {
   const p = normalizeComparePath(action.path)
   if (!p) return false
@@ -1029,11 +1041,23 @@ export function evidenceGuideMaxAttempts(v: { missing: string[]; unverifiable: s
 
 // —— 方案清单派生（不变量 6 承载：plannedFiles 只由已确认的 PlanProposal.files 派生——追加语义 A0 §5） ——
 
-/** 返回 state.plannedFiles ∪ proposal.files（追加/去重——路径规范化由解析层 trustPath 承担，S2） */
-export function derivePlannedFiles(s: ConversationState, proposal: PlanProposal): Set<string> {
+/** 返回 state.plannedFiles ∪ proposal.files（追加/去重——路径规范化由解析层 trustPath 承担，S2）
+ * 2026-11-24 根外条目：已确认方案中的**根外**文件不并入写入批准清单（清单外/根外永不自动放行的
+ * 数据侧防线）——调用方传入 rootPath 时过滤，根外文件只能走逐次授权（rootPath 缺失时保持旧行为）。 */
+export function derivePlannedFiles(
+  s: ConversationState,
+  proposal: PlanProposal,
+  rootPath?: string | null,
+): Set<string> {
   const planned = new Set(s.plannedFiles)
   for (const f of proposal.files ?? []) {
-    if (f && typeof f.path === 'string' && f.path.trim()) planned.add(f.path.trim())
+    if (!f || typeof f.path !== 'string' || !f.path.trim()) continue
+    const p = f.path.trim()
+    if (rootPath) {
+      const abs = resolveSandboxPath(rootPath, p)
+      if (!isPathInsideRoot(abs, rootPath)) continue
+    }
+    planned.add(p)
   }
   return planned
 }

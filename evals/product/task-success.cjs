@@ -587,6 +587,7 @@ async function driveToResolution(wc) {
   let approvalRejectedOnce = false
   let approvalContinueSent = false
   let clarifyAnswered = false
+  let clarifyAnswers = 0
   let goalRejectedOnce = false
   let planRejectedOnce = false
   const deadline = t0 + TIMEOUT_MS
@@ -669,13 +670,14 @@ async function driveToResolution(wc) {
         resolutionClicked = true
         break
       }
-    } else if (ui.clarify && task.rejection && !clarifyAnswered) {
-      // 拒绝后真实模型常先追问方向（ask_user/<candidates>）——点第一个可用选项作答，
-      // 相当于用户给出「按原目标继续」的选择；mock 剧本不会走到这里。
+    } else if (ui.clarify && clarifyAnswers < 5) {
+      // 真实模型常先追问方向（ask_user/<candidates>）——点第一个可用选项作答（脚本化用户选择）。
+      // 拒绝路径与普通任务都可能出现；上限 5 次防追问循环。mock 剧本不会走到这里。
       const clicked = await clickSelector(wc, '.nf-candidates .nf-candidates__btn:not([disabled])')
       if (clicked) {
         clarifyAnswered = true
-        stages.clarifyAnswers = (stages.clarifyAnswers ?? 0) + 1
+        clarifyAnswers++
+        stages.clarifyAnswers = clarifyAnswers
         stages.clarifyAnsweredMs = at
       }
     }
@@ -775,6 +777,7 @@ function collectDelegateAudit() {
     delegateDenials: 0,
     fileApprovalDenials: 0,
     bashApprovalCards: 0,
+    policyBlockedWrites: 0,
     evidenceMissing: 0,
   }
   let names = []
@@ -818,6 +821,9 @@ function collectDelegateAudit() {
         const toolName = String(detail.name ?? '')
         if (toolName === 'write' || toolName === 'edit') audit.fileApprovalDenials++
         else if (toolName === 'bash') audit.bashApprovalCards++
+      } else if (evt?.type === 'tool.blocked' && detail.gate === 'policy') {
+        // 规划门控（policy）拦截的 write——用于根外任务判「写入被拦截且未自动放行」。
+        if (String(detail.name ?? '') === 'write') audit.policyBlockedWrites++
       }
     }
   }

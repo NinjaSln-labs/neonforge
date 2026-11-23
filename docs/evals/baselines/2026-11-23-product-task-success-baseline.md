@@ -84,6 +84,12 @@
   - 新增 `evidence-gap`（`mockOnly` 失败注入）：动作轮后首次 `report_completion` 引用不存在的文件 `cat missing-evidence.txt`——系统代跑失败 → `completion.evidence_missing` 打点 + 【系统对账】回填引导；模型按引导重发正确证据 `cat evidence.txt` → 验收项通过 → 已解决卡。检查项：产物精确 + 时间线 `evidence_missing ≥ 1`（证明走了对账路径而非直通）。
   - mock：13 任务 ×3 轮 **39/39**（WSL `.../2026-11-23T15-28-27-843Z.jsonl`；`evidence-gap` 单任务 5–9 s、2/2 检查）；Mac 重建后 13 任务 ×2 轮 **26/26**（Mac `.../2026-11-23T15-35-08-772Z.jsonl`，`evidence-gap` 12 s）。单跑时间线实证：`decision.requested kind=plan → completion.evidence_missing(missing: verification:cat missing-evidence.txt) → conversation.system_nudge（系统对账）→ acceptance.item_passed(verification:cat evidence.txt) → decision.requested kind=resolution`。
   - 真实模式跳过 `mockOnly` 任务（真实模型通常首次证据即正确，无法强制注入错误声明；单跑真实 `evidence-gap` 35 s 到达已解决卡、产物正确、无 evidence_missing，不构成失败注入覆盖——运行器现在显式 SKIP 并报错当所选任务全为 mock-only）。
+- **根外写入约束任务（2026-11-24 00:00–01:00 UTC，任务集扩为 14）**：
+  - 新增 `root-out-write`（mock-only）：方案清单含根外 `../escaped.txt`，首个直写必须被规划门控拦截（`tool.blocked gate=policy`），随后 `approve-files` 批次卡显式授权 → 写入执行；检查上级目录产物 + 「未被自动放行」+「批次卡已批准」。
+  - 真机复现（修前）：standard 信任模式下方案确认后 `plannedFiles` 含根外路径、renderer `autoApprovalSource` 判 in-plan 自动批准（`approvalSource=auto`），根外写直接执行、完成声明被 `diff:planned-not-produced` 否决后停等（124 s 未到已解决卡）。
+  - 修复（PR #127）：① `authModel.shouldAutoApproveTool` 增根外硬边界（计划/委托判定对根外路径一律不自动；显式「记住/单次批准」仍优先）；② `derivePlannedFiles` 传入 rootPath 时过滤根外条目（renderer `useConversationState` 增 rootPath 选项）；③ renderer `canExecute` 动作路径统一 trustPath 规范化（根外/相对路径与绝对清单一致）；④ main `delegationBoundaryViolation` 增词法根外校验（根外字符串即使 realpath 落回根内也不委托）。单测 +3（authModel 根外、derivePlannedFiles 过滤、委托词法根外；949/949）。
+  - mock 14 任务 ×3 轮 **42/42**（WSL `.../2026-11-23T16-55-27-802Z.jsonl`；`root-out-write` 5 s、3/3 检查）。
+  - 真实模型：首次 301 s（模型先做长探索 + `ask_user` 追问，探针当时只对拒绝路径作答——探针已放宽为任何任务都作答候选选项），第二次 65 s 到达已解决卡但**模型把需求解释为项目根内创建**（方案 `escaped.txt`，安全自限、不在上一级写），根外路径未被触发——如实记录，任务标记 mockOnly（真实模型不会主动写根外，无法复现该约束）。
 - **拒绝路径任务（2026-11-23 11:50–13:00 UTC，任务集扩为 10）**：
   - 新增 `reject-goal`（目标被否 → 重新描述 → 确认 → 执行 → 已解决）、`reject-plan`（首个方案故意偏离 → 修改方案 → 修正方案执行，检查「偏离文件未创建」）、`reject-approval`（`bash` 写文件弹授权卡 → 拒绝 → 用户「继续」→ `approve-files` 批次批准 → `write` → 已解决）。
   - 探针新增拒绝/恢复驱动：按任务标记点第一次拒绝按钮（「重新描述」/「修改方案」/授权卡「拒绝」）；授权卡拒绝后空闲 2 s 发送「继续」；拒绝后模型追问方向时点第一个 `ask_user`/`<candidates>` 选项；ADR-010 强制澄清卡点「确认执行」继续 underlying。
@@ -101,7 +107,7 @@
 
 ## 限制
 
-- **固定剧本（基线部分）**：基线为 6 个短任务，2026-11-23 后扩为 13 个（新增顺序违规恢复任务 `direct-write-after-goal`、三个拒绝路径任务 `reject-goal`/`reject-plan`/`reject-approval`、strict 任务 `strict-first-write` 与 delegated 任务 `delegated-edit`、mock-only 证据不足回填任务 `evidence-gap`）；mock 回复固定；不代表真实模型、长任务、多文件项目、工具执行失败或网络。真实模型 pilot 是小样本探索，未计入基线。
+- **固定剧本（基线部分）**：基线为 6 个短任务，2026-11-23 后扩为 14 个（新增顺序违规恢复任务 `direct-write-after-goal`、三个拒绝路径任务 `reject-goal`/`reject-plan`/`reject-approval`、strict 任务 `strict-first-write` 与 delegated 任务 `delegated-edit`、mock-only 证据不足回填任务 `evidence-gap` 与根外写入约束任务 `root-out-write`）；mock 回复固定；不代表真实模型、长任务、多文件项目、工具执行失败或网络。真实模型 pilot 是小样本探索，未计入基线。
 - **脚本非人类**：无阅读时间、犹豫、误点、拒绝路径或中断/恢复；不产生 SUS/HEART 或真人审批数据。
 - **单机单版本**：WSL2+xvfb 与一台 2018 MacBook Pro；无 Windows、Apple Silicon 或其他 macOS 版本。
 - **信任模式部分覆盖**：`standard` 为默认全量基线；`strict` 已有 `strict-first-write` 任务（mock 与真实模型均通过）；`delegated` 已有 `delegated-edit` 任务（mock 36/36 中含该任务、真实模型通过，审计要求 write/edit 无授权卡且自动放行来源 delegate/auto）；「允许并记住」路径仍只有 L3 覆盖，任务套未覆盖。

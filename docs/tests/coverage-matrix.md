@@ -198,6 +198,7 @@
 | 设置页三档切换 + 委托仅计划内放行 | `trustModes.interaction.ts`（设置页切换持久化/旧键迁移删除、delegated 清单内 edit 自动且来源 delegate、strict 清单内 write 仍弹授权卡） | ✅ |
 | 任务套信任模式（strict / delegated） | `evals/product`：`strict-first-write`（`trustMode: 'strict'`、授权卡 1 次后写入）、`delegated-edit`（`trustMode: 'delegated'`、时间线 `approvalSource=delegate`、write/edit 无授权卡；standard 负控必失败） | ✅ |
 | 证据不足对账回填（显式任务） | `evals/product`：`evidence-gap`（mock-only 失败注入：首次声明引用不存在证据 → `completion.evidence_missing` → 【系统对账】回填 → 已解决；检查时间线 evidence_missing ≥ 1） | ✅ |
+| 根外写入不自动放行 | `authModel.test.ts`（根外路径标准/委托判定均拒绝——显式 trusted 仍放行）、`conversationState.test.ts`（derivePlannedFiles 传 rootPath 过滤根外条目）、`tools.test.ts`（委托词法根外即使 realpath 落回根内也拒绝）、`evals/product`：`root-out-write`（规划门控拦截 → 批次卡显式授权 → 执行） | ✅ |
 
 ## 表 13：机制拒绝事件 gate.denied ↔ 测试（ADR-016 / GitHub #16，2026-11-17）
 

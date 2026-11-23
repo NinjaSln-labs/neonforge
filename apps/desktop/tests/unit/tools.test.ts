@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import {
   initTools,
@@ -13,6 +13,7 @@ import {
   isValidOpenUrl,
   isReadOnlyBash,
   resolveDeliveryTarget,
+  delegationBoundaryViolation,
 } from '../../src/main/tools'
 import { isKillablePid, killProcessGroupBestEffort } from '../../src/main/processGuard'
 import { getPlannedFilesStore } from '../../src/main/plannedFilesStore.instance'
@@ -678,6 +679,29 @@ describe('ToolRegistry 委托边界（ADR-015）', () => {
       expect(existsSync(file)).toBe(false)
     } finally {
       rmSync(outside, { force: true })
+    }
+  })
+
+  it('delegate：词法根外字符串即使 realpath 落回根内也拒绝（根外始终弹卡）', async () => {
+    // 根外 symlink 别名指向项目根：字符串在根外，realpath 在根内——旧的 realpath 校验会放行，
+    // 新增的词法校验必须拒绝（否则「根外始终弹卡」可被 symlink 别名绕过）。
+    mkdirSync(TMP, { recursive: true })
+    const alias = '/tmp/nf-unit-tools-alias'
+    try {
+      symlinkSync(TMP, alias)
+    } catch {
+      rmSync(alias, { force: true })
+      symlinkSync(TMP, alias)
+    }
+    const lexical = path.join(alias, 'alias-root-out.txt')
+    writeFileSync(path.join(TMP, 'alias-root-out.txt'), 'x')
+    getPlannedFilesStore().addPlan([lexical])
+    try {
+      const v = await delegationBoundaryViolation('edit', { path: lexical }, TMP)
+      expect(v).toContain('根外')
+    } finally {
+      rmSync(alias, { force: true })
+      rmSync(path.join(TMP, 'alias-root-out.txt'), { force: true })
     }
   })
 
