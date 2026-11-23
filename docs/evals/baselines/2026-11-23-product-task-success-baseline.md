@@ -77,7 +77,7 @@
   - 新增 `delegated-edit`（任务级 `trustMode: 'delegated'`）：清单内 `edit` 由 renderer 自动批准（`approvalSource=delegate`）+ main 执行边界二次校验；产物核验 README 首行标题与正文保留。
   - 探针新增时间线审计：`collectDelegateAudit` 扫描隔离 userData/logs 的 `timeline-*.jsonl`，统计 `approvalSource=delegate` / `auto`（trusted 分支）的 write/edit 执行、`security.trust_delegation_denied` 与 write/edit 的授权卡请求；`delegateAuditCheck` 要求「有自动放行证据、write/edit 无授权卡」——bash 高危逐次授权不计违例（真实模型常用 bash 读取文件）。
   - 负控：同一任务临时以 `trustMode: 'standard'` 运行必失败（edit 在标准档弹授权卡、无 `delegate` 来源；`.../2026-11-23T14-42-42-311Z.jsonl`），确认检查能区分两档。
-  - mock：12 任务 ×3 轮 **36/36**（WSL `.../2026-11-23T14-44-23-761Z.jsonl`；`delegated-edit` 单任务 4–7 s、3/3 检查）。
+  - mock：12 任务 ×3 轮 **36/36**（WSL `.../2026-11-23T14-44-23-761Z.jsonl`；`delegated-edit` 单任务 4–7 s、3/3 检查）；Mac 重建后 12 任务 ×2 轮 **24/24**（Mac `.../2026-11-23T15-05-52-868Z.jsonl`；`delegated-edit` 单任务 11 s、3/3 检查）。
   - 真实模型：`delegated-edit` **通过** 52 s（目标 21.5 / 方案 27.8 / 已解决 50.7 s，`delegate` 执行 2 次、write/edit 授权卡 0 次、bash 授权卡 0 次；`.../2026-11-23T14-42-55-098Z.jsonl`）。两次同任务真实运行（14:35、14:39）：产物正确，但模型先发 `bash` 读文件触发授权卡、或先 `approve-files`（来源 auto）——首次审计把「任何授权点击/非 delegate 来源」判失败，按真实行为放宽为「write/edit 无授权卡 + 存在自动放行证据（delegate 或 trusted auto）」，两次运行实际也满足；审计口径变化如实记录。
   - 局限：`delegated` 与 `standard` 的差异仅在清单内 `edit`（`standard` 只自动放行 `write`）；「允许并记住」仍只有 L3 覆盖。
 - **拒绝路径任务（2026-11-23 11:50–13:00 UTC，任务集扩为 10）**：
