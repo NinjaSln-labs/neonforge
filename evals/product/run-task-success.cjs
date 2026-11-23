@@ -27,11 +27,13 @@ function parseArgs(argv) {
     tasks: null,
     repeat: 1,
     timeoutMs: 180000,
+    mode: 'mock',
     out: null,
   }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--tasks') opts.tasks = argv[++i]
+    else if (a === '--mode') opts.mode = argv[++i]
     else if (a === '--repeat') opts.repeat = Number(argv[++i])
     else if (a === '--timeout-ms') opts.timeoutMs = Number(argv[++i])
     else if (a === '--out') opts.out = argv[++i]
@@ -46,6 +48,7 @@ function parseArgs(argv) {
     if (unknown.length > 0) throw new Error(`unknown tasks: ${unknown.join(',')}`)
     opts.tasks = ids
   }
+  if (!['mock', 'real'].includes(opts.mode)) throw new Error(`unknown mode ${opts.mode}`)
   opts.repeat = Math.max(1, opts.repeat)
   return opts
 }
@@ -106,10 +109,20 @@ async function runOneTask(task, opts, stamp, outPath) {
   const runDir = path.join(scratchDir, `task-run-${stamp}`, task.id)
   mkdirSync(path.join(runDir, 'userdata'), { recursive: true })
   mkdirSync(shortDir('nf-task-tmp', runDir), { recursive: true })
+  const realKey = opts.mode === 'real' ? process.env.MAGPIE_GATEWAY_KEY : null
+  if (opts.mode === 'real' && !realKey) throw new Error('MAGPIE_GATEWAY_KEY missing for real mode')
   const env = {
     ...sanitizedEnv(runDir),
     NF_TASK_SUCCESS_TASK: task.id,
     NF_TASK_SUCCESS_TIMEOUT_MS: String(opts.timeoutMs),
+  }
+  if (opts.mode === 'real') {
+    env.NEONFORGE_API_KEY = realKey
+    env.NF_TASK_SUCCESS_REAL = '1'
+    env.NF_TASK_SUCCESS_MODEL =
+      process.env.NF_TASK_SUCCESS_MODEL || 'opendesign/deepseek-v4.1-flash-eco'
+    env.NF_TASK_SUCCESS_BASE_URL =
+      process.env.NF_TASK_SUCCESS_BASE_URL || 'http://127.0.0.1:3425/v1'
   }
   const args = [...electronCommand(electronBin), harness]
   const started = Date.now()
@@ -194,6 +207,20 @@ async function main() {
   if (!existsSync(path.join(desktopDir, 'dist/main/main.js'))) {
     throw new Error('apps/desktop/dist/main/main.js missing; run `npm run build` in apps/desktop')
   }
+  if (opts.mode === 'real') {
+    if (!process.env.MAGPIE_GATEWAY_KEY) throw new Error('MAGPIE_GATEWAY_KEY missing for real mode')
+    const base = process.env.NF_TASK_SUCCESS_BASE_URL || 'http://127.0.0.1:3425/v1'
+    try {
+      const res = await fetch(base.replace(/\/+$/, '') + '/models', {
+        signal: AbortSignal.timeout(5000),
+      })
+      if (!res.ok) throw new Error(`http-${res.status}`)
+    } catch (e) {
+      throw new Error(
+        `local Magpie not reachable at ${base}: ${String(e && e.message ? e.message : e)}`,
+      )
+    }
+  }
   mkdirSync(scratchDir, { recursive: true })
   const stamp = new Date().toISOString().replace(/[:.]/g, '-')
   const outPath = opts.out || path.join(scratchDir, `task-success-${stamp}.jsonl`)
@@ -254,7 +281,8 @@ async function main() {
   appendFileSync(outPath, JSON.stringify(summary) + '\n')
   console.log(
     `\nSUMMARY ${passed}/${rows.length} 通过（${failed} 失败）` +
-      ` human=false mock-protocol-product-flow\nout: ${outPath}`,
+      ` human=false ${opts.mode === 'real' ? 'real-model-product-flow' : 'mock-protocol-product-flow'}` +
+      `\nout: ${outPath}`,
   )
   process.exit(failed === 0 ? 0 : 1)
 }
