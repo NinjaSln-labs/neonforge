@@ -806,6 +806,46 @@ const TASKS = [
     networkFailures: 3,
     retryAfterNetworkExhausted: true,
   },
+  {
+    id: 'network-midstream',
+    title: '流中途断网：已输出部分内容后连接断开 → stream-reset 重置 → 重试完成',
+    prompt: '创建 midstream.txt，内容必须是 MIDSTREAM-OK，不要其他内容。',
+    goal: '创建 midstream.txt，内容为 MIDSTREAM-OK。',
+    plan: {
+      summary: '新建 midstream.txt 并写入指定内容',
+      files: [{ path: 'midstream.txt', reason: '用户指定的交付文件' }],
+      verification: ['cat midstream.txt 核对内容'],
+    },
+    rounds: [[{ name: 'write', args: { path: 'midstream.txt', content: 'MIDSTREAM-OK' } }]],
+    completion: {
+      summary: 'midstream.txt 已创建并核验内容（流中途断网后重试成功）',
+      verification: [{ command: 'cat midstream.txt', output: 'MIDSTREAM-OK' }],
+    },
+    checks: [
+      fileCheck('midstream.txt 内容精确', 'midstream.txt', 'MIDSTREAM-OK'),
+      {
+        name: '流中途断开触发 stream-reset 并重试成功（reset ≥1 / retry ≥1）',
+        run: (_root, ctx) => {
+          const drops = ctx?.midstreamDropsInjected ?? 0
+          const resets = ctx?.streamResets ?? 0
+          const retries = ctx?.gatewayRetries ?? 0
+          const residue = ctx?.partialResidue === true
+          return drops >= 1 && resets >= 1 && retries >= 1 && !residue
+            ? {
+                ok: true,
+                detail: `中途断开 ${drops} 次，stream-reset ${resets} 次，网关重试 ${retries} 次后完成（半截输出已被重置清除）`,
+              }
+            : {
+                ok: false,
+                detail: `断开 ${drops} 次 / stream-reset ${resets} 次 / 重试 ${retries} 次 / 半截残留 ${residue}（要求 ≥1/≥1/≥1 且无残留）`,
+              }
+        },
+      },
+    ],
+    // 流中途断开依赖 mock 服务器；真实模式跳过。
+    mockOnly: true,
+    midstreamDropOnce: true,
+  },
 ]
 
 function getTask(id) {
