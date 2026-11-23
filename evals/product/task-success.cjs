@@ -561,6 +561,8 @@ async function scanUi(wc) {
         // ask_user / <candidates> 澄清选项（拒绝后模型常先追问方向）——拒绝路径任务点第一个可用选项
         clarify: q('.nf-candidates .nf-candidates__btn:not([disabled])'),
         errorToolCalls: document.querySelectorAll('.nf-toolcall--error').length,
+        // 网络彻底失败后的错误气泡「重试」按钮（retryAfterNetworkExhausted 任务点击一次）
+        retry: q('.nf-msg__retry:not([disabled])'),
         working: q('.nf-working'),
         userMsgs: document.querySelectorAll('.nf-msg--user').length,
         assistantMsgs: document.querySelectorAll('.nf-msg--assistant').length,
@@ -636,6 +638,7 @@ async function driveToResolution(wc) {
   let resolutionRejectedOnce = false
   let approvalContinueSent = false
   let resolutionReworkRequested = false
+  let networkRetryClickedOnce = false
   let clarifyAnswered = false
   let clarifyAnswers = 0
   let goalRejectedOnce = false
@@ -742,6 +745,15 @@ async function driveToResolution(wc) {
           resolutionClicked = true
           break
         }
+      }
+    } else if (ui.retry && task.retryAfterNetworkExhausted && !networkRetryClickedOnce) {
+      // 网络 3 击耗尽后的错误气泡：脚本点「重试」（重放上一回合，不追加用户消息）；
+      // mock 的断开注入已耗尽，重试请求正常走剧本 → 目标卡 → … → 已解决。
+      const clicked = await clickSelector(wc, '.nf-msg__retry:not([disabled])')
+      if (clicked) {
+        networkRetryClickedOnce = true
+        stages.retryButtonMs = at
+        stages.networkRetryClicks = 1
       }
     } else if (ui.clarify && clarifyAnswers < 5) {
       // 真实模型常先追问方向（ask_user/<candidates>）——点第一个可用选项作答（脚本化用户选择）。
@@ -986,6 +998,7 @@ async function run() {
     resolutionRejects: driven?.stages?.resolutionRejects ?? 0,
     gatewayRetries,
     networkFailuresInjected,
+    networkRetryClicks: driven?.stages?.networkRetryClicks ?? 0,
   })
   const checksOk = checks.length > 0 && checks.every((c) => c.ok)
   const ok = !driveError && checksOk
