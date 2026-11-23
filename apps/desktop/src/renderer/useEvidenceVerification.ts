@@ -10,6 +10,7 @@ import {
   type ConversationState,
   type SystemVerifier,
 } from '../domain/conversationState'
+import { resolveSandboxPath } from '../domain/sandboxPath'
 import type { useConversationState } from './useConversationState'
 import type { TimelineLog } from './useTimelineLog'
 
@@ -66,13 +67,18 @@ export function useEvidenceVerification(
         const commands = claim.evidence.verification
           .filter((v) => v.passed !== false)
           .map((v) => v.command)
-        const results = await bridge.verify(commands, rootPath ?? null)
-        if (results) {
+        // 计划清单绝对化后交给 main 做存在性核对（bash 等非 write/edit 途径产出也认定已产出）
+        const planned = [...stateRef.current.plannedFiles].map((p) =>
+          resolveSandboxPath(rootPath ?? '', p),
+        )
+        const verified = await bridge.verify(commands, rootPath ?? null, planned)
+        if (verified) {
           systemState = {
-            verificationResults: results,
+            verificationResults: verified.results ?? {},
             deriveDiffs,
             plannedFiles: stateRef.current.plannedFiles,
             producedFiles: stateRef.current.producedFiles,
+            existingFiles: new Set(verified.existing ?? []),
           }
         }
       } catch {

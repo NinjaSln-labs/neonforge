@@ -1,6 +1,6 @@
 // IPC handlers：renderer 经 preload → 主进程 gateway/configStore/workspace
 import { app, BrowserWindow, dialog, ipcMain, type OpenDialogOptions } from 'electron'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import {
   parseUnifiedDiff,
   applyDiffToFile,
@@ -949,11 +949,24 @@ ipcMain.handle(
   },
 )
 // S4 完成对账 V1a：系统代跑只读验证命令（fail-closed——非只读不执行；超时/截断护栏见 verification.ts）
+// V1b+：顺带核对计划清单文件的存在性（bash 等非 write/edit 途径产出也认定已产出——
+// 2026-11-24 真机：bash 创建计划内文件后 diff 恒 planned-not-produced → 已解决卡不可达）
 ipcMain.handle(
   'completion:verify',
-  (_e, opts: { commands: string[]; rootPath?: string | null }) => {
+  async (_e, opts: { commands: string[]; rootPath?: string | null; files?: string[] }) => {
     const valid = validateIpc(opts, IPC_SCHEMAS.completionVerify)
-    if (!valid.ok) return {}
-    return runVerificationCommands(opts.commands, { cwd: opts.rootPath ?? undefined })
+    if (!valid.ok) return { results: {}, existing: [] }
+    const results = await runVerificationCommands(opts.commands, {
+      cwd: opts.rootPath ?? undefined,
+    })
+    const existing: string[] = []
+    for (const f of opts.files ?? []) {
+      try {
+        if (existsSync(f)) existing.push(f)
+      } catch {
+        /* 路径异常按不存在处理 */
+      }
+    }
+    return { results, existing }
   },
 )

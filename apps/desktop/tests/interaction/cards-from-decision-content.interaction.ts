@@ -312,7 +312,10 @@ test('S4-2：证据完整 + 系统复核通过 → 已解决卡出现（V1a 接�
       bridge.completion = {
         verify: async (commands) => {
           verifyCount++
-          return Object.fromEntries(commands.map((c) => [c, { ok: true, output: 'ok' }]))
+          return {
+            results: Object.fromEntries(commands.map((c) => [c, { ok: true, output: 'ok' }])),
+            existing: [],
+          }
         },
       }
     `,
@@ -365,7 +368,10 @@ test('S4-3：系统复核失败推翻自报 → 不弹卡 + 引导 → 重输出
         verify: async (commands) => {
           verifyCount++
           const ok = verifyCount >= 2
-          return Object.fromEntries(commands.map((c) => [c, { ok, output: ok ? 'ok' : '失败' }]))
+          return {
+            results: Object.fromEntries(commands.map((c) => [c, { ok, output: ok ? 'ok' : '失败' }])),
+            existing: [],
+          }
         },
       }
     `,
@@ -1225,7 +1231,10 @@ test('S4-3b：对账持续失败达引导上限 → 状态栏提示可见（A-01
     // extraInit 逃生舱：V1a mock（核验恒失败——verifyCompletion 永不通过）
     extraInit: `
       bridge.completion = {
-        verify: async (commands) => Object.fromEntries(commands.map((c) => [c, { ok: false, output: '失败' }])),
+        verify: async (commands) => ({
+          results: Object.fromEntries(commands.map((c) => [c, { ok: false, output: '失败' }])),
+          existing: [],
+        }),
       }
     `,
     script: compose(

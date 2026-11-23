@@ -253,7 +253,11 @@ export interface NeonForgeBridge {
     verify: (
       commands: string[],
       rootPath?: string | null,
-    ) => Promise<Record<string, { ok: boolean; output?: string }>>
+      files?: string[],
+    ) => Promise<{
+      results: Record<string, { ok: boolean; output?: string }>
+      existing: string[]
+    }>
   }
   workspace: {
     openFolder: () => Promise<string | null>

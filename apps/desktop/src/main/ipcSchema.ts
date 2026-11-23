@@ -212,6 +212,11 @@ export const IPC_SCHEMAS = {
         items: { type: 'string', minLength: 1, maxLength: 4000 },
       },
       rootPath: { type: 'string', maxLength: 4000, nullable: true },
+      files: {
+        type: 'array',
+        maxItems: 1000,
+        items: { type: 'string', minLength: 1, maxLength: 4000 },
+      },
     },
     required: ['commands'],
   },

@@ -136,6 +136,37 @@ describe('verifyCompletion（V1a 系统复核 + V1b diff 派生——S2 扩展�
     expect(r.missing).not.toContain('diff:planned-not-produced')
   })
 
+  it('V1b+：planned 未写入 producedFiles 但文件存在性事实包含 → 不判 missing（bash 途径产出）', () => {
+    const st = mockSystemState({ 'ls src': { ok: true } })
+    st.producedFiles = new Set() // 非 write/edit 途径（bash）产出 → producedFiles 为空
+    st.existingFiles = new Set(['src/a.ts', 'src/b.ts'])
+    const c = claim({
+      evidence: {
+        verification: [{ command: 'ls src', passed: true }],
+        diffs: [],
+        pendingQuestions: [],
+      },
+    })
+    const r = verifyCompletion(c, st)
+    expect(r.ok).toBe(true)
+    expect(r.missing).not.toContain('diff:planned-not-produced')
+  })
+
+  it('V1b+：存在性事实缺失时仍按 producedFiles 判定（bash 未产出 → missing）', () => {
+    const st = mockSystemState({ 'ls src': { ok: true } })
+    st.producedFiles = new Set()
+    st.existingFiles = new Set()
+    const c = claim({
+      evidence: {
+        verification: [{ command: 'ls src', passed: true }],
+        diffs: [],
+        pendingQuestions: [],
+      },
+    })
+    const r = verifyCompletion(c, st)
+    expect(r.missing).toContain('diff:planned-not-produced')
+  })
+
   it('V1b：planned 有文件未产出 → 系统派生 diff 缺失（missing: diff:planned-not-produced）', () => {
     const st = mockSystemState({ 'ls src': { ok: true } })
     st.producedFiles = new Set(['src/a.ts']) // b.ts 未产出

@@ -252,11 +252,16 @@ contextBridge.exposeInMainWorld('neonforge', {
   },
   // S4 完成对账 V1a：系统代跑只读验证命令（main 侧 fail-closed——非只读不执行）
   completion: {
-    verify: (commands: string[], rootPath?: string | null) =>
+    // V1b+：返回代跑结果 + 计划清单文件的存在性（bash 途径产出也认定已产出）
+    verify: (commands: string[], rootPath?: string | null, files?: string[]) =>
       ipcRenderer.invoke('completion:verify', {
         commands,
         rootPath: rootPath ?? null,
-      }) as Promise<Record<string, { ok: boolean; output?: string }>>,
+        files: files ?? [],
+      }) as Promise<{
+        results: Record<string, { ok: boolean; output?: string }>
+        existing: string[]
+      }>,
   },
   workspace: {
     openFolder: () => ipcRenderer.invoke('workspace:open-folder') as Promise<string | null>,

@@ -937,7 +937,9 @@ export default function ConversationPanel({
                     ) : null}
                     {dcKind === 'resolution' &&
                     achievedMatch &&
-                    stateRef.current.producedFiles.size > 0 &&
+                    // 2026-11-24：resolution 决策点只在完成对账通过后置位（useEvidenceVerification）
+                    // ——不再用 producedFiles/plannedFiles 二次否决：bash 等非 write/edit 途径产出、
+                    // 或文本方案未派生清单时，两者可能为空而 pending=resolution 冻结（真机停等）。
                     !stateRef.current.resolutionConfirmed &&
                     i === lastSignalIdx.achieve &&
                     i !== rejectedCardIdx.achievement ? (
