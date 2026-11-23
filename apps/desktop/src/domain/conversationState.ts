@@ -851,7 +851,15 @@ export function deriveDecisionPoint(
     return 'none' // 证据不足 → 不进入对账（引导由 S4 回填）
   }
   // 5. 用户主动请求（goalFallback 兜底——其余决策点）
-  if (userRequested && userRequested !== 'approval') return userRequested
+  // 已确认的一次性决策点不再触发（plan/resolution 确认后，滞后的 UI 信号不得重开决策点——
+  // 2026-11-23 真机 repro：write 成功后 UI 卡片状态未回填，sideEffectPendingUi 仍为真 →
+  // 事件层把信号翻译成 userRequested=plan → 本规则绕过规则 2 的 !planConfirmed 门，
+  // 置 pending=plan 而方案卡渲染条件仍要求 !planConfirmed → 无卡可点、模型停等死锁）
+  if (userRequested && userRequested !== 'approval') {
+    if (userRequested === 'plan' && state.planConfirmed) return 'none'
+    if (userRequested === 'resolution' && state.resolutionConfirmed) return 'none'
+    return userRequested
+  }
   return 'none'
 }
 
