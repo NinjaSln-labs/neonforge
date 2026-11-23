@@ -8,6 +8,7 @@ import {
   cancelActiveCommand,
   markPlanApproved,
   resetPlanApproved,
+  syncPlanConfirmed,
   syncPlanApprovedFromStore,
   isValidOpenUrl,
   isReadOnlyBash,
@@ -15,6 +16,7 @@ import {
 } from '../../src/main/tools'
 import { isKillablePid, killProcessGroupBestEffort } from '../../src/main/processGuard'
 import { getPlannedFilesStore } from '../../src/main/plannedFilesStore.instance'
+import { getTrustPolicyStore } from '../../src/main/trustPolicyStore.instance'
 
 // 2026-08-06 open 工具（用户「帮我打开」）：mock electron shell——vitest node 环境无 electron
 const { openExternalMock } = vi.hoisted(() => ({ openExternalMock: vi.fn(async () => {}) }))
@@ -156,6 +158,37 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     expect(r.needApproval).toBeUndefined() // 不是授权请求（引导先规划，不逐个授权）
     expect(r.error).toContain('approve-files')
     expect(existsSync(file)).toBe(false)
+  })
+
+  // 2026-11-23 信任模式 strict（ADR-015）真机形态：方案确认后 strict 不自动放行清单内 write，
+  // main 若仍返回「先调 approve-files」policy 文本，模型会放弃收口（301 s）；strict 下应落
+  // 通用授权分支（needApproval——逐次授权卡），批准后正常写入。
+  it('strict 档 + 方案已确认：write 不走 approve-files 策略引导，改弹逐次授权（needApproval）', async () => {
+    resetPlanApproved()
+    syncPlanConfirmed(true) // renderer confirm('plan') 镜像
+    getTrustPolicyStore().save('strict')
+    const file = path.join(TMP, 'strict.txt')
+    const r = await toolRegistry.execute('write', { path: file, content: 'x' }, {})
+    expect(r.ok).toBe(false)
+    expect(r.policy).toBeUndefined() // 不是 approve-files 策略引导
+    expect(r.needApproval).toBe(true) // 逐次授权卡（严格档语义）
+    expect(existsSync(file)).toBe(false)
+    const ok = await toolRegistry.execute(
+      'write',
+      { path: file, content: 'x' },
+      { approved: true, approvalSource: 'user' },
+    )
+    expect(ok.ok).toBe(true)
+  })
+
+  it('standard 档 + 方案已确认：write 仍是 approve-files 策略引导（strict 例外不外溢）', async () => {
+    resetPlanApproved()
+    syncPlanConfirmed(true)
+    getTrustPolicyStore().save('standard')
+    const file = path.join(TMP, 'std.txt')
+    const r = await toolRegistry.execute('write', { path: file, content: 'x' }, {})
+    expect(r.policy).toBe(true)
+    expect(r.error).toContain('approve-files')
   })
 
   // D3（ADR-005）：main 门控跨重启一致——syncPlanApprovedFromStore（registerIpc 启动恢复路径）从

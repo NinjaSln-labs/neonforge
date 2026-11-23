@@ -56,6 +56,15 @@ if (!process.env.NF_TEST_USERDATA) {
 if (!process.env.NEONFORGE_API_KEY) process.env.NEONFORGE_API_KEY = 'dummy-not-a-key'
 app.setPath('userData', process.env.NF_TEST_USERDATA)
 
+// 信任模式覆盖（strict/standard/delegated）：探针启动前把模式写进隔离 userData 的
+// trust-policy.json（与产品 trustPolicyStore 同格式），用于覆盖三档信任预设的授权差异。
+const TRUST_MODE = process.env.NF_TASK_SUCCESS_TRUST_MODE || ''
+if (TRUST_MODE) {
+  const trustDir = path.join(process.env.NF_TEST_USERDATA, 'config')
+  fs.mkdirSync(trustDir, { recursive: true })
+  fs.writeFileSync(path.join(trustDir, 'trust-policy.json'), JSON.stringify({ mode: TRUST_MODE }))
+}
+
 let mainWindow = null
 app.on('browser-window-created', (_event, created) => {
   if (!mainWindow) mainWindow = created
@@ -257,6 +266,27 @@ function startMockServer() {
             response = roundResponse(roundIndex)
             roundIndex++
           } else if (normalToolResult || (rejectApprovalSent && roundIndex >= task.rounds.length)) {
+            response = completionResponse()
+            completionSent = true
+          } else {
+            response = closingResponse()
+          }
+        } else if (task.trustMode === 'strict') {
+          // 信任模式 strict（ADR-015）：方案确认后清单内 write 也**不**自动放行——产品弹
+          // 授权卡（need-approval），脚本点「允许执行」；批准后 write 真正执行 → 完成。
+          if (requestIndex === 0) {
+            response = goalResponse()
+          } else if (lastUser.includes('确认，目标清楚了') && !planSent) {
+            planSent = true
+            response = planResponse()
+          } else if (lastUser.includes('确认，按方案执行') && !writeSent) {
+            writeSent = true
+            roundIndex = 1
+            response = roundResponse(0)
+          } else if (normalToolResult && roundIndex < task.rounds.length) {
+            response = roundResponse(roundIndex)
+            roundIndex++
+          } else if (normalToolResult || (planSent && roundIndex >= task.rounds.length)) {
             response = completionResponse()
             completionSent = true
           } else {
