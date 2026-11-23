@@ -38,7 +38,13 @@ if (!TASK_ID || !task) {
   fail(new Error(`unknown NF_TASK_SUCCESS_TASK: ${TASK_ID}`))
 }
 
-const MODEL_ID = process.env.NF_TASK_SUCCESS_MODEL || 'nf-task-success-model'
+// 真实模式：不启动 mock，把产品固定 provider origin 路由到本机 Magpie；
+// 凭据只由运行器从环境变量注入 NEONFORGE_API_KEY，探针不读也不打印。
+const REAL = process.env.NF_TASK_SUCCESS_REAL === '1'
+const REAL_BASE_URL = process.env.NF_TASK_SUCCESS_BASE_URL || 'http://127.0.0.1:3425/v1'
+const MODEL_ID =
+  process.env.NF_TASK_SUCCESS_MODEL ||
+  (REAL ? 'opendesign/deepseek-v4.1-flash-eco' : 'nf-task-success-model')
 const TIMEOUT_MS = Number(process.env.NF_TASK_SUCCESS_TIMEOUT_MS || '180000')
 const HOME_DIR = process.env.HOME || ''
 if (!process.env.NF_TEST_USERDATA) {
@@ -170,7 +176,8 @@ function startMockServer() {
           String(c?.function?.name ?? ''),
         )
         const normalToolResult =
-          lastRole === 'tool' && lastToolNames.some((n) => ['write', 'edit', 'bash'].includes(n))
+          lastRole === 'tool' &&
+          lastToolNames.some((n) => ['write', 'edit', 'bash', 'approve-files'].includes(n))
 
         let response
         if (lastUser.includes('已解决，谢谢')) {
@@ -367,6 +374,26 @@ async function scanUi(wc) {
   )
 }
 
+async function nudge(wc, text) {
+  return wc.executeJavaScript(
+    `(async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const ta = document.querySelector('.nf-chat__field textarea');
+      if (!ta) return false;
+      if (document.querySelector('.nf-chat__send--stop')) return false;
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+      setter.call(ta, ${JSON.stringify(text)});
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(60);
+      const btn = document.querySelector('.nf-chat__send');
+      if (!btn) return false;
+      btn.click();
+      return true;
+    })()`,
+    true,
+  )
+}
+
 async function clickSelector(wc, selector) {
   return wc.executeJavaScript(
     `(() => {
@@ -395,22 +422,27 @@ async function driveToResolution(wc) {
   let goalClicked = false
   let planClicked = false
   let resolutionClicked = false
+  let goalClicks = 0
+  let planClicks = 0
+  let nudges = 0
   const deadline = t0 + TIMEOUT_MS
   let lastUi = null
+  let idleMs = 0
 
   while (Date.now() < deadline) {
     const ui = await scanUi(wc)
     lastUi = ui
     const at = Date.now() - t0
 
-    if (ui.goal && !goalClicked) {
+    if (ui.goal) {
       if (stages.goalCardMs === null) stages.goalCardMs = at
       const clicked = await clickSelector(wc, '[aria-label="确认目标"] .nf-confirmcard__btn--ok')
       if (clicked) {
         goalClicked = true
-        stages.goalClickedMs = at
+        goalClicks++
+        if (stages.goalClickedMs === null) stages.goalClickedMs = at
       }
-    } else if (ui.plan && !planClicked) {
+    } else if (ui.plan) {
       if (stages.planCardMs === null) stages.planCardMs = at
       const clicked = await clickSelector(
         wc,
@@ -418,7 +450,8 @@ async function driveToResolution(wc) {
       )
       if (clicked) {
         planClicked = true
-        stages.planClickedMs = at
+        planClicks++
+        if (stages.planClickedMs === null) stages.planClickedMs = at
       }
     } else if (ui.approvals > 0) {
       if (stages.firstApprovalMs === null) stages.firstApprovalMs = at
@@ -436,6 +469,27 @@ async function driveToResolution(wc) {
         break
       }
     }
+    // 真实模型会先做探索/澄清，5 秒内没有任何新 done/工具/卡 → 发一条用户侧催促，
+    // 让模型进入目标确认卡（重复催促受同一 5 秒窗口节流，避免轰炸）。
+    if (
+      REAL &&
+      !goalClicked &&
+      nudges < 3 &&
+      !ui.goal &&
+      !ui.plan &&
+      ui.approvals === 0 &&
+      !ui.resolution &&
+      !ui.working
+    ) {
+      idleMs += 200
+      if (idleMs >= 5000) {
+        idleMs = 0
+        nudges++
+        await nudge(wc, '请先调用 propose_goal 提交目标提议，等我确认后再继续。')
+      }
+    } else {
+      idleMs = 0
+    }
     await new Promise((r) => setTimeout(r, 200))
   }
 
@@ -447,6 +501,9 @@ async function driveToResolution(wc) {
   }
   // 给已解决文本与最终 closing 流一点时间，避免验证时仍在写文件。
   await new Promise((r) => setTimeout(r, 800))
+  stages.goalClicks = goalClicks
+  stages.planClicks = planClicks
+  stages.nudges = nudges
   return { stages, ui: lastUi }
 }
 
@@ -489,8 +546,12 @@ function runTaskChecks(projectDir) {
 }
 
 async function run() {
-  const mock = await startMockServer()
-  const mockBase = `http://127.0.0.1:${mock.address().port}/v1`
+  let mock = null
+  let mockBase = REAL_BASE_URL
+  if (!REAL) {
+    mock = await startMockServer()
+    mockBase = `http://127.0.0.1:${mock.address().port}/v1`
+  }
   const restoreFetch = installFetchRouter(mockBase)
   const configModule = await import(
     pathToFileURL(path.resolve(__dirname, '../../apps/desktop/dist/main/configStore.js')).href
@@ -523,12 +584,12 @@ async function run() {
   const ui = driven?.ui ?? (driveError ? driveError.ui : null) ?? null
 
   if (restoreFetch) restoreFetch()
-  await new Promise((r) => mock.close(r))
+  if (mock) await new Promise((r) => mock.close(r))
 
   emit({
     ok,
     human: false,
-    mode: 'mock-protocol-product-flow',
+    mode: REAL ? 'real-model-product-flow' : 'mock-protocol-product-flow',
     task: { id: task.id, title: task.title, prompt: task.prompt },
     model: MODEL_ID,
     timeoutMs: TIMEOUT_MS,
@@ -537,6 +598,7 @@ async function run() {
     approvals: driven?.stages?.approvalClicks ?? 0,
     checks,
     projectDir,
+    lastUi: driven?.ui ?? (driveError && driveError.ui) ?? null,
     error: driveError
       ? String(driveError.message || driveError)
       : checksOk

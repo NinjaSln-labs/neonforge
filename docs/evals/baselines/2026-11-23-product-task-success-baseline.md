@@ -7,15 +7,15 @@
 
 | 字段     | 值                                                                                                                                               |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 测量日期 | 2026-11-22 19:03 UTC（WSL）/ 2026-11-22 19:21 UTC（Mac）                                                                                         |
-| 产品代码 | `28cac97`（main；性能回归门 PR #112 合并后）                                                                                                     |
-| 测量脚本 | `evals/product/task-success.cjs` + `task-suite.cjs` + `run-task-success.cjs`（仅测量，不改产品代码；本轮新增）                                   |
+| 测量日期 | 2026-11-23 06:59 UTC（WSL）/ 2026-11-23 07:02 UTC（Mac）                                                                                         |
+| 产品代码 | `e01977c`（main；产品任务成功基线 PR #113 合并后；探针为 6 任务扩版，未改产品代码）                                                              |
+| 测量脚本 | `evals/product/task-success.cjs` + `task-suite.cjs` + `run-task-success.cjs`（仅测量，不改产品代码；本轮扩为 6 任务并新增 `--mode real`）        |
 | 运行环境 | WSL2 `6.18.33.2-microsoft-standard-WSL2`；Intel i5-14400（12 线程）；16 GB；`xvfb` 1280×800；`--disable-gpu --no-sandbox`                        |
 | 目标机   | 2018 MacBook Pro（`MacBookPro15,1`）；i9-8950HK（12 线程）；32 GB；macOS 15.8.3（Darwin 24.6.0）；默认 GPU                                       |
 | 运行时   | Electron 43.4.0 / Chrome 150.0.7871.224 / Node 24.18.1                                                                                           |
 | 上游     | 本机 OpenAI 兼容 mock（固定剧本：协议工具调用 / 真实工具调用 / 完成声明；非流式文本）                                                            |
 | 凭据     | 仅假 Key；真实凭据环境变量在启动前剔除                                                                                                           |
-| 原始数据 | WSL `.scratch/evals/product/task-success-2026-11-22T19-18-37-677Z.jsonl`；Mac `.../task-success-2026-11-22T19-21-50-345Z.jsonl`（均 gitignored） |
+| 原始数据 | WSL `.scratch/evals/product/task-success-2026-11-23T06-59-39-916Z.jsonl`；Mac `.../task-success-2026-11-23T07-02-49-178Z.jsonl`（均 gitignored） |
 
 ## 测量方法
 
@@ -23,21 +23,34 @@
 - 启动页填入任务 prompt → 点「从零开始」→ 产品真实创建项目目录并自动发送首轮。
 - mock 按固定剧本返回：`propose_goal` → 用户脚本点击「确认目标」→ `propose_plan` → 点击「确认执行」→ 真实 `write/edit/bash` 调用（命中授权卡时点击「允许执行」）→ `report_completion` → 系统代跑只读证据 → 「已解决」卡 → 点击。
 - mock 路由只按「用户确认文本」「普通工具结果」「协议工具结果」区分，不依赖请求序号猜测；协议工具的合成 `role: tool` 结果不会推进动作轮。
-- 任务集 5 个：单文件写入、两文件脚本 + `bash` 运行、`edit` 授权卡 + README 标题替换、HTML + grep 证据、三行笔记精确内容。
+- 任务集 6 个：单文件写入、两文件脚本 + `bash` 运行、`edit` 授权卡 + README 标题替换、HTML + grep 证据、三行笔记精确内容、`approve-files` 清单申报后写入（授权卡 → 写入）。
 - 每个任务在独立 Electron 进程与独立 HOME/userData 中运行；产物在任务结束后由探针按内容逐项核验（含 `node check.js` 真实运行）。
-- 全部 15 次运行（每平台 3 轮 ×5 任务）都点击到「已解决」卡并完成。
+- 全部 18 次运行（每平台 3 轮 ×6 任务）都点击到「已解决」卡并完成。
 
 ## 结果
 
 | 平台 | 轮次 |  通过 | 失败 | 每任务耗时中位 | 目标卡中位 | 方案卡中位 | 首次授权卡中位 | 已解决卡中位 |
 | ---- | ---: | ----: | ---: | -------------: | ---------: | ---------: | -------------: | -----------: |
-| WSL  |    3 | 15/15 |    0 |       约 4.1 s |     202 ms |    1078 ms |        2225 ms |      2597 ms |
-| Mac  |    3 | 15/15 |    0 |      约 11.3 s |     871 ms |    3524 ms |        7454 ms |      8011 ms |
+| WSL  |    3 | 18/18 |    0 |       约 4.3 s |     203 ms |    1122 ms |        1980 ms |      2726 ms |
+| Mac  |    3 | 18/18 |    0 |      约 11.6 s |     869 ms |    3538 ms |        6516 ms |      8295 ms |
 
-- WSL 单任务耗时 4.0–8.7 s，Mac 11–14 s；差异主要来自 Electron/渲染器固定开销（与启动、工具基线一致）。
-- Mac 的目标卡/方案卡/授权卡/已解决卡都晚约 2–3 倍，但顺序与点击成功率不受影响。
-- 各任务检查：`write-single` 1/1、`script-bash` 3/3、`edit-readme` 2/2、`write-html` 1/1、`write-notes` 1/1；0 次产物核验失败。
-- 授权卡点击次数：`script-bash` 与 `edit-readme` 每个进程 1 次（符合剧本），其余任务 0 次（清单内写由标准信任模式自动放行）。
+- WSL 单任务耗时 4.2–7.6 s，Mac 11.0–13.5 s；差异主要来自 Electron/渲染器固定开销（与启动、工具基线一致）。
+- Mac 的目标卡/方案卡/授权卡/已解决卡都晚约 2–4 倍，但顺序与点击成功率不受影响。
+- 各任务检查：`write-single` 1/1、`approve-files-write` 1/1、`script-bash` 3/3、`edit-readme` 2/2、`write-html` 1/1、`write-notes` 1/1；0 次产物核验失败。
+- 授权卡点击次数：`approve-files-write`、`script-bash` 与 `edit-readme` 每个进程 1 次（符合剧本），其余任务 0 次（清单内写由标准信任模式自动放行）。
+
+## 真实模型 pilot（小样本，未计入基线）
+
+- 配置：本机 Magpie `http://127.0.0.1:3425/v1`，模型 `opendesign/deepseek-v4.1-flash-eco`；凭据只从 `MAGPIE_GATEWAY_KEY` 环境变量注入子进程 `NEONFORGE_API_KEY`，不落盘；任务脚本、点击与产物核验同 mock 基线。
+- 原始数据：套内 `.scratch/evals/product/task-success-2026-11-23T07-02-21-746Z.jsonl`；单任务 `approve-files-write`（通过）`.../task-success-2026-11-23T07-01-13-758Z.jsonl`；`write-single` 600 s 重跑 `.../task-success-2026-11-23T06-45-42-801Z.jsonl`（均 gitignored）。
+- 独立单任务 `approve-files-write`（超时 600 s）：**通过**，36 s 完成——目标卡 12.1 s → 方案卡 20.1 s → `approve-files` → 授权卡点击 → `write` → `report_completion` → 已解决卡 34.7 s。说明真实模型下产品链路本身可以走通。
+- 6 任务顺序跑（每任务 300 s 超时）：**0/6 到达已解决卡**，全部 301 s 超时；其中 `write-single` 与 `write-notes` 产物核验完全正确，仍停在收口前——
+  - `write-single`：目标卡 23.6 s、方案卡 29.5 s 均确认，`fileCheck result.txt` 通过（真实写成功），但随后产品重弹无新提议的方案决策点（`session.pending_set kind=plan`），模型停在等待，始终未发 `report_completion`，300 s 超时（单独 600 s 重跑同样超时）。
+  - `approve-files-write`（套内）：目标确认后模型直接 `write`，产品按规则拦截（`tool.blocked gate=confirm`）并置方案决策点，但模型未再 `propose_plan`，`planCardMs` 为空、无产物，300 s 超时。
+  - `write-notes`：目标卡 7.4 s、方案卡 21.9 s 均确认，`notes.md` 三行内容精确通过，但同样停在收口前。
+  - `script-bash`：两文件写入后 `node check.js` 运行通过（检查项 2/3 通过，`check.js` 内容与剧本断言行不同），随后同样未收口。
+  - `edit-readme` / `write-html`：`edit`/`write` 与授权卡都已发生（`firstApprovalMs` ≈28 s / 27 s），但产物内容与剧本不完全一致（模型改写标题句式、说明句措辞），且未到已解决卡。注意：`write-html` 的逐字说明句、`script-bash` 的逐字断言都未在任务 prompt 中要求，属探针沿用 mock 内容带来的严格性，不作模型能力结论；`edit-readme` 的标题则是 prompt 明确要求的文案。
+- 结论：阻塞点在「`write` 成功后产品重新置位方案决策点、模型据此停等」，属产品与真实模型交互的问题，不是探针剧本；单任务 `approve-files-write` 的一次通过证明链路可完成。修复该决策点重弹后应重取真实模型证据，本轮不把 pilot 计入成功率。
 
 ## 解释
 
@@ -49,7 +62,7 @@
 
 ## 限制
 
-- **固定剧本**：只有 5 个短任务，mock 回复固定；不代表真实模型、长任务、多文件项目、工具失败或网络。
+- **固定剧本（基线部分）**：只有 6 个短任务，mock 回复固定；不代表真实模型、长任务、多文件项目、工具失败或网络。真实模型 pilot 是小样本探索，未计入基线。
 - **脚本非人类**：无阅读时间、犹豫、误点、拒绝路径或中断/恢复；不产生 SUS/HEART 或真人审批数据。
 - **单机单版本**：WSL2+xvfb 与一台 2018 MacBook Pro；无 Windows、Apple Silicon 或其他 macOS 版本。
 - **信任模式固定**：使用默认 `standard`；`strict` / `delegated` 与「允许并记住」路径未覆盖。

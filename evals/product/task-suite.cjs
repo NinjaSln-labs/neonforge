@@ -12,14 +12,16 @@ const { execFileSync } = require('node:child_process')
 function fileCheck(name, file, content) {
   return {
     name,
-    run: (root) =>
-      fs.existsSync(path.join(root, file)) &&
-      fs.readFileSync(path.join(root, file), 'utf8') === content
+    run: (root) => {
+      const p = path.join(root, file)
+      if (!fs.existsSync(p)) return { ok: false, detail: `${file} 缺失` }
+      const text = fs.readFileSync(p, 'utf8')
+      // 允许末尾单个换行（真实模型常按「一行」写入；不改变可见内容）。
+      const ok = text === content || text === content + '\n'
+      return ok
         ? { ok: true, detail: `${file} 内容匹配` }
-        : {
-            ok: false,
-            detail: `${file} 缺失或内容不匹配`,
-          },
+        : { ok: false, detail: `${file} 内容不匹配` }
+    },
   }
 }
 
@@ -58,6 +60,34 @@ const TASKS = [
       verification: [{ command: 'cat result.txt', output: 'TASK-ALPHA-OK' }],
     },
     checks: [fileCheck('result.txt 内容精确', 'result.txt', 'TASK-ALPHA-OK')],
+  },
+  {
+    id: 'approve-files-write',
+    title: 'approve-files 批量授权后写入',
+    prompt: '创建 approved.txt，内容必须是 APPROVED-OK，不要其他内容。',
+    goal: '创建 approved.txt，内容为 APPROVED-OK。',
+    plan: {
+      summary: '先提交文件清单批准请求，再写入 approved.txt',
+      files: [{ path: 'approved.txt', reason: '用户指定的交付文件' }],
+      verification: ['cat approved.txt 核对内容'],
+    },
+    rounds: [
+      [
+        {
+          name: 'approve-files',
+          args: {
+            summary: '创建 approved.txt 并写入 APPROVED-OK',
+            files: [{ path: 'approved.txt', reason: '用户指定的交付文件' }],
+          },
+        },
+      ],
+      [{ name: 'write', args: { path: 'approved.txt', content: 'APPROVED-OK' } }],
+    ],
+    completion: {
+      summary: 'approved.txt 已创建并核验内容',
+      verification: [{ command: 'cat approved.txt', output: 'APPROVED-OK' }],
+    },
+    checks: [fileCheck('approved.txt 内容精确', 'approved.txt', 'APPROVED-OK')],
   },
   {
     id: 'script-bash',
