@@ -2,7 +2,7 @@
 // L1 观察（read/search/LSP——无需授权）→ L2 建议（模型文本，无工具）→ L3 操作（write/edit/bash——逐项授权 + 快照）→ L4 委托（低危规则命中免确认，可撤销）
 // 疲劳防护：同批多个低危文件操作合并授权；bash（高危命令）永远单独确认
 
-import { normalizeComparePath } from '../domain/conversationState'
+import { isPathInsideRoot, normalizeComparePath } from '../domain/conversationState'
 import type { TrustMode } from '../domain/trustMode'
 
 export type { TrustMode } from '../domain/trustMode'
@@ -64,6 +64,8 @@ export interface AutoApproveInput {
   plannedFiles: readonly string[]
   /** 任务信任（允许并记住/单次批准绑定文件）——用户显式授权，三种模式都放行 */
   trusted: boolean
+  /** 项目根（可选）：提供时根外路径永不自动放行（ADR-015 / V2 信任模式：清单外/根外始终弹卡） */
+  rootPath?: string | null
 }
 
 /** 计划清单包含判定（调用方必须传入与目标路径同一基准的绝对路径；只做精确规范化比较——
@@ -77,8 +79,13 @@ export function isInPlan(path: string, plannedFiles: readonly string[]): boolean
 const isFileTool = (name: string): boolean => name === 'write' || name === 'edit'
 
 export function shouldAutoApproveTool(input: AutoApproveInput): boolean {
-  // 任务信任只绑定文件路径（允许并记住/单次批准）——bash/MCP 不得借 args.path 搭车绕过授权
+  // 任务信任只绑定文件路径（允许并记住/单次批准）——bash/MCP 不得借 args.path 搭车绕过授权。
+  // ADR-015：用户显式绑定文件的授权优先于自动判定（三种模式都放行；根外路径单次批准后记住也尊重）。
   if (input.trusted && isFileTool(input.name)) return true
+  // V2 信任模式硬边界：计划/委托判定下的根外路径永不自动放行（根外写入只能逐次授权）。
+  // 2026-11-24 真机 root-out 剧本：方案列出 '../escaped.txt'，trustPath 绝对化后与清单精确相等，
+  // standard/delegated 的 isInPlan 判定不区分根内外 → 自动批准把根外写入放行（与 V2 验收相悖）。
+  if (input.rootPath && !isPathInsideRoot(input.path, input.rootPath)) return false
   if (input.mode === 'strict') return false
   const inPlan = input.planConfirmed && isInPlan(input.path, input.plannedFiles)
   if (input.mode === 'standard') return input.name === 'write' && inPlan

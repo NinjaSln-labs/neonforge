@@ -76,6 +76,7 @@ describe('authModel 信任模式判定（ADR-015）', () => {
     planConfirmed: true,
     plannedFiles: ['/test/app.ts'],
     trusted: false,
+    rootPath: '/test',
   }
 
   it('isInPlan：只做绝对路径精确比较（相对清单必须由调用方绝对化——禁止末段匹配绕过）', () => {
@@ -140,5 +141,37 @@ describe('authModel 信任模式判定（ADR-015）', () => {
     expect(autoApprovalSource({ ...base, mode: 'delegated', name: 'write', trusted: true })).toBe(
       'auto',
     )
+  })
+
+  it('根外路径在计划/委托判定下永不自动放行（V2：清单外/根外始终弹卡）', () => {
+    const outside = { path: '/test/../escaped.txt', plannedFiles: ['/test/../escaped.txt'] }
+    expect(shouldAutoApproveTool({ ...base, ...outside, mode: 'standard', name: 'write' })).toBe(
+      false,
+    )
+    expect(shouldAutoApproveTool({ ...base, ...outside, mode: 'delegated', name: 'edit' })).toBe(
+      false,
+    )
+    // 显式「允许并记住/单次批准」绑定文件仍优先（ADR-015：用户显式授权优先于自动判定）
+    expect(
+      shouldAutoApproveTool({
+        ...base,
+        ...outside,
+        mode: 'delegated',
+        name: 'edit',
+        trusted: true,
+      }),
+    ).toBe(true)
+    expect(autoApprovalSource({ ...base, ...outside, mode: 'standard', name: 'write' })).toBeNull()
+    // 未提供 rootPath（旧调用）→ 维持既有清单精确匹配语义
+    expect(
+      shouldAutoApproveTool({
+        path: '/test/../escaped.txt',
+        planConfirmed: true,
+        plannedFiles: ['/test/../escaped.txt'],
+        trusted: false,
+        mode: 'standard',
+        name: 'write',
+      }),
+    ).toBe(true)
   })
 })

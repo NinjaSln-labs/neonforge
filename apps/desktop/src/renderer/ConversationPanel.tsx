@@ -299,6 +299,8 @@ export default function ConversationPanel({
       void window.neonforge.acceptance?.clear(sessionId)
       void window.neonforge.changeset?.clear(sessionId)
     },
+    // V2 信任模式：根外文件永不进入自动批准清单（清单派生时过滤；根外写入只能逐次授权）
+    rootPath,
   })
   // P1-05 阶段 5：消息状态/持久化（历史恢复与决策点快照）
   const { messages, messagesRef, nextMsgId, setMessages, sessionReady } = useMessageStore({

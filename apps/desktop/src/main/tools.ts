@@ -327,6 +327,9 @@ export async function delegationBoundaryViolation(
     return e instanceof Error ? e.message : String(e)
   }
   if (!(await isInSandboxRealpath(target, rootPath))) return '目标不在项目根内'
+  // 2026-11-24：词法根外但 realpath 已校验在根内（symlink 一段指回）——根外字符串一律不委托，
+  // 保持「根外始终弹卡」语义（不因 realpath 判定放宽）。
+  if (!isInSandbox(target, rootPath)) return '目标不在项目根内（字符串位于根外）'
   const planned = getPlannedFilesStore().loadPlan()
   // approve-files（approved=true）是比方案确认更强的显式批准证据（旧存档无 planConfirmed → 兼容）
   if (!planned.planConfirmed && !planned.approved) return '方案尚未确认（计划清单未生效）'

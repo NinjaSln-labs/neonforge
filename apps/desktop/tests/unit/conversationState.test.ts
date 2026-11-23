@@ -599,6 +599,23 @@ describe('Inv 6 方案单一来源——derivePlannedFiles / plan 确认派生',
     const next = userDecided(s, 'plan', { confirm: true })
     expect(next.decisionContent).toBeUndefined()
   })
+
+  it('2026-11-24 根外条目：传入 rootPath 时方案中的根外文件不并入批准清单（根外永不自动放行）', () => {
+    const s = setPending(userConfirmed(initialState(), 'goal'), 'plan', {
+      proposal: plan([
+        { path: '/test/a.js', reason: '根内' },
+        { path: '/test/../escaped.txt', reason: '根外' },
+        { path: '../escaped2.txt', reason: '相对出根' },
+      ]),
+      since: 't1',
+    })
+    const next = userDecided(s, 'plan', { confirm: true }, '/test')
+    expect(next.plannedFiles.has('/test/a.js')).toBe(true)
+    expect(next.plannedFiles.size).toBe(1) // 根外两条都被过滤
+    // 未传 rootPath（旧调用/测试基准）→ 维持旧行为（全部并入）
+    const legacy = userDecided(s, 'plan', { confirm: true })
+    expect(legacy.plannedFiles.size).toBe(3)
+  })
 })
 
 // ============================================================================
