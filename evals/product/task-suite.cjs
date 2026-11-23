@@ -676,6 +676,23 @@ const TASKS = [
     // 失败注入依赖固定剧本（真实模型可能一次写对，无法强制先失败）——真实模式跳过。
     mockOnly: true,
   },
+  {
+    id: 'bash-produced-file',
+    title: 'bash 创建计划内文件：系统对账按文件存在认定已产出',
+    prompt: '用 bash 命令创建 produced.txt，内容必须是 BASH-OK，不要其他内容。',
+    goal: '用 bash 命令创建 produced.txt，内容为 BASH-OK。',
+    plan: {
+      summary: '用 bash 写入 produced.txt',
+      files: [{ path: 'produced.txt', reason: '用户指定的交付文件' }],
+      verification: ['cat produced.txt 核对内容'],
+    },
+    rounds: [[{ name: 'bash', args: { command: "printf 'BASH-OK' > produced.txt" } }]],
+    completion: {
+      summary: 'produced.txt 已用 bash 创建并核验',
+      verification: [{ command: 'cat produced.txt', output: 'BASH-OK' }],
+    },
+    checks: [fileCheck('produced.txt 内容精确', 'produced.txt', 'BASH-OK')],
+  },
 ]
 
 function getTask(id) {

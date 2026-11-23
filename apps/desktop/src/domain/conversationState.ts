@@ -917,6 +917,9 @@ export interface SystemVerifier {
   deriveDiffs(planned: Set<string>, produced: Set<string>): Array<{ path: string }>
   plannedFiles: Set<string>
   producedFiles: Set<string>
+  /** V1b+：main 侧文件存在性事实（计划清单中实际存在的路径——bash 等非 write/edit 途径产出的文件
+   * 也计入「已产出」；2026-11-24 真机：模型用 bash 创建/修改计划内文件后 diff 恒 missing → 已解决卡不可达）。 */
+  existingFiles?: ReadonlySet<string>
 }
 
 /**
@@ -964,7 +967,11 @@ export function verifyCompletion(
     // 产生侧计数恒 < planned.size → 相对形态永远 not-produced → resolution 不可达（真机三连 evidence_missing）
     if (
       systemState.plannedFiles.size > 0 &&
-      [...systemState.plannedFiles].some((q) => !matchesPlannedPath(q, systemState.producedFiles))
+      [...systemState.plannedFiles].some(
+        (q) =>
+          !matchesPlannedPath(q, systemState.producedFiles) &&
+          !(systemState.existingFiles && matchesPlannedPath(q, systemState.existingFiles)),
+      )
     ) {
       missing.push('diff:planned-not-produced')
     }

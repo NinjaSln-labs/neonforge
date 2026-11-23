@@ -97,6 +97,10 @@
   - 新增 `tool-failure-recovery`（mock-only 失败注入）：首个 `edit` 指向不存在的 failed.txt（必然失败），模型收到失败结果后改用 `write` 创建文件 → 完成声明与证据对账通过。检查：产物精确 + 时间线 `tool.failed ≥1`（证明失败被记录并恢复，而非直通）。
   - mock：16 任务 ×3 轮 **48/48**（WSL `.../2026-11-23T17-56-57-196Z.jsonl`；`tool-failure-recovery` 5–8 s、2/2 检查）；Mac 重建后 16 任务 ×2 轮 **32/32**（Mac `.../2026-11-23T18-08-26-805Z.jsonl`，`tool-failure-recovery` 13 s）。单跑时间线实证：`edit 需授权 → 批准 → edit 执行失败（找不到文件）→ write 成功 → report_completion → 已解决`。
   - 真实模式单跑 `tool-failure-recovery` 39 s 到达已解决卡且产物正确，但模型首次即用 write（未触发失败）——如实记录，任务标记 mockOnly。
+- **bash 产出对账任务（2026-11-24 02:15–03:05 UTC，任务集扩为 17；产品修复合并见 PR #133）**：
+  - 新增 `bash-produced-file`：模型用 `bash printf … > produced.txt` 创建计划内文件（write/edit 之外的产出途径）。真机复现**两个停机缺陷**：(a) 完成对账 `diff:planned-not-produced` 恒不通过（`producedFiles` 只记录 write/edit 的 `file`）→ 证据门反复拒绝、已解决卡不可达；(b) 修复 (a) 后 resolution 决策点已置位，但卡渲染仍要求 `producedFiles.size > 0` → `pending=resolution` 冻结、无卡可点。
+  - 修复：(a) `completion:verify` 增加计划清单文件存在性核对（IPC schema/preload/types 同步扩展，`SystemVerifier.existingFiles` 参与 diff 判定——bash 途径产出也认定已产出）；(b) 已解决卡渲染去掉 `producedFiles` 二次否决（resolution 决策点只在完成对账通过后置位，卡渲染不该再用产出集合否决）。单测 +2（existingFiles 命中不 missing / 缺失仍 missing；951/951）；L3 92 passed。
+  - mock：17 任务 ×3 轮 **51/51**（WSL `.../2026-11-23T18-54-10-409Z.jsonl`）；真实模型 `bash-produced-file` **通过** 44 s（`.../2026-11-23T18-46-48-127Z.jsonl`；修复前 304 s 停等）；修复后真实 `write-single`/`edit-readme` 复测 2/2 通过（`.../2026-11-23T18-58-29-077Z.jsonl`）。
 - **拒绝路径任务（2026-11-23 11:50–13:00 UTC，任务集扩为 10）**：
   - 新增 `reject-goal`（目标被否 → 重新描述 → 确认 → 执行 → 已解决）、`reject-plan`（首个方案故意偏离 → 修改方案 → 修正方案执行，检查「偏离文件未创建」）、`reject-approval`（`bash` 写文件弹授权卡 → 拒绝 → 用户「继续」→ `approve-files` 批次批准 → `write` → 已解决）。
   - 探针新增拒绝/恢复驱动：按任务标记点第一次拒绝按钮（「重新描述」/「修改方案」/授权卡「拒绝」）；授权卡拒绝后空闲 2 s 发送「继续」；拒绝后模型追问方向时点第一个 `ask_user`/`<candidates>` 选项；ADR-010 强制澄清卡点「确认执行」继续 underlying。
@@ -114,7 +118,7 @@
 
 ## 限制
 
-- **固定剧本（基线部分）**：基线为 6 个短任务，2026-11-23 后扩为 16 个（新增顺序违规恢复任务 `direct-write-after-goal`、三个拒绝路径任务 `reject-goal`/`reject-plan`/`reject-approval`、strict 任务 `strict-first-write` 与 delegated 任务 `delegated-edit`、「允许并记住」任务 `remember-edit`、mock-only 失败注入任务 `evidence-gap`/`tool-failure-recovery` 与根外写入约束任务 `root-out-write`）；mock 回复固定；不代表真实模型、长任务、多文件项目或网络。真实模型 pilot 是小样本探索，未计入基线。
+- **固定剧本（基线部分）**：基线为 6 个短任务，2026-11-23 后扩为 17 个（新增顺序违规恢复任务 `direct-write-after-goal`、三个拒绝路径任务 `reject-goal`/`reject-plan`/`reject-approval`、strict 任务 `strict-first-write` 与 delegated 任务 `delegated-edit`、「允许并记住」任务 `remember-edit`、bash 产出对账任务 `bash-produced-file`、mock-only 失败注入任务 `evidence-gap`/`tool-failure-recovery` 与根外写入约束任务 `root-out-write`）；mock 回复固定；不代表真实模型、长任务、多文件项目或网络。真实模型 pilot 是小样本探索，未计入基线。
 - **脚本非人类**：无阅读时间、犹豫、误点、拒绝路径或中断/恢复；不产生 SUS/HEART 或真人审批数据。
 - **单机单版本**：WSL2+xvfb 与一台 2018 MacBook Pro；无 Windows、Apple Silicon 或其他 macOS 版本。
 - **信任模式部分覆盖**：`standard` 为默认全量基线；`strict` 已有 `strict-first-write` 任务（mock 与真实模型均通过）；`delegated` 已有 `delegated-edit` 任务（mock 36/36 中含该任务、真实模型通过，审计要求 write/edit 无授权卡且自动放行来源 delegate/auto）；「允许并记住」已有 `remember-edit` 任务（mock 与真实模型均通过）。
