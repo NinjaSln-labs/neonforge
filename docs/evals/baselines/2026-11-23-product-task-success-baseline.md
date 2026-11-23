@@ -100,7 +100,7 @@
 - **bash 产出对账任务（2026-11-24 02:15–03:05 UTC，任务集扩为 17；产品修复合并见 PR #133）**：
   - 新增 `bash-produced-file`：模型用 `bash printf … > produced.txt` 创建计划内文件（write/edit 之外的产出途径）。真机复现**两个停机缺陷**：(a) 完成对账 `diff:planned-not-produced` 恒不通过（`producedFiles` 只记录 write/edit 的 `file`）→ 证据门反复拒绝、已解决卡不可达；(b) 修复 (a) 后 resolution 决策点已置位，但卡渲染仍要求 `producedFiles.size > 0` → `pending=resolution` 冻结、无卡可点。
   - 修复：(a) `completion:verify` 增加计划清单文件存在性核对（IPC schema/preload/types 同步扩展，`SystemVerifier.existingFiles` 参与 diff 判定——bash 途径产出也认定已产出）；(b) 已解决卡渲染去掉 `producedFiles` 二次否决（resolution 决策点只在完成对账通过后置位，卡渲染不该再用产出集合否决）。单测 +2（existingFiles 命中不 missing / 缺失仍 missing；951/951）；L3 92 passed。
-  - mock：17 任务 ×3 轮 **51/51**（WSL `.../2026-11-23T18-54-10-409Z.jsonl`）；真实模型 `bash-produced-file` **通过** 44 s（`.../2026-11-23T18-46-48-127Z.jsonl`；修复前 304 s 停等）；修复后真实 `write-single`/`edit-readme` 复测 2/2 通过（`.../2026-11-23T18-58-29-077Z.jsonl`）。
+  - mock：17 任务 ×3 轮 **51/51**（WSL `.../2026-11-23T18-54-10-409Z.jsonl`）；Mac 在 PR 分支重建后 17 任务 ×2 轮 **34/34**（Mac `.../2026-11-23T19-03-04-030Z.jsonl`，`bash-produced-file` 12 s）；真实模型 `bash-produced-file` **通过** 44 s（`.../2026-11-23T18-46-48-127Z.jsonl`；修复前 304 s 停等）；修复后真实 `write-single`/`edit-readme` 复测 2/2 通过（`.../2026-11-23T18-58-29-077Z.jsonl`）。
 - **拒绝路径任务（2026-11-23 11:50–13:00 UTC，任务集扩为 10）**：
   - 新增 `reject-goal`（目标被否 → 重新描述 → 确认 → 执行 → 已解决）、`reject-plan`（首个方案故意偏离 → 修改方案 → 修正方案执行，检查「偏离文件未创建」）、`reject-approval`（`bash` 写文件弹授权卡 → 拒绝 → 用户「继续」→ `approve-files` 批次批准 → `write` → 已解决）。
   - 探针新增拒绝/恢复驱动：按任务标记点第一次拒绝按钮（「重新描述」/「修改方案」/授权卡「拒绝」）；授权卡拒绝后空闲 2 s 发送「继续」；拒绝后模型追问方向时点第一个 `ask_user`/`<candidates>` 选项；ADR-010 强制澄清卡点「确认执行」继续 underlying。
