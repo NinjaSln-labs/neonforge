@@ -728,6 +728,44 @@ const TASKS = [
     mockOnly: true,
     rejectResolutionOnce: true,
   },
+  {
+    id: 'network-retry',
+    title: '网关网络瞬态故障：连续 2 次断开 → 第 3 次尝试恢复完成',
+    prompt: '创建 netfile.txt，内容必须是 NET-OK，不要其他内容。',
+    goal: '创建 netfile.txt，内容为 NET-OK。',
+    plan: {
+      summary: '新建 netfile.txt 并写入指定内容',
+      files: [{ path: 'netfile.txt', reason: '用户指定的交付文件' }],
+      verification: ['cat netfile.txt 核对内容'],
+    },
+    rounds: [[{ name: 'write', args: { path: 'netfile.txt', content: 'NET-OK' } }]],
+    completion: {
+      summary: 'netfile.txt 已创建并核验内容（网络瞬态失败后恢复）',
+      verification: [{ command: 'cat netfile.txt', output: 'NET-OK' }],
+    },
+    checks: [
+      fileCheck('netfile.txt 内容精确', 'netfile.txt', 'NET-OK'),
+      {
+        name: '网关网络瞬态失败 2 次后第 3 次尝试恢复（retry ≥2）',
+        run: (_root, ctx) => {
+          const retries = ctx?.gatewayRetries ?? 0
+          const injected = ctx?.networkFailuresInjected ?? 0
+          return retries >= 2 && injected >= 2
+            ? {
+                ok: true,
+                detail: `注入断开 ${injected} 次，网关重试 ${retries} 次后成功收口`,
+              }
+            : {
+                ok: false,
+                detail: `注入 ${injected} 次 / 网关重试 ${retries} 次（要求 ≥2/≥2；网络恢复路径未触发）`,
+              }
+        },
+      },
+    ],
+    // 网络故障依赖 mock 服务器主动断开连接；真实模型无法强制注入——真实模式跳过。
+    mockOnly: true,
+    networkFailures: 2,
+  },
 ]
 
 function getTask(id) {

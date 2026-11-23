@@ -201,6 +201,7 @@
 | 根外写入不自动放行 | `authModel.test.ts`（根外路径标准/委托判定均拒绝——显式 trusted 仍放行）、`conversationState.test.ts`（derivePlannedFiles 传 rootPath 过滤根外条目）、`tools.test.ts`（委托词法根外即使 realpath 落回根内也拒绝）、`evals/product`：`root-out-write`（规划门控拦截 → 批次卡显式授权 → 执行） | ✅ |
 | 「允许并记住」任务信任路径 | `evals/product`：`remember-edit`（首个 edit 点记住 → 同文件第二次修改 `approvalSource=auto`、need-approval 仅 1 次；mock 45/45 与真实模型均通过） | ✅ |
 | 工具执行失败恢复（显式任务） | `evals/product`：`tool-failure-recovery`（mock-only：首个 edit 失败 → write 恢复；检查时间线 tool.failed ≥1 且产物精确） | ✅ |
+| 网关网络瞬态失败重试 | `evals/product`：`network-retry`（mock-only：前 2 个 chat 请求被服务器断开（`fetch failed`）→ 网关 3 击重试（间隔 400/800 ms）→ 第 3 次恢复 → 已解决；检查注入 ≥2 + 网关「transient — retrying」日志 ≥2 + 产物精确） | ✅ |
 | 已解决卡拒绝（「还要改」）返工闭环 | `evals/product`：`reject-resolution`（mock-only：首轮写入草稿 → 对账通过 → 已解决卡点「还要改」→ 探针代表用户发返工要求 → 返工写入 → 第二次完成声明对账通过 → 再次确认；检查 `resolutionRejects ≥ 1` 与产物精确） | ✅ |
 | bash 途径产出对账 | `verifyCompletionSystem.test.ts`（existingFiles 命中不判 missing / 缺失仍判 missing）、`evals/product`：`bash-produced-file`（bash 创建计划内文件 → 存在性核对 → 已解决卡；真机曾因 diff 恒 missing 与卡渲染二次否决停等） | ✅ |
 
