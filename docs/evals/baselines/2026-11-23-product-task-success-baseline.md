@@ -59,12 +59,14 @@
   - 根因：目标确认后模型直接 `write`（未 `propose_plan`），产品拦截（`tool.blocked gate=confirm`）并置 `pending=plan`，占位执行确认卡挂在**该条 assistant 消息**上；该消息 `content` 为空、无协议工具调用，被卡渲染外层门 `(m.content || hasProtoCall(...))` 整体排除 → 卡不渲染（`card.shown exec-confirm` 遥测照常打点，是诊断混淆源），模型停等（修复前 301 s 超时）。修复：外层门同时接受「含副作用工具调用」的消息（`ConversationPanel.tsx`）。
   - 确定性复现：任务集扩为 **7**，新增 `direct-write-after-goal`（mock 目标确认后直接 `write`，被政策拦后走 `approve-files` → `write` 恢复）。修复前同一剧本 45 s 超时、`planCardMs` 空（`.../2026-11-23T09-16-44-319Z.jsonl`）；修复后 **通过** 5 s（目标 203 / 方案 1130 / 授权 2723 / 已解决 3841 ms；`.../2026-11-23T10-13-43-636Z.jsonl`）。
   - L3 回归：`cards-from-decision-content::S3-3c`（目标确认后直写被拦 → 占位「确认执行」可见）；临时回退修复该用例必失败。
-  - mock 回归：7 任务 ×1 轮 **7/7**（`.../2026-11-23T10-14-37-328Z.jsonl`）、×3 轮 **21/21**（`.../2026-11-23T10-15-37-058Z.jsonl`）；单测 944/944、双 tsc 0、eslint 0 error、Prettier 通过。
+  - mock 回归：7 任务 ×1 轮 **7/7**（`.../2026-11-23T10-14-37-328Z.jsonl`）、×3 轮 WSL **21/21**（`.../2026-11-23T10-15-37-058Z.jsonl`）；Mac 重建后 ×3 轮 **21/21**（Mac `.../2026-11-23T10-41-29-754Z.jsonl`）；单测 944/944、双 tsc 0、eslint 0 error、Prettier 通过。
   - 真实模型：修复前 301 s 超时的 `approve-files-write` **通过** 38 s（8.8 / 17.9 / 授权 23.0 / 已解决 36.0 s，0 错误工具调用；`.../2026-11-23T10-21-53-724Z.jsonl`）。全 6 任务套跑：**3/6 全项通过、6/6 到达并确认已解决卡**（`write-single` 68 s、`approve-files-write` 31 s、`script-bash` 68 s、`edit-readme` 57 s、`write-html` 49 s、`write-notes` 38 s；`.../2026-11-23T10-22-49-709Z.jsonl`）。
   - 剩余失败形态（均未再出现停等/死锁）：
     - `write-single`：模型把目标路径解释为项目根**上一级**的绝对路径（`~/Documents/NeonForge/result.txt`），`approve-files` 申报同名绝对路径后脚本批准，产品按批准执行；文件内容正确但不在会话项目目录，探针按项目目录核验故缺失。当前产品对 write 无「必须在项目根内」的硬约束（用户批准即权威），记为后续加固候选。
     - `script-bash` / `write-html`：仅逐字串检查未过（`check.js` 断言等价改写，`node check.js` 仍 PASS；`index.html` 说明句改写，`<h1>` 正确）。两处逐字串不在任务 prompt，属探针沿用 mock 内容的严格性。
   - 结论：两个已知停等死锁（write 成功后重弹方案决策点、直写被拦后无卡）在真实模型复测中均已消失；剩余失败为路径解释与探针逐字串严格性，不是产品编排阻塞。
+  - **测量对齐（2026-11-23 10:42–11:00 UTC）**：把历史「prompt 外逐字串」检查写入任务 prompt——`script-bash` 的 prompt 现逐字给出断言语句 `if (add(2, 3) !== 5) { console.log('FAIL'); process.exit(1) }` 与 PASS 要求；`write-html` 的 prompt 现要求正文包含原句「这是任务四的说明文字。」。历史轮次数字不追溯修改。对齐后 mock 7 任务 ×3 轮仍 **21/21**（`.../2026-11-23T10-42-48-796Z.jsonl`、`.../2026-11-23T10-51-49-864Z.jsonl`）；真实模型 `write-html` **2/2 通过**（75 s / 40 s）。
+  - 对齐后 `script-bash` 真实模型复测暴露一个**新的模型侧形态**（非产品死锁）：第 1 轮 301 s 停在收口前——模型逐字使用了 `add(2, 3) !== 5` 但写成「取反后当通过条件」（`const passed = add(2, 3) !== 5` → 断言失败 → `node check.js` 退出码 1），随后自我发现矛盾，多次 `report_completion` 被证据门拒绝、反复授权重跑 `node check.js`，300 s 内未收口；第 2 轮正确写法 48 s 通过（3/3 检查）。任务 prompt 已进一步明确断言的方向（`add(2, 3) !== 5` 不成立时 FAIL）。结论：对齐后两任务的产物核验可直接由 prompt 判定，剩余差异属模型生成质量，不再作为产品编排缺陷。
 
 ## 解释
 
