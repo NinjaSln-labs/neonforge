@@ -82,7 +82,7 @@
   - 局限：`delegated` 与 `standard` 的差异仅在清单内 `edit`（`standard` 只自动放行 `write`）；「允许并记住」仍只有 L3 覆盖。
 - **证据不足回填任务（2026-11-23 15:20–15:30 UTC，任务集扩为 13）**：
   - 新增 `evidence-gap`（`mockOnly` 失败注入）：动作轮后首次 `report_completion` 引用不存在的文件 `cat missing-evidence.txt`——系统代跑失败 → `completion.evidence_missing` 打点 + 【系统对账】回填引导；模型按引导重发正确证据 `cat evidence.txt` → 验收项通过 → 已解决卡。检查项：产物精确 + 时间线 `evidence_missing ≥ 1`（证明走了对账路径而非直通）。
-  - mock：13 任务 ×3 轮 **39/39**（WSL `.../2026-11-23T15-28-27-843Z.jsonl`；`evidence-gap` 单任务 5–9 s、2/2 检查）。单跑时间线实证：`decision.requested kind=plan → completion.evidence_missing(missing: verification:cat missing-evidence.txt) → conversation.system_nudge（系统对账）→ acceptance.item_passed(verification:cat evidence.txt) → decision.requested kind=resolution`。
+  - mock：13 任务 ×3 轮 **39/39**（WSL `.../2026-11-23T15-28-27-843Z.jsonl`；`evidence-gap` 单任务 5–9 s、2/2 检查）；Mac 重建后 13 任务 ×2 轮 **26/26**（Mac `.../2026-11-23T15-35-08-772Z.jsonl`，`evidence-gap` 12 s）。单跑时间线实证：`decision.requested kind=plan → completion.evidence_missing(missing: verification:cat missing-evidence.txt) → conversation.system_nudge（系统对账）→ acceptance.item_passed(verification:cat evidence.txt) → decision.requested kind=resolution`。
   - 真实模式跳过 `mockOnly` 任务（真实模型通常首次证据即正确，无法强制注入错误声明；单跑真实 `evidence-gap` 35 s 到达已解决卡、产物正确、无 evidence_missing，不构成失败注入覆盖——运行器现在显式 SKIP 并报错当所选任务全为 mock-only）。
 - **拒绝路径任务（2026-11-23 11:50–13:00 UTC，任务集扩为 10）**：
   - 新增 `reject-goal`（目标被否 → 重新描述 → 确认 → 执行 → 已解决）、`reject-plan`（首个方案故意偏离 → 修改方案 → 修正方案执行，检查「偏离文件未创建」）、`reject-approval`（`bash` 写文件弹授权卡 → 拒绝 → 用户「继续」→ `approve-files` 批次批准 → `write` → 已解决）。
