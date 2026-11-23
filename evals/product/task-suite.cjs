@@ -93,7 +93,7 @@ const TASKS = [
     id: 'script-bash',
     title: '两文件脚本 + bash 运行验证',
     prompt:
-      '创建 calculator.js（导出 add(a,b)）和 check.js（验证 add(2,3)===5 并打印 PASS），然后运行 node check.js 验证。',
+      "创建 calculator.js（导出 add(a,b)）和 check.js：check.js 必须包含断言 if (add(2, 3) !== 5) { console.log('FAIL'); process.exit(1) }，正常时输出 PASS；然后运行 node check.js 验证。",
     goal: '创建 calculator.js 与 check.js，并通过 node check.js 验证加法函数。',
     plan: {
       summary: '新建两个脚本并运行检查',
@@ -202,7 +202,8 @@ const TASKS = [
   {
     id: 'write-html',
     title: 'HTML 文件 + grep 验证',
-    prompt: '创建 index.html，包含 <h1>Task Delta</h1>，并在文件中写一句说明。',
+    prompt:
+      '创建 index.html，包含 <h1>Task Delta</h1>，并在文件中写一句说明，正文必须包含原句「这是任务四的说明文字。」。',
     goal: '创建包含 <h1>Task Delta</h1> 的 index.html。',
     plan: {
       summary: '新建单页 index.html',
