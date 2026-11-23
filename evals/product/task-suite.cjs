@@ -285,6 +285,98 @@ const TASKS = [
     // 真机 approve-files-write 的 301 s 停等（pending=plan 但占位卡未渲染）；恢复路径 approve-files。
     missequence: 'write-before-plan',
   },
+  {
+    id: 'reject-goal',
+    title: '拒绝路径：目标被否 → 重新描述后再确认',
+    prompt: '创建 refused.txt，内容必须是 REFUSED-OK，不要其他内容。',
+    goal: '创建 refused.txt，内容为 REFUSED-OK，不改动其他文件。',
+    // 首次提议故意偏离（多加文件）——用户点「重新描述」；mock 随后按 goal 重提。
+    rejectGoal: '创建 refused.txt 与 extra.txt，并删除所有旧文件。',
+    plan: {
+      summary: '新建 refused.txt 并写入指定内容',
+      files: [{ path: 'refused.txt', reason: '用户指定的交付文件' }],
+      verification: ['cat refused.txt 核对内容'],
+    },
+    rounds: [[{ name: 'write', args: { path: 'refused.txt', content: 'REFUSED-OK' } }]],
+    completion: {
+      summary: 'refused.txt 已创建并核验内容',
+      verification: [{ command: 'cat refused.txt', output: 'REFUSED-OK' }],
+    },
+    checks: [fileCheck('refused.txt 内容精确', 'refused.txt', 'REFUSED-OK')],
+    // 拒绝路径剧本：拒绝后必须能恢复（重提 → 确认 → 执行 → 已解决）。
+    rejection: 'goal',
+  },
+  {
+    id: 'reject-plan',
+    title: '拒绝路径：方案偏离被否 → 修正方案后执行',
+    prompt: '创建 planrefused.txt，内容必须是 PLAN-OK，不要其他内容。',
+    goal: '创建 planrefused.txt，内容为 PLAN-OK。',
+    // 首次方案故意写错文件名——用户点「修改方案」；mock 随后按 plan 重提。
+    rejectPlan: {
+      summary: '新建 error.txt 并写入内容',
+      files: [{ path: 'error.txt', reason: '（故意偏离）' }],
+      verification: ['cat error.txt'],
+    },
+    plan: {
+      summary: '新建 planrefused.txt 并写入指定内容',
+      files: [{ path: 'planrefused.txt', reason: '用户指定的交付文件' }],
+      verification: ['cat planrefused.txt 核对内容'],
+    },
+    rounds: [[{ name: 'write', args: { path: 'planrefused.txt', content: 'PLAN-OK' } }]],
+    completion: {
+      summary: 'planrefused.txt 已创建并核验内容',
+      verification: [{ command: 'cat planrefused.txt', output: 'PLAN-OK' }],
+    },
+    checks: [
+      fileCheck('planrefused.txt 内容精确', 'planrefused.txt', 'PLAN-OK'),
+      {
+        name: '偏离文件未创建',
+        run: (root) => {
+          const p = path.join(root, 'error.txt')
+          return fs.existsSync(p)
+            ? { ok: false, detail: 'error.txt 不应存在（首个方案已被拒绝）' }
+            : { ok: true, detail: 'error.txt 未创建' }
+        },
+      },
+    ],
+    // 拒绝路径剧本：方案被否 → 修正 → 执行 → 已解决。
+    rejection: 'plan',
+  },
+  {
+    id: 'reject-approval',
+    title: '拒绝路径：授权卡被拒 → 改走批量授权后写入',
+    prompt: '创建 authrefused.txt，内容必须是 AUTH-OK，不要其他内容。',
+    goal: '创建 authrefused.txt，内容为 AUTH-OK。',
+    plan: {
+      summary: '新建 authrefused.txt 并写入指定内容',
+      files: [{ path: 'authrefused.txt', reason: '用户指定的交付文件' }],
+      verification: ['cat authrefused.txt 核对内容'],
+    },
+    rounds: [
+      // round 0：bash 写文件（高危必弹授权卡）→ 脚本点「拒绝」——标准信任模式下
+      // 计划内的 write 会自动放行，故用 bash 制造真实授权卡。
+      [{ name: 'bash', args: { command: 'printf AUTH-OK > authrefused.txt' } }],
+      // round 1：改走 approve-files 清单申报（批次卡由脚本批准）
+      [
+        {
+          name: 'approve-files',
+          args: {
+            summary: '创建 authrefused.txt 并写入 AUTH-OK',
+            files: [{ path: 'authrefused.txt', reason: '用户指定的交付文件' }],
+          },
+        },
+      ],
+      // round 2：批准后真正写入
+      [{ name: 'write', args: { path: 'authrefused.txt', content: 'AUTH-OK' } }],
+    ],
+    completion: {
+      summary: 'authrefused.txt 已创建并核验内容',
+      verification: [{ command: 'cat authrefused.txt', output: 'AUTH-OK' }],
+    },
+    checks: [fileCheck('authrefused.txt 内容精确', 'authrefused.txt', 'AUTH-OK')],
+    // 拒绝路径剧本：首次授权卡拒绝 → 用户要求继续 → approve-files → 写入 → 已解决。
+    rejection: 'approval',
+  },
 ]
 
 function getTask(id) {

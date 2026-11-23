@@ -79,21 +79,21 @@ function protocolCall(name, args) {
   return { content: '', toolCalls: [{ name, args }] }
 }
 
-function goalResponse() {
+function goalResponse(statement = task.goal) {
   return protocolCall('propose_goal', {
-    statement: task.goal,
+    statement,
     assumptions: [
       { text: '按用户给出的文件名与内容执行，不改动其他文件。', source: 'model_inference' },
     ],
   })
 }
 
-function planResponse() {
+function planResponse(plan = task.plan) {
   return protocolCall('propose_plan', {
-    summary: task.plan.summary,
-    files: task.plan.files,
+    summary: plan.summary,
+    files: plan.files,
     assumptions: [],
-    verification_plan: task.plan.verification,
+    verification_plan: plan.verification,
   })
 }
 
@@ -138,6 +138,9 @@ function startMockServer() {
   let completionSent = false
   let missequenceSent = false
   let writeSent = false
+  let rejectGoalSent = false
+  let rejectPlanSent = false
+  let rejectApprovalSent = false
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
       if (req.method === 'GET' && req.url.startsWith('/v1/models')) {
@@ -184,6 +187,81 @@ function startMockServer() {
         let response
         if (lastUser.includes('已解决，谢谢')) {
           response = closingResponse()
+        } else if (task.rejection === 'goal') {
+          // 拒绝路径剧本（目标）：首次 propose 一个「合理但被用户否掉」的目标；
+          // 用户点「重新描述」后发修正版目标（含用户方向），之后的流程同正向任务。
+          // 强制澄清卡（ADR-010）确认后 product 会再发「确认，目标清楚了」——同时接受。
+          if (requestIndex === 0) {
+            response = goalResponse(task.rejectGoal ?? task.goal)
+          } else if (lastUser.includes('目标需要重新描述一下') && !rejectGoalSent) {
+            rejectGoalSent = true
+            response = goalResponse(task.goal)
+          } else if (lastUser.includes('确认，目标清楚了') && !planSent) {
+            planSent = true
+            response = planResponse()
+          } else if (lastUser.includes('确认，按方案执行') && !writeSent) {
+            writeSent = true
+            roundIndex = 1
+            response = roundResponse(0)
+          } else if (normalToolResult && roundIndex < task.rounds.length) {
+            response = roundResponse(roundIndex)
+            roundIndex++
+          } else if (normalToolResult || (planSent && roundIndex >= task.rounds.length)) {
+            response = completionResponse()
+            completionSent = true
+          } else {
+            response = closingResponse()
+          }
+        } else if (task.rejection === 'plan') {
+          // 拒绝路径剧本（方案）：目标确认 → 首个方案偏离用户要求（故意写错文件名）；
+          // 用户点「修改方案」后按任务正确方案重提 → 执行 → 完成。
+          // 强制澄清卡（ADR-010）确认后 product 会再发「确认，按方案执行」——同时接受。
+          if (requestIndex === 0) {
+            response = goalResponse()
+          } else if (lastUser.includes('确认，目标清楚了') && !planSent) {
+            planSent = true
+            response = planResponse(task.rejectPlan ?? task.plan)
+          } else if (lastUser.includes('方案需要调整一下') && !rejectPlanSent) {
+            rejectPlanSent = true
+            response = planResponse()
+          } else if (lastUser.includes('确认，按方案执行') && !writeSent) {
+            writeSent = true
+            roundIndex = 1
+            response = roundResponse(0)
+          } else if (normalToolResult && roundIndex < task.rounds.length) {
+            response = roundResponse(roundIndex)
+            roundIndex++
+          } else if (normalToolResult || (rejectPlanSent && roundIndex >= task.rounds.length)) {
+            response = completionResponse()
+            completionSent = true
+          } else {
+            response = closingResponse()
+          }
+        } else if (task.rejection === 'approval') {
+          // 拒绝路径剧本（授权卡）：方案正确；首次 bash（高危）弹授权卡时脚本点「拒绝」——
+          // 产品置工具卡 error「已拒绝授权——未执行」；用户随后在输入框要求继续，
+          // 模型改走 approve-files（清单申报 → 卡批准）再写 → 完成。
+          if (requestIndex === 0) {
+            response = goalResponse()
+          } else if (lastUser.includes('确认，目标清楚了') && !planSent) {
+            planSent = true
+            response = planResponse()
+          } else if (lastUser.includes('确认，按方案执行') && !writeSent) {
+            writeSent = true
+            response = roundResponse(0)
+          } else if (lastUser.includes('继续') && !rejectApprovalSent) {
+            rejectApprovalSent = true
+            roundIndex = 2
+            response = roundResponse(1)
+          } else if (normalToolResult && roundIndex < task.rounds.length) {
+            response = roundResponse(roundIndex)
+            roundIndex++
+          } else if (normalToolResult || (rejectApprovalSent && roundIndex >= task.rounds.length)) {
+            response = completionResponse()
+            completionSent = true
+          } else {
+            response = closingResponse()
+          }
         } else if (
           task.missequence === 'write-before-plan' &&
           lastUser.includes('确认，目标清楚了') &&
@@ -365,9 +443,18 @@ async function scanUi(wc) {
       const state = window.__nfTask || { doneCount: 0, chunkCount: 0, toolCalls: 0 };
       return {
         goal: q('[aria-label="确认目标"] .nf-confirmcard__btn--ok'),
+        goalReject: q('[aria-label="确认目标"] .nf-confirmcard__btn--no'),
         plan: q('[aria-label="确认执行方案"] .nf-confirmcard__btn--ok'),
+        planReject: q('[aria-label="确认执行方案"] .nf-confirmcard__btn--no'),
         resolution: q('[aria-label="确认达成"] .nf-confirmcard__btn--ok'),
+        // ADR-010 强制澄清卡（拒绝链路可能触发）——点「确认执行」继续 underlying（goal/plan）
+        forcedOk: q('.nf-forcedcard__btn--ok'),
         approvals: approveButtons.length,
+        // 授权卡类型：need-approval（write/bash 等文字授权） vs file-approval（approve-files 批量清单）
+        needApprovalCard: q('.nf-toolcall--need-approval .nf-toolcall__approve'),
+        fileApprovalCard: q('.nf-toolcall--file-approval .nf-toolcall__approve'),
+        // ask_user / <candidates> 澄清选项（拒绝后模型常先追问方向）——拒绝路径任务点第一个可用选项
+        clarify: q('.nf-candidates .nf-candidates__btn:not([disabled])'),
         errorToolCalls: document.querySelectorAll('.nf-toolcall--error').length,
         working: q('.nf-working'),
         userMsgs: document.querySelectorAll('.nf-msg--user').length,
@@ -437,6 +524,11 @@ async function driveToResolution(wc) {
   let goalClicks = 0
   let planClicks = 0
   let nudges = 0
+  let approvalRejectedOnce = false
+  let approvalContinueSent = false
+  let clarifyAnswered = false
+  let goalRejectedOnce = false
+  let planRejectedOnce = false
   const deadline = t0 + TIMEOUT_MS
   let lastUi = null
   let idleMs = 0
@@ -446,32 +538,67 @@ async function driveToResolution(wc) {
     lastUi = ui
     const at = Date.now() - t0
 
-    if (ui.goal) {
+    if (ui.forcedOk) {
+      // 强制澄清卡优先处理：点「确认执行」= 确认 underlying 决策点并发对应确认文本。
+      if (stages.forcedCardMs === null) stages.forcedCardMs = at
+      const clicked = await clickSelector(wc, '.nf-forcedcard__btn--ok')
+      if (clicked) {
+        stages.forcedClicks = (stages.forcedClicks ?? 0) + 1
+        if (stages.forcedCardClickedMs === null) stages.forcedCardClickedMs = at
+      }
+    } else if (ui.goal) {
       if (stages.goalCardMs === null) stages.goalCardMs = at
-      const clicked = await clickSelector(wc, '[aria-label="确认目标"] .nf-confirmcard__btn--ok')
+      const selector =
+        task.rejection === 'goal' && !goalRejectedOnce
+          ? '[aria-label="确认目标"] .nf-confirmcard__btn--no'
+          : '[aria-label="确认目标"] .nf-confirmcard__btn--ok'
+      const clicked = await clickSelector(wc, selector)
       if (clicked) {
         goalClicked = true
         goalClicks++
-        if (stages.goalClickedMs === null) stages.goalClickedMs = at
+        if (task.rejection === 'goal' && !goalRejectedOnce) {
+          goalRejectedOnce = true
+          stages.goalRejectedMs = at
+          stages.goalRejects = 1
+        } else if (stages.goalClickedMs === null) {
+          stages.goalClickedMs = at
+        }
       }
     } else if (ui.plan) {
       if (stages.planCardMs === null) stages.planCardMs = at
-      const clicked = await clickSelector(
-        wc,
-        '[aria-label="确认执行方案"] .nf-confirmcard__btn--ok',
-      )
+      const selector =
+        task.rejection === 'plan' && !planRejectedOnce
+          ? '[aria-label="确认执行方案"] .nf-confirmcard__btn--no'
+          : '[aria-label="确认执行方案"] .nf-confirmcard__btn--ok'
+      const clicked = await clickSelector(wc, selector)
       if (clicked) {
         planClicked = true
         planClicks++
-        if (stages.planClickedMs === null) stages.planClickedMs = at
+        if (task.rejection === 'plan' && !planRejectedOnce) {
+          planRejectedOnce = true
+          stages.planRejectedMs = at
+          stages.planRejects = 1
+        } else if (stages.planClickedMs === null) {
+          stages.planClickedMs = at
+        }
       }
     } else if (ui.approvals > 0) {
       if (stages.firstApprovalMs === null) stages.firstApprovalMs = at
-      const clicked = await clickSelector(
-        wc,
-        '.nf-toolcall--need-approval .nf-toolcall__approve, .nf-toolcall--file-approval .nf-toolcall__approve',
-      )
-      if (clicked) stages.approvalClicks++
+      const selector =
+        task.rejection === 'approval' && !approvalRejectedOnce && ui.needApprovalCard
+          ? '.nf-toolcall--need-approval .nf-toolcall__reject'
+          : '.nf-toolcall--need-approval .nf-toolcall__approve, .nf-toolcall--file-approval .nf-toolcall__approve'
+      const clicked = await clickSelector(wc, selector)
+      if (clicked) {
+        if (task.rejection === 'approval' && !approvalRejectedOnce && ui.needApprovalCard) {
+          // 拒绝后由测试侧在空闲时发送「继续」（与真实用户行为一致：拒绝后说明要求）。
+          approvalRejectedOnce = true
+          stages.approvalRejectedMs = at
+          stages.approvalRejects = 1
+        } else {
+          stages.approvalClicks++
+        }
+      }
     } else if (ui.resolution) {
       if (stages.resolutionCardMs === null) stages.resolutionCardMs = at
       const clicked = await clickSelector(wc, '[aria-label="确认达成"] .nf-confirmcard__btn--ok')
@@ -480,10 +607,28 @@ async function driveToResolution(wc) {
         resolutionClicked = true
         break
       }
+    } else if (ui.clarify && task.rejection && !clarifyAnswered) {
+      // 拒绝后真实模型常先追问方向（ask_user/<candidates>）——点第一个可用选项作答，
+      // 相当于用户给出「按原目标继续」的选择；mock 剧本不会走到这里。
+      const clicked = await clickSelector(wc, '.nf-candidates .nf-candidates__btn:not([disabled])')
+      if (clicked) {
+        clarifyAnswered = true
+        stages.clarifyAnswers = (stages.clarifyAnswers ?? 0) + 1
+        stages.clarifyAnsweredMs = at
+      }
     }
-    // 真实模型会先做探索/澄清，5 秒内没有任何新 done/工具/卡 → 发一条用户侧催促，
-    // 让模型进入目标确认卡（重复催促受同一 5 秒窗口节流，避免轰炸）。
-    if (
+    // 拒绝路径（授权卡）：拒绝后产品回到 ready 且无卡可点——测试侧在空闲 2 s 后
+    // 代表用户发送「继续」，驱动模型改走 approve-files（真实用户拒绝后的自然动作）。
+    const idleNow =
+      !ui.goal && !ui.plan && ui.approvals === 0 && !ui.resolution && !ui.working && !ui.clarify
+    if (idleNow && task.rejection === 'approval' && approvalRejectedOnce && !approvalContinueSent) {
+      idleMs += 200
+      if (idleMs >= 2000) {
+        idleMs = 0
+        approvalContinueSent = true
+        await nudge(wc, '继续')
+      }
+    } else if (
       REAL &&
       !goalClicked &&
       nudges < 3 &&

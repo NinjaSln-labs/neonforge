@@ -142,6 +142,36 @@ test('S3-3c：目标确认后直接 write 被拦 → 占位执行确认卡渲染
   await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
 })
 
+// 2026-11-23 真机 reject-goal 死锁回归：方案已确认后模型再次 propose_plan（revised 方案）——
+// 协议层幂等覆盖置 pending=plan + 新快照；旧卡渲染条件要求 !planConfirmed → 卡不渲染、pending 冻结。
+// 锁：结构化方案快照（dcKind==='plan'）在 planConfirmed 后仍渲染（新提议需再确认）。
+test('S3-3d：方案确认后模型重提议方案 → 新方案卡渲染（防 pending 冻结）', async ({ page }) => {
+  await installMockBridge(page, {
+    project: 'none',
+    script: compose(
+      goalConfirm('创建一个网页游戏'),
+      [[toolCall.proposePlan('执行方案', [{ path: 'game.js', reason: '游戏入口' }]), chunk.done()]],
+      [
+        [
+          toolCall.proposePlan('修订方案：改为两个文件', [
+            { path: 'game.js', reason: '游戏入口' },
+            { path: 'style.css', reason: '样式' },
+          ]),
+          chunk.done(),
+        ],
+      ],
+    ),
+  })
+  await startFromScratch(page, '做个网页游戏')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  await page.getByRole('button', { name: '确认执行' }).click()
+  // 确认后模型重提议（新产品会置 pending=plan）——新方案卡必须再次可用
+  await expectText(page.locator('.nf-confirmcard'), 'style.css', 10000)
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+})
+
 test('S3-4：拒绝超限回退——连续拒绝 2 次 → 强制澄清卡（不弹卡轰炸）', async ({ page }) => {
   await installMockBridge(page, {
     project: 'none',

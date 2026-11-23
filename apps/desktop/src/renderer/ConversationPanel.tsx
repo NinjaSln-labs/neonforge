@@ -899,7 +899,11 @@ export default function ConversationPanel({
                         拒绝后由 rejectedCardIdx 抑制（无快照卡）——结构化卡（dcKind）拒绝后经领域状态自然消失 */}
                     {(dcKind === 'plan' || execFallback || execSignal) &&
                     !!goalConfirmed &&
-                    !planConfirmed &&
+                    // 2026-11-23 真机 reject-goal：方案确认后模型再次 propose_plan（确认位仍为 true）——
+                    // 协议层「重复提议幂等覆盖」会置 pending=plan + dcKind 快照；若这里仍要求 !planConfirmed，
+                    // 卡不渲染而 pending 冻结 → 死锁。结构化方案快照（dcKind==='plan'）按「新提议需再确认」
+                    // 渲染（与 ADR-006 目标重提议对称）；信号兜底/占位卡仍只在方案未确认时显示。
+                    (!planConfirmed || dcKind === 'plan') &&
                     stateRef.current.pending !== 'none' &&
                     ((execSignal && i === lastSignalIdx.exec) ||
                       (lastSignalIdx.exec === -1 && isLastAssistant && !hasCandidates)) &&
