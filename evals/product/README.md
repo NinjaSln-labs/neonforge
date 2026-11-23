@@ -2,7 +2,7 @@
 
 固定剧本驱动**真实产品流程**，测量产品编排成功率（目标确认 → 方案确认 → 授权 → 工具执行 → 完成对账 → 已解决卡），并核验真实产物。
 
-- `task-suite.cjs`：6 个固定任务与产物检查（纯数据，不依赖 Electron）。
+- `task-suite.cjs`：6 个正向任务 + 1 个顺序违规恢复任务（`direct-write-after-goal`——复现「目标确认后直接 write」形态）与产物检查（纯数据，不依赖 Electron）。
 - `task-success.cjs`：Electron 探针，隔离 userData/HOME；默认本地 mock SSE；`NF_TASK_SUCCESS_REAL=1` 时改为真实 OpenAI 兼容端点（本机 Magpie）。按剧本发协议工具与真实工具调用，脚本点击确认/授权卡，结束后核验文件。
 - `run-task-success.cjs`：每任务独立进程运行器，报告写 `.scratch/evals/product/`。
 

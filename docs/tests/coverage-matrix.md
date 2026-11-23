@@ -85,6 +85,7 @@
 | 拒绝方案带原因 → 卡隐藏 + 模型收到方向 | cards-from-decision-content::S3-2 | ✅ |
 | 触发权切换——goal 卡内容来自 decisionContent 快照（含关键假设） | cards-from-decision-content::S3-3 | ✅ |
 | 触发权切换——无 decisionContent 不弹卡（C3 降级） | cards-from-decision-content::S3-3b（a666459 新增） | ✅ |
+| 目标确认后直接 write 被拦 → 占位执行确认卡渲染（防「pending=plan 但无卡」死锁；2026-11-23 真机 approve-files-write 301 s 停等回归） | cards-from-decision-content::S3-3c（2026-11-23 新增） | ✅ |
 | 拒绝超限回退——rejectStreak ≥2 强制澄清卡（ADR-010 阈值覆盖旧「≥3 澄清提示」，.nf-reject-overflow 保留为更深层兜底） | cards-from-decision-content::S3-4（9f70c0b 后对齐） | ✅ |
 | 决策点持久化往返（decisionContent 序列化） | sessionStore.test.ts::decisionContent 序列化（3 用例） | ✅ |
 

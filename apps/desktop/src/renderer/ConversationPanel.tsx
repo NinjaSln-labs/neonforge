@@ -788,7 +788,13 @@ export default function ConversationPanel({
               // V1.5 S2 A-017：协议工具轮消息 content 为空（只调工具无文本——propose_goal/propose_plan/
               // report_completion 决策内容经 decisionContent 承载）→ 放宽 content 条件：含协议工具调用
               // 的消息同样进入卡渲染（否则 pending 置位后卡永不弹——文本路径消息有标记故不受影响）
-              (m.content || hasProtoCall(m, ...PROTOCOL_TOOL_NAMES)) &&
+              // 2026-11-23 诊断/真机：仅含被拦副作用工具的消息（content 空、无协议工具）也必须进入——
+              // write 被拦后产品置 pending=plan，占位执行确认卡挂在该消息上；漏掉 → 无卡可点死锁。
+              (m.content ||
+                hasProtoCall(m, ...PROTOCOL_TOOL_NAMES) ||
+                (m.toolCalls ?? []).some((c) =>
+                  isSideEffectAction(c.name, String(c.args?.command ?? '')),
+                )) &&
               (() => {
                 // A-005：转换计数引用——stateVersion 变化触发重渲染（ref 非响应式——reject/confirm 后卡即时消失）
                 void stateVersion

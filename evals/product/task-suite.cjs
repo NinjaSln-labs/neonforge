@@ -250,6 +250,40 @@ const TASKS = [
     },
     checks: [fileCheck('notes.md 三行精确', 'notes.md', 'alpha\nbeta\ngamma\n')],
   },
+  {
+    id: 'direct-write-after-goal',
+    title: '目标确认后直接写入的恢复路径（占位方案卡 → 批量授权 → 写入）',
+    prompt: '创建 direct.txt，内容必须是 DIRECT-OK，不要其他内容。',
+    goal: '创建 direct.txt，内容为 DIRECT-OK。',
+    plan: {
+      summary: '新建 direct.txt 并写入指定内容',
+      files: [{ path: 'direct.txt', reason: '用户指定的交付文件' }],
+      verification: ['cat direct.txt 核对内容'],
+    },
+    rounds: [
+      // 违规直写（目标确认后、未 propose_plan）——占位执行卡确认后重放一次
+      [{ name: 'write', args: { path: 'direct.txt', content: 'DIRECT-OK' } }],
+      // 被政策拦截（「先调 approve-files」）后的合规恢复路径：批量授权 → 再写
+      [
+        {
+          name: 'approve-files',
+          args: {
+            summary: '创建 direct.txt 并写入 DIRECT-OK',
+            files: [{ path: 'direct.txt', reason: '用户指定的交付文件' }],
+          },
+        },
+      ],
+      [{ name: 'write', args: { path: 'direct.txt', content: 'DIRECT-OK' } }],
+    ],
+    completion: {
+      summary: 'direct.txt 已创建并核验内容',
+      verification: [{ command: 'cat direct.txt', output: 'DIRECT-OK' }],
+    },
+    checks: [fileCheck('direct.txt 内容精确', 'direct.txt', 'DIRECT-OK')],
+    // 顺序违规剧本：mock 在「目标确认」后先发直接 write（跳过 propose_plan）——复现 2026-11-23
+    // 真机 approve-files-write 的 301 s 停等（pending=plan 但占位卡未渲染）；恢复路径 approve-files。
+    missequence: 'write-before-plan',
+  },
 ]
 
 function getTask(id) {

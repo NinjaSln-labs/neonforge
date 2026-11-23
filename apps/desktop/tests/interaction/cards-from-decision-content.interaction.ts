@@ -124,6 +124,24 @@ test('S3-3b：无 decisionContent 不弹卡——纯文本含标记但解析失�
 // ADR-010 阈值覆盖（9f70c0b）：rejectStreak 1 → loop-guard 注入、2 → 强制澄清卡——
 // 旧 §4.1「3 连拒 → .nf-reject-overflow」被强制卡先行截断（overflow 提示保留为更深层兜底：
 // 拒绝 system_clarify 卡等路径 streak 仍可到 3）
+// 2026-11-23 真机死锁回归（approve-files-write 301s 停等）：目标确认后模型**直接 write（未 propose_plan）**，
+// renderer 拦下（gate=confirm）并置 pending=plan（占位卡），但被拦消息 content 空、无协议工具调用——
+// 旧外层渲染门只认 content/协议工具 → 占位执行卡永不渲染 → 无卡可点、模型停等。
+// 锁：仅含被拦副作用工具调用的 assistant 消息也必须进入卡渲染分支，占位「确认执行」可见可点。
+test('S3-3c：目标确认后直接 write 被拦 → 占位执行确认卡渲染（防无卡死锁）', async ({ page }) => {
+  await installMockBridge(page, {
+    project: 'none',
+    script: compose(goalConfirm('创建 result.txt'), [
+      [toolCall.write('result.txt', 'X'), chunk.done()],
+    ]),
+  })
+  await startFromScratch(page, '创建 result.txt')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  // 模型直接 write（跳过 propose_plan）→ 产品置 pending=plan；占位卡必须出现
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+})
+
 test('S3-4：拒绝超限回退——连续拒绝 2 次 → 强制澄清卡（不弹卡轰炸）', async ({ page }) => {
   await installMockBridge(page, {
     project: 'none',
