@@ -103,7 +103,7 @@
   - mock：17 任务 ×3 轮 **51/51**（WSL `.../2026-11-23T18-54-10-409Z.jsonl`）；Mac 在 PR 分支重建后 17 任务 ×2 轮 **34/34**（Mac `.../2026-11-23T19-03-04-030Z.jsonl`，`bash-produced-file` 12 s）；真实模型 `bash-produced-file` **通过** 44 s（`.../2026-11-23T18-46-48-127Z.jsonl`；修复前 304 s 停等）；修复后真实 `write-single`/`edit-readme` 复测 2/2 通过（`.../2026-11-23T18-58-29-077Z.jsonl`）。
 - **已解决卡拒绝（「还要改」）返工任务（2026-11-24 03:15–03:30 UTC，任务集扩为 18）**：
   - 新增 `reject-resolution`（mock-only）：首轮写入草稿 DRAFT → 完成声明证据对账通过 → 已解决卡弹出；探针点「还要改」（`.nf-confirmcard__btn--no`，产品只预填输入框 `还要改一些地方：`、不发消息）→ 空闲 1.5 s 后探针代表用户发出返工要求 → 模型返工写入 RESOLUTION-OK → 第二次完成声明对账通过 → 第二个已解决卡由脚本确认。检查：返工后产物精确 + `resolutionRejects ≥ 1`。
-  - mock：单任务 ×3 轮 **3/3**（`.../2026-11-23T19-24-27-552Z.jsonl`，8 s/轮），时间线实证 `card.rejected`（achievement/scope）→ 返工 → `card.resolved`；全量 18 任务 ×3 轮 **54/54**（`.../2026-11-23T19-25-08-027Z.jsonl`）。
+  - mock：单任务 ×3 轮 **3/3**（`.../2026-11-23T19-24-27-552Z.jsonl`，8 s/轮），时间线实证 `card.rejected`（achievement/scope）→ 返工 → `card.resolved`；全量 18 任务 ×3 轮 **54/54**（`.../2026-11-23T19-25-08-027Z.jsonl`）；Mac 重建后 18 任务 ×2 轮 **36/36**（Mac `.../task-success-2026-11-23T19-36-18-268Z.jsonl`，`reject-resolution` 16 s）。
 - **拒绝路径任务（2026-11-23 11:50–13:00 UTC，任务集扩为 10）**：
   - 新增 `reject-goal`（目标被否 → 重新描述 → 确认 → 执行 → 已解决）、`reject-plan`（首个方案故意偏离 → 修改方案 → 修正方案执行，检查「偏离文件未创建」）、`reject-approval`（`bash` 写文件弹授权卡 → 拒绝 → 用户「继续」→ `approve-files` 批次批准 → `write` → 已解决）。
   - 探针新增拒绝/恢复驱动：按任务标记点第一次拒绝按钮（「重新描述」/「修改方案」/授权卡「拒绝」）；授权卡拒绝后空闲 2 s 发送「继续」；拒绝后模型追问方向时点第一个 `ask_user`/`<candidates>` 选项；ADR-010 强制澄清卡点「确认执行」继续 underlying。
