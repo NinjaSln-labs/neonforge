@@ -43,6 +43,36 @@ function containsCheck(name, file, needles, absent = []) {
   }
 }
 
+// ADR-015 委托边界证据：探针把隔离 userData/logs 时间线的 approvalSource 汇总后传入
+// checks 上下文（ctx.delegateExecutions / ctx.delegateDenials / ctx.approvalClicks）。
+function delegateAuditCheck() {
+  return {
+    name: '文件操作自动放行（delegate/auto）且 write/edit 无授权卡',
+    run: (_root, ctx) => {
+      const n = ctx?.delegateExecutions ?? 0
+      const autoFiles = ctx?.autoFileExecutions ?? 0
+      const denied = ctx?.delegateDenials ?? 0
+      const fileDenied = ctx?.fileApprovalDenials ?? 0
+      if (denied > 0) return { ok: false, detail: `委托执行被边界拦截 ${denied} 次` }
+      if (n + autoFiles < 1)
+        return {
+          ok: false,
+          detail: '时间线未记录 write/edit 的自动批准执行（approvalSource=delegate/auto）',
+        }
+      // bash 永不委托（高危始终逐次授权）——真实模型用 bash 读文件时的授权卡不算违例。
+      if (fileDenied > 0)
+        return {
+          ok: false,
+          detail: `write/edit 出现 ${fileDenied} 次授权卡请求（委托档应自动放行）`,
+        }
+      return {
+        ok: true,
+        detail: `delegate ${n} 次 / auto(trusted) ${autoFiles} 次，write/edit 授权卡 0 次，bash 授权卡 ${ctx?.bashApprovalCards ?? 0} 次`,
+      }
+    },
+  }
+}
+
 const TASKS = [
   {
     id: 'write-single',
@@ -395,6 +425,49 @@ const TASKS = [
     checks: [fileCheck('authrefused.txt 内容精确', 'authrefused.txt', 'AUTH-OK')],
     // 拒绝路径剧本：首次授权卡拒绝 → 用户要求继续 → approve-files → 写入 → 已解决。
     rejection: 'approval',
+  },
+  {
+    id: 'delegated-edit',
+    title: '信任模式 delegated：计划内 edit 自动批准（approvalSource=delegate）',
+    prompt: '把项目 README.md 的标题改为「委托模式交付」，保留其余内容。',
+    goal: '修改 README.md 标题为「委托模式交付」，保留其余内容。',
+    plan: {
+      summary: '仅替换 README 首行标题（委托模式自动放行）',
+      files: [{ path: 'README.md', reason: '更新标题，保留正文' }],
+      verification: ['head -1 README.md 查看标题'],
+    },
+    rounds: [
+      [
+        {
+          name: 'edit',
+          args: { path: 'README.md', old: '# __GOAL__', new: '# 委托模式交付' },
+        },
+      ],
+    ],
+    completion: {
+      summary: 'README.md 标题已替换为「委托模式交付」',
+      verification: [{ command: 'head -1 README.md', output: '# 委托模式交付' }],
+    },
+    checks: [
+      {
+        name: 'README 首行标题',
+        run: (root) => {
+          const p = path.join(root, 'README.md')
+          if (!fs.existsSync(p)) return { ok: false, detail: 'README.md 缺失' }
+          const first = fs.readFileSync(p, 'utf8').split('\n')[0]
+          return first === '# 委托模式交付'
+            ? { ok: true, detail: first }
+            : { ok: false, detail: `首行为 ${JSON.stringify(first)}` }
+        },
+      },
+      containsCheck('README 正文保留', 'README.md', ['NeonForge 0-1 项目']),
+      delegateAuditCheck(),
+    ],
+    // ADR-015 委托档：清单内 edit 由 renderer 自动批准（来源 delegate）+ main 边界二次校验；
+    // 与 standard 档的差异就在 edit 也自动——本任务即验证这一点（standard 下 edit 会弹授权卡）。
+    trustMode: 'delegated',
+    // 探针等待并核对时间线的 approvalSource=delegate 证据（delegateAuditCheck）。
+    expectDelegateAudit: true,
   },
 ]
 

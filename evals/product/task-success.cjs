@@ -545,6 +545,8 @@ async function driveToResolution(wc) {
     resolutionCardMs: null,
     resolutionClickedMs: null,
     approvalClicks: 0,
+    needApprovalClicks: 0,
+    fileApprovalClicks: 0,
     firstApprovalMs: null,
   }
   const t0 = Date.now()
@@ -627,6 +629,8 @@ async function driveToResolution(wc) {
           stages.approvalRejects = 1
         } else {
           stages.approvalClicks++
+          if (ui.needApprovalCard) stages.needApprovalClicks++
+          else stages.fileApprovalClicks++
         }
       }
     } else if (ui.resolution) {
@@ -714,13 +718,13 @@ function findProjectDir() {
   return dirs[0]?.p ?? null
 }
 
-function runTaskChecks(projectDir) {
+function runTaskChecks(projectDir, ctx) {
   if (!projectDir) {
     return [{ name: '项目目录存在', ok: false, detail: '未找到 Documents/NeonForge 下的项目目录' }]
   }
   return task.checks.map((c) => {
     try {
-      const r = c.run(projectDir)
+      const r = c.run(projectDir, ctx)
       return { name: c.name, ...r }
     } catch (e) {
       return {
@@ -730,6 +734,77 @@ function runTaskChecks(projectDir) {
       }
     }
   })
+}
+
+// ADR-015 委托边界证据：工具执行的 approvalSource 由 main 写入隔离 userData/logs 时间线
+// （tool.executing / security.trust_delegation_denied）。扫描全部 timeline-*.jsonl（会话文件与
+// rootPath 兜底文件都可能在）；delegated 任务等待自动批准事件落盘（outbox 投递可能滞后）。
+function collectDelegateAudit() {
+  const logsDir = path.join(process.env.NF_TEST_USERDATA, 'logs')
+  const audit = {
+    delegateExecutions: 0,
+    autoFileExecutions: 0,
+    delegateDenials: 0,
+    fileApprovalDenials: 0,
+    bashApprovalCards: 0,
+  }
+  let names = []
+  try {
+    names = fs.readdirSync(logsDir).filter((n) => n.startsWith('timeline-') && n.endsWith('.jsonl'))
+  } catch {
+    return audit
+  }
+  for (const name of names) {
+    let text = ''
+    try {
+      text = fs.readFileSync(path.join(logsDir, name), 'utf8')
+    } catch {
+      continue
+    }
+    for (const line of text.split('\n')) {
+      if (!line.trim()) continue
+      let evt
+      try {
+        evt = JSON.parse(line)
+      } catch {
+        continue
+      }
+      const detail = evt?.detail ?? {}
+      if (evt?.type === 'tool.executing' && detail.approvalSource === 'delegate') {
+        audit.delegateExecutions++
+      } else if (
+        evt?.type === 'tool.executing' &&
+        detail.approvalSource === 'auto' &&
+        (detail.name === 'write' || detail.name === 'edit')
+      ) {
+        // 真实模型可能先 approve-files（用户显式批准整批）——此后 write/edit 来源 auto（trusted 分支），
+        // 同样属于「文件操作无需逐次授权」；标准档的 edit 不走此支（只自动放行 write）——负控仍可区分。
+        audit.autoFileExecutions++
+      } else if (evt?.type === 'security.trust_delegation_denied') {
+        audit.delegateDenials++
+      } else if (evt?.type === 'tool.failed' && detail.needApproval === true) {
+        // 授权卡请求：write/edit 在 delegated 档不应出现（bash 高危始终逐次授权——不算违例）。
+        const toolName = String(detail.name ?? '')
+        if (toolName === 'write' || toolName === 'edit') audit.fileApprovalDenials++
+        else if (toolName === 'bash') audit.bashApprovalCards++
+      }
+    }
+  }
+  return audit
+}
+
+async function waitForDelegateAudit() {
+  let audit = collectDelegateAudit()
+  const deadline = Date.now() + 3000
+  while (
+    task.expectDelegateAudit &&
+    audit.delegateExecutions + audit.autoFileExecutions === 0 &&
+    Date.now() < deadline
+  ) {
+    await new Promise((r) => setTimeout(r, 100))
+    audit = collectDelegateAudit()
+  }
+  return audit
 }
 
 async function run() {
@@ -765,7 +840,13 @@ async function run() {
   }
 
   const projectDir = findProjectDir()
-  const checks = runTaskChecks(projectDir)
+  const audit = await waitForDelegateAudit()
+  const checks = runTaskChecks(projectDir, {
+    ...audit,
+    approvalClicks: driven?.stages?.approvalClicks ?? 0,
+    needApprovalClicks: driven?.stages?.needApprovalClicks ?? 0,
+    fileApprovalClicks: driven?.stages?.fileApprovalClicks ?? 0,
+  })
   const checksOk = checks.length > 0 && checks.every((c) => c.ok)
   const ok = !driveError && checksOk
   const ui = driven?.ui ?? (driveError ? driveError.ui : null) ?? null
