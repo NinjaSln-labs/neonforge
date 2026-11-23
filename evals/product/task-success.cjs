@@ -38,6 +38,21 @@ if (!TASK_ID || !task) {
   fail(new Error(`unknown NF_TASK_SUCCESS_TASK: ${TASK_ID}`))
 }
 
+// 网络失败路径审计：网关瞬态重试日志（同进程 main 的 console.log）与 mock 注入次数。
+// 排名靠前于 dist/main 的 import，确保能观察到 gateway 的「transient — retrying」行。
+let gatewayRetries = 0
+let networkFailuresInjected = 0
+{
+  const baseLog = console.log.bind(console)
+  console.log = (...args) => {
+    const text = args.map((a) => (typeof a === 'string' ? a : '')).join(' ')
+    if (text.includes('[gateway]') && text.includes('transient') && text.includes('retrying')) {
+      gatewayRetries++
+    }
+    baseLog(...args)
+  }
+}
+
 // 真实模式：不启动 mock，把产品固定 provider origin 路由到本机 Magpie；
 // 凭据只由运行器从环境变量注入 NEONFORGE_API_KEY，探针不读也不打印。
 const REAL = process.env.NF_TASK_SUCCESS_REAL === '1'
@@ -178,6 +193,18 @@ function startMockServer() {
   let resolutionReworkSent = false
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
+      // 网络瞬态失败注入：按任务要求断开前 N 个 chat 请求的连接（undici fetch 抛 TypeError）。
+      // 网关对网络错误最多重试 2 次（共 3 击）；第 3 次请求正常走剧本。
+      if (
+        req.method === 'POST' &&
+        req.url.startsWith('/v1/chat/completions') &&
+        task.networkFailures &&
+        networkFailuresInjected < task.networkFailures
+      ) {
+        networkFailuresInjected++
+        req.destroy()
+        return
+      }
       if (req.method === 'GET' && req.url.startsWith('/v1/models')) {
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ data: [{ id: MODEL_ID }] }))
@@ -957,6 +984,8 @@ async function run() {
     fileApprovalClicks: driven?.stages?.fileApprovalClicks ?? 0,
     rememberClicks: driven?.stages?.rememberClicks ?? 0,
     resolutionRejects: driven?.stages?.resolutionRejects ?? 0,
+    gatewayRetries,
+    networkFailuresInjected,
   })
   const checksOk = checks.length > 0 && checks.every((c) => c.ok)
   const ok = !driveError && checksOk
