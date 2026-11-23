@@ -115,6 +115,16 @@ function roundResponse(index) {
   return { content: '', toolCalls: calls }
 }
 
+// 任意剧本轮（已解决拒绝后的返工动作）——与 roundResponse 相同的工具调用形态。
+function rawRoundResponse(round) {
+  const calls = (round || []).map((c) => ({
+    name: c.name,
+    args: buildArgs(c.args),
+  }))
+  if (calls.length === 0) return completionResponse()
+  return { content: '', toolCalls: calls }
+}
+
 function completionResponse() {
   return protocolCall('report_completion', {
     summary: task.completion.summary,
@@ -165,6 +175,7 @@ function startMockServer() {
   let rejectPlanSent = false
   let rejectApprovalSent = false
   let evidenceBadSent = false
+  let resolutionReworkSent = false
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
       if (req.method === 'GET' && req.url.startsWith('/v1/models')) {
@@ -336,6 +347,15 @@ function startMockServer() {
         } else if (task.evidenceGap && lastText.includes('系统对账')) {
           response = completionResponse()
           completionSent = true
+        } else if (
+          task.rejectResolutionOnce &&
+          lastUser.includes('还要改') &&
+          !resolutionReworkSent
+        ) {
+          // 已解决卡被否 → 用户「还要改」→ 模型按意见补充动作（reworkRounds）后再完成声明。
+          resolutionReworkSent = true
+          roundIndex = task.rounds.length
+          response = rawRoundResponse(task.reworkRounds?.[0] ?? [])
         } else if (lastText.includes('系统对账')) {
           // 证据不足时的系统回填引导：重发完成声明（剧本证据应一次通过）。
           response = completionResponse()
@@ -586,7 +606,9 @@ async function driveToResolution(wc) {
   let nudges = 0
   let approvalRejectedOnce = false
   let rememberedOnce = false
+  let resolutionRejectedOnce = false
   let approvalContinueSent = false
+  let resolutionReworkRequested = false
   let clarifyAnswered = false
   let clarifyAnswers = 0
   let goalRejectedOnce = false
@@ -677,11 +699,22 @@ async function driveToResolution(wc) {
       }
     } else if (ui.resolution) {
       if (stages.resolutionCardMs === null) stages.resolutionCardMs = at
-      const clicked = await clickSelector(wc, '[aria-label="确认达成"] .nf-confirmcard__btn--ok')
+      // rejectResolutionOnce：首个已解决卡点「还要改」（resolution 拒绝路径）；否则确认。
+      const selector =
+        task.rejectResolutionOnce && !resolutionRejectedOnce
+          ? '[aria-label="确认达成"] .nf-confirmcard__btn--no'
+          : '[aria-label="确认达成"] .nf-confirmcard__btn--ok'
+      const clicked = await clickSelector(wc, selector)
       if (clicked) {
-        stages.resolutionClickedMs = at
-        resolutionClicked = true
-        break
+        if (task.rejectResolutionOnce && !resolutionRejectedOnce) {
+          resolutionRejectedOnce = true
+          stages.resolutionRejectedMs = at
+          stages.resolutionRejects = 1
+        } else {
+          stages.resolutionClickedMs = at
+          resolutionClicked = true
+          break
+        }
       }
     } else if (ui.clarify && clarifyAnswers < 5) {
       // 真实模型常先追问方向（ask_user/<candidates>）——点第一个可用选项作答（脚本化用户选择）。
@@ -698,7 +731,26 @@ async function driveToResolution(wc) {
     // 代表用户发送「继续」，驱动模型改走 approve-files（真实用户拒绝后的自然动作）。
     const idleNow =
       !ui.goal && !ui.plan && ui.approvals === 0 && !ui.resolution && !ui.working && !ui.clarify
-    if (idleNow && task.rejection === 'approval' && approvalRejectedOnce && !approvalContinueSent) {
+    if (
+      idleNow &&
+      task.rejectResolutionOnce &&
+      resolutionRejectedOnce &&
+      !resolutionReworkRequested
+    ) {
+      // 已解决卡拒绝路径：产品只预填输入框不发消息；测试侧代表用户发出返工要求，
+      // 驱动模型补充动作并再次提交完成声明（第二个已解决卡由脚本确认）。
+      idleMs += 200
+      if (idleMs >= 1500) {
+        idleMs = 0
+        resolutionReworkRequested = true
+        await nudge(wc, '还要改：交付文件的内容必须是 RESOLUTION-OK，请修改后再报告完成。')
+      }
+    } else if (
+      idleNow &&
+      task.rejection === 'approval' &&
+      approvalRejectedOnce &&
+      !approvalContinueSent
+    ) {
       idleMs += 200
       if (idleMs >= 2000) {
         idleMs = 0
@@ -904,6 +956,7 @@ async function run() {
     needApprovalClicks: driven?.stages?.needApprovalClicks ?? 0,
     fileApprovalClicks: driven?.stages?.fileApprovalClicks ?? 0,
     rememberClicks: driven?.stages?.rememberClicks ?? 0,
+    resolutionRejects: driven?.stages?.resolutionRejects ?? 0,
   })
   const checksOk = checks.length > 0 && checks.every((c) => c.ok)
   const ok = !driveError && checksOk
