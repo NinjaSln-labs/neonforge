@@ -766,6 +766,46 @@ const TASKS = [
     mockOnly: true,
     networkFailures: 2,
   },
+  {
+    id: 'network-exhausted',
+    title: '网关网络彻底不可达：3 击耗尽 → 错误气泡 → 点「重试」恢复完成',
+    prompt: '创建 netdown.txt，内容必须是 NET-DOWN-OK，不要其他内容。',
+    goal: '创建 netdown.txt，内容为 NET-DOWN-OK。',
+    plan: {
+      summary: '新建 netdown.txt 并写入指定内容',
+      files: [{ path: 'netdown.txt', reason: '用户指定的交付文件' }],
+      verification: ['cat netdown.txt 核对内容'],
+    },
+    rounds: [[{ name: 'write', args: { path: 'netdown.txt', content: 'NET-DOWN-OK' } }]],
+    completion: {
+      summary: 'netdown.txt 已创建并核验内容（网络恢复后）',
+      verification: [{ command: 'cat netdown.txt', output: 'NET-DOWN-OK' }],
+    },
+    checks: [
+      fileCheck('netdown.txt 内容精确', 'netdown.txt', 'NET-DOWN-OK'),
+      {
+        name: '3 击耗尽后错误气泡出现且「重试」成功恢复（retryClicks ≥1）',
+        run: (_root, ctx) => {
+          const injected = ctx?.networkFailuresInjected ?? 0
+          const retries = ctx?.gatewayRetries ?? 0
+          const clicks = ctx?.networkRetryClicks ?? 0
+          return clicks >= 1 && injected >= 3 && retries >= 2
+            ? {
+                ok: true,
+                detail: `注入断开 ${injected} 次、网关重试 ${retries} 次后暴露错误气泡；点「重试」${clicks} 次后恢复完成`,
+              }
+            : {
+                ok: false,
+                detail: `注入 ${injected} 次 / 网关重试 ${retries} 次 / 重试点击 ${clicks} 次（要求 ≥3/≥2/≥1）`,
+              }
+        },
+      },
+    ],
+    // 同上：连接断开注入依赖 mock，真实模式跳过。
+    mockOnly: true,
+    networkFailures: 3,
+    retryAfterNetworkExhausted: true,
+  },
 ]
 
 function getTask(id) {
