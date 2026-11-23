@@ -136,6 +136,8 @@ function startMockServer() {
   let roundIndex = 0
   let planSent = false
   let completionSent = false
+  let missequenceSent = false
+  let writeSent = false
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
       if (req.method === 'GET' && req.url.startsWith('/v1/models')) {
@@ -182,9 +184,19 @@ function startMockServer() {
         let response
         if (lastUser.includes('已解决，谢谢')) {
           response = closingResponse()
-        } else if (lastUser.includes('确认，按方案执行') && roundIndex === 0) {
+        } else if (
+          task.missequence === 'write-before-plan' &&
+          lastUser.includes('确认，目标清楚了') &&
+          !missequenceSent
+        ) {
+          // 顺序违规剧本：目标确认后不发 propose_plan，直接发 write（复现真机「待决策但无卡」形态）
+          missequenceSent = true
           response = roundResponse(0)
+        } else if (lastUser.includes('确认，按方案执行') && !writeSent) {
+          // 方案确认后的首个动作轮：剧本 round 0（顺序违规任务里即被拦直写的重放）
+          writeSent = true
           roundIndex = 1
+          response = roundResponse(0)
         } else if (lastUser.includes('确认，目标清楚了') && !planSent) {
           planSent = true
           response = planResponse()
