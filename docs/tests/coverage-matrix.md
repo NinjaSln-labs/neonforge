@@ -196,6 +196,7 @@
 | 审计事件 | `timelineEvents.test.ts`（`security.trust_delegation_denied` 注册/载荷；`tool.executing` 带 approvalSource） | ✅ |
 | 旧 localStorage 开关迁移 | `useTrustPolicy.test.ts`（读取不写标记、'1'→delegated、'0'→standard、main 成功后才删键、已迁移幂等、存储抛错不阻塞） | ✅ |
 | 设置页三档切换 + 委托仅计划内放行 | `trustModes.interaction.ts`（设置页切换持久化/旧键迁移删除、delegated 清单内 edit 自动且来源 delegate、strict 清单内 write 仍弹授权卡） | ✅ |
+| 任务套信任模式（strict / delegated） | `evals/product`：`strict-first-write`（`trustMode: 'strict'`、授权卡 1 次后写入）、`delegated-edit`（`trustMode: 'delegated'`、时间线 `approvalSource=delegate`、write/edit 无授权卡；standard 负控必失败） | ✅ |
 
 ## 表 13：机制拒绝事件 gate.denied ↔ 测试（ADR-016 / GitHub #16，2026-11-17）
 
