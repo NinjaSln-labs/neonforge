@@ -70,7 +70,7 @@
 - **信任模式 strict 任务（2026-11-23 13:30–13:47 UTC，任务集扩为 11）**：
   - 新增 `strict-first-write`（任务级 `trustMode: 'strict'`，探针 `--trust-mode` 亦可全局覆盖）：方案确认后清单内 write 在 strict 档不自动放行，产品弹逐次授权卡，批准后写入。
   - 发现并修复：strict 档下 main `decide` 的「先调 approve-files」策略引导先于授权判定命中——方案已确认时模型收到的是「先审批文件清单」而非授权卡，无卡可点后直接改发完成声明、被证据门拒绝（301 s）。修复：`planConfirmed` 且信任模式为 `strict` 时 write 跳过该策略引导，落通用逐次授权（`needApproval`）；standard/delegated 语义不变。单测 +2（strict → needApproval、standard 仍 policy，946/946）。
-  - mock：11 任务 ×3 轮 **33/33**（`.../2026-11-23T13-43-32-018Z.jsonl`）；`strict-first-write` 单任务授权卡 1 次点击、5 s 通过。
+  - mock：11 任务 ×3 轮 **33/33**（`.../2026-11-23T13-43-32-018Z.jsonl`，WSL）；Mac 重建后 11 任务 ×2 轮 **22/22**（Mac `.../2026-11-23T13-59-22-733Z.jsonl`）且 `--trust-mode strict` 单任务 12 s 通过（Mac `.../2026-11-23T14-03-59-187Z.jsonl`）；`strict-first-write` 单任务授权卡 1 次点击、5 s 通过。
   - 真实模型 strict：**通过** 41 s（目标 8.6 / 方案 16.2 / 授权卡 22.8 / 已解决 39.3 s，`strict.txt` 精确匹配；`.../2026-11-23T13-46-46-426Z.jsonl`）。
   - `delegated` 档仍由 L3 `trustModes.interaction.ts` 覆盖（清单内 edit 自动放行、来源 delegate），真实模型与任务套未覆盖。
 - **拒绝路径任务（2026-11-23 11:50–13:00 UTC，任务集扩为 10）**：
