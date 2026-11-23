@@ -424,12 +424,19 @@ class ToolRegistry {
     // write/edit 首次执行前必须 approve-files 已批准——否则返回错误引导模型先规划（一次性授权整批，不再逐个授权）
     // 2026-08-08 根因 3 修复②：policy=true——策略引导非执行失败（renderer 不置 lastToolFailed，forceTool 保持强制逼模型调 approve-files）
     if (name === 'write' && !filesApprovedRef && !opts.approved) {
-      // 2026-08-06 edit 豁免（改现有文件=操作明确——B 类直接改）；write 新建强制规划
-      return {
-        ok: false,
-        policy: true,
-        error:
-          '修改前请先调用 approve-files 工具一次性列出本次要新增/修改的文件清单（用户批准后这些文件自动放行，不需要逐个授权）——不要直接逐个 write/edit',
+      // 2026-08-06 edit 豁免（改现有文件=操作明确——B 类直接改）；write 新建强制规划。
+      // 2026-11-23 strict 档（ADR-015）：谨慎模式「所有写入逐次授权」——方案已确认时不再
+      // 引导 approve-files（批量清单在 strict 下不是「逐次」），落入通用 requiresApproval
+      // 分支弹逐次授权卡。真机 strict：原 policy 文本无卡可点，模型放弃收口（301 s）。
+      if (planConfirmedRef && getTrustPolicyStore().load() === 'strict') {
+        // fall through：由下方 requiresApproval 分支返回 needApproval（授权卡）
+      } else {
+        return {
+          ok: false,
+          policy: true,
+          error:
+            '修改前请先调用 approve-files 工具一次性列出本次要新增/修改的文件清单（用户批准后这些文件自动放行，不需要逐个授权）——不要直接逐个 write/edit',
+        }
       }
     }
     // 2026-08-04 授权架构 v4：规则裁决 deny > allow > ask（fail-closed）——对齐 Claude/Codex/Cursor 共识
@@ -934,6 +941,7 @@ export const toolRegistry = new ToolRegistry()
 // D3（ADR-005）：布尔镜像由 plannedFilesStore 驱动——启动恢复（registerIpc → syncPlanApprovedFromStore——批准事实跨重启）；
 // 生产写路径经 IPC（planned-files:add/reset → syncPlanApprovedFromStore）；markPlanApproved/resetPlanApproved 保留给测试
 import { getPlannedFilesStore } from './plannedFilesStore.instance.js'
+import { getTrustPolicyStore } from './trustPolicyStore.instance.js'
 
 let filesApprovedRef = false
 // #6 真机 2026-08-31（复验轮）：方案确认布尔镜像（renderer confirm('plan') 同步——approve-files 硬序门）

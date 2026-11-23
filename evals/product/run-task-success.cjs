@@ -29,6 +29,7 @@ function parseArgs(argv) {
     timeoutMs: 180000,
     mode: 'mock',
     out: null,
+    trustMode: null,
   }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
@@ -37,6 +38,7 @@ function parseArgs(argv) {
     else if (a === '--repeat') opts.repeat = Number(argv[++i])
     else if (a === '--timeout-ms') opts.timeoutMs = Number(argv[++i])
     else if (a === '--out') opts.out = argv[++i]
+    else if (a === '--trust-mode') opts.trustMode = argv[++i]
     else throw new Error(`unknown arg ${a}`)
   }
   if (opts.tasks) {
@@ -49,6 +51,8 @@ function parseArgs(argv) {
     opts.tasks = ids
   }
   if (!['mock', 'real'].includes(opts.mode)) throw new Error(`unknown mode ${opts.mode}`)
+  if (opts.trustMode && !['strict', 'standard', 'delegated'].includes(opts.trustMode))
+    throw new Error(`unknown trust mode ${opts.trustMode}`)
   opts.repeat = Math.max(1, opts.repeat)
   return opts
 }
@@ -116,6 +120,8 @@ async function runOneTask(task, opts, stamp, outPath) {
     NF_TASK_SUCCESS_TASK: task.id,
     NF_TASK_SUCCESS_TIMEOUT_MS: String(opts.timeoutMs),
   }
+  if (opts.trustMode) env.NF_TASK_SUCCESS_TRUST_MODE = opts.trustMode
+  if (task.trustMode) env.NF_TASK_SUCCESS_TRUST_MODE = task.trustMode
   if (opts.mode === 'real') {
     env.NEONFORGE_API_KEY = realKey
     env.NF_TASK_SUCCESS_REAL = '1'

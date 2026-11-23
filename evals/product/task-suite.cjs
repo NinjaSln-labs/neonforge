@@ -286,6 +286,25 @@ const TASKS = [
     missequence: 'write-before-plan',
   },
   {
+    id: 'strict-first-write',
+    title: '信任模式 strict：方案确认后首次写入需授权卡再执行',
+    prompt: '创建 strict.txt，内容必须是 STRICT-OK，不要其他内容。',
+    goal: '创建 strict.txt，内容为 STRICT-OK。',
+    plan: {
+      summary: '新建 strict.txt 并写入指定内容',
+      files: [{ path: 'strict.txt', reason: '用户指定的交付文件' }],
+      verification: ['cat strict.txt 核对内容'],
+    },
+    rounds: [[{ name: 'write', args: { path: 'strict.txt', content: 'STRICT-OK' } }]],
+    completion: {
+      summary: 'strict.txt 已创建并核验内容',
+      verification: [{ command: 'cat strict.txt', output: 'STRICT-OK' }],
+    },
+    checks: [fileCheck('strict.txt 内容精确', 'strict.txt', 'STRICT-OK')],
+    // 信任模式覆盖：要求本任务在 strict 档下运行（探针 --trust-mode strict 或任务标记）。
+    trustMode: 'strict',
+  },
+  {
     id: 'reject-goal',
     title: '拒绝路径：目标被否 → 重新描述后再确认',
     prompt: '创建 refused.txt，内容必须是 REFUSED-OK，不要其他内容。',

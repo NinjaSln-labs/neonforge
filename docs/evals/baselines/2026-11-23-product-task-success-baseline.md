@@ -67,6 +67,12 @@
   - 结论：两个已知停等死锁（write 成功后重弹方案决策点、直写被拦后无卡）在真实模型复测中均已消失；剩余失败为路径解释与探针逐字串严格性，不是产品编排阻塞。
   - **测量对齐（2026-11-23 10:42–11:00 UTC）**：把历史「prompt 外逐字串」检查写入任务 prompt——`script-bash` 的 prompt 现逐字给出断言语句 `if (add(2, 3) !== 5) { console.log('FAIL'); process.exit(1) }` 与 PASS 要求；`write-html` 的 prompt 现要求正文包含原句「这是任务四的说明文字。」。历史轮次数字不追溯修改。对齐后 mock 7 任务 ×3 轮仍 **21/21**（`.../2026-11-23T10-42-48-796Z.jsonl`、`.../2026-11-23T10-51-49-864Z.jsonl`）；真实模型 `write-html` **2/2 通过**（75 s / 40 s）、`script-bash` 独立复测 **2/2 通过**（48 s / 67 s，均 3/3 检查；`.../2026-11-23T10-54-09-897Z.jsonl`）。
   - 对齐过程中 `script-bash` 曾出现一次 301 s 未收口（第 1 轮、prompt v1 歧义）：模型逐字用了 `add(2, 3) !== 5` 但写成「取反后当通过条件」（`const passed = add(2, 3) !== 5` → 断言失败 → `node check.js` 退出码 1），随后自我发现矛盾，多次 `report_completion` 被证据门拒绝、反复授权重跑 `node check.js`；prompt 明确方向后不复现。结论：对齐后两任务的产物核验可直接由 prompt 判定，属模型生成质量范畴，不是产品死锁。
+- **信任模式 strict 任务（2026-11-23 13:30–13:47 UTC，任务集扩为 11）**：
+  - 新增 `strict-first-write`（任务级 `trustMode: 'strict'`，探针 `--trust-mode` 亦可全局覆盖）：方案确认后清单内 write 在 strict 档不自动放行，产品弹逐次授权卡，批准后写入。
+  - 发现并修复：strict 档下 main `decide` 的「先调 approve-files」策略引导先于授权判定命中——方案已确认时模型收到的是「先审批文件清单」而非授权卡，无卡可点后直接改发完成声明、被证据门拒绝（301 s）。修复：`planConfirmed` 且信任模式为 `strict` 时 write 跳过该策略引导，落通用逐次授权（`needApproval`）；standard/delegated 语义不变。单测 +2（strict → needApproval、standard 仍 policy，946/946）。
+  - mock：11 任务 ×3 轮 **33/33**（`.../2026-11-23T13-43-32-018Z.jsonl`）；`strict-first-write` 单任务授权卡 1 次点击、5 s 通过。
+  - 真实模型 strict：**通过** 41 s（目标 8.6 / 方案 16.2 / 授权卡 22.8 / 已解决 39.3 s，`strict.txt` 精确匹配；`.../2026-11-23T13-46-46-426Z.jsonl`）。
+  - `delegated` 档仍由 L3 `trustModes.interaction.ts` 覆盖（清单内 edit 自动放行、来源 delegate），真实模型与任务套未覆盖。
 - **拒绝路径任务（2026-11-23 11:50–13:00 UTC，任务集扩为 10）**：
   - 新增 `reject-goal`（目标被否 → 重新描述 → 确认 → 执行 → 已解决）、`reject-plan`（首个方案故意偏离 → 修改方案 → 修正方案执行，检查「偏离文件未创建」）、`reject-approval`（`bash` 写文件弹授权卡 → 拒绝 → 用户「继续」→ `approve-files` 批次批准 → `write` → 已解决）。
   - 探针新增拒绝/恢复驱动：按任务标记点第一次拒绝按钮（「重新描述」/「修改方案」/授权卡「拒绝」）；授权卡拒绝后空闲 2 s 发送「继续」；拒绝后模型追问方向时点第一个 `ask_user`/`<candidates>` 选项；ADR-010 强制澄清卡点「确认执行」继续 underlying。
@@ -87,7 +93,7 @@
 - **固定剧本（基线部分）**：基线为 6 个短任务，2026-11-23 后扩为 10 个（新增顺序违规恢复任务 `direct-write-after-goal` 与三个拒绝路径任务 `reject-goal`/`reject-plan`/`reject-approval`）；mock 回复固定；不代表真实模型、长任务、多文件项目、工具失败或网络。真实模型 pilot 是小样本探索，未计入基线。
 - **脚本非人类**：无阅读时间、犹豫、误点、拒绝路径或中断/恢复；不产生 SUS/HEART 或真人审批数据。
 - **单机单版本**：WSL2+xvfb 与一台 2018 MacBook Pro；无 Windows、Apple Silicon 或其他 macOS 版本。
-- **信任模式固定**：使用默认 `standard`；`strict` / `delegated` 与「允许并记住」路径未覆盖。
+- **信任模式部分覆盖**：`standard` 为默认全量基线；`strict` 已有 `strict-first-write` 任务（mock 与真实模型均通过）；`delegated` 仅由 L3 交互测试覆盖，任务套与真实模型未覆盖；「允许并记住」路径未覆盖。
 - **拒绝路径已覆盖，失败路径部分**：2026-11-23 起覆盖拒绝目标（`reject-goal`）、拒绝方案（`reject-plan`）、拒绝授权卡（`reject-approval`）及拒绝后的恢复；证据不足回填引导仅由 mock 剧本间接覆盖（`script-bash` 证据门拒绝重试路径），工具执行失败/网络失败仍未覆盖。
 - **不是 SLO**：没有提案阈值对应「任务成功率」；本轮只建立基线。
 
