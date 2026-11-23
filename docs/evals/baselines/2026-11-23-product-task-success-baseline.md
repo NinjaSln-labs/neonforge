@@ -88,7 +88,7 @@
   - 新增 `root-out-write`（mock-only）：方案清单含根外 `../escaped.txt`，首个直写必须被规划门控拦截（`tool.blocked gate=policy`），随后 `approve-files` 批次卡显式授权 → 写入执行；检查上级目录产物 + 「未被自动放行」+「批次卡已批准」。
   - 真机复现（修前）：standard 信任模式下方案确认后 `plannedFiles` 含根外路径、renderer `autoApprovalSource` 判 in-plan 自动批准（`approvalSource=auto`），根外写直接执行、完成声明被 `diff:planned-not-produced` 否决后停等（124 s 未到已解决卡）。
   - 修复（PR #127）：① `authModel.shouldAutoApproveTool` 增根外硬边界（计划/委托判定对根外路径一律不自动；显式「记住/单次批准」仍优先）；② `derivePlannedFiles` 传入 rootPath 时过滤根外条目（renderer `useConversationState` 增 rootPath 选项）；③ renderer `canExecute` 动作路径统一 trustPath 规范化（根外/相对路径与绝对清单一致）；④ main `delegationBoundaryViolation` 增词法根外校验（根外字符串即使 realpath 落回根内也不委托）。单测 +3（authModel 根外、derivePlannedFiles 过滤、委托词法根外；949/949）。
-  - mock 14 任务 ×3 轮 **42/42**（WSL `.../2026-11-23T16-55-27-802Z.jsonl`；`root-out-write` 5 s、3/3 检查）。
+  - mock 14 任务 ×3 轮 **42/42**（WSL `.../2026-11-23T16-55-27-802Z.jsonl`；`root-out-write` 5 s、3/3 检查）；Mac 重建后 14 任务 ×2 轮 **28/28**（Mac `.../2026-11-23T17-14-56-746Z.jsonl`，`root-out-write` 14 s）。
   - 真实模型：首次 301 s（模型先做长探索 + `ask_user` 追问，探针当时只对拒绝路径作答——探针已放宽为任何任务都作答候选选项），第二次 65 s 到达已解决卡但**模型把需求解释为项目根内创建**（方案 `escaped.txt`，安全自限、不在上一级写），根外路径未被触发——如实记录，任务标记 mockOnly（真实模型不会主动写根外，无法复现该约束）。
 - **拒绝路径任务（2026-11-23 11:50–13:00 UTC，任务集扩为 10）**：
   - 新增 `reject-goal`（目标被否 → 重新描述 → 确认 → 执行 → 已解决）、`reject-plan`（首个方案故意偏离 → 修改方案 → 修正方案执行，检查「偏离文件未创建」）、`reject-approval`（`bash` 写文件弹授权卡 → 拒绝 → 用户「继续」→ `approve-files` 批次批准 → `write` → 已解决）。
