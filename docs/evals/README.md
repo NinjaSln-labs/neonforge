@@ -40,7 +40,7 @@
 - [2026-11-22 远端 DeepSeek 首 token 延迟基线](baselines/2026-11-22-remote-provider-first-token-baseline.md)
 - [2026-11-23 长会话内存与事件循环基线（WSL2+xvfb 与单一 macOS 目标机）](baselines/2026-11-23-long-session-memory-baseline.md)
 - [2026-11-23 性能回归门（初版，WSL2+xvfb 与单一 macOS 目标机）](perf-regression-gate-2026-11-23.md)
-- [2026-11-23 产品级任务成功率基线（固定剧本 12 任务：6 正向 + 顺序违规恢复 + 3 拒绝路径 + strict/delegated 信任模式，WSL2+xvfb 与单一 macOS 目标机）](baselines/2026-11-23-product-task-success-baseline.md)
+- [2026-11-23 产品级任务成功率基线（固定剧本 13 任务：6 正向 + 顺序违规恢复 + 3 拒绝路径 + strict/delegated 信任模式 + mock-only 证据不足回填，WSL2+xvfb 与单一 macOS 目标机）](baselines/2026-11-23-product-task-success-baseline.md)
 - [2026-11-19 外部基准 → 产品 ToolRegistry 桥接设计](product-toolregistry-bridge-design.md)
 - [2026-11-18 用户体验与治理差距评估（初版）](governance-gap-assessment-2026-11-18.md)
 - [2026-11-19 AI 风险登记册（初版）](ai-risk-register-2026-11-19.md)

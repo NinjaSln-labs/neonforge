@@ -80,6 +80,10 @@
   - mock：12 任务 ×3 轮 **36/36**（WSL `.../2026-11-23T14-44-23-761Z.jsonl`；`delegated-edit` 单任务 4–7 s、3/3 检查）；Mac 重建后 12 任务 ×2 轮 **24/24**（Mac `.../2026-11-23T15-05-52-868Z.jsonl`；`delegated-edit` 单任务 11 s、3/3 检查）。
   - 真实模型：`delegated-edit` **通过** 52 s（目标 21.5 / 方案 27.8 / 已解决 50.7 s，`delegate` 执行 2 次、write/edit 授权卡 0 次、bash 授权卡 0 次；`.../2026-11-23T14-42-55-098Z.jsonl`）。两次同任务真实运行（14:35、14:39）：产物正确，但模型先发 `bash` 读文件触发授权卡、或先 `approve-files`（来源 auto）——首次审计把「任何授权点击/非 delegate 来源」判失败，按真实行为放宽为「write/edit 无授权卡 + 存在自动放行证据（delegate 或 trusted auto）」，两次运行实际也满足；审计口径变化如实记录。
   - 局限：`delegated` 与 `standard` 的差异仅在清单内 `edit`（`standard` 只自动放行 `write`）；「允许并记住」仍只有 L3 覆盖。
+- **证据不足回填任务（2026-11-23 15:20–15:30 UTC，任务集扩为 13）**：
+  - 新增 `evidence-gap`（`mockOnly` 失败注入）：动作轮后首次 `report_completion` 引用不存在的文件 `cat missing-evidence.txt`——系统代跑失败 → `completion.evidence_missing` 打点 + 【系统对账】回填引导；模型按引导重发正确证据 `cat evidence.txt` → 验收项通过 → 已解决卡。检查项：产物精确 + 时间线 `evidence_missing ≥ 1`（证明走了对账路径而非直通）。
+  - mock：13 任务 ×3 轮 **39/39**（WSL `.../2026-11-23T15-28-27-843Z.jsonl`；`evidence-gap` 单任务 5–9 s、2/2 检查）。单跑时间线实证：`decision.requested kind=plan → completion.evidence_missing(missing: verification:cat missing-evidence.txt) → conversation.system_nudge（系统对账）→ acceptance.item_passed(verification:cat evidence.txt) → decision.requested kind=resolution`。
+  - 真实模式跳过 `mockOnly` 任务（真实模型通常首次证据即正确，无法强制注入错误声明；单跑真实 `evidence-gap` 35 s 到达已解决卡、产物正确、无 evidence_missing，不构成失败注入覆盖——运行器现在显式 SKIP 并报错当所选任务全为 mock-only）。
 - **拒绝路径任务（2026-11-23 11:50–13:00 UTC，任务集扩为 10）**：
   - 新增 `reject-goal`（目标被否 → 重新描述 → 确认 → 执行 → 已解决）、`reject-plan`（首个方案故意偏离 → 修改方案 → 修正方案执行，检查「偏离文件未创建」）、`reject-approval`（`bash` 写文件弹授权卡 → 拒绝 → 用户「继续」→ `approve-files` 批次批准 → `write` → 已解决）。
   - 探针新增拒绝/恢复驱动：按任务标记点第一次拒绝按钮（「重新描述」/「修改方案」/授权卡「拒绝」）；授权卡拒绝后空闲 2 s 发送「继续」；拒绝后模型追问方向时点第一个 `ask_user`/`<candidates>` 选项；ADR-010 强制澄清卡点「确认执行」继续 underlying。
@@ -97,11 +101,11 @@
 
 ## 限制
 
-- **固定剧本（基线部分）**：基线为 6 个短任务，2026-11-23 后扩为 12 个（新增顺序违规恢复任务 `direct-write-after-goal`、三个拒绝路径任务 `reject-goal`/`reject-plan`/`reject-approval`、strict 任务 `strict-first-write` 与 delegated 任务 `delegated-edit`）；mock 回复固定；不代表真实模型、长任务、多文件项目、工具失败或网络。真实模型 pilot 是小样本探索，未计入基线。
+- **固定剧本（基线部分）**：基线为 6 个短任务，2026-11-23 后扩为 13 个（新增顺序违规恢复任务 `direct-write-after-goal`、三个拒绝路径任务 `reject-goal`/`reject-plan`/`reject-approval`、strict 任务 `strict-first-write` 与 delegated 任务 `delegated-edit`、mock-only 证据不足回填任务 `evidence-gap`）；mock 回复固定；不代表真实模型、长任务、多文件项目、工具执行失败或网络。真实模型 pilot 是小样本探索，未计入基线。
 - **脚本非人类**：无阅读时间、犹豫、误点、拒绝路径或中断/恢复；不产生 SUS/HEART 或真人审批数据。
 - **单机单版本**：WSL2+xvfb 与一台 2018 MacBook Pro；无 Windows、Apple Silicon 或其他 macOS 版本。
 - **信任模式部分覆盖**：`standard` 为默认全量基线；`strict` 已有 `strict-first-write` 任务（mock 与真实模型均通过）；`delegated` 已有 `delegated-edit` 任务（mock 36/36 中含该任务、真实模型通过，审计要求 write/edit 无授权卡且自动放行来源 delegate/auto）；「允许并记住」路径仍只有 L3 覆盖，任务套未覆盖。
-- **拒绝路径已覆盖，失败路径部分**：2026-11-23 起覆盖拒绝目标（`reject-goal`）、拒绝方案（`reject-plan`）、拒绝授权卡（`reject-approval`）及拒绝后的恢复；证据不足回填引导仅由 mock 剧本间接覆盖（`script-bash` 证据门拒绝重试路径），工具执行失败/网络失败仍未覆盖。
+- **拒绝路径已覆盖，失败路径部分**：2026-11-23 起覆盖拒绝目标（`reject-goal`）、拒绝方案（`reject-plan`）、拒绝授权卡（`reject-approval`）及拒绝后的恢复；证据不足回填已有显式 mock-only 任务（`evidence-gap`，对账拦截 → 回填 → 已解决）；工具执行失败/网络失败仍未覆盖。
 - **不是 SLO**：没有提案阈值对应「任务成功率」；本轮只建立基线。
 
 ## 安全与边界

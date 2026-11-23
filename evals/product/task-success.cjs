@@ -127,6 +127,20 @@ function completionResponse() {
   })
 }
 
+// 证据不足剧本：首次完成声明的验证命令系统代跑失败（文件不存在），触发系统对账回填。
+function badCompletionResponse() {
+  const bad = task.badCompletion
+  return protocolCall('report_completion', {
+    summary: bad?.summary ?? task.completion.summary,
+    verification: (bad?.verification ?? []).map((v) => ({
+      command: v.command,
+      output: v.output,
+      passed: true,
+    })),
+    pending_questions: [],
+  })
+}
+
 function buildArgs(raw) {
   // edit-readme 的 old 依赖目标确认后产品回写的 README 标题（# ${goal}）。
   const args = { ...raw }
@@ -150,6 +164,7 @@ function startMockServer() {
   let rejectGoalSent = false
   let rejectPlanSent = false
   let rejectApprovalSent = false
+  let evidenceBadSent = false
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
       if (req.method === 'GET' && req.url.startsWith('/v1/models')) {
@@ -308,6 +323,19 @@ function startMockServer() {
         } else if (lastUser.includes('确认，目标清楚了') && !planSent) {
           planSent = true
           response = planResponse()
+        } else if (
+          task.evidenceGap &&
+          normalToolResult &&
+          roundIndex >= task.rounds.length &&
+          !evidenceBadSent
+        ) {
+          // 证据不足剧本：动作轮结束后先发「证据对不上」的完成声明（系统代跑失败 → 对账回填引导），
+          // 收到【系统对账】后重发正确证据的完成声明 → 已解决卡。
+          evidenceBadSent = true
+          response = badCompletionResponse()
+        } else if (task.evidenceGap && lastText.includes('系统对账')) {
+          response = completionResponse()
+          completionSent = true
         } else if (lastText.includes('系统对账')) {
           // 证据不足时的系统回填引导：重发完成声明（剧本证据应一次通过）。
           response = completionResponse()
@@ -747,6 +775,7 @@ function collectDelegateAudit() {
     delegateDenials: 0,
     fileApprovalDenials: 0,
     bashApprovalCards: 0,
+    evidenceMissing: 0,
   }
   let names = []
   try {
@@ -782,6 +811,8 @@ function collectDelegateAudit() {
         audit.autoFileExecutions++
       } else if (evt?.type === 'security.trust_delegation_denied') {
         audit.delegateDenials++
+      } else if (evt?.type === 'completion.evidence_missing') {
+        audit.evidenceMissing++
       } else if (evt?.type === 'tool.failed' && detail.needApproval === true) {
         // 授权卡请求：write/edit 在 delegated 档不应出现（bash 高危始终逐次授权——不算违例）。
         const toolName = String(detail.name ?? '')
@@ -796,11 +827,10 @@ function collectDelegateAudit() {
 async function waitForDelegateAudit() {
   let audit = collectDelegateAudit()
   const deadline = Date.now() + 3000
-  while (
-    task.expectDelegateAudit &&
-    audit.delegateExecutions + audit.autoFileExecutions === 0 &&
-    Date.now() < deadline
-  ) {
+  const stillWaiting = () =>
+    (task.expectDelegateAudit && audit.delegateExecutions + audit.autoFileExecutions === 0) ||
+    (task.expectEvidenceGap && audit.evidenceMissing === 0)
+  while (stillWaiting() && Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 100))
     audit = collectDelegateAudit()
   }
