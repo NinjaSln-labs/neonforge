@@ -792,6 +792,7 @@ function collectDelegateAudit() {
     bashApprovalCards: 0,
     policyBlockedWrites: 0,
     evidenceMissing: 0,
+    toolFailures: 0,
   }
   let names = []
   try {
@@ -837,6 +838,13 @@ function collectDelegateAudit() {
       } else if (evt?.type === 'tool.blocked' && detail.gate === 'policy') {
         // 规划门控（policy）拦截的 write——用于根外任务判「写入被拦截且未自动放行」。
         if (String(detail.name ?? '') === 'write') audit.policyBlockedWrites++
+      } else if (
+        evt?.type === 'tool.failed' &&
+        detail.needApproval !== true &&
+        !String(detail.error ?? '').includes('修改前请先调用 approve-files')
+      ) {
+        // 工具执行失败（非授权卡请求、非规划引导）——失败恢复任务判据。
+        audit.toolFailures++
       }
     }
   }

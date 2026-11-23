@@ -2,7 +2,7 @@
 
 固定剧本驱动**真实产品流程**，测量产品编排成功率（目标确认 → 方案确认 → 授权 → 工具执行 → 完成对账 → 已解决卡），并核验真实产物。
 
-- `task-suite.cjs`：15 个任务与产物检查（纯数据，不依赖 Electron）——6 个正向任务、1 个顺序违规恢复任务（`direct-write-after-goal`）、3 个拒绝路径任务（`reject-goal` / `reject-plan` / `reject-approval`）、2 个信任模式任务（`strict-first-write` / `delegated-edit`）、1 个「允许并记住」任务（`remember-edit`：首次 edit 点记住 → 同文件第二次修改来源 auto 不弹卡）、1 个证据不足回填任务（`evidence-gap`，mock-only）与 1 个根外写入约束任务（`root-out-write`，mock-only：首写被规划门控拦截 → 批次卡显式授权 → 执行）。
+- `task-suite.cjs`：16 个任务与产物检查（纯数据，不依赖 Electron）——6 个正向任务、1 个顺序违规恢复任务（`direct-write-after-goal`）、3 个拒绝路径任务（`reject-goal` / `reject-plan` / `reject-approval`）、2 个信任模式任务（`strict-first-write` / `delegated-edit`）、1 个「允许并记住」任务（`remember-edit`：首次 edit 点记住 → 同文件第二次修改来源 auto 不弹卡）、2 个 mock-only 失败注入任务（`evidence-gap` 证据不足回填、`tool-failure-recovery` 工具失败后改写入恢复）与 1 个根外写入约束任务（`root-out-write`，mock-only：首写被规划门控拦截 → 批次卡显式授权 → 执行）。
 - `task-success.cjs`：Electron 探针，隔离 userData/HOME；默认本地 mock SSE；`NF_TASK_SUCCESS_REAL=1` 时改为真实 OpenAI 兼容端点（本机 Magpie）。按剧本发协议工具与真实工具调用，脚本点击确认/授权卡，结束后核验文件并审计隔离 userData 时间线（`approvalSource`、`completion.evidence_missing`、委托越界）。`mockOnly` 任务（失败注入类）在真实模式下跳过。
 - `run-task-success.cjs`：每任务独立进程运行器，报告写 `.scratch/evals/product/`。
 

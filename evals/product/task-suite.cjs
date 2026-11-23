@@ -642,6 +642,40 @@ const TASKS = [
     rememberOnce: true,
     expectDelegateAudit: true,
   },
+  {
+    id: 'tool-failure-recovery',
+    title: '工具执行失败 → 模型改用 bash 成功后收口（失败恢复路径）',
+    prompt: '创建 failed.txt，内容必须是 FAIL-RECOVER-OK，不要其他内容。',
+    goal: '创建 failed.txt，内容为 FAIL-RECOVER-OK。',
+    plan: {
+      summary: '新建 failed.txt 并写入指定内容',
+      files: [{ path: 'failed.txt', reason: '用户指定的交付文件' }],
+      verification: ['cat failed.txt 核对内容'],
+    },
+    rounds: [
+      // 首个 edit 目标是尚不存在的 failed.txt——edit 必然失败（未找到待替换内容），
+      // 产品应把失败结果回灌模型；模型随后改用 write 写入并完成任务（恢复路径）。
+      [{ name: 'edit', args: { path: 'failed.txt', old: 'MISSING', new: 'FAIL-RECOVER-OK' } }],
+      // 恢复：改用 write 创建文件（清单内自动放行）→ 产物登记 → 完成声明通过。
+      [{ name: 'write', args: { path: 'failed.txt', content: 'FAIL-RECOVER-OK' } }],
+    ],
+    completion: {
+      summary: 'failed.txt 已创建并核验内容（首次 edit 失败后改用 write 成功）',
+      verification: [{ command: 'cat failed.txt', output: 'FAIL-RECOVER-OK' }],
+    },
+    checks: [
+      fileCheck('failed.txt 内容精确', 'failed.txt', 'FAIL-RECOVER-OK'),
+      {
+        name: 'edit 失败被记录并完成恢复（tool.failed ≥1）',
+        run: (_root, ctx) =>
+          (ctx?.toolFailures ?? 0) >= 1
+            ? { ok: true, detail: `工具执行失败 ${ctx.toolFailures} 次后恢复完成` }
+            : { ok: false, detail: '时间线未记录工具执行失败（失败恢复路径未触发）' },
+      },
+    ],
+    // 失败注入依赖固定剧本（真实模型可能一次写对，无法强制先失败）——真实模式跳过。
+    mockOnly: true,
+  },
 ]
 
 function getTask(id) {
