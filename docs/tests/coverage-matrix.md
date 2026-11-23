@@ -200,6 +200,7 @@
 | 证据不足对账回填（显式任务） | `evals/product`：`evidence-gap`（mock-only 失败注入：首次声明引用不存在证据 → `completion.evidence_missing` → 【系统对账】回填 → 已解决；检查时间线 evidence_missing ≥ 1） | ✅ |
 | 根外写入不自动放行 | `authModel.test.ts`（根外路径标准/委托判定均拒绝——显式 trusted 仍放行）、`conversationState.test.ts`（derivePlannedFiles 传 rootPath 过滤根外条目）、`tools.test.ts`（委托词法根外即使 realpath 落回根内也拒绝）、`evals/product`：`root-out-write`（规划门控拦截 → 批次卡显式授权 → 执行） | ✅ |
 | 「允许并记住」任务信任路径 | `evals/product`：`remember-edit`（首个 edit 点记住 → 同文件第二次修改 `approvalSource=auto`、need-approval 仅 1 次；mock 45/45 与真实模型均通过） | ✅ |
+| 工具执行失败恢复（显式任务） | `evals/product`：`tool-failure-recovery`（mock-only：首个 edit 失败 → write 恢复；检查时间线 tool.failed ≥1 且产物精确） | ✅ |
 
 ## 表 13：机制拒绝事件 gate.denied ↔ 测试（ADR-016 / GitHub #16，2026-11-17）
 
