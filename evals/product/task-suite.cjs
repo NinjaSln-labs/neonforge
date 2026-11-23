@@ -469,6 +469,44 @@ const TASKS = [
     // 探针等待并核对时间线的 approvalSource=delegate 证据（delegateAuditCheck）。
     expectDelegateAudit: true,
   },
+  {
+    id: 'evidence-gap',
+    title: '证据不足对账：错误证据被系统否决 → 回填正确证据后到达已解决',
+    prompt: '创建 evidence.txt，内容必须是 EVIDENCE-OK，不要其他内容。',
+    goal: '创建 evidence.txt，内容为 EVIDENCE-OK。',
+    plan: {
+      summary: '新建 evidence.txt 并写入指定内容',
+      files: [{ path: 'evidence.txt', reason: '用户指定的交付文件' }],
+      verification: ['cat evidence.txt 核对内容'],
+    },
+    rounds: [[{ name: 'write', args: { path: 'evidence.txt', content: 'EVIDENCE-OK' } }]],
+    // 首次完成声明引用不存在的文件——系统代跑失败 → 完成对账判证据不足 → 【系统对账】回填引导；
+    // 模型随后重发正确证据的完成声明 → 已解决卡。验证证据门与回填闭环（非直通）。
+    badCompletion: {
+      summary: 'evidence.txt 已创建（首次声明引用了错误证据）',
+      verification: [{ command: 'cat missing-evidence.txt', output: 'EVIDENCE-OK' }],
+    },
+    completion: {
+      summary: 'evidence.txt 已创建并核验内容',
+      verification: [{ command: 'cat evidence.txt', output: 'EVIDENCE-OK' }],
+    },
+    checks: [
+      fileCheck('evidence.txt 内容精确', 'evidence.txt', 'EVIDENCE-OK'),
+      {
+        name: '完成对账拦截过错误证据（evidence_missing 至少 1 次）',
+        run: (_root, ctx) =>
+          (ctx?.evidenceMissing ?? 0) > 0
+            ? { ok: true, detail: `evidence_missing ${ctx.evidenceMissing} 次` }
+            : { ok: false, detail: '时间线未出现 completion.evidence_missing（未触发对账）' },
+      },
+    ],
+    // 证据不足回填剧本：首份声明证据系统不可通过，必须经【系统对账】回填后才出已解决卡。
+    evidenceGap: true,
+    expectEvidenceGap: true,
+    // 失败注入依赖固定剧本（真实模型通常首次证据正确，无法强制注入错误声明）——
+    // 真实模式跳过本任务（运行器按 mockOnly 过滤），不纳入真实模型成绩。
+    mockOnly: true,
+  },
 ]
 
 function getTask(id) {

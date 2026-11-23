@@ -232,7 +232,17 @@ async function main() {
   const outPath = opts.out || path.join(scratchDir, `task-success-${stamp}.jsonl`)
   mkdirSync(path.dirname(outPath), { recursive: true })
   const g = gitInfo()
-  const selected = opts.tasks ? TASKS.filter((t) => opts.tasks.includes(t.id)) : TASKS
+  let selected = opts.tasks ? TASKS.filter((t) => opts.tasks.includes(t.id)) : TASKS
+  if (opts.mode === 'real') {
+    const skipped = selected.filter((t) => t.mockOnly)
+    if (skipped.length > 0) {
+      selected = selected.filter((t) => !t.mockOnly)
+      console.log(
+        `SKIP ${skipped.map((t) => t.id).join(',')} — mock-only 失败注入任务，真实模式不运行`,
+      )
+    }
+    if (selected.length === 0) throw new Error('没有可运行的任务：所选任务均为 mock-only')
+  }
   const meta = {
     type: 'meta',
     timestamp: new Date().toISOString(),
