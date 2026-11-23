@@ -693,6 +693,41 @@ const TASKS = [
     },
     checks: [fileCheck('produced.txt 内容精确', 'produced.txt', 'BASH-OK')],
   },
+  {
+    id: 'reject-resolution',
+    title: '拒绝路径：已解决卡被否（还要改）→ 返工动作 → 再次完成对账通过',
+    prompt: '创建 resolution.txt，内容必须是 RESOLUTION-OK，不要其他内容。',
+    goal: '创建 resolution.txt，内容为 RESOLUTION-OK。',
+    plan: {
+      summary: '新建 resolution.txt 并写入指定内容',
+      files: [{ path: 'resolution.txt', reason: '用户指定的交付文件' }],
+      verification: ['cat resolution.txt 核对内容'],
+    },
+    rounds: [
+      // 首轮故意写入草稿 DRAFT——对账通过并弹出已解决卡；脚本点「还要改」拒绝，
+      // 随后代表用户发出返工要求（产品只预填输入框，不发消息）。
+      [{ name: 'write', args: { path: 'resolution.txt', content: 'DRAFT' } }],
+    ],
+    // 拒绝后的返工动作：改写为最终内容 → 第二次完成声明 → 对账通过 → 已解决卡确认。
+    reworkRounds: [[{ name: 'write', args: { path: 'resolution.txt', content: 'RESOLUTION-OK' } }]],
+    completion: {
+      summary: 'resolution.txt 已创建并核验内容',
+      verification: [{ command: 'cat resolution.txt', output: 'RESOLUTION-OK' }],
+    },
+    checks: [
+      fileCheck('返工后 resolution.txt 内容精确', 'resolution.txt', 'RESOLUTION-OK'),
+      {
+        name: '首个已解决卡被拒绝（还要改）并继续完成（resolutionRejects ≥1）',
+        run: (_root, ctx) =>
+          (ctx?.resolutionRejects ?? 0) >= 1
+            ? { ok: true, detail: `已解决卡拒绝 ${ctx.resolutionRejects} 次后经返工再次确认` }
+            : { ok: false, detail: '时间线/阶段未记录已解决卡拒绝（拒绝路径未触发）' },
+      },
+    ],
+    // 固定剧本模拟「先交草稿再返工」；真实模型可能一次写对，无法强制拒绝路径——真实模式跳过。
+    mockOnly: true,
+    rejectResolutionOnce: true,
+  },
 ]
 
 function getTask(id) {
