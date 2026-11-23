@@ -186,6 +186,16 @@ describe('Inv 2 决策点确定性——deriveDecisionPoint 纯函数', () => {
     expect(deriveDecisionPoint(fullyConfirmed(), { completion: claim() })).toBe('none')
   })
 
+  it('已确认的 plan/resolution 不被 userRequested 兜底重开（写后 UI 信号滞后防护）', () => {
+    // 2026-11-23 真机 repro：write 成功后 sideEffectPendingUi 仍为真 → userRequested=plan；
+    // 旧规则 5 绕过 !planConfirmed 门 → pending=plan 但无卡可点（模型停等死锁）
+    expect(deriveDecisionPoint(confirmed(), {}, [], 'plan')).toBe('none')
+    expect(deriveDecisionPoint(fullyConfirmed(), {}, [], 'resolution')).toBe('none')
+    // 未确认的请求照常触发（goalFallback 兼容语义不变）
+    expect(deriveDecisionPoint(initialState(), {}, [], 'goal')).toBe('goal')
+    expect(deriveDecisionPoint(userConfirmed(initialState(), 'goal'), {}, [], 'plan')).toBe('plan')
+  })
+
   it('#7 换目标：goal 已确认 + 新目标提议 → goal；确认清任务边界/拒绝回澄清（ADR-006）', () => {
     const s = userConfirmed(initialState(), 'goal')
     // 模型输出新【目标确认】→ 触发 goal 决策点

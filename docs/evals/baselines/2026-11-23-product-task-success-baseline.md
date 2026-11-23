@@ -51,6 +51,7 @@
   - `script-bash`：两文件写入后 `node check.js` 运行通过（检查项 2/3 通过，`check.js` 内容与剧本断言行不同），随后同样未收口。
   - `edit-readme` / `write-html`：`edit`/`write` 与授权卡都已发生（`firstApprovalMs` ≈28 s / 27 s），但产物内容与剧本不完全一致（模型改写标题句式、说明句措辞），且未到已解决卡。注意：`write-html` 的逐字说明句、`script-bash` 的逐字断言都未在任务 prompt 中要求，属探针沿用 mock 内容带来的严格性，不作模型能力结论；`edit-readme` 的标题则是 prompt 明确要求的文案。
 - 结论：阻塞点在「`write` 成功后产品重新置位方案决策点、模型据此停等」，属产品与真实模型交互的问题，不是探针剧本；单任务 `approve-files-write` 的一次通过证明链路可完成。修复该决策点重弹后应重取真实模型证据，本轮不把 pilot 计入成功率。
+- **修复后回归（2026-11-23 08:45 UTC，PR #115）**：`deriveDecisionPoint` 规则 5 加一次性确认位守卫后，同一模型重跑 `write-single` / `approve-files-write` / `write-notes` 三任务 **3/3 通过**：`write-single` 32 s（目标卡 9.0 s → 方案卡 16.1 s → 已解决卡 30.7 s，`result.txt` 核验通过）、`approve-files-write` 45 s（18.8 / 27.2 / 43.3 s，`approved.txt` 核验通过，1 次目标前催促）、`write-notes` 37 s（9.9 / 16.3 / 35.1 s，三行精确通过）。原始数据 `.../task-success-2026-11-23T08-45-14-707Z.jsonl`。mock 回归同轮 18/18（`.../task-success-2026-11-23T08-43-34-658Z.jsonl`）。这仍是单机小样本，不作模型能力或真人成功率结论。
 
 ## 解释
 
