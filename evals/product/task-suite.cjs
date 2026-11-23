@@ -575,6 +575,73 @@ const TASKS = [
     // 项目根内创建（安全自限，不在上一级写），无法复现根外尝试——真实模式跳过，不纳入真实成绩。
     mockOnly: true,
   },
+  {
+    id: 'remember-edit',
+    title: '允许并记住：首次 edit 授权后同文件第二次修改自动放行',
+    prompt: '把 README.md 标题改为「记住交付」，并在正文追加一行「记住模式已验证」。',
+    goal: '修改 README.md：标题改为「记住交付」，正文追加「记住模式已验证」。',
+    plan: {
+      summary: '两次修改 README.md（标题与正文追加）',
+      files: [{ path: 'README.md', reason: '用户指定的修改文件' }],
+      verification: ['head -1 README.md 核对标题', 'grep 记住模式已验证 README.md'],
+    },
+    rounds: [
+      // 首次 edit：standard 档下 edit 需授权——探针点「允许并记住」（任务信任绑定 README.md）
+      [{ name: 'edit', args: { path: 'README.md', old: '# __GOAL__', new: '# 记住交付' } }],
+      // 第二次同文件 edit：任务信任（trusted）→ autoApprovalSource 'auto'，不再弹卡
+      [
+        {
+          name: 'edit',
+          args: {
+            path: 'README.md',
+            old: 'NeonForge 0-1 项目——需求驱动交付',
+            new: 'NeonForge 0-1 项目——需求驱动交付\n\n记住模式已验证',
+          },
+        },
+      ],
+    ],
+    completion: {
+      summary: 'README.md 标题已改、正文已追加（第二次修改未再弹卡）',
+      verification: [
+        { command: 'head -1 README.md', output: '# 记住交付' },
+        { command: 'grep 记住模式已验证 README.md', output: '记住模式已验证' },
+      ],
+    },
+    checks: [
+      {
+        name: 'README 首行标题',
+        run: (root) => {
+          const p = path.join(root, 'README.md')
+          if (!fs.existsSync(p)) return { ok: false, detail: 'README.md 缺失' }
+          const first = fs.readFileSync(p, 'utf8').split('\n')[0]
+          return first === '# 记住交付'
+            ? { ok: true, detail: first }
+            : { ok: false, detail: `首行为 ${JSON.stringify(first)}` }
+        },
+      },
+      containsCheck('README 正文含追加行', 'README.md', ['记住模式已验证']),
+      {
+        name: '首个卡点「允许并记住」，同文件第二次 edit 不弹卡',
+        run: (_root, ctx) => {
+          if ((ctx?.rememberClicks ?? 0) < 1) return { ok: false, detail: '未点击「允许并记住」' }
+          if ((ctx?.needApprovalClicks ?? 0) > 1)
+            return {
+              ok: false,
+              detail: `need-approval 点击 ${ctx.needApprovalClicks} 次（记住后不应再弹）`,
+            }
+          if ((ctx?.autoFileExecutions ?? 0) < 1)
+            return { ok: false, detail: '第二次 edit 未以 trusted(auto) 自动执行' }
+          return {
+            ok: true,
+            detail: `记住 1 次、auto(trusted) ${ctx.autoFileExecutions} 次、need-approval ${ctx.needApprovalClicks} 次`,
+          }
+        },
+      },
+    ],
+    // 「允许并记住」= 任务信任路径（trusted → autoApprovalSource 'auto'）——首个卡点点记住按钮。
+    rememberOnce: true,
+    expectDelegateAudit: true,
+  },
 ]
 
 function getTask(id) {

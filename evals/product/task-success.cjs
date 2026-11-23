@@ -585,6 +585,7 @@ async function driveToResolution(wc) {
   let planClicks = 0
   let nudges = 0
   let approvalRejectedOnce = false
+  let rememberedOnce = false
   let approvalContinueSent = false
   let clarifyAnswered = false
   let clarifyAnswers = 0
@@ -645,18 +646,30 @@ async function driveToResolution(wc) {
       }
     } else if (ui.approvals > 0) {
       if (stages.firstApprovalMs === null) stages.firstApprovalMs = at
-      const selector =
-        task.rejection === 'approval' && !approvalRejectedOnce && ui.needApprovalCard
-          ? '.nf-toolcall--need-approval .nf-toolcall__reject'
-          : '.nf-toolcall--need-approval .nf-toolcall__approve, .nf-toolcall--file-approval .nf-toolcall__approve'
+      // rememberOnce：首个 need-approval 卡点「允许并记住」（任务信任路径）；
+      // rejection==='approval'：首个卡点「拒绝」（拒绝路径任务）。
+      let selector
+      if (ui.needApprovalCard && task.rejection === 'approval' && !approvalRejectedOnce) {
+        selector = '.nf-toolcall--need-approval .nf-toolcall__reject'
+      } else if (ui.needApprovalCard && task.rememberOnce && !rememberedOnce) {
+        selector = '.nf-toolcall--need-approval .nf-toolcall__remember'
+      } else {
+        selector =
+          '.nf-toolcall--need-approval .nf-toolcall__approve, .nf-toolcall--file-approval .nf-toolcall__approve'
+      }
       const clicked = await clickSelector(wc, selector)
       if (clicked) {
-        if (task.rejection === 'approval' && !approvalRejectedOnce && ui.needApprovalCard) {
+        if (ui.needApprovalCard && task.rejection === 'approval' && !approvalRejectedOnce) {
           // 拒绝后由测试侧在空闲时发送「继续」（与真实用户行为一致：拒绝后说明要求）。
           approvalRejectedOnce = true
           stages.approvalRejectedMs = at
           stages.approvalRejects = 1
         } else {
+          if (ui.needApprovalCard && task.rememberOnce && !rememberedOnce) {
+            rememberedOnce = true
+            stages.rememberClicks = 1
+            stages.rememberClickedMs = at
+          }
           stages.approvalClicks++
           if (ui.needApprovalCard) stages.needApprovalClicks++
           else stages.fileApprovalClicks++
@@ -882,6 +895,7 @@ async function run() {
     approvalClicks: driven?.stages?.approvalClicks ?? 0,
     needApprovalClicks: driven?.stages?.needApprovalClicks ?? 0,
     fileApprovalClicks: driven?.stages?.fileApprovalClicks ?? 0,
+    rememberClicks: driven?.stages?.rememberClicks ?? 0,
   })
   const checksOk = checks.length > 0 && checks.every((c) => c.ok)
   const ok = !driveError && checksOk
