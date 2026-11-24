@@ -960,7 +960,9 @@ const TASKS = [
     // 同上：连接断开注入依赖 mock，真实模式跳过。
     mockOnly: true,
     networkFailures: 3,
-    networkFailuresSkip: 3,
+    // 2026-11-24 平台校准：以「写入轮已返回」为注入起点（Mac 上方案确认消息可能仍在排队，
+    // auto-continue 按设计让位排队消息）——保证 3 击耗尽发生在写入后的空闲回合。
+    networkFailuresAfterWrite: true,
     expectAutoContinue: true,
   },
 ]
