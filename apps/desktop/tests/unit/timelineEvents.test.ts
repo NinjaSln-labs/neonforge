@@ -476,3 +476,68 @@ describe('gate.denied（ADR-016——机制拒绝结构化）', () => {
     expect(warns.some((w) => w.includes('risk'))).toBe(true)
   })
 })
+
+// 2026-11-24 审计批次 6：注册表遍历校验（全部 93 事件 schema 自洽 + 必选载荷强制执行）
+// 逐事件断言仍是独立缺口（见覆盖矩阵表 2）；本组锁定「登记本身」的结构契约，防漏字段/畸形键。
+describe('TIMELINE_EVENT_SPECS 注册表遍历（事件 schema 自洽）', () => {
+  const VALID_DOMAINS = new Set([
+    'conversation',
+    'task',
+    'session',
+    'plan',
+    'tool',
+    'security',
+    'capability',
+    'execution',
+    'stuck',
+    'problem',
+    'usage',
+    'changeset',
+    'queue',
+    'extension',
+    'acceptance',
+    'card',
+    'decision',
+    'proposal',
+    'completion',
+    'gate',
+    'protocol',
+  ])
+  const VALID_ROLES = new Set(['user', 'assistant', 'system', 'tool'])
+  const entries = Object.entries(TIMELINE_EVENT_SPECS)
+
+  it('全部事件登记完整：domain/role 合法、detailKeys 无空项/重复/畸形可选前缀', () => {
+    expect(entries.length).toBeGreaterThanOrEqual(90) // 2026-11-24 快照 93
+    for (const [type, spec] of entries) {
+      expect(type).toMatch(/^[a-z_]+\.[a-z_]+$/)
+      expect(VALID_DOMAINS.has(spec.domain)).toBe(true)
+      if (spec.role !== undefined) expect(VALID_ROLES.has(spec.role)).toBe(true)
+      const keys = spec.detailKeys ?? []
+      for (const k of keys) {
+        expect(k.startsWith('??')).toBe(false)
+        expect(k.replace(/^\?/, '')).toMatch(/^[A-Za-z0-9_]+$/)
+      }
+      expect(new Set(keys).size).toBe(keys.length)
+    }
+  })
+
+  it('必选载荷字段被强制执行：齐全 → 无警告；逐项缺失 → 精确警告', () => {
+    for (const [type, spec] of entries) {
+      const required = (spec.detailKeys ?? []).filter((k) => !k.startsWith('?'))
+      const valid: Record<string, string> = Object.fromEntries(required.map((k) => [k, 'x']))
+      if (required.length > 0) expect(validateTimelineEvent(type, valid)).toEqual([])
+      for (const key of required) {
+        const missing = { ...valid }
+        delete missing[key]
+        expect(validateTimelineEvent(type, missing).some((w) => w.includes(key))).toBe(true)
+      }
+      if (required.length === 0) expect(validateTimelineEvent(type, {})).toEqual([])
+    }
+  })
+
+  it('未登记事件被拒绝（防新事件绕过 schema 散落）', () => {
+    const warns = validateTimelineEvent('not.registered.example', {})
+    expect(warns).toHaveLength(1)
+    expect(warns[0]).toContain('未登记')
+  })
+})

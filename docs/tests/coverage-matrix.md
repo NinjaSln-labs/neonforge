@@ -1,7 +1,7 @@
 # 覆盖矩阵（Coverage Matrix）
 
 > 首版：2026-08-16（S2）→ 增补：2026-09-29（Keenable 合规）
-> 当前快照（2026-11-24，PR #141–#150 合并后）：L1 **79 文件 / 965 用例** · 事件注册表 **93 事件** · 不变量 Inv 1-8 + I17-I21 · L3 interaction **96 收集 / 93 通过 + 3 跳过**
+> 当前快照（2026-11-24，PR #141–#156 合并后）：L1 **79 文件 / 970 用例** · 事件注册表 **93 事件** · 不变量 Inv 1-8 + I17-I21 · L3 interaction **96 收集 / 93 通过 + 3 跳过**
 > 表 1-表 10 保留各阶段时点的基线记录；当前总数以本快照为准。
 > 维护：阶段末更新（coverage-matrix skill）；缺口入 audit-items
 
@@ -23,7 +23,7 @@
 
 ## 表 2：事件 ↔ 测试
 
-> 2026-11-24 审计澄清：下表「判定 ✅」表示事件已在注册表登记/由派生函数产生并有对应模块测试，**不等于** `timelineEvents.test.ts` 对每个事件都有逐名断言（实测约 8 组直接断言：deriveStateEvents 的 task/plan/decision、proposal.*、completion.evidence_missing、gate.denied 等）。注册表现有 93 事件，逐事件断言覆盖仍是缺口（见「缺口清单」）。历史事件名 `task.execution_*`/`task.achievement_*` 仅保留读取窗口，canonical 为 `task.plan_*`/`task.resolution_*`。
+> 2026-11-24 审计澄清：下表「判定 ✅」表示事件已在注册表登记/由派生函数产生并有对应模块测试，**不等于** `timelineEvents.test.ts` 对每个事件都有逐名语义断言（实测约 8 组直接断言：deriveStateEvents 的 task/plan/decision、proposal.*、completion.evidence_missing、gate.denied 等）。2026-11-24 已补**注册表遍历校验**（`timelineEvents.test.ts::TIMELINE_EVENT_SPECS 注册表遍历`：全部 93 事件的命名/domain/role/detailKeys 形态 + 必选载荷强制执行 + 未登记拒绝），逐事件语义断言仍是缺口（见「缺口清单」）。历史事件名 `task.execution_*`/`task.achievement_*` 仅保留读取窗口，canonical 为 `task.plan_*`/`task.resolution_*`。
 
 | 事件 id | 语义 | 断言测试 | 判定 |
 |---------|------|----------|------|
@@ -281,7 +281,7 @@
 
 - **无**（A-003 已关闭——proposal.* 事件断言 c91079e 补齐；A-010 已关闭——S4 V1a integration 用例 + L3 4 场景；S3/S4/S5 行为全部有测试承载——S5 新增 progressGuarantee.test.ts 用例 + agentLoop 5 + L3 2 场景；D3 全行为有测试承载——plannedFilesStore + tools 1 + L3 D3-1/2；#8 引导有 L1 断言锁定；#9 e2e 脚本无单测基建——真机复验跟踪中）。2026-11-24 计数刷新：planProposalParser 16、completionClaimParser 10、verifyCompletionSystem 14、progressGuarantee 16、plannedFilesStore 15、sysPrompt 8、conversationState 137、timelineEvents 41、authModel 16、taskSnapshot 13。
 - **2026-11-24 审计新增缺口（如实记录，未关闭）**：
-  - 事件注册表 93 事件中约 8 组有直接测试断言；其余仅注册/由派生函数产生，逐事件断言仍缺（表 2 判定为「登记/产出」语义，非逐名断言）。
+  - 事件注册表 93 事件中约 8 组有直接断名**语义**断言；其余仅注册/由派生函数产生，逐事件语义断言仍缺（表 2 判定为「登记/产出」语义，非逐名断言）。注册表结构契约已 2026-11-24 由遍历校验锁定（命名/domain/role/detailKeys 形态 + 必选载荷强制执行 + 未登记拒绝）。
   - 未入矩阵的已测模块：compaction、preheat、codeRag/context、diffRender、lsp、serviceManager、projectInit、sandboxPath/sandboxSymlink、envManager、useConversationState、gateway 各模块等（文件清单见 `apps/desktop/tests/unit/`）。
   - `delegated` 的 standard 负控为手工临时改任务运行，未编码为运行器选项/负控任务。
   - L5 视觉基线只在 macOS 刷新；WSL 不更新基线；L5 无 CI 承载。
