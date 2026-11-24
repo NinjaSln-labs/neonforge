@@ -1068,7 +1068,11 @@ export function evidenceGuideMaxAttempts(v: { missing: string[]; unverifiable: s
 
 /** 返回 state.plannedFiles ∪ proposal.files（追加/去重——路径规范化由解析层 trustPath 承担，S2）
  * 2026-11-24 根外条目：已确认方案中的**根外**文件不并入写入批准清单（清单外/根外永不自动放行的
- * 数据侧防线）——调用方传入 rootPath 时过滤，根外文件只能走逐次授权（rootPath 缺失时保持旧行为）。 */
+ * 数据侧防线）——调用方传入 rootPath 时过滤。
+ * 2026-11-24 审计终局：rootPath 缺失时**不能**默认全量并入——绝对路径与向上逃逸路径结构上就无法
+ * 判定在根内（fail-closed，跳过），只并入干净的相对路径；生产 renderer 恒传 rootPath
+ * （ConversationPanel → useConversationState.confirm），此分支仅覆盖测试/旧调用/无项目根边界。
+ * 追加语义不变：state 中已有清单（历史明确批准）保留。 */
 export function derivePlannedFiles(
   s: ConversationState,
   proposal: PlanProposal,
@@ -1081,6 +1085,11 @@ export function derivePlannedFiles(
     if (rootPath) {
       const abs = resolveSandboxPath(rootPath, p)
       if (!isPathInsideRoot(abs, rootPath)) continue
+    } else {
+      const norm = normalizeComparePath(p)
+      const absolute = norm.startsWith('/') || /^[A-Za-z]:\//.test(norm)
+      const escapesUp = norm === '..' || norm.startsWith('../')
+      if (absolute || escapesUp) continue
     }
     planned.add(p)
   }

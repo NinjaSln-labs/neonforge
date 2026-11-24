@@ -554,14 +554,14 @@ describe('Inv 6 方案单一来源——derivePlannedFiles / plan 确认派生',
   it('追加语义（不覆盖前批——A0 §5）', () => {
     let s = confirmed()
     s = approvalGranted(s, ['/test/a.js'])
-    const next = userDecided(s, 'plan', { confirm: true })
+    const next = userDecided(s, 'plan', { confirm: true }, '/test')
     expect(next.plannedFiles.size).toBe(1)
     // 第二个方案确认（重提议后）→ 追加不覆盖
     const s2 = setPending(s, 'plan', {
       proposal: plan([{ path: '/test/b.js', reason: 'y' }]),
       since: 't',
     })
-    const next2 = userDecided(s2, 'plan', { confirm: true })
+    const next2 = userDecided(s2, 'plan', { confirm: true }, '/test')
     expect(next2.plannedFiles.has('/test/a.js')).toBe(true)
     expect(next2.plannedFiles.has('/test/b.js')).toBe(true)
   })
@@ -574,7 +574,7 @@ describe('Inv 6 方案单一来源——derivePlannedFiles / plan 确认派生',
       ]),
       since: 't1',
     })
-    const next = userDecided(s, 'plan', { confirm: true })
+    const next = userDecided(s, 'plan', { confirm: true }, '/test')
     expect(next.plannedFiles.has('/test/a.js')).toBe(true)
     expect(next.plannedFiles.has('/test/b.js')).toBe(true)
     expect(next.plannedFiles.size).toBe(2)
@@ -593,6 +593,7 @@ describe('Inv 6 方案单一来源——derivePlannedFiles / plan 确认派生',
         { path: '/test/a.js', reason: 'y' },
         { path: '  ', reason: 'z' },
       ]),
+      '/test',
     )
     expect(files.has('/test/a.js')).toBe(true)
     expect(files.size).toBe(1) // 去重 + 空白过滤
@@ -600,6 +601,7 @@ describe('Inv 6 方案单一来源——derivePlannedFiles / plan 确认派生',
     const merged = derivePlannedFiles(
       approvalGranted(initialState(), ['/test/b.js']),
       plan([{ path: '/test/a.js', reason: 'x' }]),
+      '/test',
     )
     expect(merged.has('/test/a.js')).toBe(true)
     expect(merged.has('/test/b.js')).toBe(true)
@@ -627,9 +629,44 @@ describe('Inv 6 方案单一来源——derivePlannedFiles / plan 确认派生',
     const next = userDecided(s, 'plan', { confirm: true }, '/test')
     expect(next.plannedFiles.has('/test/a.js')).toBe(true)
     expect(next.plannedFiles.size).toBe(1) // 根外两条都被过滤
-    // 未传 rootPath（旧调用/测试基准）→ 维持旧行为（全部并入）
+    // 2026-11-24 审计终局：未传 rootPath 也不再全量并入——绝对/向上逃逸路径 fail-closed 跳过
+    // （绝对路径在无根时无法判定是否根内，`/test/a.js` 也属于「无法判定」）
     const legacy = userDecided(s, 'plan', { confirm: true })
-    expect(legacy.plannedFiles.size).toBe(3)
+    expect(legacy.plannedFiles.size).toBe(0)
+    expect(legacy.plannedFiles.has('/test/a.js')).toBe(false)
+    expect(legacy.plannedFiles.has('/test/../escaped.txt')).toBe(false)
+    expect(legacy.plannedFiles.has('../escaped2.txt')).toBe(false)
+  })
+
+  it('无 rootPath 时 Windows 绝对路径与反斜杠逃逸同样 fail-closed', () => {
+    const next = userDecided(
+      setPending(userConfirmed(initialState(), 'goal'), 'plan', {
+        proposal: plan([
+          { path: 'C:\\Windows\\system.ini', reason: '盘符绝对' },
+          { path: '..\\..\\escape.txt', reason: '反斜杠出根' },
+          { path: 'docs\\readme.md', reason: '干净相对' },
+        ]),
+        since: 't1',
+      }),
+      'plan',
+      { confirm: true },
+    )
+    expect(next.plannedFiles.has('C:\\Windows\\system.ini')).toBe(false)
+    expect(next.plannedFiles.has('..\\..\\escape.txt')).toBe(false)
+    expect(next.plannedFiles.has('docs\\readme.md')).toBe(true)
+  })
+
+  it('无 rootPath 时干净相对路径仍并入（项目根外无法判定 ≠ 拒绝一切相对路径）', () => {
+    const s = setPending(userConfirmed(initialState(), 'goal'), 'plan', {
+      proposal: plan([
+        { path: 'src/app.ts', reason: '相对路径' },
+        { path: 'bin/tool', reason: '无扩展名' },
+      ]),
+      since: 't1',
+    })
+    const next = userDecided(s, 'plan', { confirm: true })
+    expect(next.plannedFiles.has('src/app.ts')).toBe(true)
+    expect(next.plannedFiles.has('bin/tool')).toBe(true)
   })
 })
 
