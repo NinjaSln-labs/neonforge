@@ -19,6 +19,7 @@ node evals/product/run-task-success.cjs --mode real --tasks approve-files-write 
 ```
 
 - 退出码：`0` 全部通过；`1` 有任务失败；`2` 参数/环境错误。
+- 跳过语义：`real` 模式跳过 `mockOnly` 失败注入任务；`delegated` 信任模式跳过标记 `needsApprovalCard` 的任务（`remember-edit`——计划内 edit 自动放行、卡不会出现，按 ADR-015 委托语义该任务不适用，不是产品缺陷）。全部所选任务被跳过时运行器报错退出。
 - **非人类**：mock 剧本固定，点击由脚本完成；`real` 模式虽由真实模型生成工具调用，但仍是固定剧本驱动与小样本 pilot，不代表模型能力或真人任务成功率。
 - 授权卡出现时脚本点「允许执行」；剧本内清单写由产品默认 `standard` 信任模式自动放行。拒绝路径任务（`reject-*`）按任务标记点第一次出现的拒绝按钮（目标「重新描述」/ 方案「修改方案」/ 授权卡「拒绝」/ 已解决卡「还要改」），之后由脚本代表用户发送恢复文本（「继续」或返工要求），验证拒绝后产品能回到正向流程并完成。`reject-resolution` 的产品行为是只预填输入框、不发消息，因此探针在空闲后发送 `还要改：…` 文本，驱动返工动作与第二次完成声明。
 - 原始数据与任务产物只在 `.scratch/`（gitignored）；凭据类环境变量在子进程启动前剔除；`real` 模式仅把 `MAGPIE_GATEWAY_KEY` 值注入子进程的 `NEONFORGE_API_KEY`。

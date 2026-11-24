@@ -116,6 +116,10 @@
 - **稳定性回归（2026-11-24 06:45–07:05 UTC，合并后 main `5836c84`，22 任务全量）**：
   - WSL：22 任务 ×5 轮 **110/110**、0 失败（`.../2026-11-24T04-52-23-011Z.jsonl`）；单任务耗时 p50 5.2 s、最长 9.8 s（`reject-resolution` p50 8.4 / max 9.8 s——两次完成声明 + 拒绝后空闲等待；`reject-approval` max 8.4 s；`network-exhausted` max 7.7 s——3 击耗尽后的错误气泡与自动重试等待）。
   - 无 flake：每任务 5/5 全过、每项检查全过；无 timeout、无 stderr 尾部异常。 Mac：22 任务 ×3 轮 **66/66**、0 失败（Mac `.../task-success-2026-11-24T04-53-03-797Z.jsonl`）。
+- **委托模式全量回归（2026-11-24 07:15–07:40 UTC，任务集 22；运行器语义跳过）**：
+  - `--trust-mode delegated` 全量：任务级 `trustMode` 优先（`strict-first-write` 仍 strict、`delegated-edit` 仍 delegated）；`remember-edit` 因「首次 edit 弹卡再点允许并记住」依赖人工授权卡，而 delegated 按 ADR-015 对计划内 edit 自动放行、卡不会出现——**按任务标记 `needsApprovalCard` 语义跳过**（不是产品缺陷）。21 个可运行任务 ×3 轮 **63/63**、0 失败（`.../2026-11-24T05-16-08-815Z.jsonl`）。
+  - 跳过语义实现：运行器对 `needsApprovalCard && (task.trustMode || --trust-mode) === 'delegated'` 显式 SKIP（日志给出原因）；所选任务全部被跳过时报错退出。默认 `standard` 不受影响。
+  - 默认档回归：22 任务 ×3 轮 **66/66**、0 失败（`.../2026-11-24T05-21-57-403Z.jsonl`；`remember-edit` 正常执行并通过）。
 - **拒绝路径任务（2026-11-23 11:50–13:00 UTC，任务集扩为 10）**：
   - 新增 `reject-goal`（目标被否 → 重新描述 → 确认 → 执行 → 已解决）、`reject-plan`（首个方案故意偏离 → 修改方案 → 修正方案执行，检查「偏离文件未创建」）、`reject-approval`（`bash` 写文件弹授权卡 → 拒绝 → 用户「继续」→ `approve-files` 批次批准 → `write` → 已解决）。
   - 探针新增拒绝/恢复驱动：按任务标记点第一次拒绝按钮（「重新描述」/「修改方案」/授权卡「拒绝」）；授权卡拒绝后空闲 2 s 发送「继续」；拒绝后模型追问方向时点第一个 `ask_user`/`<candidates>` 选项；ADR-010 强制澄清卡点「确认执行」继续 underlying。
