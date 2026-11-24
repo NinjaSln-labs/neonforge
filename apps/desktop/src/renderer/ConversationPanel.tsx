@@ -1276,9 +1276,6 @@ export default function ConversationPanel({
           const fdc = stateRef.current.decisionContent
           const prop = fdc?.proposal as { underlying?: string; statement?: string } | undefined
           if (!prop) return null
-          const lastAssistant = [...messagesRef.current]
-            .reverse()
-            .find((m) => m.role === 'assistant')
           return (
             <div className="nf-forcedcard" role="alertdialog" aria-label="需要你做出选择">
               <div className="nf-forcedcard__head">
@@ -1339,8 +1336,10 @@ export default function ConversationPanel({
                   onClick={() => {
                     confirm('system_clarify')
                     tlog('card.resolved', { card: 'system_clarify', action: 'confirm' }, 'system')
-                    if (lastAssistant?.toolCalls?.length)
-                      approveAllToolCalls(lastAssistant.toolCalls)
+                    // 2026-11-24 审计修复：澄清卡「由搭档全权决定」只决策方向，不代批工具授权——
+                    // 原实现顺带 approveAllToolCalls(lastAssistant.toolCalls)，把授权决定混入澄清确认，
+                    // 绕过逐次授权（V2 structured-clarify 边界：澄清不得成为 DecisionPoint/pending）。
+                    // 待授权调用保留卡片，用户仍可逐项/合并（低危）批准。
                     const u = prop?.underlying
                     const confirmText =
                       u === 'goal'

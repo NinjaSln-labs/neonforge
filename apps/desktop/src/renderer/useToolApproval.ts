@@ -2,6 +2,8 @@
 // 依赖注入（组件状态交织——setMessages/续聊链/流式 ref 经参数传入；不可变依赖走 deps）
 import type { ToolCallMsg, Msg } from './ConversationPanel'
 import type { ApprovalRequest, RejectReason } from '../domain/conversationState'
+// 2026-11-24 审计：批量批准必须按风险过滤（bash/未知工具保留授权卡）
+import { toolRisk } from './authModel'
 
 /** 拒绝记忆 risk 分级（S7 P1-2——复用工具卡既有 risk 判定语义：bash 高危/其余 low-medium） */
 function classifyRiskForReject(tc: ToolCallMsg): 'low' | 'medium' | 'high' {
@@ -186,6 +188,8 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
     const tc = calls[idx]
     // S7（A0 审校 P1-2 接线）：拒绝记忆登记（§3.4 C6——approvalDecided——同轮同类动作短封——
     // canExecute 消费 deniedApprovals；pending 清除 + decisionContent 清理由转换承担）
+    // 2026-11-24 审计：把实际 RejectReason 传下去（原硬编码 direction，拒绝原因 UI 缺失的替代）；
+    // 待授权卡本身不提供原因选择，direction 语义成立（用户拒绝执行方向）。
     if (tc) {
       const subject = String(tc.args?.command ?? tc.args?.path ?? tc.args?.filePath ?? '')
       rejectApproval(
@@ -224,8 +228,10 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
   }
 
   // 批量「全部允许并记住」——一条消息内多个待授权文件一次批准整批
+  // 2026-11-24 审计：只批低危文件操作；bash/未知工具留在授权卡（「记住」不能绕过高危逐次确认）
   const approveAllRemember = (calls: ToolCallMsg[]): void => {
-    const pending = calls.filter((c) => c.status === 'need-approval')
+    const pending = calls.filter((c) => c.status === 'need-approval' && toolRisk(c.name) === 'low')
+    if (pending.length === 0) return
     pending.forEach((c) => addTrust(c.args))
     pending.forEach((c) => {
       const idx = calls.indexOf(c)
@@ -316,10 +322,19 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
   }
 
   // 疲劳防护：同批多个低危文件操作合并授权（bash 高危永不合并——canMergeApprove 已保证）
+  // 2026-11-24 审计修复：批量批准不得把高危调用混进「全部」——
+  //   - 单个待批调用：文本/按钮确认即对该调用的逐项确认（高危也可以，仍是单次单卡）；
+  //   - 多个待批调用：只批低危文件操作，bash/未知工具保留授权卡（高危永远单独确认）。
+  // 文本批准路径（useChatEngine）与「允许全部」按钮共用此门。
   const approveAllToolCalls = (calls: ToolCallMsg[]): void => {
-    calls.forEach((tc, i) => {
-      if (tc.status === 'need-approval') approveToolCall(calls, i, tc)
-    })
+    const pending = calls.filter((tc) => tc.status === 'need-approval')
+    if (pending.length === 0) return
+    const targets =
+      pending.length === 1 ? pending : pending.filter((tc) => toolRisk(tc.name) === 'low')
+    for (const tc of targets) {
+      const idx = calls.indexOf(tc)
+      if (idx >= 0) approveToolCall(calls, idx, tc)
+    }
   }
 
   return {
