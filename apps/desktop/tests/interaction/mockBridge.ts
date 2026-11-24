@@ -274,7 +274,7 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
     version: 'test',
     config: {
       hasKey: async () => ${json(spec.hasKey)},
-      getKey: async () => ${json(spec.hasKey ? 'test-key' : null)},
+      // getKey removed (audit 2026-11-24): renderer uses hasKey only
       getProvider: async () => 'commandcode',
       getModel: async () => null,
       setKey: async () => {},

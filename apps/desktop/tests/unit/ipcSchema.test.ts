@@ -61,7 +61,7 @@ describe('IPC 契约校验（P1-04）', () => {
     expect(validateIpc({}, IPC_SCHEMAS.problemsSyncFolder).ok).toBe(false)
   })
 
-  it('streamChat：messages 数组/role 必填；枚举约束', () => {
+  it('streamChat：messages 数组/role 必填；枚举约束；Key 不再必填（main 读取）', () => {
     expect(
       validateIpc(
         { apiKey: 'k', messages: [{ role: 'user', content: 'hi' }], level: 'basic' },
@@ -69,6 +69,8 @@ describe('IPC 契约校验（P1-04）', () => {
       ).ok,
     ).toBe(true)
     expect(validateIpc({ apiKey: 'k', messages: [] }, IPC_SCHEMAS.streamChat).ok).toBe(true)
+    // 2026-11-24 审计：renderer 不传 Key 为正常载荷（main 从 configStore 读取）
+    expect(validateIpc({ messages: [] }, IPC_SCHEMAS.streamChat).ok).toBe(true)
     expect(
       validateIpc({ apiKey: 'k', messages: [{ content: 'x' }] }, IPC_SCHEMAS.streamChat).ok,
     ).toBe(false)

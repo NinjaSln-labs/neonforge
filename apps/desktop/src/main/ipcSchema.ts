@@ -145,6 +145,8 @@ export const IPC_SCHEMAS = {
   streamChat: {
     type: 'object',
     properties: {
+      // 2026-11-24 审计：Key 不随 renderer 载荷传入——main 从 configStore/env/凭据文件读取
+      //（原 renderer 先取明文 Key 再回传，等于把明文暴露给渲染进程；保留字段仅为旧客户端兼容，可省略）
       apiKey: { type: 'string' },
       level: { type: 'string', enum: ['none', 'basic', 'medium', 'high'] as const },
       tools: { type: 'boolean' },
@@ -170,7 +172,7 @@ export const IPC_SCHEMAS = {
         },
       },
     },
-    required: ['apiKey', 'messages'],
+    required: ['messages'],
   },
   sessionId: { type: 'string', minLength: 1, maxLength: 200 },
   queueEnqueue: {

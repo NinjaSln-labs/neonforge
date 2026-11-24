@@ -234,6 +234,8 @@ export default function ConfigPage({ onDone }: { onDone: () => void }) {
                 href={selected.docsUrl}
                 target="_blank"
                 rel="noreferrer"
+                // 2026-11-24 审计：主进程 setWindowOpenHandler 会把外链交给系统浏览器并拒绝新窗口；
+                // 这里不 preventDefault，保留 href 语义（无脚本环境仍可右键复制）。
               >
                 打开获取页
               </a>

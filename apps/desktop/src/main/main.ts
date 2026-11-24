@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu } from 'electron'
+import { app, BrowserWindow, Menu, shell } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync, appendFileSync } from 'node:fs'
@@ -113,6 +113,22 @@ if (!gotTheLock) {
 
     win.webContents.on('preload-error', (_e, pathFailed, err) => {
       console.error('[main] preload-error', pathFailed, err)
+    })
+
+    // 2026-11-24 审计（Electron 加固）：产品是本地工作台，渲染进程无需打开新窗口/跳站外 URL——
+    // 一律拒绝（外链交给系统浏览器由用户判断）；应用内导航只允许开发服务器或打包渲染页。
+    win.webContents.setWindowOpenHandler(({ url }) => {
+      if (/^https?:\/\//.test(url)) void shell.openExternal(url).catch(() => {})
+      return { action: 'deny' }
+    })
+    win.webContents.on('will-navigate', (event, url) => {
+      const allowed = process.env.VITE_DEV_SERVER_URL
+        ? url.startsWith(process.env.VITE_DEV_SERVER_URL)
+        : /^file:\/\//.test(url)
+      if (!allowed) {
+        event.preventDefault()
+        if (/^https?:\/\//.test(url)) void shell.openExternal(url).catch(() => {})
+      }
     })
 
     // V1 仅深色主题（D0 §8 / D3 tokens）

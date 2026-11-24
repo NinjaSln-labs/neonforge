@@ -19,7 +19,7 @@ async function mockQueueBridge(page: Page, firstTurnMs: number): Promise<void> {
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         getProvider: async () => 'commandcode',
         setKey: async () => {},
         clearKey: async () => {},

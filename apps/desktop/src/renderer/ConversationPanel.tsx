@@ -9,7 +9,7 @@ import { useMessageStore } from './useMessageStore'
 import { useConversationTelemetry } from './useConversationTelemetry'
 import { useEvidenceVerification } from './useEvidenceVerification'
 // ticket 14 信任阶梯：授权执行模型（等级/影响/合并判定——L4 委托 + 疲劳防护）
-import { buildAuthHint, canMergeApprove } from './authModel'
+import { buildAuthHint, canMergeApprove, canTaskTrust } from './authModel'
 import { useTrustPolicy } from './useTrustPolicy'
 // 2026-08-03 v33：思考过程内容清洗（reasoning 含 Markdown 标记 → 展示为可读纯文字）
 // 2026-08-04：cleanContent 回复正文展示清洗（字面转义/连续换行杂音）
@@ -581,7 +581,9 @@ export default function ConversationPanel({
     const p = trustPath(args.path ?? args.filePath ?? '')
     if (!p || taskTrustRef.current.includes(p)) return
     // 2026-08-04 授权架构 v4：只信任沙箱内（项目根内）——沙箱外 write/edit 永不进入信任集合（每次弹卡——安全底线）
-    if (!rootPath || !p.startsWith(rootPath)) return
+    // 2026-11-24 审计修复：原 `p.startsWith(rootPath)` 是字符串前缀判定，根 `/x/app` 时
+    // `/x/app-evil/f` 也会被当作根内写入信任集合；canTaskTrust 用路径段边界（与 main realpath 边界同语义）。
+    if (!canTaskTrust(p, rootPath)) return
     taskTrustRef.current = [...taskTrustRef.current, p]
     setTaskTrust(taskTrustRef.current)
   }

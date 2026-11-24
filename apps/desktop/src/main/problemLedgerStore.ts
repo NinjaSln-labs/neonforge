@@ -16,6 +16,7 @@ import {
   mergeProblemLedgers,
   normalizeProblemLedger,
   type LedgerProblem,
+  type MergeConflict,
   type ProblemLedgerPayload,
 } from '../domain/problemLedger.js'
 import {
@@ -59,7 +60,11 @@ export interface SyncNowResult {
   localOnly?: number
   remoteOnly?: number
   conflicts?: number
+  /** ADR-018 §3：冲突摘要保留 id/revision（不丢数据；UI 可展示（当前只展示计数）） */
+  conflictDetails?: MergeConflict[]
   total?: number
+  /** 合并后的权威台账——renderer 必须以此刷新内存态（防陈旧副本回写覆盖远端赢家，ADR-018） */
+  problems?: LedgerProblem[]
 }
 
 function readJson(file: string): unknown {
@@ -161,7 +166,10 @@ export class ProblemLedgerStore {
       const existing = this.load().problems
       const oldById = new Map(existing.map((p) => [p.id, p]))
       const incomingIds = new Set(incoming.map((p) => p.id))
-      const tombstones = existing.filter((p) => p.deletedAt && !incomingIds.has(p.id))
+      // ADR-018 审计修复：renderer 全量保存时，main 中不在本次列表内的条目也必须保留——
+      // 同步刚合并进来的远端新增/删除 tombstone 若被下一次陈旧保存省略，会静默丢失。
+      // 删除走显式 tombstone（ADR-018 §3），「缺席」不等于删除。
+      const keepExisting = existing.filter((p) => !incomingIds.has(p.id))
       const bumped = incoming.map((p) => {
         const old = oldById.get(p.id)
         if (!old) return { ...p, revision: Math.max(1, p.revision ?? 0) }
@@ -173,12 +181,17 @@ export class ProblemLedgerStore {
           (p.updatedAtIso ?? p.updatedAt) !== (old.updatedAtIso ?? old.updatedAt) ||
           JSON.stringify(p.snapshot ?? null) !== JSON.stringify(old.snapshot ?? null) ||
           Boolean(p.deletedAt) !== Boolean(old.deletedAt)
+        // ADR-018 审计修复：陈旧副本不得覆盖更高 revision 的 main 权威。
+        // 同步（或其它设备写入）后 main revision 可能已高于 renderer 内存里的副本；若内容不同且
+        // incoming revision 低于现有，视为陈旧（renderer 尚未刷新）→ 保留 main 版本，不再抬 revision。
+        const incomingRevision = p.revision ?? 0
+        if (changed && incomingRevision > 0 && incomingRevision < (old.revision ?? 0)) return old
         const revision = changed
-          ? Math.max((old.revision ?? 0) + 1, p.revision ?? 0)
-          : Math.max(old.revision ?? 0, p.revision ?? 0)
+          ? Math.max((old.revision ?? 0) + 1, incomingRevision)
+          : Math.max(old.revision ?? 0, incomingRevision)
         return { ...p, revision }
       })
-      const next = normalizeProblemLedger([...bumped, ...tombstones])
+      const next = normalizeProblemLedger([...bumped, ...keepExisting])
       this.writeLedger(next)
       return { ok: true, problems: next }
     } catch (e) {
@@ -312,7 +325,9 @@ export class ProblemLedgerStore {
       localOnly: [...localIds].filter((id) => !remoteIds.has(id)).length,
       remoteOnly: [...remoteIds].filter((id) => !localIds.has(id)).length,
       conflicts: merged.conflicts.length,
+      conflictDetails: merged.conflicts,
       total: merged.problems.length,
+      problems: merged.problems,
     }
   }
 }

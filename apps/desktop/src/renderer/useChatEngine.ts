@@ -328,8 +328,10 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
     // 原只在 streamChat 成功后记录：第二回合失败时 chatRef 仍指向上一次成功回合，重试会丢掉
     // 失败的用户消息（重放上一轮）。失败后无续聊路径，记录失败回合上下文无副作用。
     chatRef.current = { msgs, depth }
-    const key = await window.neonforge.config.getKey()
-    if (!key) {
+    // 2026-11-24 审计：renderer 不再读取明文 Key——只判断「当前是否有可用 Key」；
+    // 实际 Key 由 main 从 configStore/env/凭据文件读取并直接注入网关（config:get-key 已移除）。
+    const hasKey = await window.neonforge.config.hasKey()
+    if (!hasKey) {
       finishError('key-invalid', undefined, sid)
       return
     }
@@ -507,7 +509,6 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
         return // 等待用户在强制卡上做出选择——不进入模型回合
       }
       const res = await window.neonforge.gateway.streamChat({
-        apiKey: key,
         level: 'basic',
         tools: true,
         forceTool,
