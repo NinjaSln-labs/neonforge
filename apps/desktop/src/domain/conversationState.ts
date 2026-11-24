@@ -136,7 +136,7 @@ export interface ConversationState {
   decisionContent?: DecisionContent // 当前待决策内容快照（决策点呈现与审计唯一来源）
   deniedApprovals: Array<{ toolName: string; subject: string }> // 拒绝记忆（§3.4 C6——同轮同类动作短封，S6 actionGate 消费；任务边界重置）
   rejectStreak: number // 同一决策点连续拒绝计数（§4.1 C8——上限 3 超限回退澄清/人工接管；随确认/新提议重置；S3 消费）
-  lastRejectReason?: RejectReason // S7（A0 审校 P1-4）：最近一次拒绝的原因（诊断——decision.resolved 载荷；confirm/其他转换清除）
+  lastRejectReason?: RejectReason | null // S7（A0 审校 P1-4）：最近一次拒绝的原因（诊断——decision.resolved 载荷；confirm/其他转换清除为 null——ADR-013 快照显式空值）
   pendingRepeatCount: number // ADR-010 T1：同 kind 决策点连续 pending_set 次数（换 kind/决策清零）
   unresolvedTextReplies: number // ADR-010 T2：pending 存在期间用户连续文本回复数（决策清零）
 }
@@ -193,7 +193,7 @@ export function userDecided(
   next.pendingRepeatCount = 0
   next.unresolvedTextReplies = 0
   if (decision.confirm) {
-    next.lastRejectReason = undefined // S7（P1-4）：确认清除拒绝原因（诊断字段只保留最近一次拒绝）
+    next.lastRejectReason = null // S7（P1-4）：确认清除拒绝原因（诊断字段只保留最近一次拒绝；ADR-013 显式 null）
     next.rejectStreak = 0 // §4.1 C8：决策点确认 → 连续拒绝计数重置
     if (point === 'goal') {
       // 目标确认 = 任务边界（A0 §9 目标驱动原点；对齐 clearTrust 语义）——新任务清零进度/清单/达成/拒绝记忆
@@ -297,7 +297,7 @@ export function approvalDecided(
     // S7（P1-4）：授权拒绝原因同样入诊断字段
     next.lastRejectReason = decision.reason
   } else {
-    next.lastRejectReason = undefined
+    next.lastRejectReason = null
   }
   return next
 }
@@ -898,7 +898,11 @@ export function isSystemVerifiable(command: string): boolean {
  * ADR-008：pendingQuestions 不计入（遗留问题=知情项，非证据缺失）。 */
 export function evidenceVerifiable(evidence: CompletionEvidence): boolean {
   if (evidence.verification.length === 0) return false
-  return evidence.verification.some((item) => isSystemVerifiable(item.command))
+  // 2026-11-24 审计：passed=false 的证据不构成「可对账证据」——与 verifyCompletion（先记 missing）
+  // 对齐，避免全失败声明仍经 deriveDecisionPoint 进入 resolution 决策点（双判定器分叉）。
+  return evidence.verification.some(
+    (item) => item.passed !== false && isSystemVerifiable(item.command),
+  )
 }
 
 /** V1a：claim.output ↔ 代跑 stdout 对齐（ADR-011）——去空白后双向包含；空串不对齐 */
@@ -972,11 +976,18 @@ export function verifyCompletion(
     // A-021 r2：覆盖判定从 produced 侧计数改为 **planned 侧逐项覆盖**——集合可能含同一文件的相对/绝对
     // 双形态登记（真机实证：propose_plan 注册时 rootPath 未注入 → 'index.html'；approve-files → 绝对），
     // 产生侧计数恒 < planned.size → 相对形态永远 not-produced → resolution 不可达（真机三连 evidence_missing）
+    // 2026-11-24 审计：ADR-004 V1b 的 `deriveDiffs` 契约不再悬空——先派生「planned ∩ produced」，
+    // 覆盖判定消费派生结果（导出纯函数 `deriveDiffs` 与接口字段同源；existingFiles 仍单独核对）。
+    const derivedPaths = new Set(
+      systemState
+        .deriveDiffs(systemState.plannedFiles, systemState.producedFiles)
+        .map((d) => d.path),
+    )
     if (
       systemState.plannedFiles.size > 0 &&
       [...systemState.plannedFiles].some(
         (q) =>
-          !matchesPlannedPath(q, systemState.producedFiles) &&
+          !matchesPlannedPath(q, derivedPaths) &&
           !(systemState.existingFiles && matchesPlannedPath(q, systemState.existingFiles)),
       )
     ) {

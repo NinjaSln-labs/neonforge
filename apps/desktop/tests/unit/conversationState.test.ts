@@ -438,6 +438,14 @@ describe('Inv 4 无证据不对账——verifyCompletion/completionEvidenceCompl
     expect(r.missing).toContain('verification:grep x /test/a.js')
   })
 
+  it('全部 passed=false → 不构成可对账证据（completionEvidenceComplete 与 verifyCompletion 同源）', () => {
+    const c = claim({
+      evidence: evidence({ verification: [{ command: 'ls /test', passed: false }] }),
+    })
+    expect(completionEvidenceComplete(c.evidence)).toBe(false)
+    expect(deriveDecisionPoint(confirmed(), { completion: c })).toBe('none')
+  })
+
   it('混合：≥1 条可代跑 + unverifiable → ok=true 且进 resolution（ADR-011）', () => {
     const c = claim({
       evidence: evidence({
