@@ -44,6 +44,7 @@ let gatewayRetries = 0
 let networkFailuresInjected = 0
 let midstreamDropsInjected = 0
 let streamResets = 0
+let chatRequestsSeen = 0
 {
   const baseLog = console.log.bind(console)
   console.log = (...args) => {
@@ -196,17 +197,20 @@ function startMockServer() {
   let resolutionReworkSent = false
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
-      // 网络瞬态失败注入：按任务要求断开前 N 个 chat 请求的连接（undici fetch 抛 TypeError）。
-      // 网关对网络错误最多重试 2 次（共 3 击）；第 3 次请求正常走剧本。
-      if (
-        req.method === 'POST' &&
-        req.url.startsWith('/v1/chat/completions') &&
-        task.networkFailures &&
-        networkFailuresInjected < task.networkFailures
-      ) {
-        networkFailuresInjected++
-        req.destroy()
-        return
+      // 网络瞬态失败注入：按任务要求断开 chat 请求的连接（undici fetch 抛 TypeError）。
+      // networkFailureSkip：前 N 个成功进入路由的 chat 请求不注入（用于在对话中途制造断网，
+      // 而不是首轮就失败）。网关对网络错误最多重试 2 次（共 3 击）。
+      if (req.method === 'POST' && req.url.startsWith('/v1/chat/completions')) {
+        chatRequestsSeen++
+        if (
+          task.networkFailures &&
+          chatRequestsSeen > (task.networkFailuresSkip ?? 0) &&
+          networkFailuresInjected < task.networkFailures
+        ) {
+          networkFailuresInjected++
+          req.destroy()
+          return
+        }
       }
       // 流中途断开注入：先写若干 content delta（网关已 emitted=true）再销毁连接，
       // 触发 gateway 的 stream-reset + 重试分支（与连接前失败不同）。
