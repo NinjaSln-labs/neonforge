@@ -4,6 +4,7 @@
 
 Accepted（2026-08-31——用户拍板：全方位调研后重构，重构完成后再做 Mac 真机验证）
 修订 r2（2026-08-31——立项文档审计修正：拦截层归属/时序/Consequences 夸大/CAS 出 scope，见 stage-spec 附录审计记录）
+修订 r3（2026-11-24——设计与实现审计批次 5/6：确认 S3 降级已落地（标记不构造 proposals/不写 decisionContent、`protocol.text_fallback` + 引导改道）；`pendingCardToShow`/`goalFallbackTrigger` 等文本兜底**生产调用点仍在**（停止续聊/工具门控/渲染兜底），其完全退场按 Decision/S4 归 V1.5-S4，不计入领域决策点判定输入；补注册表遍历测试后逐事件**语义**断言仍为缺口）
 
 ## Context
 
