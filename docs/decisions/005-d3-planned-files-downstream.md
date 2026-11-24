@@ -1,6 +1,6 @@
 # ADR-005：PlannedFiles 权威下沉 main + 批准事实跨重启（D3）
 
-- 状态: accepted
+- 状态: accepted（2026-11-24 注：文中「任务状态机不跨重启」已被 ADR-013 取代——快照覆盖确认位/拒绝记忆/决策内容；本 ADR 的 main plannedFiles 权威语义仍然有效）
 - 日期: 2026-08-16
 - 相关: HANDOFF §3 D3（PlannedFiles 下沉 main——V2 规模）；docs/domain/04-tactical-design.md §1.3（PlannedFiles 聚合——Workspace BC 宿主强制边界数据源）/ §5（IPlannedFilesRepository 计划清单持久化）；docs/domain/00-domain-authority.md §5（计划清单由已确认 PlanProposal.files 派生——不变量 6）；未修 1（三基准分裂——S7 裁决并入 V2 规模）；stage-specs/D3.md
 
