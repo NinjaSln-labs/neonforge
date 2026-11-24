@@ -104,12 +104,15 @@
 - **已解决卡拒绝（「还要改」）返工任务（2026-11-24 03:15–03:30 UTC，任务集扩为 18）**：
   - 新增 `reject-resolution`（mock-only）：首轮写入草稿 DRAFT → 完成声明证据对账通过 → 已解决卡弹出；探针点「还要改」（`.nf-confirmcard__btn--no`，产品只预填输入框 `还要改一些地方：`、不发消息）→ 空闲 1.5 s 后探针代表用户发出返工要求 → 模型返工写入 RESOLUTION-OK → 第二次完成声明对账通过 → 第二个已解决卡由脚本确认。检查：返工后产物精确 + `resolutionRejects ≥ 1`。
   - mock：单任务 ×3 轮 **3/3**（`.../2026-11-23T19-24-27-552Z.jsonl`，8 s/轮），时间线实证 `card.rejected`（achievement/scope）→ 返工 → `card.resolved`；全量 18 任务 ×3 轮 **54/54**（`.../2026-11-23T19-25-08-027Z.jsonl`）；Mac 重建后 18 任务 ×2 轮 **36/36**（Mac `.../task-success-2026-11-23T19-36-18-268Z.jsonl`，`reject-resolution` 16 s）。
-- **网关网络失败任务（2026-11-24 03:55–05:30 UTC，任务集扩为 19 → 21）**：
+- **网关网络失败任务（2026-11-24 03:55–06:10 UTC，任务集扩为 19 → 22）**：
   - 新增 `network-retry`（mock-only 失败注入）：mock SSE 服务器对前 2 个 chat 请求直接 `req.destroy()`（undici `fetch` 抛 `TypeError: fetch failed`），网关 `streamChat` 对网络错误最多重试 2 次（共 3 击，间隔 400/800 ms），第 3 次尝试正常走剧本 → 目标/方案卡 → write → 完成对账 → 已解决。检查：产物精确 + 注入 ≥2 + 网关重试日志 ≥2（探针包裹同进程 main 的 `console.log` 计数「transient — retrying」行）。
   - mock：单任务 ×3 轮 **3/3**（`.../2026-11-23T19-52-48-218Z.jsonl`，6–8 s/轮；注入 2 次、重试 2 次后收口）；全量 19 任务 ×3 轮 **57/57**（`.../2026-11-23T19-53-11-493Z.jsonl`）；Mac 重建后 19 任务 ×2 轮 **38/38**（Mac `.../task-success-2026-11-23T19-59-37-805Z.jsonl`，`network-retry` 12 s）。
   - 追加 `network-exhausted`（第 20 任务，mock-only）：断开前 **3** 个 chat 请求 → 网关 3 击全部耗尽 → `streamChat` 抛错 → IPC 返回 `errorType=service` → renderer `finishError` 置错误气泡（时间线 `conversation.error` errorType=service、message `fetch failed`）→ 探针点气泡旁「重试」（`retryFailedTurn` 重放上一回合，不追加用户消息；mock 断开注入已耗尽）→ 目标/方案卡 → write → 已解决。检查：产物精确 + 注入 ≥3 + 网关重试日志 ≥2 + 重试点击 ≥1。
   - `network-exhausted` mock：单任务 ×3 轮 **3/3**（`.../2026-11-23T20-12-47-335Z.jsonl`，6–9 s/轮；重试按钮 1.4 s 出现）；全量 20 任务 ×3 轮 **60/60**（`.../2026-11-23T20-13-11-494Z.jsonl`）；Mac 重建后 20 任务 ×2 轮 **40/40**（Mac `.../task-success-2026-11-23T20-19-53-613Z.jsonl`，`network-exhausted` 13 s）。
-  - 追加 `network-midstream`（第 21 任务，mock-only）：首个 chat 请求先写一条 content delta（网关 `emitted=true`）再销毁连接 → 网关 `stream-reset`（清空半截流、提交「重试中…」阶段）→ 400 ms 后重试正常走剧本 → 已解决。检查：产物精确 + 断开 ≥1 + `[ipc] SEND stream-reset` ≥1 + 网关重试 ≥1 + **UI 无半截残留**（扫描所有 assistant 消息是否含中途注入文本）。 - `network-midstream` mock：单任务 ×3 轮 **3/3**（`.../2026-11-23T20-32-35-509Z.jsonl`，5 s/轮；中途断开 1 次、stream-reset 1 次、重试 1 次）；全量 21 任务 ×3 轮 **63/63**（`.../2026-11-23T20-32-49-172Z.jsonl`）；Mac 重建后 21 任务 ×2 轮 **42/42**（Mac `.../task-success-2026-11-23T20-40-10-935Z.jsonl`，`network-midstream` 12 s）。
+  - 追加 `network-midstream`（第 21 任务，mock-only）：首个 chat 请求先写一条 content delta（网关 `emitted=true`）再销毁连接 → 网关 `stream-reset`（清空半截流、提交「重试中…」阶段）→ 400 ms 后重试正常走剧本 → 已解决。检查：产物精确 + 断开 ≥1 + `[ipc] SEND stream-reset` ≥1 + 网关重试 ≥1 + **UI 无半截残留**（扫描所有 assistant 消息是否含中途注入文本）。
+  - `network-midstream` mock：单任务 ×3 轮 **3/3**（`.../2026-11-23T20-32-35-509Z.jsonl`，5 s/轮；中途断开 1 次、stream-reset 1 次、重试 1 次）；全量 21 任务 ×3 轮 **63/63**（`.../2026-11-23T20-32-49-172Z.jsonl`）；Mac 重建后 21 任务 ×2 轮 **42/42**（Mac `.../task-success-2026-11-23T20-40-10-935Z.jsonl`，`network-midstream` 12 s）。
+  - 追加 `network-auto-retry`（第 22 任务，mock-only）：放行前 3 个 chat 请求（目标轮/方案轮/写入轮）后在对话中途断开 ×3 → 网关重试耗尽 → renderer `finishError`（目标/方案已确认后的瞬态失败）**自动续跑一次**（等同点「重试」、不追加用户消息）→ 恢复完成 → 已解决。检查：产物精确 + 注入 ≥3 + 网关重试 ≥2 + **人工重试点击 = 0**（证明是产品自动续跑而非探针点击）。
+  - `network-auto-retry` mock：单任务 ×3 轮 **3/3**（`.../2026-11-24T04-29-04-819Z.jsonl`，6 s/轮）；全量 22 任务 ×3 轮 **66/66**（`.../2026-11-24T04-29-22-594Z.jsonl`）；Mac 重建后 22 任务 ×2 轮 **44/44**（Mac `.../task-success-2026-11-24T04-37-33-692Z.jsonl`，`network-auto-retry` 12 s）。
 - **拒绝路径任务（2026-11-23 11:50–13:00 UTC，任务集扩为 10）**：
   - 新增 `reject-goal`（目标被否 → 重新描述 → 确认 → 执行 → 已解决）、`reject-plan`（首个方案故意偏离 → 修改方案 → 修正方案执行，检查「偏离文件未创建」）、`reject-approval`（`bash` 写文件弹授权卡 → 拒绝 → 用户「继续」→ `approve-files` 批次批准 → `write` → 已解决）。
   - 探针新增拒绝/恢复驱动：按任务标记点第一次拒绝按钮（「重新描述」/「修改方案」/授权卡「拒绝」）；授权卡拒绝后空闲 2 s 发送「继续」；拒绝后模型追问方向时点第一个 `ask_user`/`<candidates>` 选项；ADR-010 强制澄清卡点「确认执行」继续 underlying。
@@ -127,11 +130,11 @@
 
 ## 限制
 
-- **固定剧本（基线部分）**：基线为 6 个短任务，2026-11-23 后扩为 21 个（新增顺序违规恢复任务 `direct-write-after-goal`、四个拒绝路径任务 `reject-goal`/`reject-plan`/`reject-approval`/`reject-resolution`、strict 任务 `strict-first-write` 与 delegated 任务 `delegated-edit`、「允许并记住」任务 `remember-edit`、bash 产出对账任务 `bash-produced-file`、mock-only 失败注入任务 `evidence-gap`/`tool-failure-recovery`/`network-retry`/`network-exhausted`/`network-midstream` 与根外写入约束任务 `root-out-write`）；mock 回复固定；不代表真实模型、长任务、多文件项目或网络。真实模型 pilot 是小样本探索，未计入基线。
+- **固定剧本（基线部分）**：基线为 6 个短任务，2026-11-23 后扩为 22 个（新增顺序违规恢复任务 `direct-write-after-goal`、四个拒绝路径任务 `reject-goal`/`reject-plan`/`reject-approval`/`reject-resolution`、strict 任务 `strict-first-write` 与 delegated 任务 `delegated-edit`、「允许并记住」任务 `remember-edit`、bash 产出对账任务 `bash-produced-file`、mock-only 失败注入任务 `evidence-gap`/`tool-failure-recovery`/`network-retry`/`network-exhausted`/`network-midstream`/`network-auto-retry` 与根外写入约束任务 `root-out-write`）；mock 回复固定；不代表真实模型、长任务、多文件项目或网络。真实模型 pilot 是小样本探索，未计入基线。
 - **脚本非人类**：无阅读时间、犹豫、误点、拒绝路径或中断/恢复；不产生 SUS/HEART 或真人审批数据。
 - **单机单版本**：WSL2+xvfb 与一台 2018 MacBook Pro；无 Windows、Apple Silicon 或其他 macOS 版本。
 - **信任模式部分覆盖**：`standard` 为默认全量基线；`strict` 已有 `strict-first-write` 任务（mock 与真实模型均通过）；`delegated` 已有 `delegated-edit` 任务（mock 36/36 中含该任务、真实模型通过，审计要求 write/edit 无授权卡且自动放行来源 delegate/auto）；「允许并记住」已有 `remember-edit` 任务（mock 与真实模型均通过）。
-- **拒绝路径、执行失败与网关网络失败已覆盖**：2026-11-23 起覆盖拒绝目标（`reject-goal`）、拒绝方案（`reject-plan`）、拒绝授权卡（`reject-approval`）及已解决卡「还要改」返工（`reject-resolution`，mock-only）与各拒绝后的恢复；证据不足回填（`evidence-gap`）、工具执行失败恢复（`tool-failure-recovery`）、网关网络瞬态断开 ×2 后重试恢复（`network-retry`）、断开 ×3 击穿重试预算后的错误气泡 + 点「重试」恢复（`network-exhausted`）与流中途断开 + stream-reset 清半截内容后重试（`network-midstream`，均为 mock-only）已有显式任务；未覆盖的是真实网络抖动/丢包、断网期间的多轮上下文语义与 Provider 侧（非连接层）错误体。
+- **拒绝路径、执行失败与网关网络失败已覆盖**：2026-11-23 起覆盖拒绝目标（`reject-goal`）、拒绝方案（`reject-plan`）、拒绝授权卡（`reject-approval`）及已解决卡「还要改」返工（`reject-resolution`，mock-only）与各拒绝后的恢复；证据不足回填（`evidence-gap`）、工具执行失败恢复（`tool-failure-recovery`）、网关网络瞬态断开 ×2 后重试恢复（`network-retry`）、断开 ×3 击穿重试预算后的错误气泡 + 点「重试」恢复（`network-exhausted`）、断开 ×3 击穿重试预算后的错误气泡 + 点「重试」恢复（`network-exhausted`）、流中途断开 + stream-reset 清半截内容后重试（`network-midstream`）与对话中途断网 3 击耗尽后的产品自动续跑恢复（`network-auto-retry`，均为 mock-only）已有显式任务；未覆盖的是真实网络抖动/丢包、断网期间的多轮上下文语义与 Provider 侧（非连接层）错误体。
 - **不是 SLO**：没有提案阈值对应「任务成功率」；本轮只建立基线。
 
 ## 安全与边界

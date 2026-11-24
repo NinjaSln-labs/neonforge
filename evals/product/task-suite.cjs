@@ -846,6 +846,46 @@ const TASKS = [
     mockOnly: true,
     midstreamDropOnce: true,
   },
+  {
+    id: 'network-auto-retry',
+    title: '对话中途断网：写入完成后请求 3 击耗尽 → 产品自动续跑一次恢复 → 已解决',
+    prompt: '创建 autoretry.txt，内容必须是 AUTO-RETRY-OK，不要其他内容。',
+    goal: '创建 autoretry.txt，内容为 AUTO-RETRY-OK。',
+    plan: {
+      summary: '新建 autoretry.txt 并写入指定内容',
+      files: [{ path: 'autoretry.txt', reason: '用户指定的交付文件' }],
+      verification: ['cat autoretry.txt 核对内容'],
+    },
+    rounds: [[{ name: 'write', args: { path: 'autoretry.txt', content: 'AUTO-RETRY-OK' } }]],
+    completion: {
+      summary: 'autoretry.txt 已创建并核验内容（对话中途断网后自动续跑成功）',
+      verification: [{ command: 'cat autoretry.txt', output: 'AUTO-RETRY-OK' }],
+    },
+    checks: [
+      fileCheck('autoretry.txt 内容精确', 'autoretry.txt', 'AUTO-RETRY-OK'),
+      {
+        name: '中途断网 3 击耗尽后无人工点击亦恢复（产品自动续跑）',
+        run: (_root, ctx) => {
+          const injected = ctx?.networkFailuresInjected ?? 0
+          const retries = ctx?.gatewayRetries ?? 0
+          const clicks = ctx?.networkRetryClicks ?? 0
+          return injected >= 3 && retries >= 2 && clicks === 0
+            ? {
+                ok: true,
+                detail: `写入后注入断开 ${injected} 次、网关重试 ${retries} 次；未人工点「重试」仍恢复完成`,
+              }
+            : {
+                ok: false,
+                detail: `注入 ${injected} 次 / 重试 ${retries} 次 / 人工点击 ${clicks} 次（要求 ≥3/≥2/0；自动续跑路径未触发）`,
+              }
+        },
+      },
+    ],
+    // 同上：连接断开注入依赖 mock，真实模式跳过。
+    mockOnly: true,
+    networkFailures: 3,
+    networkFailuresSkip: 3,
+  },
 ]
 
 function getTask(id) {

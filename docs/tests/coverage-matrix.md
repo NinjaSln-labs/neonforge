@@ -201,6 +201,7 @@
 | 根外写入不自动放行 | `authModel.test.ts`（根外路径标准/委托判定均拒绝——显式 trusted 仍放行）、`conversationState.test.ts`（derivePlannedFiles 传 rootPath 过滤根外条目）、`tools.test.ts`（委托词法根外即使 realpath 落回根内也拒绝）、`evals/product`：`root-out-write`（规划门控拦截 → 批次卡显式授权 → 执行） | ✅ |
 | 「允许并记住」任务信任路径 | `evals/product`：`remember-edit`（首个 edit 点记住 → 同文件第二次修改 `approvalSource=auto`、need-approval 仅 1 次；mock 45/45 与真实模型均通过） | ✅ |
 | 工具执行失败恢复（显式任务） | `evals/product`：`tool-failure-recovery`（mock-only：首个 edit 失败 → write 恢复；检查时间线 tool.failed ≥1 且产物精确） | ✅ |
+| 对话中途断网自动续跑 | `evals/product`：`network-auto-retry`（mock-only：放行前 3 个 chat 请求后在对话中途断开 ×3 → 网关重试耗尽 → renderer「目标/方案已确认后瞬态失败自动续跑一次」恢复 → 已解决；检查注入 ≥3 + 重试 ≥2 + 人工点击 = 0 + 产物精确） | ✅ |
 | 流中途断网（stream-reset 重置） | `evals/product`：`network-midstream`（mock-only：首个 chat 请求先写一条 content delta 再断开 → 网关 `stream-reset` → 400 ms 后重试 → 已解决；检查断开 ≥1 + `[ipc] SEND stream-reset` ≥1 + 重试 ≥1 + UI 无半截残留 + 产物精确） | ✅ |
 | 网关网络彻底不可达（重试预算耗尽） | `evals/product`：`network-exhausted`（mock-only：前 3 个 chat 请求被断开 → 网关 3 击全部耗尽 → 时间线 `conversation.error` errorType=service → 错误气泡「重试」→ 重放上一回合恢复 → 已解决；检查注入 ≥3 + 重试日志 ≥2 + 重试点击 ≥1 + 产物精确） | ✅ |
 | 网关网络瞬态失败重试 | `evals/product`：`network-retry`（mock-only：前 2 个 chat 请求被服务器断开（`fetch failed`）→ 网关 3 击重试（间隔 400/800 ms）→ 第 3 次恢复 → 已解决；检查注入 ≥2 + 网关「transient — retrying」日志 ≥2 + 产物精确） | ✅ |
