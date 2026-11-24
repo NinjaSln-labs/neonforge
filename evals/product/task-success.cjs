@@ -195,6 +195,9 @@ function startMockServer() {
   let rejectApprovalSent = false
   let evidenceBadSent = false
   let resolutionReworkSent = false
+  // 2026-11-24 平台校准：networkFailuresAfterWrite 任务以「写入轮已返回」为注入起点（不依赖请求计数），
+  // 保证 3 击耗尽发生在写入后的空闲回合（方案确认排队消息已消费，auto-continue 不被排队让位）。
+  let writeRoundSent = false
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
       // 网络瞬态失败注入：按任务要求断开 chat 请求的连接（undici fetch 抛 TypeError）。
@@ -202,10 +205,13 @@ function startMockServer() {
       // 而不是首轮就失败）。网关对网络错误最多重试 2 次（共 3 击）。
       if (req.method === 'POST' && req.url.startsWith('/v1/chat/completions')) {
         chatRequestsSeen++
+        const afterWriteWindow = task.networkFailuresAfterWrite && writeRoundSent
         if (
           task.networkFailures &&
-          chatRequestsSeen > (task.networkFailuresSkip ?? 0) &&
-          networkFailuresInjected < task.networkFailures
+          networkFailuresInjected < task.networkFailures &&
+          (afterWriteWindow ||
+            (!task.networkFailuresAfterWrite &&
+              chatRequestsSeen > (task.networkFailuresSkip ?? 0)))
         ) {
           networkFailuresInjected++
           req.destroy()
@@ -389,10 +395,12 @@ function startMockServer() {
         ) {
           // 顺序违规剧本：目标确认后不发 propose_plan，直接发 write（复现真机「待决策但无卡」形态）
           missequenceSent = true
+          writeRoundSent = true
           response = roundResponse(0)
         } else if (lastUser.includes('确认，按方案执行') && !writeSent) {
           // 方案确认后的首个动作轮：剧本 round 0（顺序违规任务里即被拦直写的重放）
           writeSent = true
+          writeRoundSent = true
           roundIndex = 1
           response = roundResponse(0)
         } else if (lastUser.includes('确认，目标清楚了') && !planSent) {
