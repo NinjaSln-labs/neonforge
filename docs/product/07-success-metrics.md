@@ -1,7 +1,7 @@
 # 07 — 产品成功指标（Success Metrics）
 
-> version: v1.2 · 2026-08-16（v1.1 · 2026-08-16；v1 · 2026-07-31）
-> 修订（v1.2）：第 16 轮审计 #3——补「执行转化率」指标（方案批准→首次写入——03 §2 衡量落地）
+> version: v1.3 · 2026-11-24（v1.2 · 2026-08-16；v1.1 · 2026-08-16；v1 · 2026-07-31）
+> 修订（v1.3）：2026-11-24 审计批次 4——数据来源改为**实际实现**（JSONL 时间线 + usage 记账）；逐项埋点现状标注（多数指标事件未接线，V1.5 延后，见 `00-product-design.md`「V1.5 明确延后」）。
 > 修订（v1.1）：意图确认重设计落地同步（第 5 轮产品文档审计 #1-#3）——补「确认交互质量」指标组（授权卡滞留率/方案修改率/证据核验通过率）+ 解决确认率（北极星口径对齐解决语义）+ 反指标澄清
 > 来源：write-spec 技能方法（leading/lagging）+ `.agents/product-marketing.md` 目标
 > 用途：0-1 验证的量化标尺；各阶段（Alpha/Beta/Full Launch）评估用。
@@ -75,6 +75,11 @@
 
 ## 6. 数据来源与工具
 
-- 事件埋点：本地 SQLite（对话/任务/用量已存）→ 增加 `events` 表（task/diff/preheat 计数）；
+**实现现状（2026-11-24 审计核实）**：
+
+- 事件埋点：**本地 JSONL**——时间线 `timeline-*.jsonl`（`src/domain/timeline.ts` 注册表，`src/main/timelineLogger.ts` 落盘）与用量 `usage.jsonl`（`src/main/usageStore.ts`）。**没有 SQLite `events` 表**（原文「对话/任务/用量已存 → 增加 events 表」是实现前的规划描述，已过期）。
+- 指标事件接线现状：`07` 所列 `task.started` / `task.written` / `diff.accepted` / `preheat.hit` / `project.created_nondev` / `project.preview_started` / `diff.accepted_summary` 在 `src` 中 **0 命中**（近似语义可由现有事件推导：`task.goal_confirmed` / `task.files_produced` / `plan.approved` / `changeset.applied`，但口径不同、未定义为指标）；`approval.requested` 别名不存在（授权卡以 `tool.failed needApproval:true` + 工具卡状态表达）。
+- 首 token 时延：产品运行时不测；已有独立探针基线（`docs/evals/baselines/2026-11-22-product-first-token-baseline.md` 等）。
+- 逐项埋点补齐与仪表视图列为 **V1.5 延后**（见 `00-product-design.md`「V1.5 明确延后」表）；在此之前，本文所列指标为**设计口径**而非已采集数据，不得对外宣称已有指标证据。
 - 问卷：Beta 期 PMF 问卷（NPS + 竞品迁移 + 推荐理由）；
-- 指标仪表：V1 不做 UI，开发期用脚本导出；V1.1 视需要加「用量」视图扩展。
+- 指标仪表：V1 不做 UI，开发期用脚本导出（基于上述 JSONL）；V1.1 视需要加「用量」视图扩展。
