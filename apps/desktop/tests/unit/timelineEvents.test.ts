@@ -88,6 +88,78 @@ describe('deriveStateEvents（转换 diff → 领域事件）', () => {
     const s = initialState()
     expect(deriveStateEvents(s, s)).toEqual([])
   })
+
+  // 2026-11-24 审计：确认位「掉落」不是拒绝——任务边界重置不得误发 *_rejected
+  it('解决确认重置 planConfirmed → 不发 task.plan_rejected（只发 resolution_confirmed）', () => {
+    const s = userConfirmed(userConfirmed(initialState(), 'goal'), 'plan')
+    const ach = userConfirmed(s, 'resolution')
+    const types = deriveStateEvents(s, ach).map((e) => e.type)
+    expect(types).toContain('task.resolution_confirmed')
+    expect(types).not.toContain('task.plan_rejected')
+  })
+
+  it('新目标确认重置 plan/resolution → 不发 plan_rejected/resolution_rejected', () => {
+    let s = userConfirmed(userConfirmed(initialState(), 'goal'), 'plan')
+    s = userConfirmed(s, 'resolution')
+    const newGoalPending = setPending(s, 'goal')
+    // goalConfirmed 已为 true（重确认）——确认位无「上升」，必须靠转换原因（cause）发事件
+    const newGoal = userConfirmed(newGoalPending, 'goal')
+    const types = deriveStateEvents(newGoalPending, newGoal, {
+      action: 'confirm',
+      point: 'goal',
+    }).map((e) => e.type)
+    expect(types).toContain('task.goal_confirmed')
+    expect(types).not.toContain('task.plan_rejected')
+    expect(types).not.toContain('task.resolution_rejected')
+  })
+
+  it('初始目标/方案的普通拒绝（false→false）仍发对应 rejection 事件', () => {
+    const s = initialState()
+    const pendingGoal = setPending(s, 'goal')
+    const rejectedGoal = userRejected(pendingGoal, 'goal', { kind: 'direction' })
+    const goalTypes = deriveStateEvents(pendingGoal, rejectedGoal, {
+      action: 'reject',
+      point: 'goal',
+    }).map((e) => e.type)
+    expect(goalTypes).toContain('task.goal_rejected')
+    expect(
+      deriveStateEvents(pendingGoal, rejectedGoal, { action: 'reject', point: 'goal' }).find(
+        (e) => e.type === 'task.goal_rejected',
+      )?.detail.reason,
+    ).toEqual({ kind: 'direction' })
+
+    const planPending = setPending(userConfirmed(initialState(), 'goal'), 'plan')
+    const planRejected = userRejected(planPending, 'plan', { kind: 'scope' })
+    expect(
+      deriveStateEvents(planPending, planRejected, { action: 'reject', point: 'plan' }).map(
+        (e) => e.type,
+      ),
+    ).toContain('task.plan_rejected')
+  })
+
+  it('确认转换不误发拒绝（cause=confirm 即使确认位掉落）', () => {
+    const s = userConfirmed(userConfirmed(initialState(), 'goal'), 'plan')
+    const ach = userConfirmed(s, 'resolution')
+    const types = deriveStateEvents(s, ach, { action: 'confirm', point: 'resolution' }).map(
+      (e) => e.type,
+    )
+    expect(types).toContain('task.resolution_confirmed')
+    expect(types).not.toContain('task.plan_rejected')
+    expect(types).not.toContain('task.resolution_rejected')
+  })
+
+  it('解决卡「还要改」（resolution 仍为 false 的拒绝）发 task.resolution_rejected', () => {
+    let s = userConfirmed(userConfirmed(initialState(), 'goal'), 'plan')
+    s = userConfirmed(s, 'resolution')
+    const pending = setPending(s, 'resolution')
+    const rejected = userRejected(pending, 'resolution', { kind: 'scope' })
+    const types = deriveStateEvents(pending, rejected, {
+      action: 'reject',
+      point: 'resolution',
+    }).map((e) => e.type)
+    expect(types).toContain('task.resolution_rejected')
+    expect(types).toContain('decision.resolved')
+  })
 })
 
 describe('validateTimelineEvent（注册表——A2 接入约束）', () => {
