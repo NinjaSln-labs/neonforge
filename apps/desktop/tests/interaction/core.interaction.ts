@@ -290,6 +290,12 @@ test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 1
           return () => {}
         },
       },
+      // 2026-11-24 审计：空方案清单不再放行 write/edit——本测试用 strict 模式 + 真实方案清单，
+      // 使清单内 write/edit 仍需授权（保留「合并授权」测试意图）
+      trust: {
+        get: async () => 'strict',
+        set: async (mode: string) => ({ ok: true, mode }),
+      },
       delivery: {
         applyDiff: async () => ({ ok: true, file: '/test/a.txt' }),
         revertDiff: async () => ({ ok: true }),
@@ -359,9 +365,22 @@ test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 1
     page.locator('.nf-msg--assistant .nf-msg__body').filter({ hasText: '搭档处理中' }),
   ).toBeVisible({ timeout: 5000 })
   await page.evaluate(() => {
-    // 方案征询文本（textAskPlan → userRequested='plan' 信号——非标记产卡；V1.5 S3 后方案标记
-    // 走降级引导——此处只用征询文本触发执行确认卡）
-    window.__emit({ type: 'content', text: '好的，方案如下，等你确认。' })
+    // 2026-11-24 审计：空方案清单不再放行 write/edit——先提结构化方案（清单含 a.txt/b.txt），
+    // 用户确认执行后 write/edit 仍需授权（strict 模式——合并授权测试意图不变）
+    window.__emit({
+      type: 'tool-call',
+      toolCall: {
+        name: 'propose_plan',
+        args: {
+          summary: '批量整理 a.txt / b.txt',
+          files: [
+            { path: 'a.txt', reason: '整理 a' },
+            { path: 'b.txt', reason: '整理 b' },
+          ],
+          verification_plan: [],
+        },
+      },
+    })
     window.__emit({ type: 'done' })
   })
   await expect(page.getByRole('button', { name: '确认执行' })).toBeVisible()
@@ -384,11 +403,11 @@ test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 1
   await expect(page.locator('.nf-toolcall__note').first()).toContainText('备份')
   // 疲劳防护：同批 ≥2 低危待授权 → 合并授权按钮出现
   await expect(page.locator('.nf-toolcall__approveall')).toBeVisible()
-  // 点击合并授权 → 授权卡消失（2 个执行完成 + 第一次 pending 拦截的 2 个「未执行」+ propose_goal 工具卡
-  // = 共 5 done——V1.5 S3 工具化：协议工具渲染为 done 卡；领域语义：确认前动作无效残留显示）
+  // 点击合并授权 → 授权卡消失（2 个执行完成 + 第一次 pending 拦截的 2 个「未执行」+ propose_goal/propose_plan
+  // 协议工具卡 = 共 6 done——V1.5 S3 工具化：协议工具渲染为 done 卡；领域语义：确认前动作无效残留显示）
   await page.locator('.nf-toolcall__approveall').click()
   await page.waitForTimeout(600)
-  await expect(page.locator('.nf-toolcall--done')).toHaveCount(5)
+  await expect(page.locator('.nf-toolcall--done')).toHaveCount(6)
   await expect(page.locator('.nf-toolcall__approveall')).toHaveCount(0)
 })
 
@@ -1164,12 +1183,18 @@ test('0-1 授权 v4 完整路径：允许并记住 → 同文件自动 → 新�
         initProject: async () => ({ ok: true, path: '/test', title: 't' }),
         updateProjectTitle: async () => ({ ok: true }),
       },
+      // 2026-11-24 审计：空方案清单不再放行 write/edit——strict 模式下清单内 write 仍需授权，
+      // 「允许并记住」的 trusted 分支仍放行同文件后续写入（授权 v4 语义不变）
+      trust: {
+        get: async () => 'strict',
+        set: async (mode: string) => ({ ok: true, mode }),
+      },
       gateway: {
         validate: async () => ({ ok: true }),
         streamChat: async () => {
           chatCount++
           setTimeout(() => {
-            // chatCount：1=需求消息、2=确认推进 send（都回 content）；3-5=执行确认后的 3 次 write；6=收尾 content
+            // chatCount：1=需求消息、2=确认推进 send（回方案）；3-5=执行确认后的 3 次 write；6=收尾 content
             // 2026-08-14 S2b：chat#2 带「等确认」语义（A0：执行确认=确认「怎么做」——方案已给才有确认对象；
             // 原「收到，继续。」无方案 → 状态机正确不弹卡 → 测试死等）
             if (chatCount === 1) {
@@ -1177,10 +1202,18 @@ test('0-1 授权 v4 完整路径：允许并记住 → 同文件自动 → 新�
               // 原「收到，继续。」无总结语义 → 正确不弹 → 测试死等
               streamCb?.({ type: 'content', text: '你的需求是做网页游戏——就按这个做，行不行？' })
             } else if (chatCount === 2) {
-              // 方案征询 + 方案标记占位（无文件行 → C3 不置清单——确认执行后 write 走授权卡——授权 v4 场景）
+              // 2026-11-24 审计：空方案清单不再放行 write/edit——chat#2 提结构化方案（清单含 index.html），
+              // 确认执行后 write 走授权卡（strict 模式 + 任务信任——授权 v4 场景不变）
               streamCb?.({
-                type: 'content',
-                text: '方案如下：写 index.html 游戏页面，等你确认。\n【执行方案】',
+                type: 'tool-call',
+                toolCall: {
+                  name: 'propose_plan',
+                  args: {
+                    summary: '写 index.html 游戏页面',
+                    files: [{ path: 'index.html', reason: '游戏页面' }],
+                    verification_plan: [],
+                  },
+                },
               })
             } else if (chatCount >= 3 && chatCount <= 5) {
               const w = writes[chatCount - 3]

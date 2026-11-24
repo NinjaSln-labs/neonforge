@@ -657,12 +657,17 @@ export function sessionGate(
       reason: '方案未确认——先输出【执行方案】清单（文件+原因）等用户确认（确认后工具才放行）',
     }
   }
-  // A0 §3.5：方案已确认 → 按计划清单判定（write/edit 新建/清单外 → 拒绝；清单空则无边界）
-  if (
-    (action.name === 'write' || action.name === 'edit') &&
-    s.plannedFiles.size > 0 &&
-    !inPlannedFiles(s, action)
-  ) {
+  // A0 §3.5：方案已确认 → 按计划清单判定（write/edit 新建/清单外 → 拒绝）
+  // 2026-11-24 审计修复：原实现「清单为空 → 无文件边界」允许确认空方案后任意写——
+  // 与设计「方案确认后写入必须在清单内」不符。空清单 = 没有可执行的文件计划，write/edit 一律拒绝，
+  // 模型需重新 propose_plan 列出文件（bash 等非文件动作不受此条约束）。
+  if ((action.name === 'write' || action.name === 'edit') && s.plannedFiles.size === 0) {
+    return {
+      ok: false,
+      reason: '批准方案清单为空——先重新 propose_plan 列出要写的文件，用户确认后再动手',
+    }
+  }
+  if ((action.name === 'write' || action.name === 'edit') && !inPlannedFiles(s, action)) {
     const approved = [...s.plannedFiles].map((p) => p.split('/').pop()).join('、')
     return {
       ok: false,
@@ -791,11 +796,9 @@ export function canExecute(
 ): ExecuteGateResult {
   const gate = sessionGate(s, action)
   if (!gate.ok) return { ...gate, deniedBy: 'session-gate' }
-  // 清单为空（无计划）→ 无文件边界（写放行由确认点把关——继承现状语义）
-  const effectiveInPlanned =
-    (action.name === 'write' || action.name === 'edit') && s.plannedFiles.size === 0
-      ? true
-      : inPlanned
+  // 2026-11-24 审计：清单为空不再等同于「无文件边界」——sessionGate 已拒绝空清单方案下的 write/edit；
+  // 这里保持 inPlanned 原样（空清单时唯一能到达的非文件动作不受影响）。
+  const effectiveInPlanned = inPlanned
   // 先算动作属性（纯函数）——拒绝记忆/策略 deny 的事件载荷复用同一判定（不重复 classify）
   const verdict = actionGate(action, effectiveInPlanned, policy)
   // S7（A0 审校 P1-2 接线——§3.4 C6 短封）：拒绝记忆——同任务内被拒绝的同类动作直接 deny
