@@ -182,6 +182,20 @@ describe('verifyCompletion（V1a 系统复核 + V1b diff 派生——S2 扩展�
     expect(r.missing).toContain('diff:planned-not-produced')
   })
 
+  it('V1b：消费 systemState.deriveDiffs——派生结果为空时即使 producedFiles 非空也判 missing（契约接线）', () => {
+    const st = mockSystemState({ 'ls src': { ok: true } })
+    st.deriveDiffs = () => []
+    const c = claim({
+      evidence: {
+        verification: [{ command: 'ls src', passed: true }],
+        diffs: [],
+        pendingQuestions: [],
+      },
+    })
+    const r = verifyCompletion(c, st)
+    expect(r.missing).toContain('diff:planned-not-produced')
+  })
+
   it('systemState 缺省 = 纯逻辑判定（S1 兼容——不代跑不派生）', () => {
     const c = claim({
       evidence: {

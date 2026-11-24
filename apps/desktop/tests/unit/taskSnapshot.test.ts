@@ -184,7 +184,7 @@ describe('taskSnapshot（A1 Task 跨重启快照）', () => {
     })
     expect(restored).not.toBeNull()
     expect(restored?.decisionContent).toBeUndefined()
-    expect(restored?.lastRejectReason).toBeUndefined()
+    expect(restored?.lastRejectReason).toBeNull()
     expect(restored?.pending).toBe('none')
   })
 

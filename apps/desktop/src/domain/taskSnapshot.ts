@@ -37,7 +37,7 @@ export interface TaskSnapshot {
   decisionContent?: DecisionContent
   deniedApprovals: DeniedApproval[]
   rejectStreak: number
-  lastRejectReason?: RejectReason
+  lastRejectReason?: RejectReason | null
   pendingRepeatCount: number
   unresolvedTextReplies: number
 }
@@ -95,7 +95,7 @@ export function toTaskSnapshot(state: ConversationState): TaskSnapshot {
       subject: d.subject,
     })),
     rejectStreak: state.rejectStreak,
-    ...(state.lastRejectReason ? { lastRejectReason: state.lastRejectReason } : {}),
+    lastRejectReason: state.lastRejectReason ?? null,
     pendingRepeatCount: state.pendingRepeatCount,
     unresolvedTextReplies: state.unresolvedTextReplies,
   }
@@ -299,7 +299,7 @@ export function fromTaskSnapshot(raw: unknown): ConversationState | null {
     ...(decisionContent ? { decisionContent } : {}),
     deniedApprovals,
     rejectStreak: raw.rejectStreak,
-    ...(lastRejectReason ? { lastRejectReason } : {}),
+    lastRejectReason: lastRejectReason ?? null,
     pendingRepeatCount: raw.pendingRepeatCount,
     unresolvedTextReplies: raw.unresolvedTextReplies,
   }

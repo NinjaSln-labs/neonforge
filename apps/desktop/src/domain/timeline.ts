@@ -343,7 +343,11 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
   'card.resolved': { domain: 'card', role: 'system', detailKeys: ['card', 'action'] },
   'card.rejected': { domain: 'card', role: 'system', detailKeys: ['card', 'action'] },
   'card.dismissed': { domain: 'card', role: 'system', detailKeys: ['card', 'cause'] },
-  'decision.requested': { domain: 'decision', role: 'system', detailKeys: ['kind', 'since'] },
+  'decision.requested': {
+    domain: 'decision',
+    role: 'system',
+    detailKeys: ['kind', 'since', 'content'],
+  },
   'decision.resolved': {
     domain: 'decision',
     role: 'system',
@@ -522,9 +526,15 @@ export function deriveStateEvents(
   // —— 决策点（领域视图——设计 §3.5；与 card.* 并存：card=UI 卡生命周期，decision=领域决策点）——
   if (prev.pending === 'none' && next.pending !== 'none') {
     events.push({ type: 'session.pending_set', detail: { kind: next.pending } })
+    // 2026-11-24 审计：decision.requested 带决策点内容快照（design §3.5「用户当时看到了什么」——
+    // 原载荷只有 kind/since，事后无法审计确认卡/方案/证据内容）
     events.push({
       type: 'decision.requested',
-      detail: { kind: next.pending, since: next.decisionContent?.since ?? '' },
+      detail: {
+        kind: next.pending,
+        since: next.decisionContent?.since ?? '',
+        ...(next.decisionContent ? { content: next.decisionContent } : {}),
+      },
     })
   }
   if (prev.pending !== 'none' && next.pending === 'none') {

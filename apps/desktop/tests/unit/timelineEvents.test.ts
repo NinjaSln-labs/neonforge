@@ -239,6 +239,8 @@ describe('deriveStateEvents（decision.* 领域决策点事件——设计 §3.5
     const evt = events.find((e) => e.type === 'decision.requested')
     expect(evt?.detail.kind).toBe('goal')
     expect(evt?.detail.since).toBe('t1')
+    // 2026-11-24 审计：决策点内容快照随事件入时间线（「用户当时看到了什么」可事后审计）
+    expect(evt?.detail.content).toEqual(next.decisionContent)
     // 与 session.pending_set 并存（领域视图 + 会话视图——§3.5 两层语义）
     expect(events.map((e) => e.type)).toContain('session.pending_set')
   })
