@@ -203,7 +203,7 @@ ActionAttribute {
 
 ### 4.1 推进的判定（与 StuckDetector 同源——2026-08-16 同步）
 
-`TurnProgress` 扩展：**有副作用工具成功 / 新 read / 结构化提议输出 / 完成声明带证据** 均算推进。「只说不做」判定从「无工具调用」改为「无推进」（防模型输出提议被判停滞→escalate 打断合法链——坑 99 教训）。
+`TurnProgress` 扩展：**有副作用工具成功 / 新 read / 结构化提议输出 / 完成声明带证据** 均记录为「活动」。**判定「推进」不等于「活动」**（2026-08-06 定案，2026-11-24 文档对齐）：`detectStuck` 与 `decideProgressGuarantee` 只把 **产出（write/edit）/ 副作用工具成功 / 结构化提议 / 带证据完成声明** 算推进；「新 read」保留在 `TurnProgress.readNewFile` 供诊断，但**不重置停滞计数**（行业共识 activity ≠ progress；防模型连续 read 不同文件假装推进——L3「连续 3 轮 read 必须 escalate」锁定）。「只说不做」判定从「无工具调用」改为「无推进」（防模型输出提议被判停滞→escalate 打断合法链——坑 99 教训）。
 
 ### 4.2 完成证据（2026-08-16 新增——学术共识：self-verification 不可靠，完成判定必须对账外部证据）
 
