@@ -316,6 +316,9 @@ export default function ConversationPanel({
   // 2026-08-14 S2b：授权等待接入状态机单一 PENDING（pending='approval'——A0 §3.2 授权卡同属会话级 pending）
   // 2026-08-15 D5：互斥——确认卡 pending（goal/execution/achievement——done 分支 setPending 置位）优先，
   // 授权卡 pending 只在当前无确认卡 pending 时置位（A0：pending 只有一个——决策点互斥，用户先处理先弹的卡）
+  // 2026-11-24 审计裁定（双路径）：授权卡 pending 由本 effect 对消息工具卡对账置位（不是 deriveDecisionPoint
+  // 的 approval 分支）——授权内容在工具卡自身（decisionContent.approval 非必需），先到决策点优先；
+  // 领域纯函数仍保留 approval 分支供可提供 pendingActions 的调用方使用（见 00-domain-authority §3.3）。
   useEffect(() => {
     // 等会话恢复完成：首渲染 messages 还是空数组，若此时按快照 pending 对账会先清掉 approval 再经
     // transition 重建（派生 pending_set/decision.requested 假事件）。恢复后 messages 与任务态一致再对账。
