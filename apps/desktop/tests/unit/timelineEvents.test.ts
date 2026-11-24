@@ -224,6 +224,13 @@ describe('dedupeKey / detectProposed（2026-08-15 补齐）', () => {
     expect(detectProposed('我先看看项目结构。')).toEqual([])
     expect(detectProposed('')).toEqual([])
   })
+
+  it('事件注册表包含 conversation.auto_continue（自动续跑可断言——审计批次 3）', () => {
+    expect(TIMELINE_EVENT_SPECS['conversation.auto_continue']).toMatchObject({
+      domain: 'conversation',
+      detailKeys: ['errorType', 'reason'],
+    })
+  })
 })
 
 // 2026-08-16 意图确认重设计 S1（Q1 审计修复）：decision.requested/resolved 事件派生锁定（三步登记第 3 步）

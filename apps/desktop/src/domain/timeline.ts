@@ -138,6 +138,7 @@ export type TimelineEventType =
   // —— 元事件（运行时可观测——诊断/状态）——
   | 'conversation.status_change' // working/ready/approval-pending 变化
   | 'conversation.error' // 错误链路（errorType/message）
+  | 'conversation.auto_continue' // 已确认后瞬态失败的一次自动续跑（载荷：errorType/reason——证明产品自动续跑）
   | 'execution.force_input' // forceTool 输入快照（取证——planned/produced/projectFiles 三集合）
 
 // === 事件注册表（schema——新增事件三步：登记 → emit → 测试；dev 校验防散落） ===
@@ -399,6 +400,11 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
   },
   'conversation.status_change': { domain: 'conversation', role: 'system', detailKeys: ['status'] },
   'conversation.error': { domain: 'conversation', role: 'system', detailKeys: ['errorType'] },
+  'conversation.auto_continue': {
+    domain: 'conversation',
+    role: 'system',
+    detailKeys: ['errorType', 'reason'],
+  },
   'execution.force_input': {
     domain: 'execution',
     role: 'system',

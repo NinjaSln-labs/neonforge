@@ -54,10 +54,11 @@ function delegateAuditCheck() {
       const denied = ctx?.delegateDenials ?? 0
       const fileDenied = ctx?.fileApprovalDenials ?? 0
       if (denied > 0) return { ok: false, detail: `委托执行被边界拦截 ${denied} 次` }
-      if (n + autoFiles < 1)
+      // 2026-11-24 审计断言强化：必须出现 approvalSource=delegate——纯 trusted auto 不能替代委托来源
+      if (n < 1)
         return {
           ok: false,
-          detail: '时间线未记录 write/edit 的自动批准执行（approvalSource=delegate/auto）',
+          detail: '时间线未记录 write/edit 的 approvalSource=delegate（委托来源未验证）',
         }
       // bash 永不委托（高危始终逐次授权）——真实模型用 bash 读文件时的授权卡不算违例。
       if (fileDenied > 0)
@@ -117,7 +118,16 @@ const TASKS = [
       summary: 'approved.txt 已创建并核验内容',
       verification: [{ command: 'cat approved.txt', output: 'APPROVED-OK' }],
     },
-    checks: [fileCheck('approved.txt 内容精确', 'approved.txt', 'APPROVED-OK')],
+    checks: [
+      fileCheck('approved.txt 内容精确', 'approved.txt', 'APPROVED-OK'),
+      {
+        name: 'approve-files 批次授权卡确实出现并批准（fileApprovalClicks ≥1）',
+        run: (_root, ctx) =>
+          (ctx?.fileApprovalClicks ?? 0) >= 1
+            ? { ok: true, detail: `批次授权卡批准 ${ctx.fileApprovalClicks} 次` }
+            : { ok: false, detail: '未出现 approve-files 批次授权卡（未走批量授权路径）' },
+      },
+    ],
   },
   {
     id: 'script-bash',
@@ -310,7 +320,16 @@ const TASKS = [
       summary: 'direct.txt 已创建并核验内容',
       verification: [{ command: 'cat direct.txt', output: 'DIRECT-OK' }],
     },
-    checks: [fileCheck('direct.txt 内容精确', 'direct.txt', 'DIRECT-OK')],
+    checks: [
+      fileCheck('direct.txt 内容精确', 'direct.txt', 'DIRECT-OK'),
+      {
+        name: '首写（未提方案）确实被门控拦截（blockedWrites ≥1）',
+        run: (_root, ctx) =>
+          (ctx?.blockedWrites ?? 0) >= 1
+            ? { ok: true, detail: `首写被拦截 ${ctx.blockedWrites} 次后走恢复路径` }
+            : { ok: false, detail: '目标确认后直接 write 未被拦截（顺序违规路径未触发）' },
+      },
+    ],
     // 顺序违规剧本：mock 在「目标确认」后先发直接 write（跳过 propose_plan）——复现 2026-11-23
     // 真机 approve-files-write 的 301 s 停等（pending=plan 但占位卡未渲染）；恢复路径 approve-files。
     missequence: 'write-before-plan',
@@ -330,7 +349,16 @@ const TASKS = [
       summary: 'strict.txt 已创建并核验内容',
       verification: [{ command: 'cat strict.txt', output: 'STRICT-OK' }],
     },
-    checks: [fileCheck('strict.txt 内容精确', 'strict.txt', 'STRICT-OK')],
+    checks: [
+      fileCheck('strict.txt 内容精确', 'strict.txt', 'STRICT-OK'),
+      {
+        name: 'strict 档清单内 write 未自动放行（必须出现逐次授权卡 needApprovalClicks ≥1）',
+        run: (_root, ctx) =>
+          (ctx?.needApprovalClicks ?? 0) >= 1
+            ? { ok: true, detail: `逐次授权卡批准 ${ctx.needApprovalClicks} 次后执行` }
+            : { ok: false, detail: 'strict 档 write 未出现授权卡（可能被自动放行）' },
+      },
+    ],
     // 信任模式覆盖：要求本任务在 strict 档下运行（探针 --trust-mode strict 或任务标记）。
     trustMode: 'strict',
   },
@@ -351,7 +379,16 @@ const TASKS = [
       summary: 'refused.txt 已创建并核验内容',
       verification: [{ command: 'cat refused.txt', output: 'REFUSED-OK' }],
     },
-    checks: [fileCheck('refused.txt 内容精确', 'refused.txt', 'REFUSED-OK')],
+    checks: [
+      fileCheck('refused.txt 内容精确', 'refused.txt', 'REFUSED-OK'),
+      {
+        name: '目标拒绝路径确实触发（goalRejects ≥1）',
+        run: (_root, ctx) =>
+          (ctx?.goalRejects ?? 0) >= 1
+            ? { ok: true, detail: `目标拒绝 ${ctx.goalRejects} 次后重提并确认` }
+            : { ok: false, detail: '未记录目标拒绝（拒绝路径未触发）' },
+      },
+    ],
     // 拒绝路径剧本：拒绝后必须能恢复（重提 → 确认 → 执行 → 已解决）。
     rejection: 'goal',
   },
@@ -378,6 +415,13 @@ const TASKS = [
     },
     checks: [
       fileCheck('planrefused.txt 内容精确', 'planrefused.txt', 'PLAN-OK'),
+      {
+        name: '方案拒绝路径确实触发（planRejects ≥1）',
+        run: (_root, ctx) =>
+          (ctx?.planRejects ?? 0) >= 1
+            ? { ok: true, detail: `方案拒绝 ${ctx.planRejects} 次后修正并确认` }
+            : { ok: false, detail: '未记录方案拒绝（拒绝路径未触发）' },
+      },
       {
         name: '偏离文件未创建',
         run: (root) => {
@@ -422,7 +466,19 @@ const TASKS = [
       summary: 'authrefused.txt 已创建并核验内容',
       verification: [{ command: 'cat authrefused.txt', output: 'AUTH-OK' }],
     },
-    checks: [fileCheck('authrefused.txt 内容精确', 'authrefused.txt', 'AUTH-OK')],
+    checks: [
+      fileCheck('authrefused.txt 内容精确', 'authrefused.txt', 'AUTH-OK'),
+      {
+        name: '授权卡拒绝路径确实触发（approvalRejects ≥1）',
+        run: (_root, ctx) =>
+          (ctx?.approvalRejects ?? 0) >= 1
+            ? { ok: true, detail: `授权卡拒绝 ${ctx.approvalRejects} 次后改走批量授权` }
+            : { ok: false, detail: '未记录授权卡拒绝（拒绝路径未触发）' },
+      },
+    ],
+    // 拒绝剧本固定「首次授权卡拒绝 → 继续 → 批量授权」；真实模型可能直接 approve-files 或 write，
+    // 无法强制拒绝卡出现——真实模式跳过（不纳入真实成绩）。
+    mockOnly: true,
     // 拒绝路径剧本：首次授权卡拒绝 → 用户要求继续 → approve-files → 写入 → 已解决。
     rejection: 'approval',
   },
@@ -553,14 +609,17 @@ const TASKS = [
         run: (_root, ctx) => {
           // 修前：方案内根外 write 被 standard 自动批准 → 无门控拦截、无授权点击，直接写成功。
           // 修后：首个直写被规划门控拦截；之后 approve-files 批次卡授权（trusted 放行）属显式授权语义。
-          if ((ctx?.policyBlockedWrites ?? 0) > 0)
+          if ((ctx?.autoFileExecutions ?? 0) > 0)
+            return {
+              ok: false,
+              detail: `根外 write 出现 ${ctx.autoFileExecutions} 次自动批准执行（应始终弹卡/拦截）`,
+            }
+          if ((ctx?.blockedWrites ?? 0) > 0)
             return {
               ok: true,
-              detail: `根外 write 被规划门控拦截 ${ctx.policyBlockedWrites} 次、未被自动放行；继续路径经显式授权`,
+              detail: `根外 write 被门控拦截 ${ctx.blockedWrites} 次、未被自动放行；继续路径经显式授权`,
             }
-          if ((ctx?.needApprovalClicks ?? 0) >= 1)
-            return { ok: true, detail: '根外 write 经逐次授权卡批准后执行' }
-          return { ok: false, detail: '根外 write 既未弹授权卡、也无规划门控拦截记录' }
+          return { ok: false, detail: '根外 write 未被门控拦截（可能被自动放行）' }
         },
       },
       {
@@ -787,6 +846,13 @@ const TASKS = [
     checks: [
       fileCheck('netdown.txt 内容精确', 'netdown.txt', 'NET-DOWN-OK'),
       {
+        name: '3 击耗尽后暴露服务错误事件（conversation.error errorType=service ≥1）',
+        run: (_root, ctx) =>
+          (ctx?.serviceErrors ?? 0) >= 1
+            ? { ok: true, detail: `服务错误事件 ${ctx.serviceErrors} 次` }
+            : { ok: false, detail: '时间线未记录 errorType=service 的错误（错误气泡未暴露）' },
+      },
+      {
         name: '3 击耗尽后错误气泡出现且「重试」成功恢复（retryClicks ≥1）',
         run: (_root, ctx) => {
           const injected = ctx?.networkFailuresInjected ?? 0
@@ -867,6 +933,13 @@ const TASKS = [
     checks: [
       fileCheck('autoretry.txt 内容精确', 'autoretry.txt', 'AUTO-RETRY-OK'),
       {
+        name: '产品自动续跑事件确实触发（conversation.auto_continue ≥1）',
+        run: (_root, ctx) =>
+          (ctx?.autoContinues ?? 0) >= 1
+            ? { ok: true, detail: `自动续跑事件 ${ctx.autoContinues} 次` }
+            : { ok: false, detail: '时间线未记录产品自动续跑（零点击可能只是网关重试预算更长）' },
+      },
+      {
         name: '中途断网 3 击耗尽后无人工点击亦恢复（产品自动续跑）',
         run: (_root, ctx) => {
           const injected = ctx?.networkFailuresInjected ?? 0
@@ -888,6 +961,7 @@ const TASKS = [
     mockOnly: true,
     networkFailures: 3,
     networkFailuresSkip: 3,
+    expectAutoContinue: true,
   },
 ]
 

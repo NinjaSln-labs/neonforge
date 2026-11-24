@@ -953,8 +953,11 @@ function collectDelegateAudit() {
     fileApprovalDenials: 0,
     bashApprovalCards: 0,
     policyBlockedWrites: 0,
+    blockedWrites: 0,
     evidenceMissing: 0,
     toolFailures: 0,
+    serviceErrors: 0,
+    autoContinues: 0,
   }
   let names = []
   try {
@@ -999,7 +1002,17 @@ function collectDelegateAudit() {
         else if (toolName === 'bash') audit.bashApprovalCards++
       } else if (evt?.type === 'tool.blocked' && detail.gate === 'policy') {
         // 规划门控（policy）拦截的 write——用于根外任务判「写入被拦截且未自动放行」。
-        if (String(detail.name ?? '') === 'write') audit.policyBlockedWrites++
+        if (String(detail.name ?? '') === 'write') {
+          audit.policyBlockedWrites++
+          audit.blockedWrites++
+        }
+      } else if (evt?.type === 'tool.blocked' && String(detail.name ?? '') === 'write') {
+        // 任意门（pending/confirm/gate/out-of-plan）拦截的 write——顺序违规任务判「首写确实被拦」。
+        audit.blockedWrites++
+      } else if (evt?.type === 'conversation.error' && detail.errorType === 'service') {
+        audit.serviceErrors++
+      } else if (evt?.type === 'conversation.auto_continue') {
+        audit.autoContinues++
       } else if (
         evt?.type === 'tool.failed' &&
         detail.needApproval !== true &&
@@ -1018,7 +1031,8 @@ async function waitForDelegateAudit() {
   const deadline = Date.now() + 3000
   const stillWaiting = () =>
     (task.expectDelegateAudit && audit.delegateExecutions + audit.autoFileExecutions === 0) ||
-    (task.expectEvidenceGap && audit.evidenceMissing === 0)
+    (task.expectEvidenceGap && audit.evidenceMissing === 0) ||
+    (task.expectAutoContinue && audit.autoContinues === 0)
   while (stillWaiting() && Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 100))
     audit = collectDelegateAudit()
@@ -1067,6 +1081,10 @@ async function run() {
     fileApprovalClicks: driven?.stages?.fileApprovalClicks ?? 0,
     rememberClicks: driven?.stages?.rememberClicks ?? 0,
     resolutionRejects: driven?.stages?.resolutionRejects ?? 0,
+    goalRejects: driven?.stages?.goalRejects ?? 0,
+    planRejects: driven?.stages?.planRejects ?? 0,
+    approvalRejects: driven?.stages?.approvalRejects ?? 0,
+    forcedClicks: driven?.stages?.forcedClicks ?? 0,
     gatewayRetries,
     networkFailuresInjected,
     networkRetryClicks: driven?.stages?.networkRetryClicks ?? 0,
