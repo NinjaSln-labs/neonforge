@@ -307,8 +307,11 @@ describe('Inv 3 门控顺序——sessionGate × actionGate 双维正交', () =>
     expect(r.reason).toContain('a.js') // 拒绝回填带清单内容
   })
 
-  it('sessionGate：清单为空（无计划）→ 无文件边界（写放行由确认点把关）', () => {
-    expect(sessionGate(confirmed(), { name: 'write', path: '/test/any.js' }).ok).toBe(true)
+  it('sessionGate：清单为空（空方案）→ write/edit 拒绝（要求重新列出文件）', () => {
+    // 2026-11-24 审计：原实现「空清单无边界」允许确认空方案后任意写
+    const r = sessionGate(confirmed(), { name: 'write', path: '/test/any.js' })
+    expect(r.ok).toBe(false)
+    expect(r.reason).toContain('清单为空')
   })
 
   it('actionGate：只读/清单内/网络只读(localhost) 自动放行——拍板 3', () => {
@@ -364,7 +367,11 @@ describe('Inv 3 门控顺序——sessionGate × actionGate 双维正交', () =>
     expect(frozen.ok).toBe(false)
     // ADR-016：拒绝来源结构化——session-gate 不属于 gate.denied 发送范围
     expect(frozen.deniedBy).toBe('session-gate')
-    expect(canExecute(confirmed(), { name: 'write', path: '/test/a.js' }, true).ok).toBe(true)
+    // 2026-11-24 审计：空方案清单下的 write 被 sessionGate 拒绝（需先列出文件）
+    expect(canExecute(confirmed(), { name: 'write', path: '/test/a.js' }, true).ok).toBe(false)
+    expect(canExecute(confirmed(), { name: 'write', path: '/test/a.js' }, true).reason).toContain(
+      '清单为空',
+    )
     const withPlan = approvalGranted(confirmed(), ['/test/a.js'])
     expect(canExecute(withPlan, { name: 'write', path: '/test/a.js' }, true).ok).toBe(true)
     // sessionGate 拒绝带边界（清单内容）——先于 actionGate
