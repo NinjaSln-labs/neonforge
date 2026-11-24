@@ -2,6 +2,7 @@
 
 > 每个可复用 UI 组件的所有状态、尺寸、行为和用法。
 > 组件命名采用 BEM 风格：`nf-{component}__{element}--{modifier}`
+> 2026-11-24 审计批次 4：本文中 ErrorBanner / Notification / Skeleton / ConfirmStrip / PageCard / Switch / QuickCommand 等组件规格与 Flow 6 交付包逐处 diff 视图为 **V1.5 延后**（见 `00-product-design.md`「V1.5 明确延后」）；已实现组件（确认卡 RejectReasonPicker、交付包基础视图、信任阶梯）以 `apps/desktop/src/renderer` 现实为准。
 
 ---
 
