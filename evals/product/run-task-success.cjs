@@ -233,16 +233,26 @@ async function main() {
   mkdirSync(path.dirname(outPath), { recursive: true })
   const g = gitInfo()
   let selected = opts.tasks ? TASKS.filter((t) => opts.tasks.includes(t.id)) : TASKS
-  if (opts.mode === 'real') {
-    const skipped = selected.filter((t) => t.mockOnly)
-    if (skipped.length > 0) {
-      selected = selected.filter((t) => !t.mockOnly)
-      console.log(
-        `SKIP ${skipped.map((t) => t.id).join(',')} — mock-only 失败注入任务，真实模式不运行`,
-      )
+  const skipReason = (task) => {
+    if (opts.mode === 'real' && task.mockOnly) {
+      return 'mock-only 失败注入任务，真实模式不运行'
     }
-    if (selected.length === 0) throw new Error('没有可运行的任务：所选任务均为 mock-only')
+    // 需要人工授权卡的任务在 delegated 模式语义不适用：计划内 write/edit 自动放行，卡不会出现。
+    const effectiveMode = task.trustMode || opts.trustMode
+    if (task.needsApprovalCard && effectiveMode === 'delegated') {
+      return '需要授权卡任务，delegated 模式计划内 edit 自动放行（语义不适用）'
+    }
+    return null
   }
+  const skippedTasks = selected
+    .map((task) => ({ task, reason: skipReason(task) }))
+    .filter((x) => x.reason)
+  if (skippedTasks.length > 0) {
+    selected = selected.filter((t) => !skipReason(t))
+    for (const x of skippedTasks) console.log(`SKIP ${x.task.id} — ${x.reason}`)
+  }
+  if (selected.length === 0)
+    throw new Error('没有可运行的任务：所选任务均被跳过（mock-only/delegated 语义）')
   const meta = {
     type: 'meta',
     timestamp: new Date().toISOString(),

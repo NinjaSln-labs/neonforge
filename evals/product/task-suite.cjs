@@ -641,6 +641,9 @@ const TASKS = [
     // 「允许并记住」= 任务信任路径（trusted → autoApprovalSource 'auto'）——首个卡点点记住按钮。
     rememberOnce: true,
     expectDelegateAudit: true,
+    // 需要人工授权卡：delegated 模式计划内 edit 自动放行（ADR-015：委托语义），卡不会出现——
+    // 运行器在 delegated 下按此标记跳过本任务（语义不适用，不是产品缺陷）。
+    needsApprovalCard: true,
   },
   {
     id: 'tool-failure-recovery',
