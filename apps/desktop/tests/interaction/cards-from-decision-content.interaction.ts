@@ -650,6 +650,32 @@ test('S7-3：授权卡待批时用户打字「批准」→ 自动批准（approv
   await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(0, { timeout: 10000 })
 })
 
+// 2026-11-24 审计：文本/批量批准不得把高危调用混进「全部」——多待批时只批低危文件，bash 留卡
+test('S7-4：多待批（edit+bash）时打字「批准」→ 只批低危 edit，bash 授权卡保留', async ({
+  page,
+}) => {
+  await installMockBridge(page, {
+    project: 'none',
+    approval: 'all',
+    script: compose(
+      goalConfirm('做一个待办应用'),
+      planPropose(['/test/a.ts（核心）', '/test/b.ts（状态）']),
+      [[toolCall.edit('/test/b.ts', 'a', 'b'), toolCall.bash('npm install three'), chunk.done()]],
+    ),
+  })
+  await startFromScratch(page, '做个待办应用')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  await page.getByRole('button', { name: '确认执行' }).click()
+  // 两个授权卡（edit + bash）
+  await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(2, { timeout: 10000 })
+  await sendChat(page, '批准')
+  // 低危 edit 被文本批准；bash 高危仍在待授权（必须逐项点卡）
+  await expect(page.locator('.nf-toolcall--need-approval')).toHaveCount(1, { timeout: 10000 })
+  await expect(page.locator('.nf-toolcall--need-approval .nf-toolcall__name')).toContainText('bash')
+})
+
 // D3（ADR-005）：PlannedFiles 权威下沉 main——恢复接线（load）+ 批准链（add）+ 任务边界重置（reset）
 // 恢复窗口语义（ADR-005）：目标确认 = 任务边界（领域层清清单——铁律）——恢复价值窗口 = 未确认新目标前
 // （刷新/重开同一会话）+ main 门控跨重启一致（syncPlanApprovedFromStore——L1 tools 门控测试承载）

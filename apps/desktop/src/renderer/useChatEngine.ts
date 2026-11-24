@@ -666,6 +666,8 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
         ) {
           // S7（C2 完善——e2e-0to1 场景 B）：approval 期确认文本 → 自动批准当前待批授权卡
           // （真实用户打字「行/批准」——确认卡时代只处理按钮批准遗漏文本批准）
+          // 2026-11-24 审计：文本批准与「允许全部」走同一门——只批低危文件操作（写/改）；
+          // bash 等高危调用必须逐项点卡（与卡片「高危永远单独确认」一致）。
           const lastMsg = messagesRef.current[messagesRef.current.length - 1]
           if (lastMsg?.role === 'assistant' && lastMsg.toolCalls?.length) {
             getApproveAllToolCalls()(lastMsg.toolCalls)
@@ -857,8 +859,11 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
     messagesRef.current = nextMsgs
     setMessages(nextMsgs)
     // 目标或方案已确认后的瞬态失败：一次自动续跑（等同点「重试」——不追加用户消息）
+    // ADR-011 §6：条件是「已确认 goal 或 plan **且 pending=none**」——决策点等待期间失败不得自动续跑
+    //（2026-11-24 审计修复：原实现缺 pending 判定，pending 回合的失败会与待决策轮叠加）
     if (
       errorType === 'service' &&
+      stateRef.current.pending === 'none' &&
       (stateRef.current.goalConfirmed || stateRef.current.planConfirmed) &&
       !autoRetriedServiceRef.current
     ) {
