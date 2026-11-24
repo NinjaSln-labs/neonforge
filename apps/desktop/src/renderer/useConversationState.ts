@@ -24,7 +24,7 @@ import {
   type PlanProposal,
   type SystemClarifyProposal,
 } from '../domain/conversationState'
-import { deriveStateEvents } from '../domain/timeline'
+import { deriveStateEvents, type StateTransitionCause } from '../domain/timeline'
 import { fromTaskSnapshot } from '../domain/taskSnapshot'
 
 export type ConfirmPoint = 'goal' | 'plan' | 'resolution' | 'system_clarify'
@@ -60,12 +60,17 @@ export function useConversationState(opts?: UseConversationStateOpts) {
   // A-005：转换后强制重渲染计数（ref 变化不触发渲染——卡隐藏/内容切换依赖响应式；
   // rejectedCardIdx 移除后由 version 驱动；读 stateRef 的渲染点消费 `version`）
   const [version, setVersion] = useState(0)
-  const transition = (fn: (s: ConversationState) => ConversationState): void => {
+  const transition = (
+    fn: (s: ConversationState) => ConversationState,
+    cause?: StateTransitionCause,
+  ): void => {
     const prev = stateRef.current
     stateRef.current = fn(prev)
     // DDD：转换后 diff 派生领域事件（状态机可回放——G1 缺口闭环）
+    // 2026-11-24 审计：确认/拒绝必须携带转换原因——纯 diff 无法区分「确认重置」与「拒绝」，
+    // 也无法看到初始确认位 false→false 的拒绝（原实现据此漏发/误发 task.*_rejected）。
     if (emit) {
-      for (const evt of deriveStateEvents(prev, stateRef.current)) {
+      for (const evt of deriveStateEvents(prev, stateRef.current, cause)) {
         emit(evt.type, evt.detail)
       }
     }
@@ -101,7 +106,10 @@ export function useConversationState(opts?: UseConversationStateOpts) {
     confirm: async (point: ConfirmPoint) => {
       const before = stateRef.current
       const target = effectivePoint(point, before)
-      const r = transition((s) => userConfirmed(s, point, opts?.rootPath))
+      const r = transition((s) => userConfirmed(s, point, opts?.rootPath), {
+        action: 'confirm',
+        point: target,
+      })
       if (target === 'plan') {
         await syncPlanMirror(true)
         // BC-14：确认前的 decisionContent 是方案快照；确认时派生验收记录（无来源则记录为空）
@@ -119,7 +127,10 @@ export function useConversationState(opts?: UseConversationStateOpts) {
     reject: async (point: ConfirmPoint, reason: RejectReason) => {
       const before = stateRef.current
       const target = effectivePoint(point, before)
-      const r = transition((s) => userRejected(s, point, reason))
+      const r = transition((s) => userRejected(s, point, reason), {
+        action: 'reject',
+        point: target,
+      })
       // 审计修正（stage-review-2026-08-31 Spec-3）：plan 拒绝 → main 镜像复位（否则硬序门仍开）
       if (target === 'plan') await syncPlanMirror(false)
       return r

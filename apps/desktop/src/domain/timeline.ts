@@ -427,24 +427,98 @@ export interface DerivedStateEvent {
   detail: Record<string, unknown>
 }
 
+/** 转换原因（应用层在唯一写入口传入——确认/拒绝不能只靠确认位 diff 推断：
+ * goal 重确认时 goalConfirmed 已为 true，确认位无「上升」；而任务边界重置会让确认位掉落。 */
+export interface StateTransitionCause {
+  action: 'confirm' | 'reject'
+  point: 'goal' | 'plan' | 'resolution' | 'approval' | 'system_clarify'
+}
+
+const TASK_DECISION_POINTS = new Set(['goal', 'plan', 'resolution'])
+
 export function deriveStateEvents(
   prev: ConversationState,
   next: ConversationState,
+  cause?: StateTransitionCause,
 ): DerivedStateEvent[] {
   const events: DerivedStateEvent[] = []
   // —— 确认点（Task 聚合——意图确认重设计 S1：execution→plan / achievement→resolution 语义更名）——
-  if (!prev.goalConfirmed && next.goalConfirmed)
-    events.push({ type: 'task.goal_confirmed', detail: { point: 'goal' } })
-  if (prev.goalConfirmed && !next.goalConfirmed)
-    events.push({ type: 'task.goal_rejected', detail: { point: 'goal' } })
-  if (!prev.planConfirmed && next.planConfirmed)
-    events.push({ type: 'task.plan_confirmed', detail: { point: 'plan' } })
-  if (prev.planConfirmed && !next.planConfirmed)
-    events.push({ type: 'task.plan_rejected', detail: { point: 'plan' } })
-  if (!prev.resolutionConfirmed && next.resolutionConfirmed)
-    events.push({ type: 'task.resolution_confirmed', detail: { point: 'resolution' } })
-  if (prev.resolutionConfirmed && !next.resolutionConfirmed)
-    events.push({ type: 'task.resolution_rejected', detail: { point: 'resolution' } })
+  // 2026-11-24 审计修复：确认位「掉落」不等于用户拒绝——goal 确认会重置 plan/resolution，
+  // resolution 确认会重置 plan（任务边界语义）。原实现把任何 true→false 都发 *_rejected，
+  // 导致解决确认/新目标确认时误发 plan_rejected/resolution_rejected；而初始目标/方案的普通拒绝
+  // 是 false→false，反而从不发事件。现在：
+  //   - 确认转换：一律不发拒绝事件（确认不会同时是拒绝；边界重置不是拒绝）；
+  //   - 拒绝转换（cause 明确）：在 pending 清除/或直接拒绝处显式补发 task.*_rejected（覆盖 false→false）；
+  //   - 无 cause（纯 diff 调用/测试）：以「更高层确认刚置真」判定边界重置，不发误报。
+  const goalJustConfirmed = !prev.goalConfirmed && next.goalConfirmed
+  const planJustConfirmed = !prev.planConfirmed && next.planConfirmed
+  const resolutionJustConfirmed = !prev.resolutionConfirmed && next.resolutionConfirmed
+  const confirmCause = cause?.action === 'confirm' ? cause.point : undefined
+  const rejectCause =
+    cause?.action === 'reject' && TASK_DECISION_POINTS.has(cause.point)
+      ? (cause.point as 'goal' | 'plan' | 'resolution')
+      : undefined
+  const rejectedPoints = new Set<'goal' | 'plan' | 'resolution'>()
+  const confirmedPoints = new Set<'goal' | 'plan' | 'resolution'>()
+  const pushConfirmation = (point: 'goal' | 'plan' | 'resolution'): void => {
+    if (confirmedPoints.has(point)) return
+    confirmedPoints.add(point)
+    const type =
+      point === 'goal'
+        ? 'task.goal_confirmed'
+        : point === 'plan'
+          ? 'task.plan_confirmed'
+          : 'task.resolution_confirmed'
+    events.push({ type, detail: { point } })
+  }
+  const pushRejection = (point: 'goal' | 'plan' | 'resolution'): void => {
+    if (rejectedPoints.has(point)) return
+    rejectedPoints.add(point)
+    const type =
+      point === 'goal'
+        ? 'task.goal_rejected'
+        : point === 'plan'
+          ? 'task.plan_rejected'
+          : 'task.resolution_rejected'
+    events.push({
+      type,
+      detail: {
+        point,
+        ...(next.lastRejectReason ? { reason: next.lastRejectReason } : {}),
+      },
+    })
+  }
+  if (!prev.goalConfirmed && next.goalConfirmed) pushConfirmation('goal')
+  if (prev.goalConfirmed && !next.goalConfirmed && !confirmCause) {
+    pushRejection('goal')
+  }
+  if (!prev.planConfirmed && next.planConfirmed) pushConfirmation('plan')
+  if (
+    prev.planConfirmed &&
+    !next.planConfirmed &&
+    !confirmCause &&
+    !goalJustConfirmed &&
+    !resolutionJustConfirmed
+  ) {
+    pushRejection('plan')
+  }
+  if (!prev.resolutionConfirmed && next.resolutionConfirmed) pushConfirmation('resolution')
+  if (
+    prev.resolutionConfirmed &&
+    !next.resolutionConfirmed &&
+    !confirmCause &&
+    !goalJustConfirmed &&
+    !planJustConfirmed
+  ) {
+    pushRejection('resolution')
+  }
+  // 确认 cause：确认位已为 true 的重确认（goal 重提议/plan 重确认）也要记录事件
+  //（纯 diff 只看到「没有上升」——ADR-006 目标重确认场景会漏）
+  if (confirmCause && TASK_DECISION_POINTS.has(confirmCause)) {
+    pushConfirmation(confirmCause as 'goal' | 'plan' | 'resolution')
+  }
+  // 拒绝 cause：显式补发（覆盖初始确认位 false→false / goal 重确认等 diff 不可见的拒绝）
+  if (rejectCause) pushRejection(rejectCause)
   // —— 决策点（领域视图——设计 §3.5；与 card.* 并存：card=UI 卡生命周期，decision=领域决策点）——
   if (prev.pending === 'none' && next.pending !== 'none') {
     events.push({ type: 'session.pending_set', detail: { kind: next.pending } })
@@ -492,6 +566,9 @@ export function deriveStateEvents(
           ...(!confirmed && next.lastRejectReason ? { reason: next.lastRejectReason } : {}),
         },
       })
+      // 2026-11-24 审计修复：普通拒绝（初始确认位 false→false）diff 不可见——按 decision.resolved
+      // 的同一判定显式补发（确认不发；与确认位 diff 通过 rejectedPoints 去重）。
+      if (confirmed === false) pushRejection(effective as 'goal' | 'plan' | 'resolution')
     }
   }
   // —— PlannedFiles：批准清单追加（plan.approved）——
