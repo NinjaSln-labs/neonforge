@@ -4,6 +4,8 @@
 //   node evals/product/run-task-success.cjs
 //   node evals/product/run-task-success.cjs --tasks write-single,script-bash
 //   node evals/product/run-task-success.cjs --repeat 3
+//   node evals/product/run-task-success.cjs --tasks delegated-edit --trust-override standard \
+//     --expect-fail --expect-fail-check "delegate" --repeat 3   # standard 负控（必须失败）
 //
 // 每个任务 = 一个独立 Electron 应用进程、隔离 HOME/userData；本地 mock 模型按固定剧本
 // 驱动真实产品流程。结果是产品编排成功率（非模型能力、非人类研究）。
@@ -30,6 +32,12 @@ function parseArgs(argv) {
     mode: 'mock',
     out: null,
     trustMode: null,
+    // 负控用：显式覆盖任务自带 trustMode（任务定义优先于 --trust-mode——负控需要反例）
+    trustOverride: null,
+    // 负控（2026-11-24 审计缺口关闭）：--expect-fail 要求全部运行失败；
+    // --expect-fail-check 要求失败原因包含给定子串（例如 standard 负控的 "delegate"）
+    expectFail: false,
+    expectFailCheck: null,
   }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
@@ -39,6 +47,9 @@ function parseArgs(argv) {
     else if (a === '--timeout-ms') opts.timeoutMs = Number(argv[++i])
     else if (a === '--out') opts.out = argv[++i]
     else if (a === '--trust-mode') opts.trustMode = argv[++i]
+    else if (a === '--trust-override') opts.trustOverride = argv[++i]
+    else if (a === '--expect-fail') opts.expectFail = true
+    else if (a === '--expect-fail-check') opts.expectFailCheck = argv[++i]
     else throw new Error(`unknown arg ${a}`)
   }
   if (opts.tasks) {
@@ -53,8 +64,23 @@ function parseArgs(argv) {
   if (!['mock', 'real'].includes(opts.mode)) throw new Error(`unknown mode ${opts.mode}`)
   if (opts.trustMode && !['strict', 'standard', 'delegated'].includes(opts.trustMode))
     throw new Error(`unknown trust mode ${opts.trustMode}`)
+  if (opts.trustOverride && !['strict', 'standard', 'delegated'].includes(opts.trustOverride))
+    throw new Error(`unknown trust override ${opts.trustOverride}`)
+  if (opts.expectFailCheck && !opts.expectFail)
+    throw new Error('--expect-fail-check requires --expect-fail')
   opts.repeat = Math.max(1, opts.repeat)
   return opts
+}
+
+function rowPasses(row, opts) {
+  if (!opts.expectFail) return !!row.ok
+  // 负控：必须失败，且（若指定）失败检查名包含子串——防基础设施错误冒充负控成功
+  if (row.ok) return false
+  const failedChecks = (row.checks || []).filter((c) => !c.ok)
+  if (opts.expectFailCheck) {
+    return failedChecks.some((c) => String(c.name || '').includes(opts.expectFailCheck))
+  }
+  return true
 }
 
 function gitInfo() {
@@ -122,6 +148,8 @@ async function runOneTask(task, opts, stamp, outPath) {
   }
   if (opts.trustMode) env.NF_TASK_SUCCESS_TRUST_MODE = opts.trustMode
   if (task.trustMode) env.NF_TASK_SUCCESS_TRUST_MODE = task.trustMode
+  // 负控覆盖：任务自带 trustMode 之上再显式覆盖（如 delegated-edit 用 standard 跑反例）
+  if (opts.trustOverride) env.NF_TASK_SUCCESS_TRUST_MODE = opts.trustOverride
   if (opts.mode === 'real') {
     env.NEONFORGE_API_KEY = realKey
     env.NF_TASK_SUCCESS_REAL = '1'
@@ -196,8 +224,23 @@ async function runOneTask(task, opts, stamp, outPath) {
     stderrTail: stderr.slice(-2000),
     ...result,
   }
+  const controlPass = opts.expectFail ? rowPasses(row, opts) : null
+  if (opts.expectFail)
+    row.control = {
+      expectedFail: true,
+      matched: controlPass,
+      expectFailCheck: opts.expectFailCheck,
+    }
   appendFileSync(outPath, JSON.stringify(row) + '\n')
-  const status = row.ok ? 'PASS' : 'FAIL'
+  const status = opts.expectFail
+    ? controlPass
+      ? 'EXPECTED-FAIL'
+      : row.ok
+        ? 'UNEXPECTED-PASS'
+        : 'FAIL-CHECK-MISMATCH'
+    : row.ok
+      ? 'PASS'
+      : 'FAIL'
   const detail = row.error
     ? ` — ${String(row.error).split('\n')[0]}`
     : row.checks
@@ -238,7 +281,7 @@ async function main() {
       return 'mock-only 固定剧本任务（真实模型无法强制复现该路径），真实模式不运行'
     }
     // 需要人工授权卡的任务在 delegated 模式语义不适用：计划内 write/edit 自动放行，卡不会出现。
-    const effectiveMode = task.trustMode || opts.trustMode
+    const effectiveMode = opts.trustOverride || task.trustMode || opts.trustMode
     if (task.needsApprovalCard && effectiveMode === 'delegated') {
       return '需要授权卡任务，delegated 模式计划内 edit 自动放行（语义不适用）'
     }
@@ -278,13 +321,15 @@ async function main() {
     }
   }
 
-  const passed = rows.filter((r) => r.ok).length
+  const passed = rows.filter((r) => rowPasses(r, opts)).length
   const failed = rows.length - passed
   const summary = {
     type: 'summary',
     timestamp: new Date().toISOString(),
     git: g,
     options: meta.options,
+    expectFail: opts.expectFail,
+    expectFailCheck: opts.expectFailCheck,
     runs: rows.length,
     tasks: selected.length,
     passed,
@@ -296,7 +341,7 @@ async function main() {
         id: task.id,
         title: task.title,
         runs: taskRows.length,
-        passed: taskRows.filter((r) => r.ok).length,
+        passed: taskRows.filter((r) => rowPasses(r, opts)).length,
         stages: taskRows.map((r) => r.stages),
         errors: taskRows.filter((r) => !r.ok).map((r) => r.error),
       }
@@ -307,6 +352,7 @@ async function main() {
   appendFileSync(outPath, JSON.stringify(summary) + '\n')
   console.log(
     `\nSUMMARY ${passed}/${rows.length} 通过（${failed} 失败）` +
+      (opts.expectFail ? ' [负控：期望失败]' : '') +
       ` human=false ${opts.mode === 'real' ? 'real-model-product-flow' : 'mock-protocol-product-flow'}` +
       `\nout: ${outPath}`,
   )

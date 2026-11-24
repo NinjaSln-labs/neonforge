@@ -14,11 +14,16 @@ node evals/product/run-task-success.cjs --repeat 3 --timeout-ms 120000
 # 信任模式覆盖（strict/standard/delegated；任务自带 trustMode 时以任务为准）
 node evals/product/run-task-success.cjs --tasks strict-first-write --trust-mode strict
 node evals/product/run-task-success.cjs --tasks delegated-edit --trust-mode delegated
+# standard 负控（2026-11-24 审计关闭的编码缺口）：任务自带 delegated，覆盖为 standard 必须失败
+# 且失败检查名含 "delegate"——防基础设施错误冒充负控通过
+node evals/product/run-task-success.cjs --tasks delegated-edit --trust-override standard \
+  --expect-fail --expect-fail-check delegate --repeat 3
 # 真实模型 pilot（凭据只从环境变量读取，不写值；默认 http://127.0.0.1:3425/v1）
 node evals/product/run-task-success.cjs --mode real --tasks approve-files-write --timeout-ms 600000
 ```
 
 - 退出码：`0` 全部通过；`1` 有任务失败；`2` 参数/环境错误。
+- 负控模式：`--expect-fail` 反转通过判定（全部运行必须以「期望失败」收口）；`--expect-fail-check <子串>` 进一步要求失败检查名包含该子串——失败行标记 `EXPECTED-FAIL`，意外通过标记 `UNEXPECTED-PASS`，失败但检查不匹配标记 `FAIL-CHECK-MISMATCH`。`--trust-override` 在任务自带 `trustMode` 之上强制覆盖信任档（负控专用）。
 - 跳过语义：`real` 模式跳过 `mockOnly` 固定剧本任务（9 个）；`delegated` 信任模式跳过标记 `needsApprovalCard` 的任务（`remember-edit`——计划内 edit 自动放行、卡不会出现，按 ADR-015 委托语义该任务不适用，不是产品缺陷）。全部所选任务被跳过时运行器报错退出。
 - **非人类**：mock 剧本固定，点击由脚本完成；`real` 模式虽由真实模型生成工具调用，但仍是固定剧本驱动与小样本 pilot，不代表模型能力或真人任务成功率。
 - 授权卡出现时脚本点「允许执行」；剧本内清单写由产品默认 `standard` 信任模式自动放行。拒绝路径任务（`reject-*`）按任务标记点第一次出现的拒绝按钮（目标「重新描述」/ 方案「修改方案」/ 授权卡「拒绝」/ 已解决卡「还要改」），之后由脚本代表用户发送恢复文本（「继续」或返工要求），验证拒绝后产品能回到正向流程并完成。`reject-resolution` 的产品行为是只预填输入框、不发消息，因此探针在空闲后发送 `还要改：…` 文本，驱动返工动作与第二次完成声明。
