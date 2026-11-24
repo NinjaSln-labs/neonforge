@@ -653,6 +653,25 @@ async function clickSelector(wc, selector) {
   )
 }
 
+/** 拒绝原因选择器（RejectReasonPicker）：在 scope 内选指定 kind 并点「确认拒绝」。
+ * 2026-11-24 审计：拒绝按钮两段式（先展开选择器）——脚本必须给出真实 kind 才提交。 */
+async function pickRejectReason(wc, scope, kind) {
+  return wc.executeJavaScript(
+    `(() => {
+      const root = document.querySelector(${JSON.stringify(scope)});
+      if (!root) return false;
+      const radio = root.querySelector('input[type="radio"][value="${kind}"]');
+      if (!radio) return false;
+      radio.click();
+      const submit = [...root.querySelectorAll('button')].find((b) => (b.textContent || '').includes('确认拒绝'));
+      if (!submit || submit.disabled) return false;
+      submit.click();
+      return true;
+    })()`,
+    true,
+  )
+}
+
 async function driveToResolution(wc) {
   const stages = {
     startedMs: 0,
@@ -709,6 +728,15 @@ async function driveToResolution(wc) {
           : '[aria-label="确认目标"] .nf-confirmcard__btn--ok'
       const clicked = await clickSelector(wc, selector)
       if (clicked) {
+        // 2026-11-24 审计：拒绝按钮现在先展开 RejectReasonPicker（非模态）——脚本选原因并「确认拒绝」
+        //（原一线点击即 reject；拒绝原因由用户真实选择，链路需要两步证据）
+        // reject-goal：direction（重新描述方向）——默认选第一项；
+        // reject-plan：设计规定「修改方案」直接 modify（不展开选择器）；
+        // reject-resolution：scope（还要改=范围调整）——选择对应 kind。
+        if (task.rejection === 'goal' && !goalRejectedOnce) {
+          // 目标拒绝：选择器选 direction（重新描述方向）→ 确认拒绝
+          await pickRejectReason(wc, '[aria-label="确认目标"] .nf-rejectpicker', 'direction')
+        }
         goalClicked = true
         goalClicks++
         if (task.rejection === 'goal' && !goalRejectedOnce) {
@@ -778,6 +806,8 @@ async function driveToResolution(wc) {
       const clicked = await clickSelector(wc, selector)
       if (clicked) {
         if (task.rejectResolutionOnce && !resolutionRejectedOnce) {
+          // 2026-11-24 审计：两段式——展开 RejectReasonPicker → 选 scope（还要改=范围调整）→ 确认拒绝
+          await pickRejectReason(wc, '[aria-label="确认达成"] .nf-rejectpicker', 'scope')
           resolutionRejectedOnce = true
           stages.resolutionRejectedMs = at
           stages.resolutionRejects = 1
