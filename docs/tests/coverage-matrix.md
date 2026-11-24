@@ -200,7 +200,7 @@
 | 旧 localStorage 开关迁移 | `useTrustPolicy.test.ts`（读取不写标记、'1'→delegated、'0'→standard、main 成功后才删键、已迁移幂等、存储抛错不阻塞） | ✅ |
 | 设置页三档切换 + 委托仅计划内放行 | `trustModes.interaction.ts`（设置页切换持久化/旧键迁移删除、delegated 清单内 edit 自动且来源 delegate、strict 清单内 write 仍弹授权卡） | ✅ |
 | 委托模式全量任务回归 | `evals/product`：`--trust-mode delegated` 跑全量任务集（任务级 `trustMode` 优先），21 个可运行任务 ×3 轮 63/63；`remember-edit` 因依赖人工授权卡标记 `needsApprovalCard`（委托下计划内 edit 自动放行、卡不出现——ADR-015 语义跳过，非缺陷）；默认 standard 22×3 66/66 无回归 | ✅ |
-| 任务套信任模式（strict / delegated） | `evals/product`：`strict-first-write`（`trustMode: 'strict'`、授权卡 1 次后写入）、`delegated-edit`（`trustMode: 'delegated'`、时间线 `approvalSource=delegate`、write/edit 无授权卡；standard 负控必失败） | ✅ |
+| 任务套信任模式（strict / delegated） | `evals/product`：`strict-first-write`（`trustMode: 'strict'`、授权卡 1 次后写入）、`delegated-edit`（`trustMode: 'delegated'`、时间线 `approvalSource=delegate`、write/edit 无授权卡；standard 负控必失败——`--trust-override standard --expect-fail --expect-fail-check delegate`，2026-11-24 编码进运行器） | ✅ |
 | 证据不足对账回填（显式任务） | `evals/product`：`evidence-gap`（mock-only 失败注入：首次声明引用不存在证据 → `completion.evidence_missing` → 【系统对账】回填 → 已解决；检查时间线 evidence_missing ≥ 1） | ✅ |
 | 根外写入不自动放行 | `authModel.test.ts`（根外路径标准/委托判定均拒绝——显式 trusted 仍放行）、`conversationState.test.ts`（derivePlannedFiles 传 rootPath 过滤根外条目）、`tools.test.ts`（委托词法根外即使 realpath 落回根内也拒绝）、`evals/product`：`root-out-write`（规划门控拦截 → 批次卡显式授权 → 执行） | ✅ |
 | 「允许并记住」任务信任路径 | `evals/product`：`remember-edit`（首个 edit 点记住 → 同文件第二次修改 `approvalSource=auto`、need-approval 仅 1 次；mock 45/45 与真实模型均通过） | ✅ |
@@ -283,5 +283,5 @@
 - **2026-11-24 审计新增缺口（如实记录，未关闭）**：
   - 事件注册表 93 事件中约 8 组有直接断名**语义**断言；其余仅注册/由派生函数产生，逐事件语义断言仍缺（表 2 判定为「登记/产出」语义，非逐名断言）。注册表结构契约已 2026-11-24 由遍历校验锁定（命名/domain/role/detailKeys 形态 + 必选载荷强制执行 + 未登记拒绝）。
   - 未入矩阵的已测模块：compaction、preheat、codeRag/context、diffRender、lsp、serviceManager、projectInit、sandboxPath/sandboxSymlink、envManager、useConversationState、gateway 各模块等（文件清单见 `apps/desktop/tests/unit/`）。
-  - `delegated` 的 standard 负控为手工临时改任务运行，未编码为运行器选项/负控任务。
+  - ~~`delegated` 的 standard 负控为手工临时改任务运行，未编码为运行器选项/负控任务。~~ 2026-11-24 已关闭（#158）：`--trust-override` + `--expect-fail` + `--expect-fail-check` 编码进运行器，standard 负控 3/3 EXPECTED-FAIL。
   - L5 视觉基线只在 macOS 刷新；WSL 不更新基线；L5 无 CI 承载。
