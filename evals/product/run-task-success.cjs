@@ -235,7 +235,7 @@ async function main() {
   let selected = opts.tasks ? TASKS.filter((t) => opts.tasks.includes(t.id)) : TASKS
   const skipReason = (task) => {
     if (opts.mode === 'real' && task.mockOnly) {
-      return 'mock-only 失败注入任务，真实模式不运行'
+      return 'mock-only 固定剧本任务（真实模型无法强制复现该路径），真实模式不运行'
     }
     // 需要人工授权卡的任务在 delegated 模式语义不适用：计划内 write/edit 自动放行，卡不会出现。
     const effectiveMode = task.trustMode || opts.trustMode

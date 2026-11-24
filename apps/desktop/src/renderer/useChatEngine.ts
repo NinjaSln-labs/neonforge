@@ -873,6 +873,8 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
       // 仍可享受一次自动续跑（原实现先把一次性机会消耗掉，再因排队直接 return）。
       if (pendingSendRef.current.length > 0) return
       autoRetriedServiceRef.current = true
+      // 2026-11-24 审计：自动续跑打点——探针据此断言「产品自动续跑」而非仅靠零人工点击
+      tlog('conversation.auto_continue', { errorType, reason: 'service-transient-once' }, 'system')
       setTimeout(() => {
         void retryFailedTurnRef.current?.()
       }, 0)
