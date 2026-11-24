@@ -14,9 +14,10 @@ verification 非空 && pendingQuestions 空 → true → `deriveDecisionPoint` �
 ## Decision
 
 - 抽公共谓词 `isSystemVerifiable(command)`（classifyReadonly 只读/network-read = 系统可代跑核验）
-- `evidenceVerifiable(evidence)`：verification 非空 + **至少一条**可代跑（`isSystemVerifiable`）+ 无 pendingQuestions 阻塞（ADR-008 已去掉 pending 阻塞）——单源
+- `evidenceVerifiable(evidence)`：verification 非空 + **至少一条**可代跑（`isSystemVerifiable`）+ 无 pendingQuestions 阻塞（ADR-008 已去掉 pending 阻塞）——单源；2026-11-24 修订：`passed=false` 的证据不算可对账证据（与 `verifyCompletion` 先记 missing 对齐，防全失败声明仍进入 resolution 决策点）
 - `completionEvidenceComplete` 委托 `evidenceVerifiable`；`verifyCompletion` 复用 `isSystemVerifiable`
 - unverifiable **仅标注**；`ok` 不因存在 unverifiable 而为 false；若全部不可代跑 → `ok=false`（ADR-011）
+- 2026-11-24 修订：`isSystemVerifiable` 的 network-read 范围收紧为 **localhost-only**（P0-05 SSRF 防护——外网只读不自动代跑，标 unverifiable）；ADR 原文「readonly/network-read」的执行面自此以 localhost 为界
 
 ## Consequences
 

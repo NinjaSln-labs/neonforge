@@ -1,6 +1,6 @@
 # ADR-007：provider 切换——DeepSeek 官方 → Command Code（模型仍 DeepSeek V4 系列）
 
-- 状态: accepted
+- 状态: accepted（2026-11-24 注：文中的 `API_BASE`/`API_MODEL` 实现指令已被 ADR-010 provider registry + ADR-017 ModelSelection/ModelProfile 取代；本 ADR 的成本/接入方决策背景仍然成立）
 - 日期: 2026-08-21
 - 相关: docs/domain/00-domain-authority.md §1（模型策略）；src/main/gateway.ts（API_BASE / API_MODEL）；用户成本优化拍板
 

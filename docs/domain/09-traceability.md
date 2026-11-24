@@ -1,6 +1,6 @@
 # 09 — 产品 ↔ 领域追溯矩阵（无阶段·目标驱动版）
 
-> version: v3 · 2026-08-16（v2 · 2026-08-07）
+> version: v4 · 2026-11-24（v3 · 2026-08-16；v2 · 2026-08-07）
 > 对照：产品（目标驱动的搭档交互——确认卡/推进保障/宿主边界）↔ 领域 A0 总纲 **v4.0**（无阶段·目标驱动版——2026-08-16 意图确认重设计：确认点更名方案/解决、推进保障、证据对账、触发权在系统）
 > 用途：锁定「产品说 A → 领域做成 B」，差异显式；实现时按此追溯，防漂移。
 
@@ -25,6 +25,12 @@
 | 「能力缺了什么要问」 | 能力缺失征求用户（§6——装依赖/换方案——决策类确认点）| **直接** | 能力检查后缺失 → 对话征求（不擅自装）|
 | 「出问题能追溯（重复命令/打断）」 | 会话时间线（§2 Timeline BC——全步骤统一记录）| **直接** | 可观测性——分析一步到位 |
 | 「问题 = 一等公民（台账/复跑/断点续做）」 | Problem 聚合（§4.13——问题生命周期/快照 goal·decisions·authorized·pending；断点续做 V1=消息+台账、状态机不跨重启）| **直接** | 问题台账（7 态状态机/复开复跑）——2026-08-15 M3 补建模 |
+| 「三档信任模式（strict/standard/delegated）+ 委托边界」 | ADR-015 信任模式与委托执行边界（renderer 判定单源 + main 二次校验：根内 realpath、清单已批准、write/edit 仅文件动作） | **直接** | `authModel.shouldAutoApproveTool` / `delegationBoundaryViolation`；2026-11-24 审计补根检查先于 trusted |
+| 「任务状态跨重启（待决策卡/拒绝记忆保留）」 | ADR-013 任务快照（v2、损坏拒绝、恢复不派生决策事件；`lastRejectReason` 显式 null） | **直接** | `taskSnapshot.ts` + `useMessageStore` 恢复门控 |
+| 「结构化澄清卡（假设逐条来源可追溯）」 | ADR-014 `Assumption = { text, source }`（model_inference/user_choice/clarification；自报来源需真实交互证据） | **直接** | `structuredClarify` 交互 + 解析层降级 |
+| 「机制拒绝可审计（拒绝记忆/策略 deny）」 | ADR-016 `gate.denied` 领域事件（session-gate/rejection-memory/action-gate 分层） | **直接** | `canExecute` 结构化拒绝 + 时间线注册表 |
+| 「多模型选择 + 扩展能力治理（能力指纹/信任重审）」 | ADR-017 ModelSelection/ModelProfile + `capabilityDigest`（`extension.registered`/`extension.capabilities_changed` 载荷） | **直接** | 设置页模型切换与能力明细（2026-11-24 审计补 digest 载荷） |
+| 「问题台账同步（main 权威、冲突保留）」 | ADR-018 合并台账（revision 单调、tombstone、冲突 id/revision 保留；renderer 同步刷新） | **直接** | `problemLedgerStore.syncNow` 回传 problems/conflictDetails |
 
 ---
 
@@ -46,7 +52,8 @@
 - [x] 目标确认 / 方案确认 / 解决确认 / 确认卡 / 推进保障 / 宿主边界 / 环境注入 / 能力征求 / 时间线 全部追溯至领域元素（2026-08-16 更名同步）；
 - [x] 偏离项显式标注（结构化确认替代确认词——领域设计先于实现对齐）；
 - [x] 产品非功能原则（人设/不打断）标注为交互层约束，不强行造领域元素；
-- [ ] 实现时按 ticket（`.scratch/neonforge-v1/issues/`）对照本矩阵复核，防漂移。
+- [x] V2 快照映射（ADR-013–018：任务快照/结构化澄清/信任模式与委托边界/机制拒绝/多模型与能力治理/台账同步）已追加（2026-11-24 审计 v4）；
+- [x] 实现按审计批次（2026-11-24 `.scratch/neonforge-v1/audit-items/` 报告与修复 PR #141–#150）对照本矩阵复核；`.scratch/neonforge-v1/issues/` 为历史 ticket 目录。
 
 ---
 

@@ -1,8 +1,8 @@
 # 覆盖矩阵（Coverage Matrix）
 
 > 首版：2026-08-16（S2）→ 增补：2026-09-29（Keenable 合规）
-> 当前快照（2026-11-17，PR #19/#20/#21/#22 合并 + #15 实现后）：L1 **79 文件 / 939 用例** · 事件注册表 56+ 事件 · 不变量 Inv 1-8 + I17-I21 · L3 interaction **90 场景**
-> 表 1-表 10 保留各阶段时点的基线记录；当前总数以本快照与 `09-openspec/tasks.md §4` 为准。
+> 当前快照（2026-11-24，PR #141–#150 合并后）：L1 **79 文件 / 965 用例** · 事件注册表 **93 事件** · 不变量 Inv 1-8 + I17-I21 · L3 interaction **96 收集 / 93 通过 + 3 跳过**
+> 表 1-表 10 保留各阶段时点的基线记录；当前总数以本快照为准。
 > 维护：阶段末更新（coverage-matrix skill）；缺口入 audit-items
 
 ## 表 1：不变量 ↔ L1 测试
@@ -22,6 +22,8 @@
 | S2 新增：verifyCompletion V1a/V1b | 系统复核 + diff 派生（非模型自述） | verifyCompletionSystem.test.ts::V1a/V1b 用例 | ✅ |
 
 ## 表 2：事件 ↔ 测试
+
+> 2026-11-24 审计澄清：下表「判定 ✅」表示事件已在注册表登记/由派生函数产生并有对应模块测试，**不等于** `timelineEvents.test.ts` 对每个事件都有逐名断言（实测约 8 组直接断言：deriveStateEvents 的 task/plan/decision、proposal.*、completion.evidence_missing、gate.denied 等）。注册表现有 93 事件，逐事件断言覆盖仍是缺口（见「缺口清单」）。历史事件名 `task.execution_*`/`task.achievement_*` 仅保留读取窗口，canonical 为 `task.plan_*`/`task.resolution_*`。
 
 | 事件 id | 语义 | 断言测试 | 判定 |
 |---------|------|----------|------|
@@ -53,8 +55,9 @@
 | card.shown / resolved / rejected / dismissed | 卡 UI 生命周期 | timelineEvents.test.ts | ✅ |
 | decision.requested / resolved | 领域决策点 | timelineEvents.test.ts::deriveStateEvents（decision.*） | ✅ |
 | **proposal.plan / proposal.completion** | **提议解析事件（S2 登记 + S3 接线）** | **timelineEvents.test.ts::proposal.*（schema/成功/失败/缺必选 4 断言）** | ✅（A-003 关闭 + A-007 两形态 schema） |
-| **completion.evidence_missing** | **完成声明被拒诊断（S4 登记 + 接线打点）** | **timelineEvents.test.ts::completion.evidence_missing（schema/载荷/缺必选 3 断言）+ L3 S4-1a/S4-3 打点断言** | ✅（S4——A-010 关闭） |
-| conversation.status_change / error | 状态/错误 | timelineEvents.test.ts | ✅ |
+| **completion.evidence_missing** | **完成声明被拒诊断（S4 登记 + 接线打点）** | **timelineEvents.test.ts::completion.evidence_missing（schema/载荷/缺必选 3 断言）+ L3 S4-1b/S4-3 打点断言** | ✅（S4——A-010 关闭） |
+| conversation.status_change / error | 状态/错误 | timelineEvents.test.ts（注册表）+ errorClassify/useChatEngine 集成 | ✅ |
+| conversation.auto_continue | 已确认后瞬态失败的一次自动续跑（ADR-011） | timelineEvents.test.ts::事件注册表断言 + evals/product::network-auto-retry（`auto_continue ≥1`） | ✅（2026-11-24 审计批次 3） |
 
 > 表 3-表 8 中的用例/场景数是各阶段 DoD 的时点记录，不是当前总数；当前总数见页首快照。
 
@@ -86,19 +89,19 @@
 | 触发权切换——goal 卡内容来自 decisionContent 快照（含关键假设） | cards-from-decision-content::S3-3 | ✅ |
 | 触发权切换——无 decisionContent 不弹卡（C3 降级） | cards-from-decision-content::S3-3b（a666459 新增） | ✅ |
 | 目标确认后直接 write 被拦 → 占位执行确认卡渲染（防「pending=plan 但无卡」死锁；2026-11-23 真机 approve-files-write 301 s 停等回归） | cards-from-decision-content::S3-3c（2026-11-23 新增） | ✅ |
-| 拒绝超限回退——rejectStreak ≥2 强制澄清卡（ADR-010 阈值覆盖旧「≥3 澄清提示」，.nf-reject-overflow 保留为更深层兜底） | cards-from-decision-content::S3-4（9f70c0b 后对齐） | ✅ |
+| 拒绝超限回退——rejectStreak ≥2 强制澄清卡（ADR-010 阈值覆盖旧「≥3 澄清提示」，.nf-reject-overflow 保留为更深层兜底） | cards-from-decision-content::S3-4（拒绝超限场景，:175；2026-11-24 注：:1225 的 ask_user 场景沿用旧编号，见表 8） | ✅ |
 | 决策点持久化往返（decisionContent 序列化） | sessionStore.test.ts::decisionContent 序列化（3 用例） | ✅ |
 
 ## 表 5：S4 完成证据对账 ↔ 测试（2026-08-16 新增）
 
 | S4 行为 | 场景/用例 | 判定 |
 |---------|-----------|------|
-| 已解决卡条件 = verifyCompletion 通过（不变量 4 接线——ok=false 不置决策点） | L3 S4-1a（证据不足不弹卡）+ L1 verifyCompletion（8 用例） | ✅ |
-| V1a 系统代跑（真实只读命令 → 结果表 → verifyCompletion 闭环） | verificationRunner.integration.test.ts（7 用例——A-010）+ L3 S4-2（复核通过弹卡） | ✅ |
+| 已解决卡条件 = verifyCompletion 通过（不变量 4 接线——ok=false 不置决策点） | L3 S4-1b（验证空 → 不弹卡 → 重输出带证据 → 弹卡）+ L1 verifyCompletion（14 用例） | ✅ |
+| V1a 系统代跑（真实只读命令 → 结果表 → verifyCompletion 闭环） | verificationRunner.integration.test.ts（24 用例） | ✅ |
 | V1a 复核失败推翻自报（missing verification:cmd） | L3 S4-3 + integration 拒绝侧 | ✅ |
-| V1b diff 派生（planned/produced 匹配——缺失 → diff:planned-not-produced） | integration deriveDiffs 2 用例 + verifyCompletionSystem V1b 2 用例 | ✅ |
-| completion.evidence_missing 打点（ok:false + missing 清单） | timelineEvents.test.ts 3 断言 + L3 S4-1a/S4-3 打点断言 | ✅ |
-| 证据不足回填引导（buildEvidenceBackfill 纯函数 + 注入闭环） | conversationState.test.ts 3 断言 + L3 S4-1a（引导 send 触发 chatCount）/S4-1b（重输出弹卡） | ✅ |
+| V1b diff 派生（planned/produced 匹配——缺失 → diff:planned-not-produced） | integration deriveDiffs 2 用例 + verifyCompletionSystem V1b/new 3 用例（2026-11-24 起 verifyCompletion 真正消费 deriveDiffs） | ✅ |
+| completion.evidence_missing 打点（ok:false + missing 清单） | timelineEvents.test.ts 3 断言 + L3 S4-1b/S4-3 打点断言 | ✅ |
+| 证据不足回填引导（buildEvidenceBackfill 纯函数 + 注入闭环） | conversationState.test.ts 3 断言 + L3 S4-1b（重输出弹卡）；S4-1a 只覆盖参数校验拒绝（无回填） | ✅（引用修正 2026-11-24） |
 
 ## 表 6：S5 推进保障 ↔ 测试（2026-08-16 新增）
 
@@ -148,7 +151,7 @@
 | `propose_goal` | pending:goal | `protocolTools.test.ts` PROTOCOL_TOOL_DEFS 四工具 schema 存在性 | `protocolTools.test.ts` decideProtocolToolCall goal 分支（乱序矩阵——goal 未确认分支） | `cards-from-decision-content.interaction.ts` S3-3 goal 卡内容来自 decisionContent 快照 |
 | `propose_plan` | pending:plan | `protocolTools.test.ts` PROTOCOL_TOOL_DEFS schema | `protocolTools.test.ts` decideProtocolToolCall plan 分支（goal 未确认 → reject 引导/已确认 → pending；A-016 硬序门） | `cards-from-decision-content.interaction.ts` S3-1 plan 卡三要素渲染 |
 | `report_completion` | pending:resolution（证据门） | `protocolTools.test.ts` PROTOCOL_TOOL_DEFS schema | `protocolTools.test.ts` decideProtocolToolCall completion 分支（双未确认/plan 未确认 reject）+ `verifyCompletionSystem.test.ts` 证据门 | `cards-from-decision-content.interaction.ts` S4-1a/S4-3 已解决卡（证据不足不弹 + 系统复核推翻） |
-| `ask_user` | 无（clarify 不置决策点） | `protocolTools.test.ts` PROTOCOL_TOOL_DEFS schema + getDef('ask_user') | `protocolTools.test.ts` decideProtocolToolCall ask_user 分支（任何 state → clarify） | `cards-from-decision-content.interaction.ts` S3-4 选项按钮化（点选发送/已回应禁用/文本备选） |
+| `ask_user` | 无（clarify 不置决策点） | `protocolTools.test.ts` PROTOCOL_TOOL_DEFS schema + getDef('ask_user') | `protocolTools.test.ts` decideProtocolToolCall ask_user 分支（任何 state → clarify） | `cards-from-decision-content.interaction.ts` S3-4（:1225，与拒绝超限场景同编号——历史遗留）选项按钮化（点选发送/已回应禁用/文本备选） |
 | `protocol.text_fallback` | 降级通道（打点不产卡） | `timeline.ts` 事件注册表（dev 校验——timelineEvents L1 既有机制） | `ConversationPanel.tsx` done 分支降级路径（fallbackDetected 守卫——标记命中不产卡） | L3 `cards-from-decision-content.interaction.ts` V1.5-S3-1 一轮改道（text_fallback 打点 + 引导后工具轮） |
 
 > 断言锚点经 grep 实证（S4 Task 4.3 收口）：`protocolTools.test.ts` 63 处命中、L3 卡渲染场景 11 处命中、text_fallback 由 L3 timeline 捕获承载（无独立 L1 文件）。
@@ -276,4 +279,9 @@
 
 ## 缺口清单
 
-- **无**（A-003 已关闭——proposal.* 事件断言 c91079e 补齐；A-010 已关闭——S4 V1a integration 7 用例 + L3 4 场景；S3/S4/S5 行为全部有测试承载——S5 新增 progressGuarantee.test.ts 12 用例 + agentLoop 5 + L3 2 场景；D3 全行为有测试承载——plannedFilesStore 12 + tools 1 + L3 D3-1/2；#8 引导有 L1 断言锁定；#9 e2e 脚本无单测基建——真机复验跟踪中）
+- **无**（A-003 已关闭——proposal.* 事件断言 c91079e 补齐；A-010 已关闭——S4 V1a integration 用例 + L3 4 场景；S3/S4/S5 行为全部有测试承载——S5 新增 progressGuarantee.test.ts 用例 + agentLoop 5 + L3 2 场景；D3 全行为有测试承载——plannedFilesStore + tools 1 + L3 D3-1/2；#8 引导有 L1 断言锁定；#9 e2e 脚本无单测基建——真机复验跟踪中）。2026-11-24 计数刷新：planProposalParser 16、completionClaimParser 10、verifyCompletionSystem 14、progressGuarantee 16、plannedFilesStore 15、sysPrompt 8、conversationState 137、timelineEvents 41、authModel 16、taskSnapshot 13。
+- **2026-11-24 审计新增缺口（如实记录，未关闭）**：
+  - 事件注册表 93 事件中约 8 组有直接测试断言；其余仅注册/由派生函数产生，逐事件断言仍缺（表 2 判定为「登记/产出」语义，非逐名断言）。
+  - 未入矩阵的已测模块：compaction、preheat、codeRag/context、diffRender、lsp、serviceManager、projectInit、sandboxPath/sandboxSymlink、envManager、useConversationState、gateway 各模块等（文件清单见 `apps/desktop/tests/unit/`）。
+  - `delegated` 的 standard 负控为手工临时改任务运行，未编码为运行器选项/负控任务。
+  - L5 视觉基线只在 macOS 刷新；WSL 不更新基线；L5 无 CI 承载。
