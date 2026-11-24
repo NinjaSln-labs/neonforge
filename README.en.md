@@ -121,14 +121,14 @@ The domain layer is pure functions (no React dependency); L1 unit tests lock the
 ## Testing
 
 ```bash
-npx vitest run                            # L1 domain logic (436)
+npx vitest run                            # L1 domain logic (965)
 npx tsc -p tsconfig.json --noEmit         # L2 contracts (renderer + main)
-npx playwright test --project=interaction # L3 component interaction (49)
-npx playwright test                       # L5 visual + L3
+npx playwright test --project=interaction # L3 component interaction (96 collected / 93 run + 3 skipped)
+npx playwright test                       # L5 visual + L3 (local, manual)
 NF_TEST_KEY=<key> node e2e-suite.mjs      # L4 real-API E2E (prereq: mkdir -p /tmp/nf-e2e-test)
 ```
 
-CI (GitHub Actions): push runs L1+L2+L3+L5 automatically; L4 needs repo Secret `NF_TEST_KEY` (manual trigger).
+CI (GitHub Actions): triggered only by `apps/desktop/**` changes; runs ESLint + Prettier + L1 + L2 + L3 (no L5). L4 needs repo Secret `NF_TEST_KEY` (manual trigger).
 
 ### Electron mirror (if download fails)
 

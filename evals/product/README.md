@@ -2,7 +2,7 @@
 
 固定剧本驱动**真实产品流程**，测量产品编排成功率（目标确认 → 方案确认 → 授权 → 工具执行 → 完成对账 → 已解决卡），并核验真实产物。
 
-- `task-suite.cjs`：22 个任务与产物检查（纯数据，不依赖 Electron）——6 个正向任务、1 个顺序违规恢复任务（`direct-write-after-goal`）、4 个拒绝路径任务（`reject-goal` / `reject-plan` / `reject-approval` / `reject-resolution`）、2 个信任模式任务（`strict-first-write` / `delegated-edit`）、1 个「允许并记住」任务（`remember-edit`：首次 edit 点记住 → 同文件第二次修改来源 auto 不弹卡）、1 个 bash 产出对账任务（`bash-produced-file`：bash 创建计划内文件 → 存在性核对认定已产出 → 已解决卡）、6 个 mock-only 失败注入任务（`evidence-gap` 证据不足回填、`tool-failure-recovery` 工具失败后改写入恢复、`network-retry` 网关网络瞬态断开 ×2 → 第 3 次尝试恢复、`network-exhausted` 断开 ×3 击穿重试预算 → 错误气泡 → 点「重试」恢复、`network-midstream` 流中途断开 → stream-reset 清半截内容 → 重试完成、`network-auto-retry` 对话中途断网 ×3 → 产品自动续跑一次恢复且无需人工点击）与 1 个根外写入约束任务（`root-out-write`，mock-only：首写被规划门控拦截 → 批次卡显式授权 → 执行）。
+- `task-suite.cjs`：22 个任务与产物检查（纯数据，不依赖 Electron）——6 个正向任务、1 个顺序违规恢复任务（`direct-write-after-goal`）、4 个拒绝路径任务（`reject-goal` / `reject-plan` / `reject-approval` / `reject-resolution`）、2 个信任模式任务（`strict-first-write` / `delegated-edit`）、1 个「允许并记住」任务（`remember-edit`：首次 edit 点记住 → 同文件第二次修改来源 auto 不弹卡）、1 个 bash 产出对账任务（`bash-produced-file`：bash 创建计划内文件 → 存在性核对认定已产出 → 已解决卡）与 9 个 mock-only 固定剧本任务（`evidence-gap` 证据不足回填、`tool-failure-recovery` 工具失败后改写入恢复、`reject-approval` 授权卡拒绝、`reject-resolution` 已解决卡「还要改」返工、`root-out-write` 根外写入约束、`network-retry` 网关网络瞬态断开 ×2 → 第 3 次尝试恢复、`network-exhausted` 断开 ×3 击穿重试预算 → 错误气泡 → 点「重试」恢复、`network-midstream` 流中途断开 → stream-reset 清半截内容 → 重试完成、`network-auto-retry` 写入完成后断开 ×3 → 产品自动续跑一次恢复）。`mockOnly` 的路径依赖固定剧本或连接断开注入，真实模型无法强制复现；真实模式运行其余 13 个任务。
 - `task-success.cjs`：Electron 探针，隔离 userData/HOME；默认本地 mock SSE；`NF_TASK_SUCCESS_REAL=1` 时改为真实 OpenAI 兼容端点（本机 Magpie）。按剧本发协议工具与真实工具调用，脚本点击确认/授权卡，结束后核验文件并审计隔离 userData 时间线（`approvalSource`、`completion.evidence_missing`、委托越界）。`mockOnly` 任务（失败注入类）在真实模式下跳过。
 - `run-task-success.cjs`：每任务独立进程运行器，报告写 `.scratch/evals/product/`。
 
@@ -19,7 +19,7 @@ node evals/product/run-task-success.cjs --mode real --tasks approve-files-write 
 ```
 
 - 退出码：`0` 全部通过；`1` 有任务失败；`2` 参数/环境错误。
-- 跳过语义：`real` 模式跳过 `mockOnly` 失败注入任务；`delegated` 信任模式跳过标记 `needsApprovalCard` 的任务（`remember-edit`——计划内 edit 自动放行、卡不会出现，按 ADR-015 委托语义该任务不适用，不是产品缺陷）。全部所选任务被跳过时运行器报错退出。
+- 跳过语义：`real` 模式跳过 `mockOnly` 固定剧本任务（9 个）；`delegated` 信任模式跳过标记 `needsApprovalCard` 的任务（`remember-edit`——计划内 edit 自动放行、卡不会出现，按 ADR-015 委托语义该任务不适用，不是产品缺陷）。全部所选任务被跳过时运行器报错退出。
 - **非人类**：mock 剧本固定，点击由脚本完成；`real` 模式虽由真实模型生成工具调用，但仍是固定剧本驱动与小样本 pilot，不代表模型能力或真人任务成功率。
 - 授权卡出现时脚本点「允许执行」；剧本内清单写由产品默认 `standard` 信任模式自动放行。拒绝路径任务（`reject-*`）按任务标记点第一次出现的拒绝按钮（目标「重新描述」/ 方案「修改方案」/ 授权卡「拒绝」/ 已解决卡「还要改」），之后由脚本代表用户发送恢复文本（「继续」或返工要求），验证拒绝后产品能回到正向流程并完成。`reject-resolution` 的产品行为是只预填输入框、不发消息，因此探针在空闲后发送 `还要改：…` 文本，驱动返工动作与第二次完成声明。
 - 原始数据与任务产物只在 `.scratch/`（gitignored）；凭据类环境变量在子进程启动前剔除；`real` 模式仅把 `MAGPIE_GATEWAY_KEY` 值注入子进程的 `NEONFORGE_API_KEY`。

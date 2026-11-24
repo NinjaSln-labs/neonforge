@@ -123,15 +123,15 @@ Session Timeline BC      — 全步骤统一记录（可观测性——JSONL）
 ## 测试
 
 ```bash
-npx vitest run                            # L1 领域逻辑（939）
+npx vitest run                            # L1 领域逻辑（965）
 npx tsc -p tsconfig.json --noEmit         # L2 契约（renderer + main）
 npx tsc -p tsconfig.main.json --noEmit    # L2 主进程契约
-npx playwright test --project=interaction # L3 组件交互（90）
-npx playwright test                       # L5 视觉 + L3
+npx playwright test --project=interaction # L3 组件交互（96 用例 / 93 运行 + 3 跳过）
+npx playwright test                       # L5 视觉 + L3（本地手动）
 NF_TEST_KEY=<key> node e2e-suite.mjs      # L4 真实 API E2E（前置：mkdir -p /tmp/nf-e2e-test）
 ```
 
-CI（GitHub Actions）：push 自动 L1+L2+L3+L5；L4 需仓库 Secret `NF_TEST_KEY`（手动触发）。
+CI（GitHub Actions）：仅 `apps/desktop/**` 变更触发；运行 ESLint + Prettier + L1 + L2 + L3（不含 L5）。L4 需仓库 Secret `NF_TEST_KEY`（手动触发）。
 
 ### 镜像（Electron 下载失败时）
 

@@ -13,7 +13,7 @@
 | 运行环境 | WSL2 `6.18.33.2-microsoft-standard-WSL2`；Intel i5-14400（12 线程）；16 GB；`xvfb` 1280×800；`--disable-gpu --no-sandbox`                        |
 | 目标机   | 2018 MacBook Pro（`MacBookPro15,1`）；i9-8950HK（12 线程）；32 GB；macOS 15.8.3（Darwin 24.6.0）；默认 GPU                                       |
 | 运行时   | Electron 43.4.0 / Chrome 150.0.7871.224 / Node 24.18.1                                                                                           |
-| 上游     | 本机 OpenAI 兼容 mock（固定剧本：协议工具调用 / 真实工具调用 / 完成声明；非流式文本）                                                            |
+| 上游     | 本机 OpenAI 兼容 mock（固定剧本：协议工具调用 / 真实工具调用 / 完成声明；首版为 JSON 文本，网络失败任务起为 SSE）                                |
 | 凭据     | 仅假 Key；真实凭据环境变量在启动前剔除                                                                                                           |
 | 原始数据 | WSL `.scratch/evals/product/task-success-2026-11-23T06-59-39-916Z.jsonl`；Mac `.../task-success-2026-11-23T07-02-49-178Z.jsonl`（均 gitignored） |
 
@@ -25,7 +25,7 @@
 - mock 路由只按「用户确认文本」「普通工具结果」「协议工具结果」区分，不依赖请求序号猜测；协议工具的合成 `role: tool` 结果不会推进动作轮。
 - 任务集 6 个：单文件写入、两文件脚本 + `bash` 运行、`edit` 授权卡 + README 标题替换、HTML + grep 证据、三行笔记精确内容、`approve-files` 清单申报后写入（授权卡 → 写入）。
 - 每个任务在独立 Electron 进程与独立 HOME/userData 中运行；产物在任务结束后由探针按内容逐项核验（含 `node check.js` 真实运行）。
-- 全部 18 次运行（每平台 3 轮 ×6 任务）都点击到「已解决」卡并完成。
+- 全部 36 次运行（WSL/Mac 各 3 轮 ×6 任务 = 每平台 18）都点击到「已解决」卡并完成。
 
 ## 结果
 
@@ -76,7 +76,7 @@
 - **信任模式 delegated 任务（2026-11-23 14:25–14:45 UTC，任务集扩为 12）**：
   - 新增 `delegated-edit`（任务级 `trustMode: 'delegated'`）：清单内 `edit` 由 renderer 自动批准（`approvalSource=delegate`）+ main 执行边界二次校验；产物核验 README 首行标题与正文保留。
   - 探针新增时间线审计：`collectDelegateAudit` 扫描隔离 userData/logs 的 `timeline-*.jsonl`，统计 `approvalSource=delegate` / `auto`（trusted 分支）的 write/edit 执行、`security.trust_delegation_denied` 与 write/edit 的授权卡请求；`delegateAuditCheck` 要求「有自动放行证据、write/edit 无授权卡」——bash 高危逐次授权不计违例（真实模型常用 bash 读取文件）。
-  - 负控：同一任务临时以 `trustMode: 'standard'` 运行必失败（edit 在标准档弹授权卡、无 `delegate` 来源；`.../2026-11-23T14-42-42-311Z.jsonl`），确认检查能区分两档。
+  - 负控：同一任务临时以 `trustMode: 'standard'` 运行必失败（edit 在标准档弹授权卡、无 `delegate` 来源；`.../2026-11-23T14-42-42-311Z.jsonl`），确认检查能区分两档。该负控为手工临时改任务运行，未编码为运行器选项；2026-11-24 审计批次 3 起 `delegateAuditCheck` 只接受 `approvalSource=delegate`（trusted auto 不再能替代委托来源）。
   - mock：12 任务 ×3 轮 **36/36**（WSL `.../2026-11-23T14-44-23-761Z.jsonl`；`delegated-edit` 单任务 4–7 s、3/3 检查）；Mac 重建后 12 任务 ×2 轮 **24/24**（Mac `.../2026-11-23T15-05-52-868Z.jsonl`；`delegated-edit` 单任务 11 s、3/3 检查）。
   - 真实模型：`delegated-edit` **通过** 52 s（目标 21.5 / 方案 27.8 / 已解决 50.7 s，`delegate` 执行 2 次、write/edit 授权卡 0 次、bash 授权卡 0 次；`.../2026-11-23T14-42-55-098Z.jsonl`）。两次同任务真实运行（14:35、14:39）：产物正确，但模型先发 `bash` 读文件触发授权卡、或先 `approve-files`（来源 auto）——首次审计把「任何授权点击/非 delegate 来源」判失败，按真实行为放宽为「write/edit 无授权卡 + 存在自动放行证据（delegate 或 trusted auto）」，两次运行实际也满足；审计口径变化如实记录。
   - 局限：`delegated` 与 `standard` 的差异仅在清单内 `edit`（`standard` 只自动放行 `write`）；「允许并记住」仍只有 L3 覆盖。
@@ -104,7 +104,7 @@
 - **已解决卡拒绝（「还要改」）返工任务（2026-11-24 03:15–03:30 UTC，任务集扩为 18）**：
   - 新增 `reject-resolution`（mock-only）：首轮写入草稿 DRAFT → 完成声明证据对账通过 → 已解决卡弹出；探针点「还要改」（`.nf-confirmcard__btn--no`，产品只预填输入框 `还要改一些地方：`、不发消息）→ 空闲 1.5 s 后探针代表用户发出返工要求 → 模型返工写入 RESOLUTION-OK → 第二次完成声明对账通过 → 第二个已解决卡由脚本确认。检查：返工后产物精确 + `resolutionRejects ≥ 1`。
   - mock：单任务 ×3 轮 **3/3**（`.../2026-11-23T19-24-27-552Z.jsonl`，8 s/轮），时间线实证 `card.rejected`（achievement/scope）→ 返工 → `card.resolved`；全量 18 任务 ×3 轮 **54/54**（`.../2026-11-23T19-25-08-027Z.jsonl`）；Mac 重建后 18 任务 ×2 轮 **36/36**（Mac `.../task-success-2026-11-23T19-36-18-268Z.jsonl`，`reject-resolution` 16 s）。
-- **网关网络失败任务（2026-11-24 03:55–06:10 UTC，任务集扩为 19 → 22）**：
+- **网关网络失败任务（2026-11-24 03:55–06:10 CST（UTC+8；raw 19:52–22:10Z），任务集扩为 19 → 22）**：
   - 新增 `network-retry`（mock-only 失败注入）：mock SSE 服务器对前 2 个 chat 请求直接 `req.destroy()`（undici `fetch` 抛 `TypeError: fetch failed`），网关 `streamChat` 对网络错误最多重试 2 次（共 3 击，间隔 400/800 ms），第 3 次尝试正常走剧本 → 目标/方案卡 → write → 完成对账 → 已解决。检查：产物精确 + 注入 ≥2 + 网关重试日志 ≥2（探针包裹同进程 main 的 `console.log` 计数「transient — retrying」行）。
   - mock：单任务 ×3 轮 **3/3**（`.../2026-11-23T19-52-48-218Z.jsonl`，6–8 s/轮；注入 2 次、重试 2 次后收口）；全量 19 任务 ×3 轮 **57/57**（`.../2026-11-23T19-53-11-493Z.jsonl`）；Mac 重建后 19 任务 ×2 轮 **38/38**（Mac `.../task-success-2026-11-23T19-59-37-805Z.jsonl`，`network-retry` 12 s）。
   - 追加 `network-exhausted`（第 20 任务，mock-only）：断开前 **3** 个 chat 请求 → 网关 3 击全部耗尽 → `streamChat` 抛错 → IPC 返回 `errorType=service` → renderer `finishError` 置错误气泡（时间线 `conversation.error` errorType=service、message `fetch failed`）→ 探针点气泡旁「重试」（`retryFailedTurn` 重放上一回合，不追加用户消息；mock 断开注入已耗尽）→ 目标/方案卡 → write → 已解决。检查：产物精确 + 注入 ≥3 + 网关重试日志 ≥2 + 重试点击 ≥1。
@@ -113,13 +113,18 @@
   - `network-midstream` mock：单任务 ×3 轮 **3/3**（`.../2026-11-23T20-32-35-509Z.jsonl`，5 s/轮；中途断开 1 次、stream-reset 1 次、重试 1 次）；全量 21 任务 ×3 轮 **63/63**（`.../2026-11-23T20-32-49-172Z.jsonl`）；Mac 重建后 21 任务 ×2 轮 **42/42**（Mac `.../task-success-2026-11-23T20-40-10-935Z.jsonl`，`network-midstream` 12 s）。
   - 追加 `network-auto-retry`（第 22 任务，mock-only）：放行前 3 个 chat 请求（目标轮/方案轮/写入轮）后在对话中途断开 ×3 → 网关重试耗尽 → renderer `finishError`（目标/方案已确认后的瞬态失败）**自动续跑一次**（等同点「重试」、不追加用户消息）→ 恢复完成 → 已解决。检查：产物精确 + 注入 ≥3 + 网关重试 ≥2 + **人工重试点击 = 0**（证明是产品自动续跑而非探针点击）。
   - `network-auto-retry` mock：单任务 ×3 轮 **3/3**（`.../2026-11-24T04-29-04-819Z.jsonl`，6 s/轮）；全量 22 任务 ×3 轮 **66/66**（`.../2026-11-24T04-29-22-594Z.jsonl`）；Mac 重建后 22 任务 ×2 轮 **44/44**（Mac `.../task-success-2026-11-24T04-37-33-692Z.jsonl`，`network-auto-retry` 12 s）。
-- **稳定性回归（2026-11-24 06:45–07:05 UTC，合并后 main `5836c84`，22 任务全量）**：
+- **稳定性回归（2026-11-24 12:52–13:05 CST（UTC+8；raw 04:52–05:05Z），合并后 main `5836c84`，22 任务全量）**：
   - WSL：22 任务 ×5 轮 **110/110**、0 失败（`.../2026-11-24T04-52-23-011Z.jsonl`）；单任务耗时 p50 5.2 s、最长 9.8 s（`reject-resolution` p50 8.4 / max 9.8 s——两次完成声明 + 拒绝后空闲等待；`reject-approval` max 8.4 s；`network-exhausted` max 7.7 s——3 击耗尽后的错误气泡与自动重试等待）。
   - 无 flake：每任务 5/5 全过、每项检查全过；无 timeout、无 stderr 尾部异常。 Mac：22 任务 ×3 轮 **66/66**、0 失败（Mac `.../task-success-2026-11-24T04-53-03-797Z.jsonl`）。
-- **委托模式全量回归（2026-11-24 07:15–07:40 UTC，任务集 22；运行器语义跳过）**：
+- **委托模式全量回归（2026-11-24 13:16–13:40 CST（UTC+8；raw 05:16–05:40Z），任务集 22；运行器语义跳过）**：
   - `--trust-mode delegated` 全量：任务级 `trustMode` 优先（`strict-first-write` 仍 strict、`delegated-edit` 仍 delegated）；`remember-edit` 因「首次 edit 弹卡再点允许并记住」依赖人工授权卡，而 delegated 按 ADR-015 对计划内 edit 自动放行、卡不会出现——**按任务标记 `needsApprovalCard` 语义跳过**（不是产品缺陷）。21 个可运行任务 ×3 轮 **63/63**、0 失败（`.../2026-11-24T05-16-08-815Z.jsonl`）。
   - 跳过语义实现：运行器对 `needsApprovalCard && (task.trustMode || --trust-mode) === 'delegated'` 显式 SKIP（日志给出原因）；所选任务全部被跳过时报错退出。默认 `standard` 不受影响。
   - 默认档回归：22 任务 ×3 轮 **66/66**、0 失败（`.../2026-11-24T05-21-57-403Z.jsonl`；`remember-edit` 正常执行并通过）。
+- **审计批次 3：断言强化与平台校准（2026-11-24 13:00–13:45 CST（UTC+8））**：
+  - PR #148 强化 12 个此前只核验产物的任务：strict 档 `needApprovalClicks≥1`、approve-files `fileApprovalClicks≥1`、顺序违规首写 `blockedWrites≥1`、四条拒绝路径各自拒绝计数、delegated 必须 `approvalSource=delegate`、根外写入 `blockedWrites≥1 且 autoFileExecutions=0`、network-exhausted 必须有 `conversation.error errorType=service`、network-auto-retry 必须有新增的 `conversation.auto_continue` 事件；`reject-approval` 改标 `mockOnly`（固定拒绝剧本无法在真实模型强制复现）。
+  - 首轮 Mac 22×2 = **42/44**：`network-auto-retry` 两轮均无 `auto_continue`。根因不是产品缺陷——注入按请求序号，Mac 上 3 击耗尽时方案确认消息仍在排队，ADR-011 自动续跑按设计让位排队消息（`pendingSendRef.length > 0`）；WSL 请求顺序不同恰好落在空闲回合。
+  - PR #149 把注入改为「写入轮已返回」之后（`networkFailuresAfterWrite`），与平台请求顺序解耦。校准后 WSL 22×3 **66/66**（`.../2026-11-24T13-34-03-935Z.jsonl`）、Mac 22×3 **66/66**（Mac `.../task-success-2026-11-24T13-41-16-177Z.jsonl`），`network-auto-retry` 3/3 检查含 `auto_continue≥1`。
+  - 单测 965/965、L3 93 passed/3 skipped、双 tsc 0、ESLint 0 error、Prettier 通过。
 - **拒绝路径任务（2026-11-23 11:50–13:00 UTC，任务集扩为 10）**：
   - 新增 `reject-goal`（目标被否 → 重新描述 → 确认 → 执行 → 已解决）、`reject-plan`（首个方案故意偏离 → 修改方案 → 修正方案执行，检查「偏离文件未创建」）、`reject-approval`（`bash` 写文件弹授权卡 → 拒绝 → 用户「继续」→ `approve-files` 批次批准 → `write` → 已解决）。
   - 探针新增拒绝/恢复驱动：按任务标记点第一次拒绝按钮（「重新描述」/「修改方案」/授权卡「拒绝」）；授权卡拒绝后空闲 2 s 发送「继续」；拒绝后模型追问方向时点第一个 `ask_user`/`<candidates>` 选项；ADR-010 强制澄清卡点「确认执行」继续 underlying。
@@ -137,16 +142,16 @@
 
 ## 限制
 
-- **固定剧本（基线部分）**：基线为 6 个短任务，2026-11-23 后扩为 22 个（新增顺序违规恢复任务 `direct-write-after-goal`、四个拒绝路径任务 `reject-goal`/`reject-plan`/`reject-approval`/`reject-resolution`、strict 任务 `strict-first-write` 与 delegated 任务 `delegated-edit`、「允许并记住」任务 `remember-edit`、bash 产出对账任务 `bash-produced-file`、mock-only 失败注入任务 `evidence-gap`/`tool-failure-recovery`/`network-retry`/`network-exhausted`/`network-midstream`/`network-auto-retry` 与根外写入约束任务 `root-out-write`）；mock 回复固定；不代表真实模型、长任务、多文件项目或网络。真实模型 pilot 是小样本探索，未计入基线。
+- **固定剧本（基线部分）**：基线为 6 个短任务，2026-11-23 后扩为 22 个（新增顺序违规恢复任务 `direct-write-after-goal`、四个拒绝路径任务 `reject-goal`/`reject-plan`/`reject-approval`/`reject-resolution`、strict 任务 `strict-first-write` 与 delegated 任务 `delegated-edit`、「允许并记住」任务 `remember-edit`、bash 产出对账任务 `bash-produced-file`、根外写入约束任务 `root-out-write` 与 mock-only 固定剧本任务 `evidence-gap`/`tool-failure-recovery`/`network-retry`/`network-exhausted`/`network-midstream`/`network-auto-retry`）；`mockOnly` 共 9 个（含 reject-approval/reject-resolution），真实模式运行 13 个；mock 回复固定；不代表真实模型、长任务、多文件项目或网络。真实模型 pilot 是小样本探索，未计入基线。
 - **脚本非人类**：无阅读时间、犹豫、误点、拒绝路径或中断/恢复；不产生 SUS/HEART 或真人审批数据。
 - **单机单版本**：WSL2+xvfb 与一台 2018 MacBook Pro；无 Windows、Apple Silicon 或其他 macOS 版本。
-- **信任模式部分覆盖**：`standard` 为默认全量基线；`strict` 已有 `strict-first-write` 任务（mock 与真实模型均通过）；`delegated` 已有 `delegated-edit` 任务（mock 36/36 中含该任务、真实模型通过，审计要求 write/edit 无授权卡且自动放行来源 delegate/auto）；「允许并记住」已有 `remember-edit` 任务（mock 与真实模型均通过）。
-- **拒绝路径、执行失败与网关网络失败已覆盖**：2026-11-23 起覆盖拒绝目标（`reject-goal`）、拒绝方案（`reject-plan`）、拒绝授权卡（`reject-approval`）及已解决卡「还要改」返工（`reject-resolution`，mock-only）与各拒绝后的恢复；证据不足回填（`evidence-gap`）、工具执行失败恢复（`tool-failure-recovery`）、网关网络瞬态断开 ×2 后重试恢复（`network-retry`）、断开 ×3 击穿重试预算后的错误气泡 + 点「重试」恢复（`network-exhausted`）、断开 ×3 击穿重试预算后的错误气泡 + 点「重试」恢复（`network-exhausted`）、流中途断开 + stream-reset 清半截内容后重试（`network-midstream`）与对话中途断网 3 击耗尽后的产品自动续跑恢复（`network-auto-retry`，均为 mock-only）已有显式任务；未覆盖的是真实网络抖动/丢包、断网期间的多轮上下文语义与 Provider 侧（非连接层）错误体。
+- **信任模式部分覆盖**：`standard` 为默认全量基线；`strict` 已有 `strict-first-write` 任务（mock 与真实模型均通过）；`delegated` 已有 `delegated-edit` 任务（委托全量回归 21 个可运行任务 ×3 = 63/63，含该任务；真实模型通过，审计要求 `approvalSource=delegate`）；「允许并记住」已有 `remember-edit` 任务（mock 与真实模型均通过）。
+- **拒绝路径、执行失败与网关网络失败已覆盖**：2026-11-23 起覆盖拒绝目标（`reject-goal`）、拒绝方案（`reject-plan`）、拒绝授权卡（`reject-approval`）及已解决卡「还要改」返工（`reject-resolution`，mock-only）与各拒绝后的恢复；证据不足回填（`evidence-gap`）、工具执行失败恢复（`tool-failure-recovery`）、网关网络瞬态断开 ×2 后重试恢复（`network-retry`）、断开 ×3 击穿重试预算后的错误气泡 + 点「重试」恢复（`network-exhausted`）、流中途断开 + stream-reset 清半截内容后重试（`network-midstream`）与对话中途断网 3 击耗尽后的产品自动续跑恢复（`network-auto-retry`，均为 mock-only）已有显式任务；未覆盖的是真实网络抖动/丢包、断网期间的多轮上下文语义与 Provider 侧（非连接层）错误体。`reject-approval` 自 2026-11-24 审计批次 3 起标记 `mockOnly`（固定拒绝剧本，真实模型无法强制复现）。
 - **不是 SLO**：没有提案阈值对应「任务成功率」；本轮只建立基线。
 
 ## 安全与边界
 
-- 仅假 Key 与隔离用户数据；真实凭据环境变量在启动前剔除；原始 JSONL 与任务产物只落 `.scratch/`（gitignored）。
+- 基线（mock）仅假 Key 与隔离用户数据；真实凭据环境变量在启动前剔除；真实模型 pilot 使用本机 Magpie Key（仅从 `MAGPIE_GATEWAY_KEY` 环境变量注入子进程，不落盘）；原始 JSONL 与任务产物只落 `.scratch/`（gitignored）。
 - 项目目录建在隔离 HOME 的 `Documents/NeonForge` 下，退出后不残留到用户真实目录。
 - 剧本不包含外部网络请求；`web_search`/`web_fetch` 未使用。
 
