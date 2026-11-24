@@ -109,7 +109,14 @@ export function useEvidenceVerification(
       }
       if (sessionRef.current !== sid) return
       if (stateRef.current.pending !== 'none') return
-      setPendingState('resolution', { proposal: claim, since: new Date().toISOString() })
+      // 2026-11-24 审计：证据快照随决策内容入 decisionContent——解决卡据此渲染「系统核验 ✓ /
+      // 未经系统核验」（原先只渲染 pendingQuestions，核验结果算完即弃）。
+      setPendingState('resolution', {
+        proposal: claim,
+        since: new Date().toISOString(),
+        verification: systemState?.verificationResults ?? {},
+        unverifiable: v.unverifiable,
+      })
     } else {
       // 证据不足 → 不弹卡（不产生决策点）+ evidence_missing 打点 + 回填引导（模型重新输出带证据声明）
       tlog(

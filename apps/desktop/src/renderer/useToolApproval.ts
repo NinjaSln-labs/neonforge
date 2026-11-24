@@ -184,12 +184,15 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
       })
   }
 
-  const rejectToolCall = (calls: ToolCallMsg[], idx: number): void => {
+  const rejectToolCall = (
+    calls: ToolCallMsg[],
+    idx: number,
+    reason: RejectReason = { kind: 'direction' },
+  ): void => {
     const tc = calls[idx]
     // S7（A0 审校 P1-2 接线）：拒绝记忆登记（§3.4 C6——approvalDecided——同轮同类动作短封——
     // canExecute 消费 deniedApprovals；pending 清除 + decisionContent 清理由转换承担）
-    // 2026-11-24 审计：把实际 RejectReason 传下去（原硬编码 direction，拒绝原因 UI 缺失的替代）；
-    // 待授权卡本身不提供原因选择，direction 语义成立（用户拒绝执行方向）。
+    // 2026-11-24 审计：拒绝原因可为选择器结果（默认 direction；调用方未传时保持旧语义）
     if (tc) {
       const subject = String(tc.args?.command ?? tc.args?.path ?? tc.args?.filePath ?? '')
       rejectApproval(
@@ -199,12 +202,16 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
           reason: '用户拒绝了授权请求',
           risk: classifyRiskForReject(tc),
         },
-        { kind: 'direction' },
+        reason,
       )
     }
     // 2026-08-15 DDD 重建：授权拒绝事件（G2 缺口——原无打点，卡生命周期不可回放）
     tlog('tool.rejected', { name: tc?.name, args: tc?.args }, 'system')
-    tlog('card.rejected', { card: 'approval', action: 'reject', name: tc?.name }, 'system')
+    tlog(
+      'card.rejected',
+      { card: 'approval', action: 'reject', name: tc?.name, reason: reason.kind },
+      'system',
+    )
     onApprovalResolved?.('rejected')
     setMessages((prev) => {
       const last = prev[prev.length - 1]

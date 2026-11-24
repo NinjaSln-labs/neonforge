@@ -117,6 +117,10 @@ export interface DecisionContent {
   proposal?: GoalProposal | PlanProposal | CompletionClaim | SystemClarifyProposal // 结构化内容
   approval?: ApprovalRequest // 授权请求内容
   since: string // 决策点出现时间（诊断）
+  /** S4 完成对账的系统代跑结果（command → ok/output）——解决卡证据渲染与审计快照（2026-11-24 审计） */
+  verification?: Record<string, { ok: boolean; output?: string }>
+  /** 系统不可代跑的命令清单（仅标注，不否决） */
+  unverifiable?: string[]
 }
 
 // === Task 聚合状态（单一来源） ===

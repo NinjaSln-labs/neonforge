@@ -885,13 +885,13 @@ export default function ConversationPanel({
                           onGoalConfirmed?.(confirmedGoal)
                           void sendRef.current({ text: '确认，目标清楚了' })
                         }}
-                        onReject={() => {
-                          // A-006：拒绝带具体原因（不变量 8——「重新描述」= direction 调整）
-                          reject('goal', { kind: 'direction' })
+                        onReject={(reason) => {
+                          // 2026-11-24 审计：原因由 RejectReasonPicker 选择（设计 02）——不再硬编码 direction
+                          reject('goal', reason)
                           setRejectedCardIdx((p) => ({ ...p, goal: i }))
                           tlog(
                             'card.rejected',
-                            { card: 'goal', action: 'reject', reason: 'direction' },
+                            { card: 'goal', action: 'reject', reason: reason.kind },
                             'system',
                           )
                           onGoalRejected?.()
@@ -922,18 +922,32 @@ export default function ConversationPanel({
                           onPlanConfirmed?.()
                           void sendRef.current({ text: '确认，按方案执行' })
                         }}
-                        onReject={() => {
-                          // S3：拒绝带原因（不变量 8——RejectKind；「修改方案」= scope 调整方向）
-                          reject('plan', { kind: 'scope', target: 'plan' })
+                        onReject={(reason) => {
+                          // 2026-11-24 审计：「修改方案」= modify（设计 02：kind 固定，不经选择器）；
+                          // RejectReasonPicker 只用于「重新描述/还要改/拒绝授权」三类
+                          reject('plan', reason)
                           planWasRejectedRef.current = true
                           setRejectedCardIdx((p) => ({ ...p, execution: i }))
                           tlog(
                             'card.rejected',
-                            { card: 'execution', action: 'reject', reason: 'scope' },
+                            { card: 'execution', action: 'reject', reason: reason.kind },
                             'system',
                           )
                           onPlanRejected?.()
                           void sendRef.current({ text: '方案需要调整一下' })
+                        }}
+                        onRepropose={(reason) => {
+                          // 「重出」：要求模型完整重新给方案（modify + 明确文本）
+                          reject('plan', reason)
+                          planWasRejectedRef.current = true
+                          setRejectedCardIdx((p) => ({ ...p, execution: i }))
+                          tlog(
+                            'card.rejected',
+                            { card: 'execution', action: 'reject', reason: reason.kind },
+                            'system',
+                          )
+                          onPlanRejected?.()
+                          void sendRef.current({ text: '请重新给出完整方案' })
                         }}
                       />
                     ) : null}
@@ -946,6 +960,11 @@ export default function ConversationPanel({
                     i === lastSignalIdx.achieve &&
                     i !== rejectedCardIdx.achievement ? (
                       <ResolutionConfirmCard
+                        claim={resolutionClaim}
+                        // 2026-11-24 审计：核验快照来自 decisionContent（系统代跑结果）——解决卡展示证据
+                        verificationResults={
+                          dc?.kind === 'resolution' ? dc.verification : undefined
+                        }
                         pendingQuestions={resolutionClaim?.evidence?.pendingQuestions ?? []}
                         onConfirm={() => {
                           confirm('resolution')
@@ -956,13 +975,13 @@ export default function ConversationPanel({
                           )
                           void sendRef.current({ text: '已解决，谢谢' })
                         }}
-                        onReject={() => {
-                          // A-006：拒绝带具体原因（不变量 8——「还要改」= scope 调整）
-                          reject('resolution', { kind: 'scope' })
+                        onReject={(reason) => {
+                          // 2026-11-24 审计：「还要改」原因由 RejectReasonPicker 选择（原硬编码 scope）
+                          reject('resolution', reason)
                           setRejectedCardIdx((p) => ({ ...p, achievement: i }))
                           tlog(
                             'card.rejected',
-                            { card: 'achievement', action: 'reject', reason: 'scope' },
+                            { card: 'achievement', action: 'reject', reason: reason.kind },
                             'system',
                           )
                           inputRef.current = '还要改一些地方：'

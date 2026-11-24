@@ -1101,6 +1101,39 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-confirmcard__btn--ok:hover { background: var(--nf-accent-soft); }
 .nf-confirmcard__btn--no:hover { background: var(--nf-border); }
 
+/* 2026-11-24 审计：PlanCard summary/重出、解决卡证据分级、RejectReasonPicker */
+.nf-confirmcard__plan-summary { font-size: 12px; color: var(--nf-text); line-height: 1.5; margin-bottom: 6px; }
+.nf-confirmcard__btn--rerun { flex: 0 0 auto; padding-inline: 10px; color: var(--nf-text-dim); }
+.nf-confirmcard__btn--rerun:hover { color: var(--nf-accent); border-color: var(--nf-accent); }
+.nf-confirmcard__claim { font-size: 12px; color: var(--nf-text); line-height: 1.5; }
+.nf-confirmcard__evidence,
+.nf-confirmcard__evidence--unverified { font-size: 12px; color: var(--nf-text); line-height: 1.5; }
+.nf-confirmcard__evidence ul { margin: 2px 0 0 16px; padding: 0; }
+.nf-confirmcard__evidence li { list-style: none; color: var(--nf-text); }
+.nf-confirmcard__evidence--unverified li { color: #f5a623; }
+.nf-rejectpicker {
+  margin-top: 6px; padding: var(--nf-space-2); border-top: 1px dashed var(--nf-border);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.nf-rejectpicker__title { font-size: 12px; font-weight: 600; color: var(--nf-text); }
+.nf-rejectpicker__options { display: flex; flex-direction: column; gap: 4px; }
+.nf-rejectpicker__option { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--nf-text); cursor: pointer; }
+.nf-rejectpicker__option input { accent-color: var(--nf-accent); }
+.nf-rejectpicker__text {
+  background: var(--nf-bg); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-sm);
+  color: var(--nf-text); font-size: 12px; padding: 4px 8px; resize: vertical;
+}
+.nf-rejectpicker__actions { display: flex; gap: 6px; }
+.nf-rejectpicker__submit {
+  background: none; border: 1px solid var(--nf-accent); color: var(--nf-accent);
+  border-radius: var(--nf-radius-sm); padding: 4px 12px; font-size: 12px; cursor: pointer;
+}
+.nf-rejectpicker__submit:disabled { opacity: 0.45; cursor: default; }
+.nf-rejectpicker__cancel {
+  background: none; border: 1px solid var(--nf-border); color: var(--nf-text);
+  border-radius: var(--nf-radius-sm); padding: 4px 12px; font-size: 12px; cursor: pointer;
+}
+
 
 /* ADR-010：强制澄清卡（无进展对话二级介入——悬浮输入框上方，警示样式，不物理锁输入） */
 .nf-forcedcard {
