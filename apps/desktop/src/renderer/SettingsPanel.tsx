@@ -5,6 +5,7 @@ import type {
   ExtensionInfo,
   McpServerStatus,
   PermissionRuleView,
+  ProblemInstance,
   ProblemSyncStatus,
 } from './types'
 import { useTrustPolicy } from './useTrustPolicy'
@@ -31,7 +32,16 @@ const KEY_SOURCE_LABEL: Record<ApiKeyStatusView['source'], string> = {
   none: '未配置',
 }
 
-export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
+export default function SettingsPanel({
+  onClose,
+  onProblemsSynced,
+}: {
+  onClose?: () => void
+  /** ADR-018：同步完成后把合并后的权威台账推回工作区内存态——
+   * 防「同步赢家 → 陈旧 renderer 自动保存以更高 revision 覆盖」（审计 P1：数据丢失）。
+   * 不提供时只展示计数（旧调用/测试兼容）。 */
+  onProblemsSynced?: (problems: ProblemInstance[]) => void
+}) {
   useEffect(() => {
     if (!onClose) return
     const onKey = (e: KeyboardEvent) => {
@@ -372,6 +382,9 @@ export default function SettingsPanel({ onClose }: { onClose?: () => void }) {
             `同步完成：${r.total ?? 0} 条（冲突 ${r.conflicts ?? 0}；本地独有 ${r.localOnly ?? 0} / 远端独有 ${r.remoteOnly ?? 0}）`,
           )
           refreshProblemSync()
+          // ADR-018 审计修复：合并结果必须回到 renderer 内存态——否则工作区仍持同步前的陈旧副本，
+          // 下一次自动保存会把远端合并赢家覆盖回去（save 按内容差异抬 revision）。
+          if (onProblemsSynced && r.problems) onProblemsSynced(r.problems)
         } else {
           setProblemSyncMsg(
             r?.error === 'passphrase-missing'

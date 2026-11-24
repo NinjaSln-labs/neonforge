@@ -4,6 +4,7 @@ import {
   toolLevel,
   buildAuthHint,
   canMergeApprove,
+  canTaskTrust,
   shouldAutoApproveTool,
   autoApprovalSource,
   isInPlan,
@@ -151,16 +152,16 @@ describe('authModel 信任模式判定（ADR-015）', () => {
     expect(shouldAutoApproveTool({ ...base, ...outside, mode: 'delegated', name: 'edit' })).toBe(
       false,
     )
-    // 显式「允许并记住/单次批准」绑定文件仍优先（ADR-015：用户显式授权优先于自动判定）
-    expect(
-      shouldAutoApproveTool({
-        ...base,
-        ...outside,
-        mode: 'delegated',
-        name: 'edit',
-        trusted: true,
-      }),
-    ).toBe(true)
+    // 2026-11-24 审计：根检查先于 trusted——显式「允许并记住」的根外绑定也不得自动放行
+    //（04-tactical-design §316「沙箱外永不进入信任」；原实现 trusted 先行，词法前缀碰撞路径可免卡）
+    for (const mode of ['strict', 'standard', 'delegated'] as const) {
+      expect(
+        shouldAutoApproveTool({ ...base, ...outside, mode, name: 'edit', trusted: true }),
+      ).toBe(false)
+      expect(
+        autoApprovalSource({ ...base, ...outside, mode, name: 'edit', trusted: true }),
+      ).toBeNull()
+    }
     expect(autoApprovalSource({ ...base, ...outside, mode: 'standard', name: 'write' })).toBeNull()
     // 未提供 rootPath（旧调用）→ 维持既有清单精确匹配语义
     expect(
@@ -173,5 +174,31 @@ describe('authModel 信任模式判定（ADR-015）', () => {
         name: 'write',
       }),
     ).toBe(true)
+  })
+
+  it('词法前缀碰撞的兄弟目录视为根外（/test-evil ≠ /test 内）——trusted 也不放行', () => {
+    const sibling = { path: '/test-evil/passwd', plannedFiles: ['/test-evil/passwd'] }
+    for (const mode of ['strict', 'standard', 'delegated'] as const) {
+      expect(shouldAutoApproveTool({ ...base, ...sibling, mode, name: 'write' })).toBe(false)
+      expect(
+        shouldAutoApproveTool({ ...base, ...sibling, mode, name: 'write', trusted: true }),
+      ).toBe(false)
+    }
+    // 真正根内路径不受影响（含根自身）
+    expect(shouldAutoApproveTool({ ...base, mode: 'standard', name: 'write', trusted: true })).toBe(
+      true,
+    )
+  })
+
+  it('canTaskTrust：任务信任集合只收根内路径（前缀碰撞兄弟目录 / 根外 / 无根 均拒绝）', () => {
+    expect(canTaskTrust('/test/app.ts', '/test')).toBe(true)
+    expect(canTaskTrust('/test', '/test')).toBe(true)
+    // 审计回归：字符串前缀碰撞曾让 /test-evil/passwd 进入信任集合
+    expect(canTaskTrust('/test-evil/passwd', '/test')).toBe(false)
+    expect(canTaskTrust('/test/../escaped.txt', '/test')).toBe(false)
+    expect(canTaskTrust('/other/app.ts', '/test')).toBe(false)
+    expect(canTaskTrust('/test/app.ts', '')).toBe(false)
+    expect(canTaskTrust('/test/app.ts', null)).toBe(false)
+    expect(canTaskTrust('', '/test')).toBe(false)
   })
 })

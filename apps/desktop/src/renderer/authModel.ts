@@ -78,14 +78,25 @@ export function isInPlan(path: string, plannedFiles: readonly string[]): boolean
 
 const isFileTool = (name: string): boolean => name === 'write' || name === 'edit'
 
+/** 任务信任入集合判定（允许并记住/单次批准绑定文件）：只允许项目根内路径。
+ * 2026-11-24 审计：原调用方用字符串前缀 `startsWith(rootPath)`，根 `/x/app` 时 `/x/app-evil/f`
+ * 会进入信任集合 → 之后经 trusted 分支免卡。统一走路径段边界判定（沙箱外永不进入信任）。 */
+export function canTaskTrust(path: string, rootPath?: string | null): boolean {
+  if (!path || !rootPath) return false
+  return isPathInsideRoot(path, rootPath)
+}
+
 export function shouldAutoApproveTool(input: AutoApproveInput): boolean {
-  // 任务信任只绑定文件路径（允许并记住/单次批准）——bash/MCP 不得借 args.path 搭车绕过授权。
-  // ADR-015：用户显式绑定文件的授权优先于自动判定（三种模式都放行；根外路径单次批准后记住也尊重）。
-  if (input.trusted && isFileTool(input.name)) return true
   // V2 信任模式硬边界：计划/委托判定下的根外路径永不自动放行（根外写入只能逐次授权）。
   // 2026-11-24 真机 root-out 剧本：方案列出 '../escaped.txt'，trustPath 绝对化后与清单精确相等，
   // standard/delegated 的 isInPlan 判定不区分根内外 → 自动批准把根外写入放行（与 V2 验收相悖）。
+  // 2026-11-24 审计：根检查必须先于 trusted 分支——任务信任集合本身可能混入根外路径
+  // （ConversationPanel.addTrust 曾用前缀判定 + 用户单次批准外部路径），trusted 先行会让
+  // 根外写免卡；语义上「沙箱外永不进入信任」优先于「已记住的文件」。
   if (input.rootPath && !isPathInsideRoot(input.path, input.rootPath)) return false
+  // 任务信任只绑定文件路径（允许并记住/单次批准）——bash/MCP 不得借 args.path 搭车绕过授权。
+  // ADR-015：用户显式绑定文件的授权优先于自动判定（三种模式都放行）。
+  if (input.trusted && isFileTool(input.name)) return true
   if (input.mode === 'strict') return false
   const inPlan = input.planConfirmed && isInPlan(input.path, input.plannedFiles)
   if (input.mode === 'standard') return input.name === 'write' && inPlan

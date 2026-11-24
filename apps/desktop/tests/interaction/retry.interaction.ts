@@ -9,7 +9,7 @@ async function mockRetryBridge(page: Page): Promise<void> {
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         getProvider: async () => 'commandcode',
         setKey: async () => {},
         clearKey: async () => {},
@@ -79,7 +79,7 @@ async function mockAutoRetryAfterPlan(page: Page): Promise<void> {
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         getProvider: async () => 'commandcode',
         setKey: async () => {},
         clearKey: async () => {},
@@ -178,7 +178,7 @@ async function mockSecondTurnFailure(page: Page): Promise<void> {
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         getProvider: async () => 'commandcode',
         setKey: async () => {},
         clearKey: async () => {},

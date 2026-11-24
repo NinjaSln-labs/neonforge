@@ -85,7 +85,7 @@ export function registerIpc(): void {
     keenablePublicTrial: w.keenablePublicTrial,
   })
   ipcMain.handle('config:has-key', () => configStore.hasValidKey())
-  ipcMain.handle('config:get-key', () => configStore.getApiKey())
+  // 2026-11-24 审计：移除 config:get-key（明文 Key 不进 renderer）；renderer 只用 has-key / key-status
   ipcMain.handle('config:key-status', () => configStore.getApiKeyStatus())
   ipcMain.handle('config:get-provider', () => configStore.getProviderId())
   ipcMain.handle('config:get-model', () => configStore.getModelId())
@@ -267,7 +267,8 @@ export function registerIpc(): void {
     async (
       event,
       opts: {
-        apiKey: string
+        // 旧客户端兼容字段（renderer 已不再传入）；main 以 configStore 的当前 Key 为准
+        apiKey?: string
         level?: 'none' | 'basic' | 'medium' | 'high'
         tools?: boolean
         forceTool?: boolean
@@ -307,7 +308,12 @@ export function registerIpc(): void {
         event.sender.send('gateway:stream-chunk', payload)
       }
       try {
-        await gateway.streamChat(opts.apiKey, {
+        // 2026-11-24 审计：Key 只在 main 内读取（env/凭据文件/加密存储）——renderer 载荷中的 Key 不采信
+        const apiKey = configStore.getApiKey()
+        if (!apiKey) {
+          return { ok: false, error: '未配置可用 Key', errorType: 'key-invalid' as const }
+        }
+        await gateway.streamChat(apiKey, {
           providerId: configStore.getProviderId(),
           manualModelId: configStore.getModelId(),
           level: opts.level ?? 'basic',

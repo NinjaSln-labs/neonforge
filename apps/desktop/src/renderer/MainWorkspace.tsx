@@ -485,7 +485,12 @@ export default function MainWorkspace({
       return
     }
     void loadProblemsAuthoritative(loadProblems())
-      .then(setProblems)
+      .then((loaded) => {
+        setProblems(loaded)
+        // 审计 P1：ADR-018 以 main 为权威——启动加载成功后同步一次 localStorage 降级缓存，
+        // 避免旧缓存/旧会话在 main 数据丢失时反而把陈旧台账写回 main。
+        saveProblems(loaded)
+      })
       .finally(() => setProblemsHydrated(true))
   }, [])
   const [activeProblem, setActiveProblem] = useState<string | null>(null)
@@ -871,6 +876,13 @@ export default function MainWorkspace({
           onClose={() => {
             setShowSettings(false)
             refreshModelLabel()
+          }}
+          onProblemsSynced={(synced) => {
+            // ADR-018 审计修复：同步合并结果回到工作区内存态 + localStorage 降级缓存；
+            // 随后 autosave 发回的是合并后的版本，不会再覆盖 main/远端赢家。
+            if (demoProblemsRef.current) return
+            setProblems(synced)
+            saveProblems(synced)
           }}
         />
       )}

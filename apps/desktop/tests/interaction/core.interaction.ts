@@ -12,7 +12,7 @@ async function mockBridge(page: Page): Promise<void> {
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         setKey: async () => {},
         clearKey: async () => {},
       },
@@ -194,7 +194,7 @@ test('信任阶梯：授权记录接真实数据（06 问题快照 authorized—
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         setKey: async () => {},
         clearKey: async () => {},
       },
@@ -270,7 +270,7 @@ test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 1
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         setKey: async () => {},
         clearKey: async () => {},
       },
@@ -401,7 +401,7 @@ test('0-1 从零开始：GoalCard 已删除（目标确认走对话澄清——d
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         setKey: async () => {},
         clearKey: async () => {},
       },
@@ -445,7 +445,7 @@ test('0-1 从零开始：目标确认卡确认 → 目标确认 + 执行确认�
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         setKey: async () => {},
         clearKey: async () => {},
       },
@@ -518,7 +518,7 @@ test('0-1 从零开始：模型需求确认 → 回写台账标题 + updateProje
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         setKey: async () => {},
         clearKey: async () => {},
       },
@@ -626,7 +626,7 @@ test('执行确认门控：目标+执行确认后无产出 → 强制工具产�
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         setKey: async () => {},
         clearKey: async () => {},
       },
@@ -717,7 +717,7 @@ test('根因 3：点「确认执行」按钮 → 同事件 send 读到已确认�
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         setKey: async () => {},
         clearKey: async () => {},
       },
@@ -865,7 +865,7 @@ test('0-1 对话确认需求：用户发「确认推进」→ 自动确认 + 推
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         setKey: async () => {},
         clearKey: async () => {},
       },
@@ -936,7 +936,7 @@ test('0-1 工具链自主推进：连续 3 轮 read → 自动续聊 → 最终�
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         setKey: async () => {},
         clearKey: async () => {},
       },
@@ -1027,7 +1027,7 @@ test('O2：check-capability 能力齐备 → 工具卡隐藏；能力缺失 → 
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         setKey: async () => {},
         clearKey: async () => {},
       },
@@ -1152,7 +1152,7 @@ test('0-1 授权 v4 完整路径：允许并记住 → 同文件自动 → 新�
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         setKey: async () => {},
         clearKey: async () => {},
       },
@@ -1266,7 +1266,7 @@ test('结构化候选：<candidates> 渲染为按钮 + 点选发送选项文本'
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         setKey: async () => {},
         clearKey: async () => {},
       },
@@ -1341,7 +1341,7 @@ test('目标无【目标确认】标记：用户打字「确认推进」→ 确�
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         setKey: async () => {},
         clearKey: async () => {},
       },
@@ -1421,7 +1421,7 @@ test('需求分流 B 类：改文件内容 → edit 直接执行（不弹 plan �
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         setKey: async () => {},
         clearKey: async () => {},
       },
@@ -1513,7 +1513,7 @@ test('失败重试检测：bash 连续 3 次失败重试同一命令 → 自动�
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         setKey: async () => {},
         clearKey: async () => {},
       },
@@ -1601,7 +1601,7 @@ test('approve-files 多卡并存：连续 2 次批量授权 → 各自批准都�
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         setKey: async () => {},
         clearKey: async () => {},
       },
@@ -1746,7 +1746,7 @@ test('执行确认卡不漂移：write 被拦后模型连发消息 → 卡固定
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         setKey: async () => {},
         clearKey: async () => {},
       },
@@ -1850,7 +1850,7 @@ test('问题 A：approve-files 卡悬挂 → 模型续轮被拦后停续聊（�
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         setKey: async () => {},
         clearKey: async () => {},
       },
@@ -1999,7 +1999,7 @@ test('P2：同 args bash 双卡并存 → 点第一张卡按 id 精确定位（�
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         setKey: async () => {},
         clearKey: async () => {},
       },
@@ -2131,7 +2131,7 @@ test('A-016 硬序门时序：方案未确认早调 approve-files 被拒（不�
       version: 'test',
       config: {
         hasKey: async () => true,
-        getKey: async () => 'test-key',
+        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         setKey: async () => {},
         clearKey: async () => {},
       },

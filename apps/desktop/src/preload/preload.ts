@@ -35,7 +35,6 @@ contextBridge.exposeInMainWorld('neonforge', {
   version: process.env.npm_package_version ?? '0.1.0',
   config: {
     hasKey: () => ipcRenderer.invoke('config:has-key'),
-    getKey: () => ipcRenderer.invoke('config:get-key'),
     getKeyStatus: () =>
       ipcRenderer.invoke('config:key-status') as Promise<{
         source: 'env' | 'file' | 'encrypted' | 'plaintext' | 'none'
@@ -90,7 +89,8 @@ contextBridge.exposeInMainWorld('neonforge', {
         }
       }>,
     streamChat: (opts: {
-      apiKey: string
+      // 2026-11-24 审计：Key 由 main 读取，renderer 不传明文（旧字段保留可选仅为兼容）
+      apiKey?: string
       level?: string
       tools?: boolean
       forceTool?: boolean
@@ -473,7 +473,14 @@ contextBridge.exposeInMainWorld('neonforge', {
         localOnly?: number
         remoteOnly?: number
         conflicts?: number
+        conflictDetails?: Array<{
+          id: string
+          localRevision: number
+          remoteRevision: number
+          winner: 'local' | 'remote'
+        }>
         total?: number
+        problems?: ProblemLedgerView[]
       }>,
   },
   plugins: {

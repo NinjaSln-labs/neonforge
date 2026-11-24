@@ -37,10 +37,31 @@ test('设置页：问题台账同步目录与立即同步', async ({ page }) => 
         syncNow: async () => {
           syncCalls.push('sync')
           status = { ...status, lastSyncAt: '2026-11-17T10:00:00.000Z' }
-          return { ok: true, total: 3, conflicts: 1, localOnly: 1, remoteOnly: 1 }
+          // ADR-018：合并结果随结果返回——工作区必须以此刷新内存态（审计 P1 防陈旧覆盖）
+          return {
+            ok: true,
+            total: 3,
+            conflicts: 1,
+            localOnly: 1,
+            remoteOnly: 1,
+            problems: [
+              {
+                id: 'remote-winner',
+                title: '远端合并赢家',
+                status: 'closed',
+                updatedAt: '10:30',
+                updatedAtIso: '2026-11-17T10:30:00.000Z',
+                revision: 3,
+                snapshot: { goal: '同步赢家', decisions: [], authorized: [], pending: [] },
+              },
+            ],
+          }
         },
       }
       Object.defineProperty(window, '__nfSyncCalls', { get: () => syncCalls })
+      Object.defineProperty(window, '__nfSavedProblems', {
+        get: () => JSON.parse(localStorage.getItem('nf-problems') || '[]'),
+      })
     `,
   })
   await enterWorkspace(page)
@@ -57,6 +78,14 @@ test('设置页：问题台账同步目录与立即同步', async ({ page }) => 
   await page.getByRole('button', { name: '立即同步' }).click()
   await expect(page.getByText(/同步完成：3 条/)).toBeVisible()
   await expect(page.getByText(/上次同步：/)).toBeVisible()
+  // 审计 P1：同步结果回到工作区内存态（问题台账面板显示远端合并赢家；localStorage 缓存同步刷新）
+  await expect(page.getByText('远端合并赢家')).toBeVisible()
+  await expect
+    .poll(async () => {
+      const saved = await h.readCapture<Array<{ id: string }>>('__nfSavedProblems')
+      return saved?.some((p) => p.id === 'remote-winner')
+    })
+    .toBe(true)
   await expect
     .poll(async () => (await h.readCapture<unknown[]>('__nfSyncCalls'))?.at(-1))
     .toBe('sync')

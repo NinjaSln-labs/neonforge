@@ -114,6 +114,62 @@ describe('ProblemLedgerStore（ADR-018）', () => {
     expect(a.load().problems[0]?.title).toBe('B 的版本')
   })
 
+  it('syncNow 回传合并台账与冲突摘要（ADR-018 §3：id/revision 不丢）', () => {
+    const a = store('a')
+    const b = store('b')
+    a.save([problem({ id: 'p1', title: 'A 版', revision: 1 })])
+    b.save([problem({ id: 'p1', title: 'B 版', revision: 2 }), problem({ id: 'p2', revision: 1 })])
+    b.setSyncFolder(syncDir)
+    expect(
+      b
+        .syncNow()
+        .problems?.map((p) => p.id)
+        .sort(),
+    ).toEqual(['p1', 'p2'])
+    a.setSyncFolder(syncDir)
+    const synced = a.syncNow()
+    expect(synced.ok).toBe(true)
+    // renderer 刷新依据：合并后的权威台账随结果返回
+    expect(synced.problems?.find((p) => p.id === 'p1')?.title).toBe('B 版')
+    expect(synced.problems?.some((p) => p.id === 'p2')).toBe(true)
+    expect(synced.conflictDetails).toEqual([
+      { id: 'p1', localRevision: 1, remoteRevision: 2, winner: 'remote' },
+    ])
+  })
+
+  it('陈旧 renderer 保存不得覆盖同步后的更高 revision（审计 P1 防数据丢失）', () => {
+    const a = store('a')
+    const b = store('b')
+    a.save([problem({ id: 'p1', title: 'A 旧', revision: 1 })])
+    b.save([problem({ id: 'p1', title: 'B 新', revision: 2 })])
+    b.setSyncFolder(syncDir)
+    b.syncNow()
+    a.setSyncFolder(syncDir)
+    expect(a.syncNow().problems?.find((p) => p.id === 'p1')?.title).toBe('B 新')
+    // 模拟 renderer 未刷新（内存仍是同步前副本）：全量保存旧内容（revision 1）
+    const stale = a.save([problem({ id: 'p1', title: 'A 旧', revision: 1 })])
+    expect(stale.problems.find((p) => p.id === 'p1')?.title).toBe('B 新')
+    expect(a.load().problems.find((p) => p.id === 'p1')?.title).toBe('B 新')
+    // 用户真正的新编辑（revision 与 main 持平且内容变化）仍能生效并抬 revision
+    const fresh = a.save([problem({ id: 'p1', title: 'A 再改', revision: 2 })])
+    expect(fresh.problems.find((p) => p.id === 'p1')?.title).toBe('A 再改')
+    expect(fresh.problems.find((p) => p.id === 'p1')?.revision).toBe(3)
+  })
+
+  it('renderer 保存不删除本次列表外的 main 条目（远端新增不被省略丢失）', () => {
+    const a = store('a')
+    const b = store('b')
+    b.save([problem({ id: 'p2', title: '远端新增', revision: 1 })])
+    b.setSyncFolder(syncDir)
+    expect(b.syncNow().ok).toBe(true)
+    a.setSyncFolder(syncDir)
+    expect(a.syncNow().problems?.some((p) => p.id === 'p2')).toBe(true)
+    // 陈旧 renderer 内存只含自己的 p1（不含 p2）→ 保存不得丢掉 p2
+    const saved = a.save([problem({ id: 'p1', title: '本地', revision: 1 })])
+    expect(saved.problems.some((p) => p.id === 'p2')).toBe(true)
+    expect(a.load().problems.some((p) => p.id === 'p2')).toBe(true)
+  })
+
   it('错误口令/未知 schema → 拒绝覆盖；本地保持原样', () => {
     const a = store('a')
     a.save([problem({ id: 'p1', title: '本地' })])

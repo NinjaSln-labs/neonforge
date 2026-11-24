@@ -16,7 +16,6 @@ export interface NeonForgeBridge {
   version: string
   config: {
     hasKey: () => Promise<boolean>
-    getKey: () => Promise<string | null>
     getKeyStatus?: () => Promise<ApiKeyStatusView>
     getProvider: () => Promise<string>
     setKey: (key: string, providerId?: string, modelId?: string | null) => Promise<void>
@@ -110,7 +109,8 @@ export interface NeonForgeBridge {
       }
     }>
     streamChat: (opts: {
-      apiKey: string
+      /** 2026-11-24 审计：Key 由 main 读取，renderer 不传明文（可选仅为旧调用兼容） */
+      apiKey?: string
       level?: string
       tools?: boolean
       forceTool?: boolean
@@ -352,7 +352,16 @@ export interface NeonForgeBridge {
       localOnly?: number
       remoteOnly?: number
       conflicts?: number
+      /** ADR-018 §3：冲突摘要（id/revision/胜者）——不静默丢弃 */
+      conflictDetails?: Array<{
+        id: string
+        localRevision: number
+        remoteRevision: number
+        winner: 'local' | 'remote'
+      }>
       total?: number
+      /** 合并后的权威台账——renderer 必须以此刷新内存态（防陈旧副本回写） */
+      problems?: ProblemInstance[]
     }>
   }
   plugins: {

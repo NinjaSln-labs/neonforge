@@ -1,8 +1,13 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 2026-11-24 审计：Electron 渲染进程 CSP（无内联脚本；样式允许内联属性；仅本机 Vite HMR 可连接） -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' ws://localhost:5175 http://localhost:5175; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'"
+    />
     <title>NeonForge</title>
   </head>
   <body>
