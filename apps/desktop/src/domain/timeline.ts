@@ -430,7 +430,7 @@ export function validateTimelineEvent(type: string, detail: Record<string, unkno
 }
 
 // === 事件派生（Event Sourcing-lite）：转换前后状态 diff → 领域事件 ===
-// 纯函数：任何 ConversationState 转换（userConfirmed/userRejected/approvalGranted/applyToolResult/setPending/clearPending）
+// 纯函数：任何 ConversationState 转换（userConfirmed/userRejected/approvalGranted/applyToolResult/setPending）
 // 自动产生对应事件——应用层在转换单点（useConversationState.transition）收集后发送。
 export interface DerivedStateEvent {
   type: TimelineEventType

@@ -151,13 +151,9 @@ export function useConversationState(opts?: UseConversationStateOpts) {
     // 确认卡触发 → 会话级 PENDING（D5）；S3：decisionContent 快照随置位（卡渲染唯一来源）
     setPending: (kind: Exclude<PendingKind, 'none'>, content?: Omit<DecisionContent, 'kind'>) =>
       transition((s) => setPending(s, kind, content)),
-    clearPending: () => transition((s) => ({ ...s, pending: 'none' as PendingKind })),
     // ADR-010：强制卡「我要重新描述」按钮专用——点卡 = 明确新一轮协商，rejectStreak 重置
     // （pending 期间打字拒绝不重置——C2 循环形态仍需累积触发强制卡）
     resetRejectStreak: () => transition((s) => ({ ...s, rejectStreak: 0 })),
-    // 执行方案块解析清单并入（原 Set 直接 add——转换入口规范化）
-    addPlannedFiles: (files: string[]) =>
-      transition((s) => ({ ...s, plannedFiles: new Set([...s.plannedFiles, ...files]) })),
     // 规划幂等标记（clearTrust 任务边界——D2 同步 main 在组件层）
     setFilesApproved: (v: boolean) => transition((s) => ({ ...s, filesApproved: v })),
     // D3（ADR-005）：启动恢复——main plannedFilesStore 权威状态 → 本地镜像（批准事实跨重启）；
