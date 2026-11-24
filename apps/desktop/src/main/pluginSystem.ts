@@ -141,6 +141,8 @@ export class PluginRegistry {
           extensionId: state.id,
           kind: state.kind,
           version: state.version,
+          // ADR-017：能力指纹随注册事件记录（授权范围可审计）
+          capabilityDigest: state.capabilityDigest,
           failureReason: reason,
         },
       })
@@ -166,6 +168,8 @@ export class PluginRegistry {
         extensionId: state.id,
         kind: state.kind,
         version: state.version,
+        // ADR-017：能力指纹随注册事件记录（授权范围可审计）
+        capabilityDigest: state.capabilityDigest,
         ...(state.failureReason ? { failureReason: state.failureReason } : {}),
       },
     })

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PluginRegistry, BUILTIN_PLUGINS } from '../../src/main/pluginSystem'
+import { PluginRegistry, BUILTIN_PLUGINS, setPluginTimelineSink } from '../../src/main/pluginSystem'
 
 describe('PluginRegistry（ticket 08——内置插件注册与生命周期钩子）', () => {
   it('register：init/activate 钩子触发 + active=true', () => {
@@ -46,5 +46,21 @@ describe('PluginRegistry（ticket 08——内置插件注册与生命周期钩�
     expect(r.list().every((p) => p.active)).toBe(true)
     expect(BUILTIN_PLUGINS.map((p) => p.name)).toContain('code-rag')
     expect(BUILTIN_PLUGINS.map((p) => p.name)).toContain('language-server')
+  })
+
+  it('ADR-017：extension.registered 载荷包含 capabilityDigest（授权范围可审计）', () => {
+    const events: Array<{ type: string; detail: Record<string, unknown> }> = []
+    setPluginTimelineSink((event) => events.push(event))
+    const r = new PluginRegistry()
+    r.register({
+      name: 'ext',
+      version: '1',
+      capabilities: [
+        { id: 'read_file', name: '读取文件', description: '只读项目文件', risk: 'none' },
+      ],
+    })
+    setPluginTimelineSink(() => {})
+    const registered = events.find((e) => e.type === 'extension.registered')
+    expect(registered?.detail.capabilityDigest).toBe('read_file:none')
   })
 })

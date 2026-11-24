@@ -757,7 +757,10 @@ export default function SettingsPanel({
                   {ext.failureReason ? ` · 失败：${ext.failureReason}` : ''}
                   {ext.capabilities.length > 0
                     ? ` · 能力：${ext.capabilities
-                        .map((c) => `${c.name || c.id}(${c.risk})`)
+                        .map(
+                          (c) =>
+                            `${c.name || c.id}(${c.risk})${c.description ? `：${c.description}` : ''}`,
+                        )
                         .join('、')}`
                     : ''}
                   <button

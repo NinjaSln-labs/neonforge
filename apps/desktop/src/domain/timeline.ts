@@ -295,7 +295,7 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
   'extension.registered': {
     domain: 'extension',
     role: 'system',
-    detailKeys: ['extensionId', 'kind', 'version'],
+    detailKeys: ['extensionId', 'kind', 'version', 'capabilityDigest'],
   },
   'extension.activated': { domain: 'extension', role: 'system', detailKeys: ['extensionId'] },
   'extension.deactivated': { domain: 'extension', role: 'system', detailKeys: ['extensionId'] },
