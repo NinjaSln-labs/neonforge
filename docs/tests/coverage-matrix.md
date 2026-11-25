@@ -305,3 +305,4 @@
   - 未入矩阵的已测模块：compaction、preheat、codeRag/context、diffRender、lsp、serviceManager、projectInit、sandboxPath/sandboxSymlink、envManager、useConversationState、gateway 各模块等（文件清单见 `apps/desktop/tests/unit/`）。
   - ~~`delegated` 的 standard 负控为手工临时改任务运行，未编码为运行器选项/负控任务。~~ 2026-11-24 已关闭（#158）：`--trust-override` + `--expect-fail` + `--expect-fail-check` 编码进运行器，standard 负控 3/3 EXPECTED-FAIL。
   - L5 视觉基线只在 macOS 刷新；WSL 不更新基线；L5 无 CI 承载。
+  - 队列 `pause → resume` 曾记为语义缺口，2026-11-25 复核撤销：paused 经 `startTask` 恢复（UI「开始」），`resume` 只服务 blocked 自动恢复——测试对 paused 调 resume 抛错属 API 契约。
