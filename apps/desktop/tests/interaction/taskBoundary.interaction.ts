@@ -17,7 +17,9 @@ test('新任务：清空目标/方案确认位与主进程计划门，重新弹�
         if (e && (e.type === 'card.resolved' || e.type === 'card.rejected')) window.__nfCards.push(e);
         if (e && ['problem.created', 'problem.snapshot_updated', 'environment.injected',
                     'conversation.assistant_start', 'conversation.assistant_done',
-                    'conversation.status_change'].includes(e.type)) {
+                    'conversation.status_change', 'conversation.message_sent',
+                    'execution.force_input', 'execution.forced', 'execution.released',
+                    'proposal.goal', 'proposal.plan'].includes(e.type)) {
           window.__nfBoundary.push(e);
         }
       } };
@@ -103,6 +105,51 @@ test('新任务：清空目标/方案确认位与主进程计划门，重新弹�
   expect(
     statuses.every((e) =>
       ['working', 'approval-pending', 'ready'].includes(String(e.detail?.status)),
+    ),
+  ).toBe(true)
+  // 2026-11-25 事件语义补课（批次 13）：提议/推进/消息事件产线载荷——
+  // proposal.goal（statement；无假设时 assumptions 键不上报）、proposal.plan（ok+summary+files 路径清单）、
+  // execution.forced/released（mode/reason 可回放）、execution.force_input（planned/produced/projectFiles
+  // 三集合快照 + goalAchieved）、conversation.message_sent（用户原文，按钮确认文本亦为一次 send）、
+  // problem.snapshot_updated（目标确认回写台账——field=goal）
+  const goalProps = boundary.filter((e) => e.type === 'proposal.goal')
+  expect(goalProps.map((e) => e.detail?.statement)).toEqual(['做一个待办应用', '换一个新目标'])
+  expect(goalProps.every((e) => !('assumptions' in (e.detail ?? {})))).toBe(true)
+  const planProps = boundary.filter((e) => e.type === 'proposal.plan')
+  expect(planProps.map((e) => e.detail?.summary)).toEqual(['单页方案', '新方案'])
+  expect(planProps.map((e) => e.detail?.files)).toEqual([['/test/app.ts'], ['/test/new.ts']])
+  expect(planProps.every((e) => e.detail?.ok === true)).toBe(true)
+  const textMsgs = boundary.filter((e) => e.type === 'conversation.message_sent')
+  expect(textMsgs.every((e) => typeof e.detail?.content === 'string')).toBe(true)
+  expect(textMsgs.some((e) => e.detail?.content === '做个待办应用')).toBe(true)
+  expect(textMsgs.some((e) => e.detail?.content === '换一个新目标')).toBe(true)
+  expect(textMsgs.some((e) => e.detail?.content === '确认，目标清楚了')).toBe(true)
+  expect(textMsgs.some((e) => e.detail?.content === '确认，按方案执行')).toBe(true)
+  const forceInputs = boundary.filter((e) => e.type === 'execution.force_input')
+  expect(forceInputs.length).toBeGreaterThanOrEqual(1)
+  expect(
+    forceInputs.every(
+      (e) =>
+        Array.isArray(e.detail?.planned) &&
+        Array.isArray(e.detail?.produced) &&
+        Array.isArray(e.detail?.projectFiles) &&
+        typeof e.detail?.goalAchieved === 'boolean',
+    ),
+  ).toBe(true)
+  const guarantees = boundary.filter(
+    (e) => e.type === 'execution.forced' || e.type === 'execution.released',
+  )
+  expect(guarantees.length).toBeGreaterThanOrEqual(1)
+  expect(
+    guarantees.every((e) =>
+      ['require-action', 'require-advance', 'auto'].includes(String(e.detail?.mode)),
+    ),
+  ).toBe(true)
+  expect(guarantees.every((e) => typeof e.detail?.reason === 'string')).toBe(true)
+  const goalSnapshots = boundary.filter((e) => e.type === 'problem.snapshot_updated')
+  expect(
+    goalSnapshots.some(
+      (e) => e.detail?.field === 'goal' && typeof e.detail?.problemId === 'string',
     ),
   ).toBe(true)
 })

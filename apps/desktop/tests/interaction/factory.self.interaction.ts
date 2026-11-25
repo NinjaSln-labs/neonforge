@@ -34,6 +34,12 @@ test('T0 自测 1：根因3 重搭——manualEmit + forceTool/approved 捕获 +
     project: 'none',
     manualEmit: true,
     capture: { forceToolCalls: true, approvedFlags: true },
+    extraInit: `
+      window.__nfToolTlog = [];
+      bridge.timeline = { log: async (e) => {
+        if (e && ['tool.requested', 'tool.executed'].includes(e.type)) window.__nfToolTlog.push(e);
+      } };
+    `,
   })
   await startFromScratch(page, '做个射击游戏')
   // 等 send 的流式消息创建（send 是 async——updater 找不到 streaming 消息时 emit 会被丢弃；
@@ -68,6 +74,28 @@ test('T0 自测 1：根因3 重搭——manualEmit + forceTool/approved 捕获 +
   // + 清单内 write 自动放行（approved=true——首次 write 执行即放行，无授权卡）
   expect((await h.forceToolCalls()).includes(true)).toBe(true)
   expect((await h.approvedFlags())[0]).toBe(true)
+  // 2026-11-25 事件语义补课（批次 13）：工具事件产线载荷——
+  // tool.requested（每个 chunk 的工具名+原始参数）、tool.executed（真实执行成功——write 的
+  // needApproval/error 缺省）。proposal.completion 不在本流程：本例 report_completion 的
+  // verification 为空数组 → 协议层 invalid（不置 pending、无 proposal 事件）——有效完成载荷
+  // 由 V1.5-S2-3（cards-from-decision-content）断言
+  const evts =
+    (await h.readCapture<Array<{ type: string; detail?: Record<string, unknown> }>>(
+      '__nfToolTlog',
+    )) ?? []
+  const reqs = evts.filter((e) => e.type === 'tool.requested').map((e) => e.detail?.name)
+  expect(reqs).toEqual(
+    expect.arrayContaining(['propose_goal', 'propose_plan', 'write', 'report_completion']),
+  )
+  const writeReq = evts.find((e) => e.type === 'tool.requested' && e.detail?.name === 'write')
+  expect(writeReq?.detail?.args).toEqual({ path: 'game.js', content: 'x' })
+  // 协议工具（propose_goal/propose_plan/report_completion）由协议层直接置 done——不落 tools.execute，
+  // 故 tool.executed 只有真实工具 write（区分「提议卡」与「执行」的事件语义）
+  const execs = evts.filter((e) => e.type === 'tool.executed').map((e) => e.detail?.name)
+  expect(execs).toEqual(['write'])
+  const writeExec = evts.find((e) => e.type === 'tool.executed' && e.detail?.name === 'write')
+  // 成功路径不携带 error（toEqual 忽略 undefined 键——两种序列化下语义一致）
+  expect(writeExec?.detail).toEqual({ name: 'write', needApproval: undefined, error: undefined })
 })
 
 test('T0 自测 2：S3 语义重写——manualEmit 手动推流 + 方案确认后清单内 write 自动放行', async ({
