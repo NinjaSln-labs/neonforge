@@ -11,7 +11,11 @@ test('ADR-016：拒绝记忆重试 → gate.denied（结构化来源/属性/风�
     approval: 'all',
     extraInit: `
       window.__nfGateDenied = [];
-      bridge.timeline = { log: async (e) => { if (e && e.type === 'gate.denied') window.__nfGateDenied.push(e) } };
+      window.__nfApprovalEvents = [];
+      bridge.timeline = { log: async (e) => {
+        if (e && e.type === 'gate.denied') window.__nfGateDenied.push(e);
+        if (e && ['tool.rejected', 'card.rejected'].includes(e.type)) window.__nfApprovalEvents.push(e);
+      } };
     `,
   })
   await startFromScratch(page)
@@ -73,4 +77,21 @@ test('ADR-016：拒绝记忆重试 → gate.denied（结构化来源/属性/风�
     risk: 'high',
   })
   expect(events[0]?.detail.reason).toContain('拒绝记忆')
+
+  // 2026-11-25 事件语义补课：授权拒绝载荷——tool.rejected（name/args）、card.rejected
+  // （card/action/reason——reason 来自默认 direction，调用方未传选择器结果时的旧语义）
+  const approvalEvts =
+    (await h.readCapture<Array<{ type: string; detail?: Record<string, unknown> }>>(
+      '__nfApprovalEvents',
+    )) ?? []
+  const rejected = approvalEvts.find((e) => e.type === 'tool.rejected')
+  expect(rejected?.detail?.name).toBe('bash')
+  expect(rejected?.detail?.args).toMatchObject({ command })
+  const cardRejected = approvalEvts.find((e) => e.type === 'card.rejected')
+  expect(cardRejected?.detail).toEqual({
+    card: 'approval',
+    action: 'reject',
+    name: 'bash',
+    reason: 'direction',
+  })
 })

@@ -178,11 +178,18 @@ test('T0 自测 3：P2 双卡重搭——approval all + manualEmit + 卡按 id �
 })
 
 test('T0 自测 4：交付对账重搭——demo 注入 + silent + 打开已有项目路径', async ({ page }) => {
-  await installMockBridge(page, {
+  const h = await installMockBridge(page, {
     project: 'open',
     demo: { delivery: deliveredPackage(), recentFiles: ['/test/a.ts'] },
+    extraInit: `
+      window.__nfProblem = [];
+      bridge.timeline = { log: async (e) => { if (e && ['problem.closed', 'problem.snapshot_updated'].includes(e.type)) window.__nfProblem.push(e) } };
+    `,
   })
   await enterWorkspace(page)
+  // 先发一条消息建立问题台账实例（problem.closed 需要 activeProblem——空台账时关闭不发事件）
+  await sendChat(page, '修复拼写错误')
+  await page.waitForTimeout(600)
   // 产物 Tab → diff 审核（行级渲染 + 全部接受并写入）
   await page.getByRole('button', { name: '产物' }).click()
   await page.waitForTimeout(300)
@@ -201,4 +208,11 @@ test('T0 自测 4：交付对账重搭——demo 注入 + silent + 打开已有�
   await page.getByRole('button', { name: '勾选：拼写已修正' }).click()
   await page.getByRole('button', { name: '确认问题关闭' }).click()
   await expectVisible(page.locator('.nf-delivery__badge--closed'))
+  // 2026-11-25 事件语义补课：问题台账事件载荷——problem.closed 携带 problemId（关闭可审计）
+  const problemEvts =
+    (await h.readCapture<Array<{ type: string; detail?: Record<string, unknown> }>>(
+      '__nfProblem',
+    )) ?? []
+  const closed = problemEvts.find((e) => e.type === 'problem.closed')
+  expect(typeof closed?.detail?.problemId).toBe('string')
 })
