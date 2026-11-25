@@ -16,7 +16,8 @@ test('新任务：清空目标/方案确认位与主进程计划门，重新弹�
         if (e && e.type === 'conversation.created') window.__nfCreated.push(e);
         if (e && (e.type === 'card.resolved' || e.type === 'card.rejected')) window.__nfCards.push(e);
         if (e && ['problem.created', 'problem.snapshot_updated', 'environment.injected',
-                    'conversation.assistant_start', 'conversation.assistant_done'].includes(e.type)) {
+                    'conversation.assistant_start', 'conversation.assistant_done',
+                    'conversation.status_change'].includes(e.type)) {
           window.__nfBoundary.push(e);
         }
       } };
@@ -96,6 +97,14 @@ test('新任务：清空目标/方案确认位与主进程计划门，重新弹�
     expect(typeof env.detail?.rootPath).toBe('string')
     expect(Array.isArray(env.detail?.caps)).toBe(true)
   }
+  // conversation.status_change：working/ready 状态切换载荷（值域三态）
+  const statuses = boundary.filter((e) => e.type === 'conversation.status_change')
+  expect(statuses.length).toBeGreaterThanOrEqual(1)
+  expect(
+    statuses.every((e) =>
+      ['working', 'approval-pending', 'ready'].includes(String(e.detail?.status)),
+    ),
+  ).toBe(true)
 })
 
 test('会话 ID 跨重启保留（queue/acceptance/changeset 记录可再定位）', async ({ page }) => {
