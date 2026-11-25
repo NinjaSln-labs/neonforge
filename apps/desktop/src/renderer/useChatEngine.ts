@@ -7,9 +7,7 @@ import {
   decideProgressGuarantee,
   detectUnproductiveDialogue,
   isConsumedProposal,
-  isSideEffectAction,
   noteUserTextReply,
-  pendingCardToShow,
   shouldStopContinuation,
   type ConversationState,
 } from '../domain/conversationState'
@@ -192,24 +190,13 @@ export function useChatEngine(deps: ChatEngineDeps): ChatEngine {
         (c) => c.status === 'need-approval' || c.status === 'file-approval',
       )
       // 2026-08-07 会话级单一 PENDING（重构——确认卡待决策 → 模型停——动作无效——用户决策是唯一输入）
-      // 2026-08-14 S2b（缝隙 4/5）：确认卡触发走状态机派生——执行确认只认**有副作用动作**（探索 bash 不再触发）
-      const lastContent = lastMsg.content ?? ''
-      const sideEffectPending = lastMsg.toolCalls.some(
-        (c) => c.status === 'pending' && isSideEffectAction(c.name, String(c.args?.command ?? '')),
-      )
-      const confirmPending =
-        pendingCardToShow(
-          stateRef.current.goalConfirmed,
-          stateRef.current.planConfirmed,
-          stateRef.current.resolutionConfirmed,
-          lastContent,
-          sideEffectPending,
-        ) !== 'none'
+      // 2026-11-24 V1.5-S4：停止条件只看领域 pending（deriveDecisionPoint 派生）与授权卡信号；
+      // 文本标记兼容壳 pendingCardToShow 已移除（标记命中不产卡、不参与停止判定）。
       // 2026-08-15 问题 A 修复（用户实测 14 轮工具循环根因）：停止条件接入状态机——pending 非 none 即停
       // （与 canExecute 同源——领域层 shouldStopContinuation）。授权卡（need-approval/file-approval）可能挂在
       // **旧消息**（用户未批准未拒绝——卡悬挂）→ 全列表 effect 已置 pending='approval'，但 lastMsg 派生检测不到
       // → 修复前继续喂模型 → forceTool 逼模型每轮调工具 → 被 pendingBlocked 拦 → 循环。现在卡在任意消息都停续聊
-      if (shouldStopContinuation(stateRef.current, { needsApproval, confirmPending })) {
+      if (shouldStopContinuation(stateRef.current, { needsApproval })) {
         releaseWorking()
         return
       } // 卡弹出（确认卡/授权卡）——等用户决策（模型停——不续聊）

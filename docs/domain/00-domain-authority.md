@@ -178,7 +178,8 @@ ActionAttribute {
 **关键性质**：
 
 1. **决策点 = 状态 × 提议 × 动作属性的确定性函数**——同一输入永远同一决策点；模型措辞不参与判定（原 pendingCardToShow 以模型文本为输入的建模废除）
-   - 2026-11-24 审计裁定（双路径说明）：`pendingCardToShow` 仍作为**停止续聊/渲染兜底信号**存在于应用层（不构造 proposals、不写 decisionContent）；生产授权卡 pending 由 `ConversationPanel` 对消息工具卡（`need-approval`/`file-approval`）的对账 effect 置位（仅在 `pending === 'none'` 时），授权内容由工具卡自身承载。`deriveDecisionPoint` 的 approval 分支供能提供 `pendingActions` 的调用方使用；两条路径不改变领域纯函数语义，卡内容仍只来自结构化提议/工具卡。
+   - 2026-11-24 审计裁定（双路径说明）：生产授权卡 pending 由 `ConversationPanel` 对消息工具卡（`need-approval`/`file-approval`）的对账 effect 置位（仅在 `pending === 'none'` 时），授权内容由工具卡自身承载。`deriveDecisionPoint` 的 approval 分支供能提供 `pendingActions` 的调用方使用；两条路径不改变领域纯函数语义，卡内容仍只来自结构化提议/工具卡。
+   - 2026-11-24 审计批次 9（S4 主体落地）：`pendingCardToShow`/`goalFallbackTrigger` 已删除——工具门控/续聊停止/卡渲染/文本征询均只读领域 `pending` 与 `decisionContent` 快照；文本标记只打 `protocol.text_fallback` 并引导改道，不构造提议。唯一保留的文本兜底 = `agentLoop` 的「结构化提议/证据 = 推进」探测（StallDetector 输入，不参与决策点判定）。
 2. **提议是值对象**（结构化内容：假设/证据/验证计划）——不是文本标记；解析层（parsePlanProposal/parseCompletionClaim）负责从模型输出结构化，判定层只消费结构
 2b. **假设来源可追溯（ADR-014）**：`Assumption = { text, source }`，`source ∈ model_inference | user_choice | clarification`——`clarification` 来自 `ask_user.assumptions` 核对卡的结构化回答，`user_choice` 来自候选点选，`model_inference` 为模型自行推断；**模型自报来源需有本会话真实交互证据，否则在进入决策内容前降级为 `model_inference`**；确认卡显示来源标签，旧字符串假设归一化为 `model_inference`，任务快照版本 2（v1 兼容）
 3. **决策内容快照**（decisionContent——呈现与审计的唯一来源）：卡弹出时携带完整提议内容，确认/拒绝事件记录快照（「用户确认了什么」可追溯——2026-08-15 run4 实证的追溯缺口）

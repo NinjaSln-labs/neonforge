@@ -1185,31 +1185,12 @@ export function isProgressing(
   return toolResults.some((r) => r.ok && isSideEffectAction(r.name, r.command))
 }
 
-// 确认卡触发兼容壳（缝隙 5——S3 由 deriveDecisionPoint 取代；参数/返回值已切新枚举）
-export function pendingCardToShow(
-  goalConfirmed: boolean,
-  planConfirmed: boolean,
-  resolutionConfirmed: boolean,
-  lastContent: string,
-  sideEffectPending: boolean,
-): PendingKind {
-  if (!goalConfirmed && lastContent.includes('【目标确认')) return 'goal'
-  if (
-    goalConfirmed &&
-    !planConfirmed &&
-    (lastContent.includes('【执行方案') ||
-      sideEffectPending ||
-      /(等你确认|你确认一下|确认一下|等你点头|你看行吗|你看行不行|可以的话我)/.test(lastContent))
-  )
-    return 'plan'
-  if (!resolutionConfirmed && lastContent.includes('【已达成')) return 'resolution'
-  return 'none'
-}
-
 // 续聊停止判定（问题 A 2026-08-15：maybeContinue 停止条件与 canExecute **同源**——状态机 pending 非 none 即停）
+// V1.5-S4（2026-11-24 审计批次 9）：移除文本标记兼容壳 pendingCardToShow——决策点只由 deriveDecisionPoint
+// 从结构化提议/动作属性/用户主动请求派生；停止续聊只看领域 pending 与最后消息的授权卡信号。
 export function shouldStopContinuation(
   s: ConversationState,
-  lastMsg: { needsApproval: boolean; confirmPending: boolean },
+  lastMsg: { needsApproval: boolean },
 ): boolean {
-  return s.pending !== 'none' || lastMsg.needsApproval || lastMsg.confirmPending
+  return s.pending !== 'none' || lastMsg.needsApproval
 }

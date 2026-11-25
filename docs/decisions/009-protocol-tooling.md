@@ -5,6 +5,7 @@
 Accepted（2026-08-31——用户拍板：全方位调研后重构，重构完成后再做 Mac 真机验证）
 修订 r2（2026-08-31——立项文档审计修正：拦截层归属/时序/Consequences 夸大/CAS 出 scope，见 stage-spec 附录审计记录）
 修订 r3（2026-11-24——设计与实现审计批次 5/6：确认 S3 降级已落地（标记不构造 proposals/不写 decisionContent、`protocol.text_fallback` + 引导改道）；`pendingCardToShow`/`goalFallbackTrigger` 等文本兜底**生产调用点仍在**（停止续聊/工具门控/渲染兜底），其完全退场按 Decision/S4 归 V1.5-S4，不计入领域决策点判定输入；补注册表遍历测试后逐事件**语义**断言仍为缺口）
+修订 r4（2026-11-24——审计批次 8/9 落地）：`pendingCardToShow` 与 `goalFallbackTrigger` **已删除**，工具门控/续聊停止/渲染兜底/文本征询（textAskPlan）全部改为领域 pending + decisionContent 快照 + 协议工具信号；`useChatStream` 不再从文本解析 proposals，占位执行卡只复用 `propose_plan` 工具 args。`parsePlanProposal`/`parseCompletionClaim` 仅剩 `agentLoop` 的「结构化提议/证据 = 推进」（StallDetector 语义）调用，属兜底探测（S4 允许保留项）
 
 ## Context
 

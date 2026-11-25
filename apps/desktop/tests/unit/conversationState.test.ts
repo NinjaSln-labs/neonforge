@@ -28,7 +28,6 @@ import {
   isProgressing,
   isSideEffectAction,
   isLocalhostCommand,
-  pendingCardToShow,
   shouldStopContinuation,
   actionNeedsApproval,
   type ConversationState,
@@ -1057,57 +1056,25 @@ describe('继承锁定——isProgressing（缝隙 2）', () => {
   })
 })
 
-describe('继承锁定——pendingCardToShow（缝隙 5——S3 由 deriveDecisionPoint 取代；返回值已切新枚举）', () => {
-  const show = (
-    goal: boolean,
-    plan: boolean,
-    resolution: boolean,
-    content: string,
-    sideEffect = false,
-  ) => pendingCardToShow(goal, plan, resolution, content, sideEffect)
-
-  it('模型标记命中 → 对应确认点（plan/resolution 新枚举）', () => {
-    expect(show(false, false, false, '好的。【目标确认：做一个游戏】')).toBe('goal')
-    expect(show(true, false, false, '【执行方案】\n- a.js')).toBe('plan')
-    expect(show(true, true, false, '【已达成】完成')).toBe('resolution')
-  })
-
-  it('无标记但有副作用工具待执行 → 方案确认卡（execPendingCalls 现状语义）', () => {
-    expect(show(true, false, false, '开始写。', true)).toBe('plan')
-  })
-
-  it('「等确认」语义（模型自然语言等待——无标记无工具也命中，防续聊遮挡卡死锁）', () => {
-    expect(show(true, false, false, '好的，方案如下，等你确认。')).toBe('plan')
-    expect(show(true, false, false, '我先看看项目现状。')).toBe('none')
-  })
-
-  it('已确认的标记不再触发卡（确认点一次性）', () => {
-    expect(show(true, true, false, '【目标确认：…】【执行方案】…')).toBe('none')
-  })
-})
-
+// V1.5-S4（2026-11-24 审计批次 9）：文本标记兼容壳 pendingCardToShow 已退役——决策点只由
+// deriveDecisionPoint（结构化提议/动作属性/用户主动请求）派生，停止续聊只看领域 pending 与授权卡信号。
 describe('继承锁定——shouldStopContinuation（问题 A：maybeContinue 与 canExecute 同源）', () => {
   it('pending 非 none（卡在任意消息——含旧消息授权卡）→ 停续聊', () => {
     for (const kind of ['goal', 'plan', 'resolution', 'approval'] as const) {
       expect(
         shouldStopContinuation(setPending(confirmed(), kind), {
           needsApproval: false,
-          confirmPending: false,
         }),
       ).toBe(true)
     }
   })
 
   it('pending=none + 最后消息授权卡 → 停（既有语义）', () => {
-    expect(
-      shouldStopContinuation(initialState(), { needsApproval: true, confirmPending: false }),
-    ).toBe(true)
+    expect(shouldStopContinuation(initialState(), { needsApproval: true })).toBe(true)
   })
 
   it('pending=none + 无卡信号 → 继续', () => {
-    expect(
-      shouldStopContinuation(initialState(), { needsApproval: false, confirmPending: false }),
-    ).toBe(false)
+    expect(shouldStopContinuation(initialState(), { needsApproval: false })).toBe(false)
   })
 })
 
