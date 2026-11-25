@@ -123,7 +123,7 @@ The domain layer is pure functions (no React dependency); L1 unit tests lock the
 ```bash
 npx vitest run                            # L1 domain logic (974)
 npx tsc -p tsconfig.json --noEmit         # L2 contracts (renderer + main)
-npx playwright test --project=interaction # L3 component interaction (96 collected / 93 run + 3 skipped)
+npx playwright test --project=interaction # L3 component interaction (98 collected / 95 run + 3 skipped)
 npx playwright test                       # L5 visual + L3 (local, manual)
 NF_TEST_KEY=<key> node e2e-suite.mjs      # L4 real-API E2E (prereq: mkdir -p /tmp/nf-e2e-test)
 ```
