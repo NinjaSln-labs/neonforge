@@ -22,15 +22,12 @@ import { ConversationComposer } from './ConversationComposer'
 import { createApplyChunk } from './useChatStream'
 import { useChatEngine } from './useChatEngine'
 // 2026-08-06 DDD 落地（progress-aware 卡住检测——领域层纯逻辑，双源调研驱动）
-import {
-  initialStuckState,
-  // V1.5-S4 退役——goalFallbackTrigger 仅剩兜底探测（text_fallback 路径），见 ADR-009
-  goalFallbackTrigger,
-} from '../domain/agentLoop'
+import { initialStuckState } from '../domain/agentLoop'
 // 2026-08-14 会话状态机（Task 聚合——A0 §2/§3/§4/§5）：状态单一来源 + 转换唯一入口（session-state-machine.md S2）
+// V1.5-S4（2026-11-24 审计批次 9）：文本标记兼容壳 pendingCardToShow/goalFallbackTrigger 已从本组件退场——
+// 卡触发只认 decisionContent 快照与协议工具信号；文本标记仅走降级引导（useChatStream）。
 import {
   isSideEffectAction,
-  pendingCardToShow,
   type CompletionClaim,
   type GoalProposal,
   type PlanProposal,
@@ -375,20 +372,14 @@ export default function ConversationPanel({
       // 协议工具置 pending 后卡挂在该消息下（文本探测只认标记——协议路径消息无标记 → 卡不弹缺口）
       if (
         exec === -1 &&
-        (x.content.includes('【执行方案') ||
-          hasProtoCall(x, 'propose_plan') ||
+        (hasProtoCall(x, 'propose_plan') ||
           (x.toolCalls ?? []).some((c) =>
             isSideEffectAction(c.name, String(c.args?.command ?? '')),
           ))
       )
         exec = k
-      if (goal === -1 && (/【目标确认[:：]/.test(x.content) || hasProtoCall(x, 'propose_goal')))
-        goal = k
-      if (
-        achieve === -1 &&
-        (x.content.includes('【已达成') || hasProtoCall(x, 'report_completion'))
-      )
-        achieve = k
+      if (goal === -1 && hasProtoCall(x, 'propose_goal')) goal = k
+      if (achieve === -1 && hasProtoCall(x, 'report_completion')) achieve = k
       if (exec !== -1 && goal !== -1 && achieve !== -1) break
     }
     return { exec, goal, achieve }
@@ -503,7 +494,6 @@ export default function ConversationPanel({
     doneNotifierRef,
     evidenceGuideCountRef,
     evidenceReportNudgedRef,
-    initialPrompt,
     isTrusted,
     messages,
     messagesRef,
@@ -760,13 +750,10 @@ export default function ConversationPanel({
             {m.role === 'assistant' &&
               m.status === 'done' &&
               m.content &&
-              !m.content.includes('【目标确认') &&
-              !m.content.includes('【执行方案') &&
-              !m.content.includes('【已达成') &&
+              // V1.5-S4：文本标记只走降级引导（不产卡）；候选按钮与协议工具卡互斥——同一消息
+              // 含协议提议调用时不渲染候选（一个决策点一个决策点地走）
+              !hasProtoCall(m, ...PROTOCOL_TOOL_NAMES) &&
               (() => {
-                // 2026-08-08 B 修复（feedback.log——「候选确认卡 + 确认卡不能同时出来」）：
-                // 同消息互斥——含确认卡标记（【目标确认】/【执行方案】/【已达成】）时不渲染候选按钮
-                // （一个决策点一个决策点地走——确认卡接管决策，候选收起）
                 const opts = parseCandidates(m.content)
                 if (!opts) return null
                 // 2026-08-08 候选例外（用户「输入内容也可以解除 pending——本来就是支持选或输入」）：
@@ -816,67 +803,39 @@ export default function ConversationPanel({
                 const resolutionClaim =
                   dc?.kind === 'resolution' ? (dc.proposal as CompletionClaim) : null
                 // V1.5 S2：信号判定识别协议工具调用（协议工具消息 content 为空——决策经 decisionContent
-                // 承载；文本探测只认标记——协议路径消息无标记 → 卡信号缺失）。hasPlan/achievedMatch/
-                // execSignal 三处统一「文本标记 或 协议工具调用」
-                const hasPlan = m.content.includes('【执行方案') || hasProtoCall(m, 'propose_plan')
-                const achievedMatch =
-                  m.content.includes('【已达成') || hasProtoCall(m, 'report_completion')
-                // 2026-08-07 目标确认兜底（死锁修复延续——模型无【目标确认】标记时用户仍可确认）：
-                // 卡不依赖标记——目标未确认时「最后一条 assistant done」消息下也显示（显示 initialPrompt 暂存目标——
-                // 结构化按钮替代原确认词兜底；对齐行业：确认=显式动作，不依赖模型标记）
-                // 2026-08-14 S2b（缝隙 1/5）：确认卡挂在「最后一条 assistant 消息」上——用户消息（确认词 send）插入后
-                // 卡仍在模型消息位置显示，不必等模型下一条回复（旧实现 isLastAssistant 依赖 working 悬挂使 send 排队——缺陷耦合）
+                // 承载；文本探测只认标记——协议路径消息无标记 → 卡信号缺失）。hasPlan/achievedMatch
+                // 统一「协议工具调用」——V1.5-S4（2026-11-24）起文本标记不再定位卡（标记降级不产卡）。
+                const hasPlan = hasProtoCall(m, 'propose_plan')
+                const achievedMatch = hasProtoCall(m, 'report_completion')
+                // 2026-08-07 目标确认兜底已退场（V1.5-S4）：目标卡只由结构化 propose_goal 提议派生
+                // （dcKind==='goal' + decisionContent 快照）；2026-08-14 S2b（缝隙 1/5）保留「卡挂在与
+                // 提议对应的信号消息上」的定位语义——isLastAssistant 仅用于方案占位卡的兜底定位。
                 const isLastAssistant =
                   m.role === 'assistant' &&
                   m === [...messages].reverse().find((x) => x.role === 'assistant')
-                // 2026-08-08 候选与确认卡互斥修复（用户「需求澄清选项卡和确认又一起出来了」——时间线 seq 5-6）：
-                // 消息含 <candidates>（候选=澄清决策点，等用户选方向）时不显示兜底确认卡——一个决策点走完再进下一个
-                // （此前 goalFallback「目标未确认+最后一条 done」导致候选与兜底确认卡同时显示）
+                // 2026-08-08 候选与确认卡互斥：消息含 <candidates>（候选=澄清决策点）时不显示兜底占位卡
                 const hasCandidates = m.content.includes('<candidates>')
-                // 2026-08-14 用户实测修复（「重新描述后一直弹确认」——timeline a44cce80）：goalFallback 无条件兜底过宽——
-                // 模型在澄清提问（「敌人什么样？一关还是波次？」）时每条消息都弹确认卡 → 用户被卡轰炸 → 点「重新描述」
-                // → 模型重新问 → 又弹 → 循环。收窄：只在模型**征询确认/总结目标**时弹；问句澄清期不弹（决策点互斥——
-                // 候选块/开放问题都是澄清决策点，确认卡不插队）
-                // 2026-08-15 D6：词表收敛——askingConfirm/goalStated 内联正则上移领域层（agentLoop.goalFallbackTrigger）——词表单源
-                // 征询确认（含问句形式「行不行？」）→ 直接弹——确认征询就是要用户决策；目标总结陈述需非问句
-                // （「你的需求是 X，你想做成什么样？」目标+后续提问 = 澄清中，不弹）
-                const goalFallback =
-                  !goalConfirmed &&
-                  isLastAssistant &&
-                  !hasCandidates &&
-                  // V1.5-S4 退役标注——消息列表渲染兜底探测，见 ADR-009
-                  goalFallbackTrigger(m.content)
-                // 2026-08-14 S2b（缝隙 4/5）：触发统一走状态机派生 pendingCardToShow（渲染与 maybeContinue 停模型同源）——
-                // 「等确认」语义命中即弹 + 停；探索期（只读 bash/无等确认语义）不弹（冒烟实证：探索期弹卡 → 模型困惑）
+                // 副作用工具信号（占位执行确认卡的定位信号——write 被拦后 pending=plan 但无结构化快照）
                 const sideEffectAttempted = (m.toolCalls ?? []).some((c) =>
                   isSideEffectAction(c.name, String(c.args?.command ?? '')),
                 )
                 // 2026-08-14 用户实测卡死修复（timeline 0219a516）：模型连发消息时确认卡漂移消失——
                 // write 被拦（exec-confirm 卡弹出）→ 模型继续输出 approve-files/说明消息 → isLastAssistant 漂移 → 卡消失
-                // → 模型等确认、用户找不到卡 → 死锁。**信号消息（方案标记/副作用工具卡）的卡不依赖 isLastAssistant**——
-                // 卡固定挂在信号消息上直到确认；多信号消息只显示「最后一条信号消息」（卡唯一——索引由
-                // useMemo lastSignalIdx O(n) 预计算，此处 O(1) 比较）；兜底卡（无信号）仍限最后一条
+                // → 模型等确认、用户找不到卡 → 死锁。**信号消息（协议方案工具/副作用工具卡）的卡不依赖
+                // isLastAssistant**——卡固定挂在信号消息上直到确认；多信号消息只显示「最后一条信号消息」（卡唯一——
+                // 索引由 useMemo lastSignalIdx O(n) 预计算，此处 O(1) 比较）；兜底卡（无信号）仍限最后一条
                 const execSignal = hasPlan || sideEffectAttempted
-                // 文本征询兜底（pendingCardToShow——「等你确认」类方案征询；与 done 分支 cardToShow 同源）
-                const execFallback =
-                  pendingCardToShow(
-                    !!goalConfirmed,
-                    !!planConfirmed,
-                    false,
-                    m.content,
-                    sideEffectAttempted,
-                  ) === 'plan'
-                // A-004（补跑复审修正）：触发 = 领域状态（dcKind）或信号兜底（execFallback/execSignal——旧场景兼容）；
-                // 拒绝后由 rejectedCardIdx 抑制（A-005 平衡——结构化卡走 dcKind 快照自然消失，信号兜底卡走索引）
-                // 提前 return：无决策点且无兜底信号 → 不渲染任何卡
-                if (!dcKind && !goalFallback && !execFallback && !execSignal) return null
+                // V1.5-S4（2026-11-24 审计批次 9）：文本标记兼容壳退场——goalFallback/execFallback 删除；
+                // 卡触发只认领域 pending + decisionContent 快照（dcKind），或 pending=plan 的占位卡（副作用被拦——
+                // execSignal 定位信号消息）。文本标记只走 protocol.text_fallback 降级引导，不产卡。
+                // A-004（补跑复审修正）：拒绝后由 rejectedCardIdx 抑制（结构化卡走 dcKind 快照自然消失，信号兜底卡走索引）
+                // 提前 return：无决策点且无信号 → 不渲染任何卡
+                if (!dcKind && !execSignal) return null
                 return (
                   <>
                     {/* #7（ADR-006）：dcKind==='goal' 渲染去掉 !goalConfirmed——换目标提议（goal 已确认后新【目标确认】）
                         也渲染目标卡（决策点由领域层派生——setPending 已置 decisionContent；再确认=新任务边界）*/}
-                    {((dcKind === 'goal' && i === lastSignalIdx.goal) ||
-                      (lastSignalIdx.goal === -1 && goalFallback && !dcKind)) &&
-                    i !== rejectedCardIdx.goal ? (
+                    {dcKind === 'goal' && i === lastSignalIdx.goal && i !== rejectedCardIdx.goal ? (
                       <GoalConfirmCard
                         statement={goalDc?.statement || initialPrompt || '你描述的目标'}
                         assumptions={goalDc?.assumptions ?? []}
@@ -902,9 +861,10 @@ export default function ConversationPanel({
                         }}
                       />
                     ) : null}
-                    {/* 触发：领域状态（dcKind==='plan'）或信号兜底（execFallback/execSignal——旧场景：方案征询文本/write 拦截；
-                        拒绝后由 rejectedCardIdx 抑制（无快照卡）——结构化卡（dcKind）拒绝后经领域状态自然消失 */}
-                    {(dcKind === 'plan' || execFallback || execSignal) &&
+                    {/* 触发：领域状态（dcKind==='plan'——结构化方案快照）或占位卡信号（execSignal——write 被拦截
+                        后的执行确认面；V1.5-S4 起文本征询 execFallback 已退场）。拒绝后由 rejectedCardIdx 抑制
+                        （无快照卡）——结构化卡（dcKind）拒绝后经领域状态自然消失 */}
+                    {(dcKind === 'plan' || execSignal) &&
                     !!goalConfirmed &&
                     // 2026-11-23 真机 reject-goal：方案确认后模型再次 propose_plan（确认位仍为 true）——
                     // 协议层「重复提议幂等覆盖」会置 pending=plan + dcKind 快照；若这里仍要求 !planConfirmed，

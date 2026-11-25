@@ -5,7 +5,6 @@ import {
   initialStuckState,
   parseExecutionPlan,
   summarizeCapability,
-  goalFallbackTrigger,
   isQuestionLike,
   isConfirmIntent,
   isApprovalIntent,
@@ -402,30 +401,18 @@ describe('StuckDetector 待授权轮排除（根因 2——write 授权卡被当
   })
 })
 
-// 2026-08-15 D6：目标确认兜底触发（词表单源——渲染层不再自建正则）
-describe('goalFallbackTrigger（目标确认兜底——D6）', () => {
-  it('征询确认（含问句形式）→ 触发', () => {
-    expect(goalFallbackTrigger('我理解你的目标是做一个游戏，等你确认。')).toBe(true)
-    expect(goalFallbackTrigger('这个方案行不行？')).toBe(true)
-    expect(goalFallbackTrigger('就按这个来，确认一下？')).toBe(true)
-  })
-  it('目标总结陈述（非问句）→ 触发', () => {
-    expect(goalFallbackTrigger('你的需求是整理这个文件夹的图片。')).toBe(true)
-    expect(goalFallbackTrigger('我们要做的是建一个个人展示页。')).toBe(true)
-    expect(goalFallbackTrigger('目标就是修好这个页面。')).toBe(true)
-  })
-  it('澄清提问（目标+后续问句）→ 不触发（决策点互斥——确认卡不插队）', () => {
-    expect(goalFallbackTrigger('你的需求是做一个游戏，你想做成什么样？')).toBe(false)
-    expect(goalFallbackTrigger('敌人什么样？一关还是波次？')).toBe(false)
-  })
-  it('空内容/普通陈述 → 不触发', () => {
-    expect(goalFallbackTrigger('')).toBe(false)
-    expect(goalFallbackTrigger('我先看看项目结构。')).toBe(false)
-    expect(goalFallbackTrigger('文件已整理完成。')).toBe(false)
-  })
-  it('与 isQuestionLike 语义一致（问句直接走澄清，不走兜底）', () => {
+// 2026-08-15 D6：目标确认兜底词表（V1.5-S4 2026-11-24 审计批次 9 全量退役——goalFallbackTrigger 已删除；
+// 目标提议唯一来源 = 结构化 propose_goal。此组保留 isQuestionLike 语义锁定，防未来兜底重启时无词表可依）。
+describe('isQuestionLike（问句判定——渲染层兜底退役后仍为共享词表）', () => {
+  it('问句 → true（征询确认/澄清提问同属问句）', () => {
     expect(isQuestionLike('可以吗？')).toBe(true)
-    expect(goalFallbackTrigger('可以吗？')).toBe(true) // 征询确认词命中（设计：问句确认征询=要决策）
+    expect(isQuestionLike('这个方案行不行？')).toBe(true)
+    expect(isQuestionLike('敌人什么样？一关还是波次？')).toBe(true)
+  })
+  it('非问句 → false', () => {
+    expect(isQuestionLike('我先看看项目结构。')).toBe(false)
+    expect(isQuestionLike('文件已整理完成。')).toBe(false)
+    expect(isQuestionLike('')).toBe(false)
   })
 })
 

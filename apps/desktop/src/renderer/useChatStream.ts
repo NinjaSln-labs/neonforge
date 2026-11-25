@@ -6,11 +6,9 @@ import {
   deriveDecisionPoint,
   inPlannedFiles as inPlannedFilesDomain,
   isSideEffectAction,
-  pendingCardToShow,
   type CompletionClaim,
   type ConversationState,
   type DecisionKind,
-  type DecisionProposals,
   type GoalProposal,
   type PlanProposal,
 } from '../domain/conversationState'
@@ -25,8 +23,6 @@ import {
 } from '../domain/agentLoop'
 import { PROTOCOL_TOOL_NAMES, decideProtocolToolCall } from '../domain/protocolTools'
 import { detectProposed } from '../domain/timeline'
-import { extractAssumptionsSection, parsePlanProposal } from '../domain/planProposalParser'
-import { parseCompletionClaim } from '../domain/completionClaimParser'
 import type { Assumption } from '../domain/conversationState'
 import type { Msg, ToolCallMsg } from './ConversationPanel'
 import type { useConversationState } from './useConversationState'
@@ -96,7 +92,6 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
     doneNotifierRef,
     evidenceGuideCountRef,
     evidenceReportNudgedRef,
-    initialPrompt,
     isTrusted,
     messages,
     messagesRef,
@@ -311,18 +306,17 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
             String(c.result ?? '').includes('等待你的决策') ||
             String(c.result ?? '').includes('未确认')),
       )
-      // S7（A0 审校 P1-1——S3 触发权 DoD 补课）：触发判定 = 领域层 deriveDecisionPoint（不变量 2——
-      // 决策点确定性纯函数——单源）；renderer 只做**信号翻译**（解析 proposals + 兜底 userRequested）——
-      // pendingCardToShow 文本探测兼容壳生产调用移除（降级为仅测试/备用）
-      // V1.5 S3：文本标记降级——标记命中不再直接产卡（sysPrompt ⑬⑭⑮ 已改为工具契约主通道；
-      // 标记=降级通道——仅工具调用不可用时）。探测到标记 → 打 protocol.text_fallback + 记录降级标记，
-      // **不构造 proposals**（不置决策点）——done 分支末尾注入引导（合成 tool result + 引导文本）
-      // 推动模型下一轮改用 propose_* 工具（maybeContinue 一轮改道闭环）。S4 才退役解析器本身。
-      const goalMark = content.match(/【目标确认[:：]\s*([^】]+)/)
-      const planMark = /【执行方案/.test(content)
-      const claimMark = /【已达成/.test(content)
+      // S7（A0 审校 P1-1——S3 触发权 DoD 补课）：决策点唯一派生 = 领域层 deriveDecisionPoint（不变量 2——
+      // 确定性纯函数——单源）；renderer 只做结构化信号翻译。
+      // V1.5 S3/S4（2026-11-24 审计批次 9）：文本标记降级——标记命中只打 protocol.text_fallback + 记录
+      // 降级标记，**不构造 proposals/不置决策点、不写 decisionContent**；done 分支末尾注入引导推动模型
+      // 下一轮改用 propose_* 工具（maybeContinue 一轮改道闭环）。文本征询（「等你确认」类）同属文本建模，
+      // 不再触发决策点（旧 textAskPlan 兜底已退场）；唯一保留的兜底信号是**被拦副作用工具**（占位执行卡）。
+      const goalMarker = /【目标确认/.test(content)
+      const planMarker = /【执行方案/.test(content)
+      const claimMarker = /【已达成/.test(content)
       const fallbackMarkers: string[] = []
-      if (goalMark || /【目标确认/.test(content)) {
+      if (goalMarker) {
         fallbackMarkers.push('goal')
         tlog(
           'protocol.text_fallback',
@@ -330,7 +324,7 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
           'system',
         )
       }
-      if (planMark) {
+      if (planMarker) {
         fallbackMarkers.push('plan')
         tlog(
           'protocol.text_fallback',
@@ -338,7 +332,7 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
           'system',
         )
       }
-      if (claimMark) {
+      if (claimMarker) {
         fallbackMarkers.push('completion')
         tlog(
           'protocol.text_fallback',
@@ -347,158 +341,45 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
         )
       }
       const fallbackDetected = fallbackMarkers.length > 0
-      // 降级路径不构造 proposals（文本标记不产卡）；正常路径（无标记）保留原 proposals 解析。
-      // 注意：userRequested 信号（write 拦截/方案征询文本「等你确认」）是**非标记**的「等确认」语义——
-      // 与降级无冲突（它们不来自标记，保留产卡路径）；plan 标记降级时 plannedFiles 也不并入（见下）
-      const goalProposal: GoalProposal | undefined = fallbackDetected
-        ? undefined
-        : goalMark
-          ? {
-              statement: goalMark[1]?.trim() ?? (initialPrompt || content.trim()),
-              // V1.5-S4 退役标注——extractAssumptionsSection 为假设提取（文本节提取，非解析），见 ADR-009
-              // ADR-014：文本降级无来源信息 → 全部记为模型推断
-              assumptions: extractAssumptionsSection(content).map((text) => ({
-                text,
-                source: 'model_inference' as const,
-              })),
-            }
-          : undefined
-      // V1.5-S4 退役标注——兜底调用（受 fallbackDetected 守卫：无降级标记才解析），见 ADR-009
-      const planR = !fallbackDetected && planMark ? parsePlanProposal(content) : undefined
-      // V1.5-S4 退役标注——兜底调用（受 fallbackDetected 守卫），见 ADR-009
-      const claim = !fallbackDetected && claimMark ? parseCompletionClaim(content) : undefined
-      const proposals: DecisionProposals = {
-        ...(goalProposal ? { goal: goalProposal } : {}),
-        ...(planR?.ok ? { plan: planR.proposal } : {}), // malformed/no-block → C3 不置决策点（诊断事件）
-        ...(claim ? { completion: claim } : {}),
-      }
-      // C3 诊断：有【执行方案】标记但解析失败（格式漂移——模型被要求重输出；原始文本保留在对话审计）
-      if (planR && !planR.ok) {
-        tlog('proposal.plan', { ok: false, reason: planR.reason }, 'assistant')
-      }
-      // 兜底信号（旧 pendingCardToShow 文本征询语义——判定归领域层 userRequested 参数）：
-      // write 被拦（sideEffectPendingUi 或本轮流副作用工具——write 被拦后模型连发消息场景）或
-      // 方案征询文本（「等你确认」类）→ 执行确认点。S7（P1-1 修正）：本轮流副作用工具（streamingRef——
-      // 流式 toolCalls 未清空前）也构成信号——旧实现靠渲染层 execSignal 兜底（无 pending——卡漂移风险）
+      // 兜底信号（结构化）：被拦副作用工具（write 被拦后模型连发消息场景）→ 执行确认占位点。
+      // S7（P1-1 修正）：本轮流副作用工具（streamingRef——流式 toolCalls 未清空前）也构成信号。
       const sideEffectAttemptedThisRound = streamingRef.current.toolCalls.some((c) =>
         isSideEffectAction(c.name, String(c.args?.command ?? '')),
       )
-      const textAskPlan =
-        /(等你确认|你确认一下|确认一下|等你点头|你看行吗|你看行不行|可以的话我)/.test(content)
       const userRequested: DecisionKind | undefined =
         sideEffectPendingUi ||
         (sideEffectAttemptedThisRound &&
           stateRef.current.goalConfirmed &&
-          !stateRef.current.planConfirmed) ||
-        (textAskPlan && stateRef.current.goalConfirmed && !stateRef.current.planConfirmed)
+          !stateRef.current.planConfirmed)
           ? 'plan'
           : undefined
-      const cardToShow = deriveDecisionPoint(stateRef.current, proposals, [], userRequested)
-      // S3（§6 S3 + §8.2 E）：决策点置位携带 decisionContent 快照（卡渲染唯一来源——呈现内容完整审计；
-      // 模型文本不再直接参与卡内容判定——文本标记只用于**探测**，内容取结构化解析结果）
-      if (cardToShow !== 'none' && stateRef.current.pending === 'none') {
-        if (cardToShow === 'plan') {
-          // 方案提议 → PlanProposal（文件/假设/验证计划）或占位（write 拦截/征询——无结构内容）
-          if (planR?.ok) {
-            setPendingState('plan', {
-              proposal: planR.proposal,
-              since: new Date().toISOString(),
-            })
-            tlog(
-              'proposal.plan',
-              {
-                ok: true,
-                summary: planR.proposal.summary,
-                files: planR.proposal.files.map((f) => f.path),
-              },
-              'assistant',
-            )
-          } else {
-            // no-block（无方案标记）+ 决策点存在（write 拦截/方案征询「等你确认」）→ 等确认执行——
-            // #6 真机 2026-08-30（P1-4）：原实现直接置空 proposal（卡占位空内容——用户确认一张空卡）。
-            // 修正：回搜消息历史最近一次已登记的【执行方案】并复用其结构化内容（孤儿提议回收）；
-            // 确实无历史提议才置占位
-            let reused: PlanProposal | undefined
-            for (let k = messages.length - 1; k >= 0; k--) {
-              const mm = messages[k]
-              if (mm.role !== 'assistant' || !/【执行方案/.test(mm.content)) continue
-              // V1.5-S4 退役标注——孤儿提议回收兜底（回搜历史消息解析），见 ADR-009
-              const r = parsePlanProposal(mm.content)
-              if (r.ok) {
-                reused = r.proposal
-                break
-              }
-            }
-            setPendingState('plan', {
-              ...(reused ? { proposal: reused } : {}),
-              since: new Date().toISOString(),
-            })
-            // A-020（S5 真机 2026-09-06）：无 proposal 的占位卡保留（write 被拦的同意面——L3「执行确认卡
-            // 不漂移」契约；done 时 execute 结果尚未回填，sideEffectPendingUi 不可依赖）。占位卡的事故
-            // 触发源（bash `2>/dev/null` 误判副作用→被拦→空卡冻结）由 classifyReadonly stderr 丢弃修正根除。
-          }
-        } else if (cardToShow === 'goal') {
-          // 目标提议 → GoalProposal（statement + assumptions——S2 ⑬ 契约：必要时附「关键假设：」行）
-          // S7（A0 审校 P1-3）：proposal.goal 结构化提议事件（§3.5——statement+assumptions——替代 task.goal_proposed 文本摘要）
-          tlog(
-            'proposal.goal',
-            {
-              statement: goalProposal?.statement ?? '',
-              ...(goalProposal?.assumptions && goalProposal.assumptions.length > 0
-                ? { assumptions: goalProposal.assumptions }
-                : {}),
-            },
-            'assistant',
+      const cardToShow = deriveDecisionPoint(stateRef.current, {}, [], userRequested)
+      // V1.5-S4：此分支只剩「被拦副作用工具」的占位执行确认点（结构化提议由协议工具分支直接
+      // setPendingState）。不再从文本解析 proposals、不再回搜文本【执行方案】——占位卡内容若需要，
+      // 只从历史 propose_plan **工具调用 args** 复用（结构化来源，经 decideProtocolToolCall 规范化）。
+      if (cardToShow === 'plan' && stateRef.current.pending === 'none') {
+        let reused: PlanProposal | undefined
+        for (let k = messages.length - 1; k >= 0; k--) {
+          const mm = messages[k]
+          if (mm.role !== 'assistant') continue
+          const call = (mm.toolCalls ?? []).find((c) => c.name === 'propose_plan')
+          if (!call) continue
+          // 仅借规范化能力：以「目标已确认、方案未确认」探针态调用（不落状态）
+          const probe = decideProtocolToolCall(
+            { ...stateRef.current, goalConfirmed: true, planConfirmed: false },
+            'propose_plan',
+            call.args,
+            new Date().toISOString(),
           )
-          setPendingState('goal', {
-            proposal: goalProposal ?? {
-              statement: goalMark?.[1]?.trim() || initialPrompt || content.trim(),
-              // ADR-014：文本降级通道也要呈现模型写出的关键假设（来源只能是模型推断）
-              assumptions: extractAssumptionsSection(content).map((text) => ({
-                text,
-                source: 'model_inference' as const,
-              })),
-            },
-            since: new Date().toISOString(),
-          })
-        } else if (cardToShow === 'resolution') {
-          // V1.5-S4 退役标注——完成声明兜底解析 → 已解决卡条件 = verifyCompletion 通过
-          // （不变量 4 接线——不再直接置决策点；异步系统核验（V1a 代跑 + V1b 派生）后判定）
-          if (claim) {
-            tlog(
-              'proposal.completion',
-              {
-                ok: true,
-                summary: claim.summary,
-                verification: claim.evidence.verification.length,
-                pendingQuestions: claim.evidence.pendingQuestions.length,
-              },
-              'assistant',
-            )
-            void verifyThenResolve(claim)
-          } else {
-            tlog('proposal.completion', { ok: false }, 'assistant')
+          if (probe.action === 'pending' && probe.kind === 'plan') {
+            reused = probe.content.proposal as PlanProposal
+            break
           }
-        } else {
-          setPendingState(cardToShow, { since: new Date().toISOString() })
         }
-      }
-      // S7（A0 审校 P1-1——S4 语义保留）：完成声明存在但 deriveDecisionPoint 证据门未命中
-      // （证据不足 → none——设计 §3.3「不进入对账（引导由 S4 回填）」）——verifyThenResolve 统一处理：
-      // 证据完整 → 弹已解决卡；证据不足 → evidence_missing 打点 + 回填引导（证据门由 verifyCompletion 承担——
-      // 避免 deriveDecisionPoint 的 completionEvidenceComplete 门绕过 S4 引导路径——双判定器同源）
-      if (claim && cardToShow !== 'resolution' && stateRef.current.pending === 'none') {
-        tlog(
-          'proposal.completion',
-          {
-            ok: true,
-            summary: claim.summary,
-            verification: claim.evidence.verification.length,
-            pendingQuestions: claim.evidence.pendingQuestions.length,
-          },
-          'assistant',
-        )
-        void verifyThenResolve(claim)
+        setPendingState('plan', {
+          ...(reused ? { proposal: reused } : {}),
+          since: new Date().toISOString(),
+        })
       }
       // P0-03（不变量 6）：文本【执行方案】只用于展示/决策内容，不并入 plannedFiles——
       // 文本降级不产生确认卡，提前并入会让 write 绕过用户确认自动放行。
@@ -785,24 +666,6 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
       // renderer 不再自写匹配逻辑——领域层相对/绝对/目录尾斜杠兼容）
       const inPlannedFiles = (p: unknown): boolean =>
         inPlannedFilesDomain(stateRef.current, { name: 'write', path: trustPath(p) })
-      const confirmPending = (
-        content: string,
-        calls: Array<{ name: string; status?: string; command?: string }>,
-      ): boolean => {
-        // 2026-08-14 S2b（缝隙 4/5）：确认卡触发走状态机派生——执行确认只认**有副作用动作**（探索 bash 不再触发）
-        const sideEffectPending = calls.some(
-          (c) => c.status === 'pending' && isSideEffectAction(c.name, c.command),
-        )
-        return (
-          pendingCardToShow(
-            stateRef.current.goalConfirmed,
-            stateRef.current.planConfirmed,
-            stateRef.current.resolutionConfirmed,
-            content,
-            sideEffectPending,
-          ) !== 'none'
-        )
-      }
       // 2026-08-07 用户纠正（「无害≠有用」）：pending 下**所有工具都不执行**——read/search 虽只读无害但没用
       // （用户决策未到——结果无意义——做了白做）——模型停（maybeContinue releaseWorking）等用户决策
       // 2026-08-08 问题 2 修复（feedback.log 标注——「又检测，而且这个显示出来了，咱们定的不显示」）：
@@ -822,12 +685,8 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
         },
         inPlannedFiles(tc.args?.path ?? tc.args?.filePath),
       )
-      const confirmGate = confirmPending(streamingRef.current.content, [
-        { name: tc.name, status: 'pending', command: String(tc.args?.command ?? '') },
-      ])
-      // 2026-08-15 D5：会话级 PENDING（状态机冻结）下**所有工具无效**（含只读——A0 §3.4「无害≠有用」：
-      // 用户决策未到——read/search 结果无意义——做了白做）。原条件只拦 side-effect——escalate 新轮
-      // 在 pending 下仍可 read（轮级 confirmGate 无信号时不拦 + readonly 豁免）→ 与状态机语义不一致
+      // 2026-11-24 V1.5-S4：文本标记兼容壳 confirmGate 已移除——工具执行只看领域 pending
+      // （pendingBlocked——状态机冻结）与 canExecute 门（toolGate——目标/方案/清单/拒绝记忆/根边界）。
       const pendingBlocked = stateRef.current.pending !== 'none'
       // V1.5 S2 A-017：同轮并存挂起——本轮流中出现协议工具（suspendRoundRef）后，兄弟普通工具
       // 一律挂起不执行（deer-flow 兄弟调用丢弃语义——Spike-4）。与 pendingBlocked 互补：
@@ -853,30 +712,26 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
         return
       }
       if (
-        confirmGate ||
         pendingBlocked ||
         (!toolGate.ok && isSideEffectAction(tc.name, String(tc.args?.command ?? '')))
       ) {
         const gateReason = pendingBlocked
           ? `会话等待你的决策（${stateRef.current.pending}）——此动作未执行`
-          : confirmGate
-            ? '等待你的决策'
-            : toolGate.reason
+          : toolGate.reason
         // 2026-08-15 DDD 重建：工具拦截事件（tool.blocked——G3 缺口：拦截原因落时间线，消费方无需反推代码）
         tlog(
           'tool.blocked',
           {
             name: tc.name,
-            gate: pendingBlocked ? 'pending' : confirmGate ? 'confirm' : 'gate',
+            gate: pendingBlocked ? 'pending' : 'gate',
             reason: gateReason,
             args: tc.args,
           },
           'tool',
         )
-        // ADR-016：机制拒绝领域事件（拒绝记忆/策略 deny——非 ask；pending/confirm 抢先时不记）
+        // ADR-016：机制拒绝领域事件（拒绝记忆/策略 deny——非 ask；pending 抢先时不记）
         if (
           !pendingBlocked &&
-          !confirmGate &&
           !toolGate.ok &&
           (toolGate.deniedBy === 'rejection-memory' || toolGate.deniedBy === 'action-gate')
         ) {
@@ -901,10 +756,9 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
                   ...c,
                   status: 'done' as const,
                   hidden: tc.name === 'check-capability',
-                  result:
-                    confirmGate || pendingBlocked
-                      ? `${tc.name} 等待你的决策——此动作未执行（点确认卡后模型会重新执行）`
-                      : `${tc.name} 未执行：${gateReason}`,
+                  result: pendingBlocked
+                    ? `${tc.name} 等待你的决策——此动作未执行（点确认卡后模型会重新执行）`
+                    : `${tc.name} 未执行：${gateReason}`,
                 }
               : c,
           )
