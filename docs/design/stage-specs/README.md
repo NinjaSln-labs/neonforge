@@ -51,4 +51,5 @@
 - [V2 机制拒绝事件 gate.denied](V2-gate-denied-events.md)（GitHub #16——2026-11-17）
 - [V2 多模型网关与扩展能力治理](V2-multi-model-plugin.md)（GitHub #14——2026-11-17，开工前定稿）
 - [V2 问题台账 Local-first 同步](V2-problem-ledger-sync.md)（GitHub #15——2026-11-17，开工前定稿）
+- [V1.5 确认协议工具化](V1.5-protocol-tooling.md)（ADR-009——2026-08-31 立项；S4 主体与兜底探测复核 2026-11-25 落地，S5 真机验收未开）
 - 说明：S3–S6 的 DoD 复选框在 spec 中保留原文作历史契约；关闸判定以对应 stage-gate 报告的逐条断言结果为准（2026-11-24 审计澄清）。
