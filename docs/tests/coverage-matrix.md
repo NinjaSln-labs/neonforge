@@ -1,7 +1,7 @@
 # 覆盖矩阵（Coverage Matrix）
 
 > 首版：2026-08-16（S2）→ 增补：2026-09-29（Keenable 合规）
-> 当前快照（2026-11-25，PR #141–#159 合并后）：L1 **79 文件 / 963 用例** · 事件注册表 **93 事件** · 不变量 Inv 1-8 + I17-I21 · L3 interaction **96 收集 / 93 通过 + 3 跳过**
+> 当前快照（2026-11-25，PR #141–#159 合并后）：L1 **79 文件 / 965 用例** · 事件注册表 **93 事件** · 不变量 Inv 1-8 + I17-I21 · L3 interaction **96 收集 / 93 通过 + 3 跳过**
 > 表 1-表 10 保留各阶段时点的基线记录；当前总数以本快照为准。
 > 维护：阶段末更新（coverage-matrix skill）；缺口入 audit-items
 
@@ -110,6 +110,7 @@
 | decideProgressGuarantee 唯一推进判定器（吸收 turnPolicy 状态空间——pending/未确认/lastToolFailed/累积完成度） | progressGuarantee.test.ts 12 用例（S5 新建）+ conversationState.test.ts 继承锁定迁移 5 用例 | ✅ |
 | 推进 ≠ 逼调工具（require-advance——工具不可用不逼工具，允许输出推进） | progressGuarantee.test.ts（toolsAvailable=false → require-advance）| ✅ |
 | 推进检测统一（proposed/providedEvidence——结构化提议/完成声明带证据 = 推进） | agentLoop.test.ts::evaluateTurnProgress S5 2 用例（【目标确认】/【执行方案】/【已达成】检测 + parseCompletionClaim 证据判定）| ✅ |
+| 兜底探测调用点边界（2026-11-25 S4 复核裁定——文本探测只服务纯文本轮；协议工具轮不计确认后推进） | progressGuarantee.test.ts::S4 兜底探测调用点 2 用例（propose_goal 轮 → not-confirmed auto；propose_plan 轮 → require-action 逼执行）| ✅ |
 | StuckDetector 对齐（提议/证据轮重置——模型走决策点流程不被打断；纯文本承诺仍 escalate——只说不做保留） | agentLoop.test.ts::detectStuck S5 3 用例 + L3 S5-1（连续提议不打断）/S5-2（纯文本 escalate 打点）| ✅ |
 | renderer 切换（decideTurnPolicy → decideProgressGuarantee——已确认决策点提议过滤 + toolsAvailable 能力快照） | L3 全量 42（根因 3/T0-1 forceTool 强制回归 + S5-1/2）| ✅ |
 | 对话健康度 T1/T2/T4（无进展对话检测——同决策点重复/文本拒绝循环/总回合上限） | conversationState.test.ts ADR-010 7 用例（notePendingSet/noteUserTextReply/detectUnproductiveDialogue + system_clarify 委派） | ✅ |
@@ -279,10 +280,10 @@
 
 ## 缺口清单
 
-- **无**（A-003 已关闭——proposal.* 事件断言 c91079e 补齐；A-010 已关闭——S4 V1a integration 用例 + L3 4 场景；S3/S4/S5 行为全部有测试承载——S5 新增 progressGuarantee.test.ts 用例 + agentLoop 5 + L3 2 场景；D3 全行为有测试承载——plannedFilesStore + tools 1 + L3 D3-1/2；#8 引导有 L1 断言锁定；#9 e2e 脚本无单测基建——真机复验跟踪中）。2026-11-24 计数刷新：planProposalParser 16、completionClaimParser 10、verifyCompletionSystem 14、progressGuarantee 16、plannedFilesStore 15、sysPrompt 8、conversationState 135、timelineEvents 44、authModel 16、taskSnapshot 13（V1.5-S4 退役后 conversationState 减 2；timelineEvents 含注册表遍历 3）。
+- **无**（A-003 已关闭——proposal.* 事件断言 c91079e 补齐；A-010 已关闭——S4 V1a integration 用例 + L3 4 场景；S3/S4/S5 行为全部有测试承载——S5 新增 progressGuarantee.test.ts 用例 + agentLoop 5 + L3 2 场景；D3 全行为有测试承载——plannedFilesStore + tools 1 + L3 D3-1/2；#8 引导有 L1 断言锁定；#9 e2e 脚本无单测基建——真机复验跟踪中）。2026-11-24 计数刷新：planProposalParser 16、completionClaimParser 10、verifyCompletionSystem 14、progressGuarantee 18、plannedFilesStore 15、sysPrompt 8、conversationState 135、timelineEvents 44、authModel 16、taskSnapshot 13（V1.5-S4 退役后 conversationState 减 2；timelineEvents 含注册表遍历 3）。
 - **2026-11-24 审计新增缺口（如实记录，未关闭）**：
   - 事件注册表 93 事件中约 8 组有直接断名**语义**断言；其余仅注册/由派生函数产生，逐事件语义断言仍缺（表 2 判定为「登记/产出」语义，非逐名断言）。注册表结构契约已 2026-11-24 由遍历校验锁定（命名/domain/role/detailKeys 形态 + 必选载荷强制执行 + 未登记拒绝）。
-  - ~~文本标记兼容壳（pendingCardToShow/goalFallbackTrigger）驱动门控/停止/兜底卡~~ 2026-11-24 已退役（V1.5-S4 主体，批次 9）：两函数删除；卡触发收敛到 decisionContent 快照 + 协议工具信号；文本标记只打 `protocol.text_fallback` 并引导改用协议工具。保留的 `agentLoop` 提议/证据推进探测属 StallDetector 输入，不参与决策点判定。
+  - ~~文本标记兼容壳（pendingCardToShow/goalFallbackTrigger）驱动门控/停止/兜底卡~~ 2026-11-24 已退役（V1.5-S4 主体，批次 9）：两函数删除；卡触发收敛到 decisionContent 快照 + 协议工具信号；文本标记只打 `protocol.text_fallback` 并引导改用协议工具。保留的 `agentLoop` 提议/证据推进探测属 StallDetector 输入，不参与决策点判定。**2026-11-25 复核裁定**（ADR-009 r5）：保留探测只服务纯文本轮（StallDetector 调用点有 `toolCalls.length===0` 门），不改为消费 protocol 事件（改则方案确认后不逼执行）；删除条件 = S5 兜底率≈0——与 `completionClaimParser` 一并退役。
   - 未入矩阵的已测模块：compaction、preheat、codeRag/context、diffRender、lsp、serviceManager、projectInit、sandboxPath/sandboxSymlink、envManager、useConversationState、gateway 各模块等（文件清单见 `apps/desktop/tests/unit/`）。
   - ~~`delegated` 的 standard 负控为手工临时改任务运行，未编码为运行器选项/负控任务。~~ 2026-11-24 已关闭（#158）：`--trust-override` + `--expect-fail` + `--expect-fail-check` 编码进运行器，standard 负控 3/3 EXPECTED-FAIL。
   - L5 视觉基线只在 macOS 刷新；WSL 不更新基线；L5 无 CI 承载。
