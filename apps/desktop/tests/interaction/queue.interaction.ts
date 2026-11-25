@@ -68,9 +68,14 @@ async function mockQueueBridge(page: Page, firstTurnMs: number): Promise<void> {
         add: async (files: string[]) => ({ files: files ?? [], approved: true }),
         reset: async () => ({ files: [], approved: false }),
       },
-      timeline: { log: async () => {} },
+      timeline: {
+        log: async (e: { type: string; detail?: Record<string, unknown> }) => {
+          ;((window as unknown as { __nfQTimeline: unknown[] }).__nfQTimeline ??= []).push(e)
+        },
+      },
     }
     Object.defineProperty(window, '__queueSeen', { get: () => chat.seen })
+    ;(window as unknown as { __nfQTimeline: unknown[] }).__nfQTimeline = []
   }, firstTurnMs)
 }
 
@@ -118,4 +123,21 @@ test('显式停止：排队中的用户消息回填输入框（不静默滞留�
   await page.getByRole('button', { name: '停止搭档当前工作' }).click()
   await expect(page.locator('.nf-chat__input textarea')).toHaveValue('第二条')
   await expect(page.locator('.nf-msg--user')).toHaveCount(1)
+  // 2026-11-25 事件语义补课：conversation.interrupted 载荷 source=button（停止按钮 = 显式打断——
+  // 与 silent 自动干预可区分）；assistant_start 的 forceTool/mode 亦可回放
+  const tl =
+    (await page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            __nfQTimeline: Array<{ type: string; detail?: Record<string, unknown> }>
+          }
+        ).__nfQTimeline,
+    )) ?? []
+  const interrupted = tl.find((e) => e.type === 'conversation.interrupted')
+  expect(interrupted?.detail).toEqual({ source: 'button' })
+  const starts = tl.filter((e) => e.type === 'conversation.assistant_start')
+  expect(starts.length).toBeGreaterThanOrEqual(1)
+  expect(typeof starts[0]?.detail?.forceTool).toBe('boolean')
+  expect(typeof starts[0]?.detail?.progressMode).toBe('string')
 })

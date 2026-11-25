@@ -50,7 +50,14 @@ test.describe('ADR-010 强制澄清卡', () => {
   test('T-FORCE-3：点「我要重新描述」→ 卡消失 + 重述引导续转（rejectStreak 重置）', async ({
     page,
   }) => {
-    installMockBridge(page, { project: 'none', script: loopScript() })
+    const h = await installMockBridge(page, {
+      project: 'none',
+      script: loopScript(),
+      extraInit: `
+        window.__nfDialog = [];
+        bridge.timeline = { log: async (e) => { if (e && ['dialogue.loop_guard', 'dialogue.forced_clarify', 'card.rejected'].includes(e.type)) window.__nfDialog.push(e); } };
+      `,
+    })
     await startFromScratch(page, '做一个番茄钟页面')
     await expect(page.getByRole('button', { name: '确认目标' })).toBeVisible({ timeout: 10000 })
     await sendChat(page, '就按你想的做')
@@ -63,5 +70,22 @@ test.describe('ADR-010 强制澄清卡', () => {
     await expect(page.locator('.nf-forcedcard')).toHaveCount(0)
     // 点卡 = 新一轮协商（rejectStreak 重置）+ 重述引导自动 send——模型收到反馈重新提交提议
     await expect(page.locator('body')).toContainText('目标需要重新描述一下', { timeout: 10000 })
+    // 2026-11-25 事件语义补课：对话健康介入载荷——loop_guard（rounds 计数）、forced_clarify
+    // （underlying=goal），以及强制卡拒绝（card.rejected card/action/reason）
+    const dialog =
+      (await h.readCapture<Array<{ type: string; detail?: Record<string, unknown> }>>(
+        '__nfDialog',
+      )) ?? []
+    const loopGuard = dialog.find((e) => e.type === 'dialogue.loop_guard')
+    // rounds = pendingRepeatCount + unresolvedTextReplies（rejectStreak 触发时为 0——C2 形态）
+    expect(typeof loopGuard?.detail?.rounds).toBe('number')
+    const forced = dialog.find((e) => e.type === 'dialogue.forced_clarify')
+    expect(forced?.detail).toEqual({ underlying: 'goal' })
+    const rejected = dialog.find((e) => e.type === 'card.rejected')
+    expect(rejected?.detail).toEqual({
+      card: 'system_clarify',
+      action: 'reject',
+      reason: 'direction',
+    })
   })
 })
