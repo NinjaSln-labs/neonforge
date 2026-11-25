@@ -1,7 +1,7 @@
 # 覆盖矩阵（Coverage Matrix）
 
 > 首版：2026-08-16（S2）→ 增补：2026-09-29（Keenable 合规）
-> 当前快照（2026-11-25，PR #141–#159 合并后）：L1 **79 文件 / 965 用例** · 事件注册表 **93 事件** · 不变量 Inv 1-8 + I17-I21 · L3 interaction **96 收集 / 93 通过 + 3 跳过**
+> 当前快照（2026-11-25，PR #141–#159 合并后）：L1 **79 文件 / 974 用例** · 事件注册表 **93 事件** · 不变量 Inv 1-8 + I17-I21 · L3 interaction **96 收集 / 93 通过 + 3 跳过**
 > 表 1-表 10 保留各阶段时点的基线记录；当前总数以本快照为准。
 > 维护：阶段末更新（coverage-matrix skill）；缺口入 audit-items
 
@@ -23,7 +23,7 @@
 
 ## 表 2：事件 ↔ 测试
 
-> 2026-11-24 审计澄清：下表「判定 ✅」表示事件已在注册表登记/由派生函数产生并有对应模块测试，**不等于** `timelineEvents.test.ts` 对每个事件都有逐名语义断言（实测约 8 组直接断言：deriveStateEvents 的 task/plan/decision、proposal.*、completion.evidence_missing、gate.denied 等）。2026-11-24 已补**注册表遍历校验**（`timelineEvents.test.ts::TIMELINE_EVENT_SPECS 注册表遍历`：全部 93 事件的命名/domain/role/detailKeys 形态 + 必选载荷强制执行 + 未登记拒绝），逐事件语义断言仍是缺口（见「缺口清单」）。历史事件名 `task.execution_*`/`task.achievement_*` 仅保留读取窗口，canonical 为 `task.plan_*`/`task.resolution_*`。
+> 2026-11-24 审计澄清：下表「判定 ✅」表示事件已在注册表登记/由派生函数产生并有对应模块测试，**不等于** `timelineEvents.test.ts` 对每个事件都有逐名语义断言（实测约 8 组直接断言：deriveStateEvents 的 task/plan/decision、proposal.*、completion.evidence_missing、gate.denied 等）。2026-11-24 已补**注册表遍历校验**（`timelineEvents.test.ts::TIMELINE_EVENT_SPECS 注册表遍历`：全部 93 事件的命名/domain/role/detailKeys 形态 + 必选载荷强制执行 + 未登记拒绝）。2026-11-25 起逐事件**载荷语义**覆盖分批补课：deriveStateEvents 载荷（point/kind/reason/content）、detectProposed 载荷、queue 八类、changeset 四类（proposed/applied/reverted/conflict_detected）、acceptance 五类、extension 生命周期六类、L3 card.resolved/conversation.created/proposal.clarify 载荷——仍未覆盖见「缺口清单」。历史事件名 `task.execution_*`/`task.achievement_*` 仅保留读取窗口，canonical 为 `task.plan_*`/`task.resolution_*`。
 
 | 事件 id | 语义 | 断言测试 | 判定 |
 |---------|------|----------|------|
@@ -56,8 +56,14 @@
 | decision.requested / resolved | 领域决策点 | timelineEvents.test.ts::deriveStateEvents（decision.*） | ✅ |
 | **proposal.plan / proposal.completion** | **提议解析事件（S2 登记 + S3 接线）** | **timelineEvents.test.ts::proposal.*（schema/成功/失败/缺必选 4 断言）** | ✅（A-003 关闭 + A-007 两形态 schema） |
 | **completion.evidence_missing** | **完成声明被拒诊断（S4 登记 + 接线打点）** | **timelineEvents.test.ts::completion.evidence_missing（schema/载荷/缺必选 3 断言）+ L3 S4-1b/S4-3 打点断言** | ✅（S4——A-010 关闭） |
+| conversation.created | 会话创建 | taskBoundary.interaction.ts（created 载荷 session——新问题两次不同会话）+ timelineLogger | ✅ |
 | conversation.status_change / error | 状态/错误 | timelineEvents.test.ts（注册表）+ errorClassify/useChatEngine 集成 | ✅ |
 | conversation.auto_continue | 已确认后瞬态失败的一次自动续跑（ADR-011） | timelineEvents.test.ts::事件注册表断言 + evals/product::network-auto-retry（`auto_continue ≥1`） | ✅（2026-11-24 审计批次 3） |
+| card.shown / resolved / rejected / dismissed | 卡 UI 生命周期 | timelineEvents.test.ts（注册表）+ taskBoundary.interaction.ts（resolved 载荷 card/action——goal/execution 确认） | ✅（resolved 载荷 2026-11-25 补课；dismissed/rejected 载荷仍缺） |
+| queue.entry_enqueued / started / blocked / resumed / paused / completed / cancelled / reordered | 队列八态 | taskQueueStore.test.ts::事件载荷语义（entryId/taskRef/position/reason/outcome 逐项对应） | ✅（2026-11-25 语义补课） |
+| changeset.proposed / applied / reverted / conflict_detected | 变更集生命周期 | changeSetService.test.ts（proposed+applied 载荷 / reverted changeId+files / conflict changeId+file） | ✅（2026-11-25 语义补课；reviewed 无发射点） |
+| acceptance.criteria_derived / item_passed / item_failed / item_waived / quality_gate.evaluated | 验收与门禁 | acceptanceStore.test.ts::事件载荷语义（证据引用/失败原因/豁免理由/verdict+blocking+waived） | ✅（2026-11-25 语义补课） |
+| extension.registered / activated / deactivated / invocation_denied / capabilities_changed / unregistered | 扩展治理（ADR-017） | pluginSystem.test.ts::生命周期事件载荷（digest diff added/removed、拒绝原因、回收 kind） | ✅（2026-11-25 语义补课） |
 
 > 表 3-表 8 中的用例/场景数是各阶段 DoD 的时点记录，不是当前总数；当前总数见页首快照。
 
@@ -280,9 +286,9 @@
 
 ## 缺口清单
 
-- **无**（A-003 已关闭——proposal.* 事件断言 c91079e 补齐；A-010 已关闭——S4 V1a integration 用例 + L3 4 场景；S3/S4/S5 行为全部有测试承载——S5 新增 progressGuarantee.test.ts 用例 + agentLoop 5 + L3 2 场景；D3 全行为有测试承载——plannedFilesStore + tools 1 + L3 D3-1/2；#8 引导有 L1 断言锁定；#9 e2e 脚本无单测基建——真机复验跟踪中）。2026-11-24 计数刷新：planProposalParser 16、completionClaimParser 10、verifyCompletionSystem 14、progressGuarantee 18、plannedFilesStore 15、sysPrompt 8、conversationState 135、timelineEvents 44、authModel 16、taskSnapshot 13（V1.5-S4 退役后 conversationState 减 2；timelineEvents 含注册表遍历 3）。
+- **无**（A-003 已关闭——proposal.* 事件断言 c91079e 补齐；A-010 已关闭——S4 V1a integration 用例 + L3 4 场景；S3/S4/S5 行为全部有测试承载——S5 新增 progressGuarantee.test.ts 用例 + agentLoop 5 + L3 2 场景；D3 全行为有测试承载——plannedFilesStore + tools 1 + L3 D3-1/2；#8 引导有 L1 断言锁定；#9 e2e 脚本无单测基建——真机复验跟踪中）。2026-11-24 计数刷新：planProposalParser 16、completionClaimParser 10、verifyCompletionSystem 14、progressGuarantee 18、plannedFilesStore 15、sysPrompt 8、conversationState 135、timelineEvents 49、authModel 16、taskSnapshot 13（V1.5-S4 退役后 conversationState 减 2；timelineEvents 含注册表遍历 3）。
 - **2026-11-24 审计新增缺口（如实记录，未关闭）**：
-  - 事件注册表 93 事件中约 8 组有直接断名**语义**断言；其余仅注册/由派生函数产生，逐事件语义断言仍缺（表 2 判定为「登记/产出」语义，非逐名断言）。注册表结构契约已 2026-11-24 由遍历校验锁定（命名/domain/role/detailKeys 形态 + 必选载荷强制执行 + 未登记拒绝）。
+  - 事件注册表 93 事件中约 8 组有直接断名**语义**断言；其余仅注册/由派生函数产生，逐事件语义断言仍缺（表 2 判定为「登记/产出」语义，非逐名断言）。注册表结构契约已 2026-11-24 由遍历校验锁定（命名/domain/role/detailKeys 形态 + 必选载荷强制执行 + 未登记拒绝）。**2026-11-25 进展**：已补 deriveStateEvents 载荷（point/kind/reason/content）、detectProposed 载荷、queue 8、changeset 4、acceptance 5、extension 6、L3 card.resolved/conversation.created/proposal.clarify；**仍缺**：`card.dismissed`（全代码库无发射点）、`card.rejected` 载荷（仅部分路径打点）、`changeset.reviewed`/`usage.period_closed`/`plan.rejected`/`dialogue.needs_human`（注册表有、无发射点——死事件待裁定登记或删除）、`tool.approved`/`tool.rejected`/`tool.remembered`（L3 经时间线收集但无载荷断言）、`problem.*`（渲染层 tlog 无断言）、`usage.*`（main 入账路径无断言）、`capability.checked`/`capability.ledger_updated`、`dialogue.loop_guard`/`dialogue.forced_clarify`、`environment.injected`、`execution.force_input`、`stuck.needs_human`、`conversation.assistant_start`/`assistant_done`、`conversation.interrupted`——这些多数只在渲染层 tlog 打点，L3 可捕获但未断言载荷。
   - ~~文本标记兼容壳（pendingCardToShow/goalFallbackTrigger）驱动门控/停止/兜底卡~~ 2026-11-24 已退役（V1.5-S4 主体，批次 9）：两函数删除；卡触发收敛到 decisionContent 快照 + 协议工具信号；文本标记只打 `protocol.text_fallback` 并引导改用协议工具。保留的 `agentLoop` 提议/证据推进探测属 StallDetector 输入，不参与决策点判定。**2026-11-25 复核裁定**（ADR-009 r5）：保留探测只服务纯文本轮（StallDetector 调用点有 `toolCalls.length===0` 门），不改为消费 protocol 事件（改则方案确认后不逼执行）；删除条件 = S5 兜底率≈0——与 `completionClaimParser` 一并退役。
   - 未入矩阵的已测模块：compaction、preheat、codeRag/context、diffRender、lsp、serviceManager、projectInit、sandboxPath/sandboxSymlink、envManager、useConversationState、gateway 各模块等（文件清单见 `apps/desktop/tests/unit/`）。
   - ~~`delegated` 的 standard 负控为手工临时改任务运行，未编码为运行器选项/负控任务。~~ 2026-11-24 已关闭（#158）：`--trust-override` + `--expect-fail` + `--expect-fail-check` 编码进运行器，standard 负控 3/3 EXPECTED-FAIL。

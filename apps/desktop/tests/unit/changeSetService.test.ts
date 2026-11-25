@@ -175,6 +175,39 @@ describe('ChangeSetService（BC-10 持久化 + 基线校验）', () => {
       'changeset.proposed',
       'changeset.applied',
     ])
+    const [proposed, applied] = commits[0].events as Array<{
+      type: string
+      detail: Record<string, unknown>
+    }>
+    expect(proposed.detail.files).toEqual([file])
+    expect(typeof proposed.detail.changeId).toBe('string')
+    expect(typeof proposed.detail.baseHash).toBe('string')
+    expect(applied.detail).toEqual({ changeId: proposed.detail.changeId, files: [file] })
+  })
+
+  // 2026-11-25 事件语义补课：回滚/冲突事件载荷（changeId/files/file）与真实结果一致——
+  // 时间线消费方可直接区分「已回滚」与「基线冲突拒绝覆盖」。
+  it('回滚事件载荷语义：reverted 带 changeId+files；外部修改 → conflict_detected 带 changeId+file', () => {
+    const emitted: Array<{ type: string; detail?: Record<string, unknown> }> = []
+    const es = new ChangeSetService(path.join(TMP, 'changesets-events.json'), (e) =>
+      emitted.push(e as never),
+    )
+    const clean = path.join(proj, 'clean.txt')
+    const dirty = path.join(proj, 'dirty.txt')
+    writeFileSync(clean, 'after', 'utf-8')
+    writeFileSync(dirty, 'after-dirty', 'utf-8')
+    es.recordMutation('s1', clean, { content: 'before' })
+    es.recordMutation('s1', dirty, { content: 'before-dirty' })
+    writeFileSync(dirty, 'external-edit', 'utf-8') // 基线冲突：外部修改
+    const r = es.revert('s1')
+    expect(r.reverted).toEqual([clean])
+    expect(r.conflicted).toEqual([dirty])
+    const revertedEvt = emitted.find((e) => e.type === 'changeset.reverted')
+    const conflictEvt = emitted.find((e) => e.type === 'changeset.conflict_detected')
+    expect(revertedEvt?.detail).toEqual({ changeId: es.get('s1')?.id, files: [clean] })
+    expect(conflictEvt?.detail).toEqual({ changeId: es.get('s1')?.id, file: dirty })
+    expect(readFileSync(clean, 'utf-8')).toBe('before')
+    expect(readFileSync(dirty, 'utf-8')).toBe('external-edit') // 冲突不覆盖
   })
 
   it('revert：基线仍在 WAL 待落盘时从已提交意图读取（不误判 conflict）', () => {

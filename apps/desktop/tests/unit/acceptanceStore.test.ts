@@ -79,6 +79,61 @@ describe('AcceptanceStore（BC-14 持久化）', () => {
     expect(commits[0].writes[0].filePath).toBe(file)
     expect(commits[0].writes[0].content).toContain('"s1"')
     expect(commits[0].events.map((e) => e.type)).toEqual(['acceptance.criteria_derived'])
+    const derived = (commits[0].events as Array<{ detail?: Record<string, unknown> }>)[0]
+    expect(derived.detail).toEqual({ recordId: 's1', source: 'manual', items: ['a'] })
+  })
+
+  // 2026-11-25 事件语义补课：验收事件载荷与真实判定一致——通过项带证据引用、失败带原因、
+  // 豁免带理由、门禁评估带 verdict/blocking/waived（时间线消费方无需重建记录）。
+  it('事件载荷语义：通过（证据引用）/失败（原因）/豁免（理由）/门禁评估', () => {
+    const emitted: Array<{ type: string; detail?: Record<string, unknown> }> = []
+    const store = new AcceptanceStore(path.join(TMP, 'acceptance-events.json'), (e) =>
+      emitted.push(e as never),
+    )
+    store.derive('s1', ['项一', '项二', '项三'], 'plan-verification')
+    store.applyEvidence('s1', ['ls 通过', 'npm test 通过'])
+    store.mark('s1', 'item-3', 'failed', { reason: '页面 500' })
+    const gate = store.evaluate('s1')
+    expect(gate).toEqual({ verdict: 'failed', blocking: ['item-3'], waived: [] })
+    store.acceptEmpty('s2')
+
+    const evt = (type: string, nth = 0): Record<string, unknown> | undefined =>
+      emitted.filter((e) => e.type === type)[nth]?.detail
+    expect(evt('acceptance.criteria_derived', 0)).toEqual({
+      recordId: 's1',
+      source: 'plan-verification',
+      items: ['项一', '项二', '项三'],
+    })
+    expect(evt('acceptance.item_passed', 0)).toEqual({
+      recordId: 's1',
+      itemId: 'item-1',
+      evidenceRef: 'verification:ls 通过',
+    })
+    expect(evt('acceptance.item_passed', 1)).toEqual({
+      recordId: 's1',
+      itemId: 'item-2',
+      evidenceRef: 'verification:npm test 通过',
+    })
+    expect(evt('acceptance.item_failed')).toEqual({
+      recordId: 's1',
+      itemId: 'item-3',
+      reason: '页面 500',
+    })
+    expect(evt('quality_gate.evaluated')).toEqual({
+      verdict: 'failed',
+      blocking: ['item-3'],
+      waived: [],
+    })
+    expect(evt('acceptance.criteria_derived', 1)).toEqual({
+      recordId: 's2',
+      source: 'manual',
+      items: ['无验收来源（用户确认按交付关闭）'],
+    })
+    expect(evt('acceptance.item_waived')).toEqual({
+      recordId: 's2',
+      itemId: 'item-1',
+      reason: '用户显式确认接受空验收',
+    })
   })
 
   it('状态落盘失败时下一次变更基于 WAL 已提交意图（重放不丢更新）', () => {
