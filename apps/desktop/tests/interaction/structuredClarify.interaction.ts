@@ -69,7 +69,14 @@ test('ADR-014：假设核对卡——逐条选择/修正，提交结构化澄清
 })
 
 test('ADR-014：方案待确认时提交澄清回答不误拒方案（clarification 直送）', async ({ page }) => {
-  const h = await installMockBridge(page, { project: 'none', manualEmit: true })
+  const h = await installMockBridge(page, {
+    project: 'none',
+    manualEmit: true,
+    extraInit: `
+      window.__nfClarify = [];
+      bridge.timeline = { log: async (e) => { if (e && e.type === 'proposal.clarify') window.__nfClarify.push(e) } };
+    `,
+  })
   await startFromScratch(page)
   await sendChat(page, '做个待办应用')
   await h.emit([chunk.tool('propose_goal', { statement: '做一个待办应用' }), chunk.done()])
@@ -86,6 +93,16 @@ test('ADR-014：方案待确认时提交澄清回答不误拒方案（clarificat
   ])
   await expect(page.getByRole('button', { name: '确认执行' })).toBeVisible({ timeout: 10000 })
   await expect(page.locator('.nf-assumptioncheck')).toBeVisible()
+  // 2026-11-25 事件语义补课：ask_user 的 proposal.clarify 载荷（question/type/assumptions——
+  // 澄清不置决策点，事件是这条通道的唯一审计痕迹）
+  const clarify =
+    (await h.readCapture<Array<{ detail?: Record<string, unknown> }>>('__nfClarify')) ?? []
+  expect(clarify).toHaveLength(1)
+  expect(clarify[0]?.detail).toMatchObject({
+    question: '核对目标理解',
+    type: 'risk_confirmation',
+    assumptions: ['使用原生 HTML'],
+  })
   await page
     .locator('.nf-assumptioncheck__row')
     .getByRole('button', { name: '符合', exact: true })

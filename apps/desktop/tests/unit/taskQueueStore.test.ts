@@ -67,4 +67,65 @@ describe('TaskQueueStore（BC-11 持久化）', () => {
     expect(commits[0].writes[0].content).toContain('任务')
     expect(commits[0].events.map((e) => e.type)).toEqual(['queue.entry_enqueued'])
   })
+
+  // 2026-11-25 事件语义补课：队列八类事件的载荷字段（entryId/taskRef/position/reason/outcome）
+  // 与状态转换一一对应——消费方（探针/时间线审计）无需反推代码。
+  it('事件载荷语义：入队位置、启动 taskRef、阻塞原因、恢复/暂停、完成 outcome、失败原因、取消、重排', () => {
+    const events: Array<{ type: string; detail?: Record<string, unknown> }> = []
+    const s = new TaskQueueStore(path.join(TMP, 'queue-events.json'), (e) =>
+      events.push(e as never),
+    )
+    const e1 = s.enqueue('s1', '任务一', 'ref-1').entries[0]
+    const e2 = s.enqueue('s1', '任务二', 'ref-2').entries[1]
+    const e3 = s.enqueue('s1', '任务三', 'ref-3').entries[2]
+    const e4 = s.enqueue('s1', '任务四', 'ref-4').entries[3]
+    s.start('s1', e1.id)
+    s.block('s1', e1.id, '等待授权')
+    s.resume('s1', e1.id)
+    s.pause('s1', e1.id)
+    s.start('s1', e2.id)
+    s.complete('s1', e2.id)
+    s.cancel('s1', e3.id)
+    s.start('s1', e4.id)
+    s.fail('s1', e4.id, 'bash 超时')
+    s.reorder('s1', e1.id, 2)
+
+    const detailOf = (type: string, nth = 0): Record<string, unknown> | undefined =>
+      events.filter((e) => e.type === type)[nth]?.detail
+    expect(detailOf('queue.entry_enqueued', 0)).toMatchObject({
+      entryId: e1.id,
+      taskRef: 'ref-1',
+      position: 0,
+    })
+    expect(detailOf('queue.entry_enqueued', 1)).toMatchObject({
+      entryId: e2.id,
+      taskRef: 'ref-2',
+      position: 1,
+    })
+    expect(detailOf('queue.entry_started', 0)).toMatchObject({ entryId: e1.id, taskRef: 'ref-1' })
+    expect(detailOf('queue.entry_blocked')).toMatchObject({
+      entryId: e1.id,
+      reason: '等待授权',
+    })
+    expect(detailOf('queue.entry_resumed')).toMatchObject({ entryId: e1.id })
+    expect(detailOf('queue.entry_paused')).toMatchObject({ entryId: e1.id })
+    expect(detailOf('queue.entry_started', 1)).toMatchObject({ entryId: e2.id, taskRef: 'ref-2' })
+    expect(detailOf('queue.entry_completed', 0)).toMatchObject({
+      entryId: e2.id,
+      outcome: 'completed',
+    })
+    expect(detailOf('queue.entry_cancelled')).toMatchObject({ entryId: e3.id })
+    expect(detailOf('queue.entry_enqueued', 3)).toMatchObject({
+      entryId: e4.id,
+      taskRef: 'ref-4',
+      position: 3,
+    })
+    expect(detailOf('queue.entry_started', 2)).toMatchObject({ entryId: e4.id, taskRef: 'ref-4' })
+    expect(detailOf('queue.entry_completed', 1)).toMatchObject({
+      entryId: e4.id,
+      outcome: 'failed',
+      reason: 'bash 超时',
+    })
+    expect(detailOf('queue.entry_reordered')).toMatchObject({ entryId: e1.id, position: 2 })
+  })
 })

@@ -8,6 +8,14 @@ test('新任务：清空目标/方案确认位与主进程计划门，重新弹�
     project: 'none',
     manualEmit: true,
     capture: { planConfirmedCalls: true },
+    extraInit: `
+      window.__nfCreated = [];
+      window.__nfCards = [];
+      bridge.timeline = { log: async (e) => {
+        if (e && e.type === 'conversation.created') window.__nfCreated.push(e);
+        if (e && (e.type === 'card.resolved' || e.type === 'card.rejected')) window.__nfCards.push(e);
+      } };
+    `,
   })
   await startFromScratch(page)
   await sendChat(page, '做个待办应用')
@@ -48,6 +56,20 @@ test('新任务：清空目标/方案确认位与主进程计划门，重新弹�
   ])
   // 方案确认位已复位 → 新方案卡必须重新出现
   await expect(page.getByRole('button', { name: '确认执行' })).toBeVisible({ timeout: 10000 })
+
+  // 2026-11-25 事件语义补课：conversation.created 携带会话 id（两次新问题 → 两个不同会话），
+  // card.resolved 携带卡类型 + action（目标/方案确认的 UI 生命周期可回放）。
+  const created =
+    (await h.readCapture<Array<{ detail?: { session?: string } }>>('__nfCreated')) ?? []
+  expect(created.length).toBeGreaterThanOrEqual(2)
+  expect(created.every((e) => typeof e.detail?.session === 'string')).toBe(true)
+  expect(new Set(created.map((e) => e.detail?.session)).size).toBeGreaterThanOrEqual(2)
+  const cards =
+    (await h.readCapture<Array<{ detail?: { card?: string; action?: string } }>>('__nfCards')) ?? []
+  expect(cards.some((e) => e.detail?.card === 'goal' && e.detail?.action === 'confirm')).toBe(true)
+  expect(cards.some((e) => e.detail?.card === 'execution' && e.detail?.action === 'confirm')).toBe(
+    true,
+  )
 })
 
 test('会话 ID 跨重启保留（queue/acceptance/changeset 记录可再定位）', async ({ page }) => {

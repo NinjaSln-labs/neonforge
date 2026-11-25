@@ -63,4 +63,52 @@ describe('PluginRegistry（ticket 08——内置插件注册与生命周期钩�
     const registered = events.find((e) => e.type === 'extension.registered')
     expect(registered?.detail.capabilityDigest).toBe('read_file:none')
   })
+
+  // 2026-11-25 事件语义补课：扩展生命周期事件载荷（激活/停用/能力变更 diff/回收/调用拒绝）
+  it('生命周期事件载荷：激活/停用/能力变更/回收/调用拒绝（扩展 id + 能力/原因）', () => {
+    const events: Array<{ type: string; detail: Record<string, unknown> }> = []
+    setPluginTimelineSink((event) => events.push(event))
+    const r = new PluginRegistry()
+    r.register({
+      name: 'ext',
+      version: '1',
+      trust: 'trusted',
+      capabilities: [{ id: 'read_file', name: '读取文件', description: '', risk: 'none' }],
+    })
+    r.setActive('ext', false)
+    r.setActive('ext', true)
+    // 能力变更：声明新增 write_file → capabilities_changed（oldDigest/newDigest/added/removed）
+    r.register({
+      name: 'ext',
+      version: '1',
+      trust: 'trusted',
+      capabilities: [
+        { id: 'read_file', name: '读取文件', description: '', risk: 'none' },
+        { id: 'write_file', name: '写文件', description: '', risk: 'high' },
+      ],
+    })
+    // 调用拒绝：能力不存在
+    const denied = r.canInvoke('ext', 'delete_file')
+    expect(denied.allowed).toBe(false)
+    r.unregister('ext')
+    setPluginTimelineSink(() => {})
+
+    const evt = (type: string, nth = 0): Record<string, unknown> | undefined =>
+      events.filter((e) => e.type === type)[nth]?.detail
+    expect(evt('extension.deactivated')).toEqual({ extensionId: 'ext' })
+    expect(evt('extension.activated')).toEqual({ extensionId: 'ext' })
+    expect(evt('extension.capabilities_changed')).toMatchObject({
+      extensionId: 'ext',
+      oldDigest: 'read_file:none',
+      added: ['write_file'],
+      removed: [],
+    })
+    expect(evt('extension.capabilities_changed')?.newDigest).toBe('read_file:none|write_file:high')
+    expect(evt('extension.invocation_denied')).toEqual({
+      extensionId: 'ext',
+      capability: 'delete_file',
+      reason: '扩展能力不存在：ext/delete_file',
+    })
+    expect(evt('extension.unregistered')).toEqual({ extensionId: 'ext', kind: 'builtin' })
+  })
 })

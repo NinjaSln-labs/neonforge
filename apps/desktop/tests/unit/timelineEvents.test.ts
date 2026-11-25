@@ -477,6 +477,106 @@ describe('gate.denied（ADR-016——机制拒绝结构化）', () => {
   })
 })
 
+// 2026-11-25 事件语义补课：状态派生事件的载荷字段与状态转换一一对应（point/kind/reason/content），
+// 而非仅断言事件类型——时间线消费方（回放/审计/探针）可直接使用载荷。
+describe('deriveStateEvents（载荷语义——point/kind/reason/content）', () => {
+  it('确认事件 point 与决策点一一对应（goal/plan/resolution）', () => {
+    const g = userConfirmed(initialState(), 'goal')
+    expect(
+      deriveStateEvents(initialState(), g).find((e) => e.type === 'task.goal_confirmed')?.detail,
+    ).toEqual({ point: 'goal' })
+    const p = userConfirmed(g, 'plan')
+    expect(deriveStateEvents(g, p).find((e) => e.type === 'task.plan_confirmed')?.detail).toEqual({
+      point: 'plan',
+    })
+    const r = userConfirmed(p, 'resolution')
+    expect(
+      deriveStateEvents(p, r).find((e) => e.type === 'task.resolution_confirmed')?.detail,
+    ).toEqual({ point: 'resolution' })
+  })
+
+  it('pending_set/cleared kind 覆盖 plan/resolution（与当前决策点一致）', () => {
+    const goal = userConfirmed(initialState(), 'goal')
+    const planPending = setPending(goal, 'plan')
+    expect(
+      deriveStateEvents(goal, planPending).find((e) => e.type === 'session.pending_set')?.detail,
+    ).toEqual({ kind: 'plan' })
+    expect(
+      deriveStateEvents(planPending, userConfirmed(planPending, 'plan')).find(
+        (e) => e.type === 'session.pending_cleared',
+      )?.detail,
+    ).toEqual({ kind: 'plan' })
+    const resPending = setPending(userConfirmed(planPending, 'plan'), 'resolution')
+    expect(
+      deriveStateEvents(userConfirmed(planPending, 'plan'), resPending).find(
+        (e) => e.type === 'session.pending_set',
+      )?.detail,
+    ).toEqual({ kind: 'resolution' })
+    expect(
+      deriveStateEvents(resPending, userConfirmed(resPending, 'resolution')).find(
+        (e) => e.type === 'session.pending_cleared',
+      )?.detail,
+    ).toEqual({ kind: 'resolution' })
+  })
+
+  it('拒绝事件 point + reason 取自 lastRejectReason（plan/resolution）', () => {
+    const planPending = setPending(userConfirmed(initialState(), 'goal'), 'plan')
+    const planRejected = userRejected(planPending, 'plan', { kind: 'scope', target: 'plan' })
+    expect(
+      deriveStateEvents(planPending, planRejected).find((e) => e.type === 'task.plan_rejected')
+        ?.detail,
+    ).toEqual({
+      point: 'plan',
+      reason: { kind: 'scope', target: 'plan' },
+    })
+    expect(
+      deriveStateEvents(planPending, planRejected).find((e) => e.type === 'decision.resolved')
+        ?.detail,
+    ).toEqual({
+      point: 'plan',
+      action: 'reject',
+      reason: { kind: 'scope', target: 'plan' },
+    })
+    const resPending = setPending(userConfirmed(planPending, 'plan'), 'resolution')
+    const resRejected = userRejected(resPending, 'resolution', { kind: 'scope' })
+    expect(
+      deriveStateEvents(resPending, resRejected).find((e) => e.type === 'task.resolution_rejected')
+        ?.detail,
+    ).toEqual({
+      point: 'resolution',
+      reason: { kind: 'scope' },
+    })
+  })
+
+  it('decision.requested 内容快照对 plan 同样成立（用户当时看到什么可回放）', () => {
+    const goal = userConfirmed(initialState(), 'goal')
+    const pending = setPending(goal, 'plan', {
+      proposal: { summary: '做一个页面', files: [], assumptions: [], verificationPlan: [] },
+      since: 't2',
+    })
+    const evt = deriveStateEvents(goal, pending).find((e) => e.type === 'decision.requested')
+    expect(evt?.detail).toEqual({ kind: 'plan', since: 't2', content: pending.decisionContent })
+  })
+})
+
+// detectProposed 载荷语义（计划/完成提议全文 + 目标文本提取）
+describe('detectProposed（载荷语义）', () => {
+  it('plan/resolution 提议携带原文；goal 提议裁剪空白', () => {
+    expect(detectProposed('【执行方案】\n- a.js')).toContainEqual({
+      type: 'task.plan_proposed',
+      detail: { plan: '【执行方案】\n- a.js' },
+    })
+    expect(detectProposed('完成【已达成】')).toContainEqual({
+      type: 'task.resolution_proposed',
+      detail: { summary: '完成【已达成】' },
+    })
+    expect(detectProposed('好的。【目标确认： 做一个游戏 】')).toContainEqual({
+      type: 'task.goal_proposed',
+      detail: { goalText: '做一个游戏' },
+    })
+  })
+})
+
 // 2026-11-24 审计批次 6：注册表遍历校验（全部 93 事件 schema 自洽 + 必选载荷强制执行）
 // 逐事件断言仍是独立缺口（见覆盖矩阵表 2）；本组锁定「登记本身」的结构契约，防漏字段/畸形键。
 describe('TIMELINE_EVENT_SPECS 注册表遍历（事件 schema 自洽）', () => {
