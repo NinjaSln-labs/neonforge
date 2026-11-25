@@ -39,8 +39,11 @@ export interface TurnProgress {
   // 根因 2（冒烟 13）：write 授权卡（need-approval）被 StuckDetector 当「无产出」→ escalate
   // → silent 打断授权流 → 轮 4 授权处理混乱 + 轮 5 重写（此前缺失此排除）
   // S5（§8.1 B 331）：推进维度——结构化提议/完成声明带证据视为推进（模型在走决策点流程——不判停滞）
-  proposed: boolean // 结构化提议输出（【目标确认】/【执行方案】/【已达成】信号——与 pendingCardToShow 同源）
-  providedEvidence: boolean // 完成声明带验证证据（parseCompletionClaim 判定——verification 非空）
+  // 2026-11-25 S4 复核裁定（ADR-009 r5）：文本兜底探测只覆盖纯文本轮（StuckDetector 调用点以
+  // toolCalls.length===0 为门）；协议工具轮由领域 pending 状态承载推进，确认后的协议提议**不得**
+  // 计「本轮推进」（否则方案确认后不再逼执行——「只说不做」回归）。
+  proposed: boolean // 文本结构化提议信号（【目标确认】/【执行方案】/【已达成】——纯文本回退轮专用）
+  providedEvidence: boolean // 完成声明带验证证据（parseCompletionClaim 判定——verification 非空——纯文本回退轮专用）
 }
 
 // === Domain Service: 文本分类（问句/沟通/完成态——坑 79 结构判定：有限集，不匹配措辞） ===
@@ -167,8 +170,13 @@ export function evaluateTurnProgress(input: {
     (c) => c.status === 'need-approval' || c.status === 'file-approval',
   )
   // S5（§8.1 B 331——推进检测统一）：结构化提议输出 = 推进（【目标确认】/【执行方案】/【已达成】信号——
-  // 与 pendingCardToShow 信号同源——决策点流程中模型在推进）；纯文本承诺不算（「只说不做」判定保留——坑 79）
+  // 决策点流程中模型在推进）；纯文本承诺不算（「只说不做」判定保留——坑 79）
   // S5 复审（坑 97 单源）：isStructuredProposal 领域层唯一探测（renderer proposalConsumed 共用——不自写正则）
+  // 2026-11-25 S4 兜底探测调用点复核裁定（ADR-009 r5）：本探测**保留**且只服务纯文本轮——
+  // StuckDetector 调用点（useChatStream）以 toolCalls.length===0 为门，协议工具轮不进入；推进保障调用点
+  // （useChatEngine）里协议提议消息在方案确认后**不得**计「本轮推进」（否则不再逼执行——「只说不做」回归），
+  // 故不并入 protocol 事件。协议轮推进由领域 pending（确认前 auto）与确认态消费语义承载；
+  // S5 兜底率≈0 时本探测与 completionClaimParser 一并退役（stage-spec S5 DoD）。
   const proposed = isStructuredProposal(t)
   // S5：完成声明带验证证据 = 推进（parseCompletionClaim 判定——verification 非空——S4 证据对账流程中不判停滞）
   const providedEvidence = (parseCompletionClaim(t)?.evidence.verification.length ?? 0) > 0

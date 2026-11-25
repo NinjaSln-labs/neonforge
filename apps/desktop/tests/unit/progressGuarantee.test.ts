@@ -10,6 +10,7 @@ import {
   type ConversationState,
   type TurnProgress,
 } from '../../src/domain/conversationState'
+import { evaluateTurnProgress } from '../../src/domain/agentLoop'
 
 // S5 spec TDD 网格：decideProgressGuarantee 唯一推进判定器（吸收 turnPolicy 状态空间——坑 80/81/93/12
 // 冒烟 11/12 完成度语义 + S5 扩展 proposed/providedEvidence/toolsAvailable）
@@ -143,5 +144,41 @@ describe('isConsumedProposal / isStructuredProposal（S5 复审——单源探�
   it('纯文本 → 恒非已消费（isStructuredProposal 前置——与「只说不做」判定不冲突）', () => {
     const s = userConfirmed(userConfirmed(initialState(), 'goal'), 'plan')
     expect(isConsumedProposal('我马上就去改。', s)).toBe(false)
+  })
+})
+
+// 2026-11-25 S4 兜底探测调用点复核裁定（ADR-009 r5）：文本探测只覆盖纯文本轮。
+// 协议工具轮不产生文本兜底信号——确认前的推进由「未确认 → auto」承载；确认后的协议提议消息
+// **不得**计「本轮推进」（否则方案确认后不再逼执行——「只说不做」回归）。
+describe('S4 兜底探测调用点（协议工具轮不计确认后推进）', () => {
+  const guaranteeTurn = (t: ReturnType<typeof evaluateTurnProgress>): TurnProgress => ({
+    produced: t.artifactProduced || t.sideEffectSucceeded,
+    proposed: t.proposed,
+    providedEvidence: t.providedEvidence,
+    toolsAvailable: true,
+  })
+
+  it('propose_goal 工具轮（无文本标记——目标未确认态）→ auto（not-confirmed）', () => {
+    const t = evaluateTurnProgress({
+      toolCalls: [{ name: 'propose_goal', status: 'done' }],
+      content: '',
+      prevReadFiles: new Set(),
+    })
+    expect(t.proposed).toBe(false)
+    const r = decideProgressGuarantee(initialState(), guaranteeTurn(t))
+    expect(r.mode).toBe('auto')
+    expect(r.reason).toBe('not-confirmed')
+  })
+
+  it('propose_plan 工具轮（无文本标记——方案已确认态）→ require-action（逼执行——不把已确认提议当推进）', () => {
+    const t = evaluateTurnProgress({
+      toolCalls: [{ name: 'propose_plan', status: 'done' }],
+      content: '',
+      prevReadFiles: new Set(),
+    })
+    expect(t.proposed).toBe(false)
+    const r = decideProgressGuarantee(confirmed(), guaranteeTurn(t))
+    expect(r.mode).toBe('require-action')
+    expect(r.reason).toBe('confirmed-no-progress-tools-available')
   })
 })
