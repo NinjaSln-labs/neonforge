@@ -1269,6 +1269,13 @@ test('0-1 授权 v4 完整路径：允许并记住 → 同文件自动 → 新�
       compaction: { compact: async () => ({ ok: false }) },
       plugins: { list: async () => [], toggle: async () => true },
     }
+    // 2026-11-25 事件语义补课：授权三态载荷（tool.remembered name/file、tool.approved name、
+    // card.resolved card/action/name）——「允许并记住」流程的审计痕迹
+    const trustEvents: Array<{ type: string; detail?: Record<string, unknown> }> = []
+    ;(window as unknown as { __nfTrustEvents: unknown[] }).__nfTrustEvents = trustEvents
+    ;(window.neonforge as unknown as { timeline?: unknown }).timeline = {
+      log: async (e: { type: string; detail?: Record<string, unknown> }) => trustEvents.push(e),
+    }
     ;(window as unknown as { neonforge: unknown }).neonforge = window.neonforge
   })
   await gotoStart(page)
@@ -1296,6 +1303,23 @@ test('0-1 授权 v4 完整路径：允许并记住 → 同文件自动 → 新�
   await expect(
     page.locator('.nf-toolcall--done').filter({ hasText: '写入 /test/index.html' }),
   ).toHaveCount(3, { timeout: 8000 })
+  // 2026-11-25 事件语义补课：授权三态载荷——记住（name+file）、批准（name）、卡（card/action/name）
+  const trustEvts = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __nfTrustEvents: Array<{ type: string; detail?: Record<string, unknown> }>
+        }
+      ).__nfTrustEvents,
+  )
+  const remembered = trustEvts.find((e) => e.type === 'tool.remembered')
+  expect(remembered?.detail).toEqual({ name: 'write', file: '/test/index.html' })
+  const approved = trustEvts.filter((e) => e.type === 'tool.approved' && e.detail?.name === 'write')
+  expect(approved.length).toBeGreaterThanOrEqual(1)
+  const cardResolved = trustEvts.find(
+    (e) => e.type === 'card.resolved' && e.detail?.card === 'approval',
+  )
+  expect(cardResolved?.detail).toMatchObject({ card: 'approval', action: 'approve', name: 'write' })
   // 新问题 = 任务边界：点「新问题」按钮（handleNew——清会话 + 重挂载 ConversationPanel → 信任/授权全部重置）
   await page.waitForTimeout(500)
   await page.getByRole('button', { name: '新问题' }).click()
