@@ -750,13 +750,10 @@ export default function ConversationPanel({
             {m.role === 'assistant' &&
               m.status === 'done' &&
               m.content &&
-              !m.content.includes('【目标确认') &&
-              !m.content.includes('【执行方案') &&
-              !m.content.includes('【已达成') &&
+              // V1.5-S4：文本标记只走降级引导（不产卡）；候选按钮与协议工具卡互斥——同一消息
+              // 含协议提议调用时不渲染候选（一个决策点一个决策点地走）
+              !hasProtoCall(m, ...PROTOCOL_TOOL_NAMES) &&
               (() => {
-                // 2026-08-08 B 修复（feedback.log——「候选确认卡 + 确认卡不能同时出来」）：
-                // 同消息互斥——含确认卡标记（【目标确认】/【执行方案】/【已达成】）时不渲染候选按钮
-                // （一个决策点一个决策点地走——确认卡接管决策，候选收起）
                 const opts = parseCandidates(m.content)
                 if (!opts) return null
                 // 2026-08-08 候选例外（用户「输入内容也可以解除 pending——本来就是支持选或输入」）：
