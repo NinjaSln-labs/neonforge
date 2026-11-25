@@ -126,7 +126,7 @@ Session Timeline BC      — 全步骤统一记录（可观测性——JSONL）
 npx vitest run                            # L1 领域逻辑（974）
 npx tsc -p tsconfig.json --noEmit         # L2 契约（renderer + main）
 npx tsc -p tsconfig.main.json --noEmit    # L2 主进程契约
-npx playwright test --project=interaction # L3 组件交互（96 用例 / 93 运行 + 3 跳过）
+npx playwright test --project=interaction # L3 组件交互（98 用例 / 95 运行 + 3 跳过）
 npx playwright test                       # L5 视觉 + L3（本地手动）
 NF_TEST_KEY=<key> node e2e-suite.mjs      # L4 真实 API E2E（前置：mkdir -p /tmp/nf-e2e-test）
 ```

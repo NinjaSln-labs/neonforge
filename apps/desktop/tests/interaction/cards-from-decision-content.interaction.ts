@@ -1058,8 +1058,14 @@ test('V1.5-S2-2b：plan 卡字段级相等——工具 propose_plan 路径渲染
 test('V1.5-S2-3：resolution 卡渲染——工具 report_completion 路径（verification 通过 + pendingQuestions 呈现）', async ({
   page,
 }) => {
-  await installMockBridge(page, {
+  const h = await installMockBridge(page, {
     project: 'none',
+    extraInit: `
+      window.__nfCompletionTlog = [];
+      bridge.timeline = { log: async (e) => {
+        if (e && e.type === 'proposal.completion') window.__nfCompletionTlog.push(e);
+      } };
+    `,
     script: compose(
       goalConfirm('完成待办应用'),
       planPropose(['/test/app.ts（核心）']),
@@ -1085,6 +1091,17 @@ test('V1.5-S2-3：resolution 卡渲染——工具 report_completion 路径（ve
   await expectVisible(page.getByRole('button', { name: '已解决' }), 15000)
   // pendingQuestions 直接渲染断言（遗留问题——解决卡知情项；decisionContent 快照同源）
   await expectText(page.locator('.nf-confirmcard'), '移动端样式未验证', 5000)
+  // 2026-11-25 事件语义补课（批次 13）：proposal.completion 产线载荷——summary 原文 +
+  // verification/pendingQuestions 数组长度（计数口径可诊断证据门）
+  const evts =
+    (await h.readCapture<Array<{ detail?: Record<string, unknown> }>>('__nfCompletionTlog')) ?? []
+  expect(evts).toHaveLength(1)
+  expect(evts[0]?.detail).toEqual({
+    ok: true,
+    summary: '完成待办应用',
+    verification: 1,
+    pendingQuestions: 1,
+  })
 })
 
 test('V1.5-S2-4：双通道并存——工具 goal + 工具 plan 依次出现 → 状态机无冲突（deriveDecisionPoint 优先级）', async ({

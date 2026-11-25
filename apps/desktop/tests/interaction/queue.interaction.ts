@@ -109,6 +109,19 @@ test('连续排队两条消息按序送达（后发不覆盖先发）', async ({
       (window as unknown as { __queueSeen: string[] }).__queueSeen.slice(0, 3),
     ),
   ).toEqual(['第一条', '第二条', '第三条'])
+  // 2026-11-25 事件语义补课（批次 13）：conversation.message_sent——用户消息原文按发送序回放
+  // （排队消息逐条 send 各打一次；第三轮外不再有自动续跑文本）
+  const tl =
+    (await page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            __nfQTimeline: Array<{ type: string; detail?: Record<string, unknown> }>
+          }
+        ).__nfQTimeline,
+    )) ?? []
+  const sent = tl.filter((e) => e.type === 'conversation.message_sent')
+  expect(sent.map((e) => e.detail?.content)).toEqual(['第一条', '第二条', '第三条'])
 })
 
 test('显式停止：排队中的用户消息回填输入框（不静默滞留）', async ({ page }) => {
@@ -140,4 +153,26 @@ test('显式停止：排队中的用户消息回填输入框（不静默滞留�
   expect(starts.length).toBeGreaterThanOrEqual(1)
   expect(typeof starts[0]?.detail?.forceTool).toBe('boolean')
   expect(typeof starts[0]?.detail?.progressMode).toBe('string')
+  // 2026-11-25 事件语义补课（批次 13）：推进判定事件载荷——execution.forced/released（mode/reason）
+  // 与 execution.force_input（planned/produced/projectFiles 三集合快照 + goalAchieved）
+  const forceInputs = tl.filter((e) => e.type === 'execution.force_input')
+  expect(forceInputs.length).toBeGreaterThanOrEqual(1)
+  expect(
+    forceInputs.every(
+      (e) =>
+        Array.isArray(e.detail?.planned) &&
+        Array.isArray(e.detail?.produced) &&
+        Array.isArray(e.detail?.projectFiles) &&
+        typeof e.detail?.goalAchieved === 'boolean',
+    ),
+  ).toBe(true)
+  const guarantees = tl.filter(
+    (e) => e.type === 'execution.forced' || e.type === 'execution.released',
+  )
+  expect(guarantees.length).toBeGreaterThanOrEqual(1)
+  expect(
+    guarantees.every(
+      (e) => typeof e.detail?.mode === 'string' && typeof e.detail?.reason === 'string',
+    ),
+  ).toBe(true)
 })
