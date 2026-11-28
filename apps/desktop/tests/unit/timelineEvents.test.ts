@@ -577,7 +577,8 @@ describe('detectProposed（载荷语义）', () => {
   })
 })
 
-// 2026-11-24 审计批次 6：注册表遍历校验（全部 93 事件 schema 自洽 + 必选载荷强制执行）
+// 2026-11-24 审计批次 6：注册表遍历校验（全部事件 schema 自洽 + 必选载荷强制执行）
+// 2026-11-28 ADR-019：删除 3 个被取代的死事件（plan.rejected / dialogue.needs_human / card.dismissed）→ 90 事件
 // 逐事件断言仍是独立缺口（见覆盖矩阵表 2）；本组锁定「登记本身」的结构契约，防漏字段/畸形键。
 describe('TIMELINE_EVENT_SPECS 注册表遍历（事件 schema 自洽）', () => {
   const VALID_DOMAINS = new Set([
@@ -607,7 +608,7 @@ describe('TIMELINE_EVENT_SPECS 注册表遍历（事件 schema 自洽）', () =>
   const entries = Object.entries(TIMELINE_EVENT_SPECS)
 
   it('全部事件登记完整：domain/role 合法、detailKeys 无空项/重复/畸形可选前缀', () => {
-    expect(entries.length).toBeGreaterThanOrEqual(90) // 2026-11-24 快照 93
+    expect(entries.length).toBeGreaterThanOrEqual(90) // 2026-11-28 快照 90（ADR-019 清理 3 死事件）
     for (const [type, spec] of entries) {
       expect(type).toMatch(/^[a-z_]+\.[a-z_]+$/)
       expect(VALID_DOMAINS.has(spec.domain)).toBe(true)

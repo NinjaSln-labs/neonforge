@@ -28,7 +28,7 @@
 | 事件 | 触发时机 | 携带数据 |
 |------|---------|---------|
 | `plan.approved` | 用户批准文件清单 | taskId, files（追加）|
-| `plan.rejected` | 写清单外文件被拒 | taskId, file, approvedList（拒绝带边界）|
+| ~~`plan.rejected`~~ | ~~写清单外被拒~~ | **2026-11-28 ADR-019 删除**：清单外拦截由 `tool.blocked`（gate=out-of-plan，载荷 name/gate/reason/args）承载 |
 
 ### 1.3 工具授权/执行事件（Conversation/Workspace BC）
 
@@ -53,7 +53,9 @@
 
 | 事件 | 触发时机 | 携带数据 |
 |------|---------|---------|
-| `card.shown` / `card.resolved` / `card.rejected` / `card.dismissed` | 卡弹出/确认/拒绝/消失 | card, action?, cause? |
+| `card.shown` / `card.resolved` / `card.rejected` | 卡弹出/确认/拒绝 | card, action? |
+
+> 2026-11-28 ADR-019：`card.dismissed` 删除——卡终结由 `card.resolved`/`card.rejected` 覆盖；任务重置由新会话 `conversation.created` + 确认位复位承载。
 
 ### 1.4 能力/环境事件（Capability BC）
 
