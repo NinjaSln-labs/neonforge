@@ -1,9 +1,12 @@
 name: QA Chain（ddd-qa-chain）
 
+# 2026-11-28 审计 D-6：docs/** 与根 *.md 纳入触发路径——否则纯文档 PR 不会跑新的 Format check
 on:
   push:
     paths:
       - 'apps/desktop/**'
+      - 'docs/**'
+      - '*.md'
       - '.github/workflows/qa.yml'
       - '.prettierrc.json'
       - 'lefthook.yml'
@@ -12,6 +15,8 @@ on:
   pull_request:
     paths:
       - 'apps/desktop/**'
+      - 'docs/**'
+      - '*.md'
       - '.github/workflows/qa.yml'
       - '.prettierrc.json'
       - 'lefthook.yml'
