@@ -5,7 +5,7 @@
 //   3. 触发权切换：卡内容来自 decisionContent（pending 时唯一来源）
 // 装配：MockBridge 工厂 + 场景装配器（T0 基建——旧基建 S3 迁移后本文件为新场景承载）
 import { test, expect } from '@playwright/test'
-import { installMockBridge, chunk, toolCall } from './mockBridge'
+import { installMockBridge, chunk, toolCall, type StreamChunk } from './mockBridge'
 import {
   compose,
   goalConfirm,
@@ -518,6 +518,65 @@ test('S5-2：纯文本承诺不算推进——确认执行后模型连续 2 轮�
 })
 
 // S6 门控双维场景（设计 §6 S6 + 拍板 3——curl localhost 自动放行/外网 ask；main preApproval 同步放行）
+// 2026-11-28 审计批次 15：stuck.needs_human 产线时序（此前只有注册 + L1 detectStuck 决策断言）。
+// 阈值链（agentLoop detectStuck）：连续 2 轮无进展 → escalate #1（silent 自动续跑）→ 再 2 轮 → needs-human。
+// 显式脚本轮次（与 S5-2 同型）：每轮纯文本承诺（无工具/无结构化提议）。
+test('S7-3b：stuck.needs_human 时序——连续无进展 4 轮 → 2 次升级后转人工（打点载荷）', async ({
+  page,
+}) => {
+  const promiseRound = (): StreamChunk[] => [chunk.content('这就动手，别急。'), chunk.done()]
+  await installMockBridge(page, {
+    project: 'none',
+    extraInit: `
+      const tlogsNH = []
+      window.__tlogsNH = tlogsNH
+      bridge.timeline = { log: async (evt) => { tlogsNH.push(evt) } }
+    `,
+    script: compose(goalConfirm('做一个待办应用'), planPropose(['/test/app.ts（核心）']), [
+      promiseRound(),
+      promiseRound(),
+      promiseRound(),
+      promiseRound(),
+      promiseRound(),
+      promiseRound(),
+    ]),
+  })
+  const countType = async (type: string) =>
+    (
+      (await page.evaluate(
+        () => (window as unknown as { __tlogsNH: Array<{ type: string }> }).__tlogsNH,
+      )) ?? []
+    ).filter((l) => l.type === type).length
+  await startFromScratch(page, '做个待办应用')
+  await expectVisible(page.getByRole('button', { name: '确认目标' }), 10000)
+  await page.getByRole('button', { name: '确认目标' }).click()
+  await expectVisible(page.getByRole('button', { name: '确认执行' }), 10000)
+  await page.getByRole('button', { name: '确认执行' }).click()
+  // R1 承诺 → 计数 1（不升级）
+  await page.waitForTimeout(2000)
+  expect(await countType('stuck.escalated')).toBe(0)
+  // R2 → escalate #1（silent send 自动开 R3——须等 R3 收尾再发下一条，避免打断评估）
+  await sendChat(page, '继续')
+  await expect.poll(() => countType('stuck.escalated'), { timeout: 15000 }).toBe(1)
+  await page.waitForTimeout(3000) // R3 承诺跑完（计数回 1）
+  // R4 → escalations 累计到上限 2 → needs-human（直接转用户，不再发 escalate）
+  await sendChat(page, '继续')
+  await expect.poll(() => countType('stuck.needs_human'), { timeout: 15000 }).toBe(1)
+  expect(await countType('stuck.escalated')).toBe(1)
+  // 载荷：message 为转人工文案（状态栏非侵入提示来源）
+  const nh =
+    (await page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            __tlogsNH: Array<{ type: string; detail?: Record<string, unknown> }>
+          }
+        ).__tlogsNH,
+    )) ?? []
+  const event = nh.find((l) => l.type === 'stuck.needs_human')
+  expect(typeof event?.detail?.message).toBe('string')
+  expect(String(event?.detail?.message)).toContain('卡住了')
+})
 test('S6-1：curl localhost GET 自动放行（拍板 3——main preApproval 同步——无授权卡）', async ({
   page,
 }) => {
