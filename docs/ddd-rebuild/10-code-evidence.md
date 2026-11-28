@@ -154,7 +154,7 @@
 | BC-12 用量与成本 | 历史证据：TaskPanel“本轮用量”仅前缀缓存、`M/gateway.ts` 未解析 usage；实现：`domain/usageLedger.ts`、`main/usageStore.ts`、`main/budgetStore.ts`、`main/priceStore.ts`、`gateway.ts` usage 解析、`ipc.ts` `usage:*`/`budget:*`/`pricing:*` | 已落地（2026-11-14）：token/成本/缓存口径 + append-only 台账 + 月度预算 + 本机价格表（未配置时成本为 unknown） |
 | BC-13 扩展与集成 | 历史证据：`M/pluginSystem.ts`（`BUILTIN_EXTENSIONS`，原 `mcp-bridge`/`git`/`stats` 占位）、`M/ipc.ts` `plugins:*`；实现：`domain/extension.ts`、`main/pluginSystem.ts`、`main/mcpClient.ts`、`main/mcpConfig.ts`、`main/mcpManager.ts`、`main/gitBridge.ts`、`ipc.ts` `extensions:*`/`mcp:*`/`git:read` | 已落地（2026-11-14）：注册/信任/生命周期 + MCP stdio（UTF-8 分片安全）+ 应用退出清理 MCP 进程 + Git 只读桥 |
 | BC-14 验收与质量门禁 | 历史证据：`R/DeliveryPanel.tsx`（验收勾选）、`R/DoDAlignPanel.tsx`（演示）、`D/conversationState.ts` 的 `PlanProposal.verificationPlan`；实现：`domain/acceptance.ts`、`main/acceptanceStore.ts`、`ipc.ts` `acceptance:*`、`DeliveryPanel.tsx` 门禁 | 已落地（2026-11-14）：来源派生 + 证据/豁免 + 门禁判定 |
-| 演示面板（非目标域） | `R/DigitalDeliveryPanel.tsx`、`R/DoDAlignPanel.tsx`、`R/TrustLadderPanel.tsx` | 仅 demo bridge 可达；生产路径不得注入 |
+| 演示面板（非目标域） | 历史证据：`R/DigitalDeliveryPanel.tsx`、`R/DoDAlignPanel.tsx`、`R/TrustLadderPanel.tsx` | 2026-11-28 审计 D-2 已删除（仅 demo bridge 可达、生产不可达）；同等替换见 `SessionPanel` 已授权行与 `DeliveryPanel` 验收项 |
 | 场景卡（产品内容） | `R/scenes.tsx`、`R/StartPage.tsx`、`R/ConversationPanel.tsx` | 不构成业务领域 |
 
 ---

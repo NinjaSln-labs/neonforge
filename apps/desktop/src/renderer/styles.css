@@ -65,7 +65,7 @@ body {
    2026-08-03 扩展（B3）：面板标题/会话标题/流程标题/交付徽章/台账标题——中文自动回退 PingFang */
 .nf-start__brand, .nf-config__title, .nf-flow__focus-step, .nf-flow__title,
 .nf-panel__header, .nf-session__header, .nf-filetree__title,
-.nf-delivery__badge, .nf-ledger__title, .nf-trust__body strong,
+.nf-delivery__badge, .nf-ledger__title,
 .nf-settings__plugins-title, .nf-scene__label {
   font-family: var(--nf-font-display);
 }
@@ -73,7 +73,7 @@ body {
 /* 2026-08-03 视觉审计：交互元素统一 150ms 过渡（hover/focus 平滑）+ 键盘可见焦点 */
 button, a, input, textarea, select,
 .nf-tree__row, .nf-session__item, .nf-ledger__item, .nf-scene,
-.nf-flow__model-btn, .nf-trust__level, .nf-settings__seg-btn, .nf-mention__item {
+.nf-flow__model-btn, .nf-settings__seg-btn, .nf-mention__item {
   transition: background-color 150ms ease, border-color 150ms ease,
               color 150ms ease, box-shadow 150ms ease, transform 160ms ease-out;
 }
@@ -745,8 +745,8 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-flow__model { color: var(--nf-amber); font-size: var(--nf-font-sm); }
 
 /* 2026-08-03 面板层级区分（c12）：功能面板顶部渐变条 + 标题图标 accent */
-.nf-flow, .nf-digital, .nf-trust, .nf-dod, .nf-settings { position: relative; }
-.nf-flow::before, .nf-digital::before, .nf-trust::before, .nf-dod::before, .nf-settings::before {
+.nf-flow, .nf-settings { position: relative; }
+.nf-flow::before, .nf-settings::before {
   content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
   background: linear-gradient(90deg, #6366f1, #a855f7, #ff8a00);
   border-radius: var(--nf-radius-md) var(--nf-radius-md) 0 0;
@@ -793,43 +793,8 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-candidates__btn--chosen { opacity: 0.55; cursor: default; border-color: var(--nf-accent); }
 .nf-candidates__btn--chosen:hover { background: none; color: var(--nf-text); }
 
-/* 数字产物交付（ticket 13）：文件清单 + 任务选择 + 变更预览 */
-.nf-digital { display: flex; flex-direction: column; gap: var(--nf-space-3); padding: var(--nf-space-3); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md); background: var(--nf-bg-elevated); }
-.nf-digital__files { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 140px; overflow-y: auto; }
-.nf-digital__files li { font-size: var(--nf-font-sm); color: var(--nf-text-dim); padding: 2px 0; }
-.nf-digital__preview { display: flex; flex-direction: column; gap: var(--nf-space-2); }
 
-/* 信任阶梯（ticket 14）：L1-L4 渐进授权 + 授权记录 + 委托规则 */
-.nf-trust { display: flex; flex-direction: column; gap: var(--nf-space-3); padding: var(--nf-space-3); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md); background: var(--nf-bg-elevated); }
-.nf-trust__ladder { display: flex; flex-direction: column; gap: 4px; }
-.nf-trust__level { display: flex; align-items: center; gap: var(--nf-space-2); padding: var(--nf-space-2); border-radius: var(--nf-radius-sm); border: 1px solid var(--nf-border); opacity: 0.9; }
-.nf-trust__level--unlocked { opacity: 1; border-color: var(--nf-border); }
-.nf-trust__level--current { border-color: var(--nf-accent); box-shadow: 0 0 10px rgba(99, 102, 241, 0.2); }
-.nf-trust__id { font-weight: 700; color: var(--nf-accent); font-size: var(--nf-font-sm); width: 28px; }
-.nf-trust__body { display: flex; flex-direction: column; gap: 1px; flex: 1; }
-.nf-trust__body strong { color: var(--nf-text); font-size: var(--nf-font-sm); }
-.nf-trust__body span { color: var(--nf-text-dim); font-size: 12px; }
-/* 2026-08-03 v34 审计修复：em（授权说明）在 elevated 上 text-tertiary 仅 4.30 不达标 → text-dim（6.10，层级靠 11px 字号） */
-.nf-trust__body em { color: var(--nf-text-dim); font-size: 11px; font-style: normal; }
-.nf-trust__mark { color: var(--nf-accent); font-size: 11px; }
-.nf-trust__logs { display: flex; flex-direction: column; gap: 4px; }
-.nf-trust__logs h4 { margin: 0; font-size: var(--nf-font-sm); color: var(--nf-text-dim); }
-.nf-trust__logs ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.nf-trust__logs li { font-size: 12px; color: var(--nf-text); }
-.nf-trust__logs em { color: var(--nf-text-dim); font-style: normal; }
-.nf-trust__empty { margin: 0; font-size: 12px; color: var(--nf-text-dim); }
-.nf-trust__ok { color: #22C55E; }
-.nf-trust__controls { display: flex; flex-direction: column; gap: var(--nf-space-2); }
-.nf-trust__delegate { display: flex; align-items: center; gap: var(--nf-space-2); font-size: 12px; color: var(--nf-text-dim); cursor: pointer; }
-.nf-trust__btns { display: flex; gap: var(--nf-space-2); }
 
-/* DoD 对齐（ticket 15b）：复述 + 验收标准确认 */
-.nf-dod { display: flex; flex-direction: column; gap: var(--nf-space-3); padding: var(--nf-space-3); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md); background: var(--nf-bg-elevated); }
-.nf-dod__restate { color: var(--nf-text-dim); font-size: var(--nf-font-sm); margin: 0; }
-.nf-dod__restate strong { color: var(--nf-text); }
-.nf-dod__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.nf-dod__list li { display: flex; align-items: center; gap: var(--nf-space-2); font-size: var(--nf-font-sm); color: var(--nf-text); }
-.nf-dod__actions { display: flex; gap: var(--nf-space-2); }
 
 /* 设置（ticket 08）：语言/默认视图/提醒开关 */
 .nf-settings { display: flex; flex-direction: column; gap: var(--nf-space-3); padding: var(--nf-space-3); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md); background: var(--nf-bg-elevated); }
@@ -998,12 +963,10 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-delivery__error svg { flex-shrink: 0; }
 
 /* 2026-08-03 审计修复（B2）：内联 SVG 图标与文本基线对齐（状态点/勾选/标记） */
-.nf-ledger__dot, .nf-trust__mark, .nf-trust__ok, .nf-flow__stage svg {
+.nf-ledger__dot, .nf-flow__stage svg {
   display: inline-flex; vertical-align: -2px;
 }
 .nf-flow__stage { display: inline-flex; align-items: center; gap: 4px; }
-.nf-trust__mark { display: inline-flex; align-items: center; gap: 4px; }
-.nf-trust__ok { color: #22C55E; display: inline-flex; vertical-align: -2px; }
 .nf-ledger__dot { display: inline-flex; align-items: center; justify-content: center; width: 14px; }
 .nf-ledger__dot svg { display: block; }
 

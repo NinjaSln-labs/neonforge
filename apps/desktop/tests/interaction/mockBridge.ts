@@ -85,7 +85,7 @@ export interface MockBridgeOptions {
   files?: DirEntry[]
   /** readFile 按路径返回内容（默认 '// ' + path） */
   fileContents?: Record<string, string>
-  /** demo 注入（delivery/recentFiles/problems/trustLadder——纯数据） */
+  /** demo 注入（delivery/recentFiles/problems/compactHistory——纯数据） */
   demo?: Record<string, unknown>
   /** D3：plannedFiles 初始状态（main 权威 mock——load 返回；默认空清单未批准） */
   plannedFiles?: { files: string[]; approved: boolean }
