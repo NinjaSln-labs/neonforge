@@ -182,8 +182,7 @@ describe('IPC 契约校验（P1-04）', () => {
     expect(validateIpc({ ts: 't', role: 'system' }, IPC_SCHEMAS.chatLogEntry).ok).toBe(false)
     expect(validateIpc({ type: 'task.goal_confirmed' }, IPC_SCHEMAS.timelineLogEvent).ok).toBe(true)
     expect(validateIpc({ type: 'x', role: 'bad' }, IPC_SCHEMAS.timelineLogEvent).ok).toBe(false)
-    expect(validateIpc({}, IPC_SCHEMAS.timelineQuery).ok).toBe(true)
-    expect(validateIpc({ limit: 1.5 }, IPC_SCHEMAS.timelineQuery).ok).toBe(false)
+    // 2026-11-28 审计（D-1）：timelineQuery schema 随通道删除（无 renderer 消费方）
   })
 
   it('permissionsSet：规则数组结构/枚举/数量边界', () => {

@@ -26,12 +26,11 @@ import { getPermissionRulesStore } from './permissionRulesStore.instance.js'
 import { getTrustPolicyStore } from './trustPolicyStore.instance.js'
 import { registerLspTools, lsp, isLspServerAvailable } from './lsp.js'
 import { context } from './context.js'
-import { codeRag } from './codeRag.js'
 import { buildStandardPrefix, planPreheat, prefixCache, preheating } from './preheat.js'
 import { initPlugins, pluginRegistry, setPluginTimelineSink } from './pluginSystem.js'
 import { compaction } from './compact.js'
 import { appendChatLog, exportChatLog } from './chatLog.js'
-import { logTimeline, timelineLogger } from './timelineLogger.js'
+import { logTimeline } from './timelineLogger.js'
 import { runVerificationCommands } from './verification.js'
 import { createUsageEntry, evaluateBudget, summarizeUsage } from '../domain/usageLedger.js'
 import { getBudgetStore } from './budgetStore.instance.js'
@@ -543,15 +542,6 @@ export function registerIpc(): void {
       ? queueSafe(() => getTaskQueueStore().complete(opts.sessionId, opts.entryId))
       : queueInvalid(valid.error)
   })
-  ipcMain.handle(
-    'queue:fail',
-    (_e, opts: { sessionId: string; entryId: string; reason: string }) => {
-      const valid = validateIpc(opts, IPC_SCHEMAS.queueEntryReason)
-      return valid.ok
-        ? queueSafe(() => getTaskQueueStore().fail(opts.sessionId, opts.entryId, opts.reason))
-        : queueInvalid(valid.error)
-    },
-  )
   ipcMain.handle('queue:cancel', (_e, opts: { sessionId: string; entryId: string }) => {
     const valid = validateIpc(opts, IPC_SCHEMAS.queueEntry)
     return valid.ok
@@ -567,10 +557,8 @@ export function registerIpc(): void {
         : queueInvalid(valid.error)
     },
   )
-  ipcMain.handle('queue:clear', (_e, sessionId: string) => {
-    const valid = validateIpc(sessionId, IPC_SCHEMAS.sessionId)
-    if (valid.ok) getTaskQueueStore().clear(sessionId)
-  })
+  // 2026-11-28 审计（D-1）：删 queue:clear——UI 只有逐条 cancel，无「清空队列」需求；
+  // TaskQueueStore.clear 随之无调用方。
 
   // 05 交付包执行层：diff 应用（L3 授权）/ 快照回滚
   ipcMain.handle(
@@ -766,23 +754,9 @@ export function registerIpc(): void {
     return logTimeline(evt)
   })
   // 2026-08-15 DDD 重建：时间线查询（通用接入 A3——append 之外补 read）
-  ipcMain.handle(
-    'timeline:query',
-    (
-      _e,
-      filter: {
-        session?: string
-        type?: string | string[]
-        from?: string
-        to?: string
-        limit?: number
-      },
-    ) => {
-      const valid = validateIpc(filter, IPC_SCHEMAS.timelineQuery)
-      if (!valid.ok) return []
-      return timelineLogger.query({ ...filter, type: filter.type as never })
-    },
-  )
+  // 2026-11-28 审计（D-1）：删 timeline:query 通道——timeline 是只写审计存储，
+  // 消费方是人/分析工具而非 renderer；领域 QueryEvents 命令不等于渲染层需求。
+  // （TimelineLogger.query 保留供未来调试工具/CLI 复用。）
 }
 // ticket 10：ToolRegistry（工具清单 + 执行分发——write/edit/bash 需 approved）
 ipcMain.handle('tools:list', () => toolRegistry.list())
@@ -923,11 +897,8 @@ ipcMain.handle('context:resolve', (_e, opts: { files: string[] }) => {
   return context.resolve(workspace.getCurrentRoot(), opts.files)
 })
 // ticket 12 Layer2：CodeRAG 关键词检索兜底（V1 降级——不建向量索引）
-ipcMain.handle('rag:search', (_e, opts: { query: string }) => {
-  const valid = validateIpc(opts, IPC_SCHEMAS.ragSearch)
-  if (!valid.ok) return []
-  return codeRag.search(workspace.getCurrentRoot(), opts.query)
-})
+// 2026-11-28 审计（D-1）：删 rag:search 通道——CodeRag 的真实消费者是主进程内部的 search 工具
+// （tools.ts），renderer 从不需要直接检索；该通道是把内部能力重复暴露为 IPC。
 // ticket 08：内置插件注册表（list/toggle——生命周期钩子）
 ipcMain.handle('plugins:list', () => pluginRegistry.list())
 ipcMain.handle('plugins:toggle', (_e, opts: { name: string; active: boolean }) => {
@@ -950,8 +921,9 @@ ipcMain.handle('mcp:config', () => {
   return { path: loaded, servers: manager.listServers() }
 })
 ipcMain.handle('mcp:save', (_e, input: unknown) => getMcpManager().saveConfig(input))
+// 2026-11-28 审计（D-1）：删 mcp:status——SettingsPanel 用 mcp:refresh 的返回值填同一状态，
+// 该通道无任何消费方（纯冗余）。
 ipcMain.handle('mcp:refresh', () => getMcpManager().refresh())
-ipcMain.handle('mcp:status', () => getMcpManager().status())
 ipcMain.handle(
   'git:read',
   async (_e, opts: { action: string; rootPath?: string; path?: string; limit?: number }) => {

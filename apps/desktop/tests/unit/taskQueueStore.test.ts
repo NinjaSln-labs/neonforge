@@ -39,13 +39,12 @@ describe('TaskQueueStore（BC-11 持久化）', () => {
     expect(store.list('s1').entries[0].status).toBe('completed')
   })
 
-  it('cancel/clear：取消终态；clear 移除会话', () => {
+  it('cancel：取消终态', () => {
     store.enqueue('s1', '任务')
     const id = store.list('s1').entries[0].id
     store.cancel('s1', id)
     expect(store.list('s1').entries[0].status).toBe('cancelled')
-    store.clear('s1')
-    expect(store.list('s1').entries).toHaveLength(0)
+    // 2026-11-28 审计（D-1）：clear 方法与其 IPC 通道已删（无 UI 消费方）
   })
 
   it('commit 回调：enqueue 的状态与事件同一事务', () => {
@@ -87,7 +86,7 @@ describe('TaskQueueStore（BC-11 持久化）', () => {
     s.complete('s1', e2.id)
     s.cancel('s1', e3.id)
     s.start('s1', e4.id)
-    s.fail('s1', e4.id, 'bash 超时')
+    s.cancel('s1', e4.id)
     s.reorder('s1', e1.id, 2)
 
     const detailOf = (type: string, nth = 0): Record<string, unknown> | undefined =>
@@ -121,11 +120,8 @@ describe('TaskQueueStore（BC-11 持久化）', () => {
       position: 3,
     })
     expect(detailOf('queue.entry_started', 2)).toMatchObject({ entryId: e4.id, taskRef: 'ref-4' })
-    expect(detailOf('queue.entry_completed', 1)).toMatchObject({
-      entryId: e4.id,
-      outcome: 'failed',
-      reason: 'bash 超时',
-    })
+    // 2026-11-28 审计（D-1）：fail 已删（无 UI 消费方）——取消语义由 entry_cancelled 覆盖
+    expect(detailOf('queue.entry_cancelled', 1)).toMatchObject({ entryId: e4.id })
     expect(detailOf('queue.entry_reordered')).toMatchObject({ entryId: e1.id, position: 2 })
   })
 })

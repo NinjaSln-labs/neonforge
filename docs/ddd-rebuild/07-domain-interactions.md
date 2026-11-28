@@ -128,18 +128,18 @@ flowchart TD
 | `workspace:init-project` | renderer → main | title | `{ok,path,title}` | 否（创建目录） | 同名自动序号；失败 | BC-03 |
 | `workspace:update-project-title` | renderer → main | path, title | `{ok,error}` | 是 | README/package 缺失 | BC-03 |
 | `context:resolve` | renderer → main | files | `{fragments:[{path,content,truncated}]}` | 是（读取） | 缺失/不可读跳过 | BC-08 |
-| `rag:search` | renderer → main | query | `{hits,note?}` | 是 | 无项目/空关键词 | BC-08 |
+| ~~`rag:search`~~ | — | — | — | — | 2026-11-28 审计 D-1 已删（CodeRag 走主进程内部 `search` 工具，renderer 无消费方） | BC-08 |
 | `compaction:compact` | renderer → main | history | `{ok,summary,kept}\|{ok:false,error}` | 是（阈值未到返回错误） | 无 Key/摘要失败 | BC-08 |
 | `preheat:status` | renderer → main | — | `{plan,cache,preheat}` | 是 | 无 | BC-08 |
 | `timeline:log` | renderer → main | session,type,role,detail | void | 是（事件） | 写失败静默 | BC-06 |
-| `timeline:query` | renderer → main | filter | `TimelineEvent[]` | 是 | 文件缺失 → 空 | BC-06 |
+| ~~`timeline:query`~~ | — | — | — | — | 2026-11-28 审计 D-1 已删（审计存储，无 renderer 消费方；`TimelineLogger.query` 保留供未来调试工具） | BC-06 |
 | `chat:log` / `chat:export` | renderer → main | entry / — | void / `{ok,path,error}` | 是（追加/固定覆盖） | 写失败静默/无记录 | BC-06 |
 | `config:*` | renderer → main | key/provider/model/web patch | 配置值/操作结果 | 是（覆盖写） | 解密失败/落盘失败 | BC-07 |
 | `plugins:list` / `plugins:toggle` | renderer → main | — / name,active | 插件列表 / boolean | 是 | 未注册 → false | BC-09 |
 | `changeset:list/revert/clear` + `delivery:apply-diff/revert-diff`（已实现） | renderer → main | sessionId | 变更集 / 回滚结果 | revert 带基线校验；clear 幂等 | 未授权/冲突/快照缺失 | BC-10 |
-| `queue:enqueue/list/start/block/resume/pause/complete/fail/cancel/reorder/clear`（已实现） | renderer → main | sessionId/title/entryId/reason/position | 队列状态 | 命令按 entryId；list 是查询 | 重复启动/状态漂移 | BC-11 |
+| `queue:enqueue/list/start/block/resume/pause/complete/cancel/reorder`（已实现；~~fail/clear~~ 2026-11-28 D-1 删除——无 UI 消费方，`failTask` 领域函数保留） | renderer → main | sessionId/title/entryId/reason/position | 队列状态 | 命令按 entryId；list 是查询 | 重复启动/状态漂移 | BC-11 |
 | `usage:summary/export` + `budget:get/set`（已实现） | renderer → main | sessionId/settings | 用量汇总 / 预算状态 / 导出路径 | 查询只读；set 幂等 | 无 usage/导出失败 | BC-12 |
-| `extensions:list/toggle/authorize` + `mcp:config/save/refresh/status` + `git:read`（已实现） | renderer → main | extensionId/active/servers | 扩展列表 / 连接结果 / Git 只读数据 | 生命周期幂等；refresh 有并发保护 | 未注册/未授权/连接失败 | BC-13 |
+| `extensions:list/toggle/authorize` + `mcp:config/save/refresh` + `git:read`（已实现；~~mcp:status~~ 2026-11-28 D-1 删除——refresh 返回同样数据） | renderer → main | extensionId/active/servers | 扩展列表 / 连接结果 / Git 只读数据 | 生命周期幂等；refresh 有并发保护 | 未注册/未授权/连接失败 | BC-13 |
 | `acceptance:derive/list/mark/waive/apply-evidence/evaluate/accept-empty/clear`（已实现） | renderer → main | sessionId/itemId/status/evidenceRefs | 验收记录 / 门禁结论 | derive 按任务边界重写；mark 需证据/理由 | 无来源/证据缺失/豁免无理由 | BC-14 |
 
 ---
