@@ -12,7 +12,6 @@ type Screen = 'boot' | 'config' | 'start' | 'workspace' | 'new-project'
 export default function App() {
   const [screen, setScreen] = useState<Screen>('boot')
   const [rootPath, setRootPath] = useState<string | null>(null)
-  const [zeroToOne, setZeroToOne] = useState(false) // 0-1 交付模式（从零开始——创建项目后仍保持流程）
   // 2026-08-04 启动页方案 A：启动页输入/点选的问题 → 进入工作区后预填对话输入框（不自动发送）
   const [prefillPrompt, setPrefillPrompt] = useState('')
 
@@ -68,7 +67,6 @@ export default function App() {
             clearSession()
             saveProblems([])
             setRootPath(null)
-            setZeroToOne(true)
             setScreen('workspace')
           }}
         />
@@ -82,12 +80,10 @@ export default function App() {
         rootPath={rootPath ?? null}
         onBackStart={() => {
           setRootPath(null)
-          setZeroToOne(false)
           setScreen('start')
         }}
         onKeyExpired={() => setScreen('config')}
         onProjectCreated={(p) => setRootPath(p)}
-        zeroToOneMode={zeroToOne}
         initialPrompt={prefillPrompt}
       />
     )

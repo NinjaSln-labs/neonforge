@@ -103,7 +103,6 @@ export default function ConversationPanel({
   rootPath,
   currentFile,
   onKeyExpired,
-  onReasoning,
   onWorkingChange,
   onApprovalChange,
   onApprovalResolved,
@@ -130,7 +129,6 @@ export default function ConversationPanel({
   sessionId?: string // P1 修复：会话 ID 由 MainWorkspace 持有——Tab 切换/重挂载不得生成新会话
   currentFile?: string | null // 08 快捷键 Cmd+E：当前选中文件（@引用——D0 §6）
   onKeyExpired: () => void
-  onReasoning?: (text: string) => void
   onWorkingChange?: (working: boolean) => void
   onApprovalChange?: (pending: boolean) => void // 2026-08-04 审计修复（D2）：有待批准工具操作时上报（状态栏提示——键盘用户感知）
   onApprovalResolved?: (result: 'approved' | 'rejected') => void // P1：授权结果（队列恢复依据）
@@ -333,9 +331,7 @@ export default function ConversationPanel({
   }, [messages, onApprovalChange, sessionReady])
   // P1-05 阶段 5：卡弹出/状态变化遥测
   useConversationTelemetry({
-    goalConfirmed,
     messages,
-    planConfirmed,
     stateRef,
     stateVersion,
     tlog,
@@ -499,7 +495,6 @@ export default function ConversationPanel({
     messagesRef,
     nextMsgId,
     onActionPromiseHint,
-    onReasoning,
     onToolResult,
     onWorkingChange,
     planRejectNudgedRef,
@@ -1099,7 +1094,7 @@ export default function ConversationPanel({
                         <button
                           type="button"
                           className="nf-toolcall__revert"
-                          onClick={() => revertToolCall(m.toolCalls ?? [], i, tc)}
+                          onClick={() => revertToolCall(tc)}
                         >
                           <IconRotateCcw size={12} /> 回滚
                         </button>
@@ -1129,7 +1124,7 @@ export default function ConversationPanel({
                             <button
                               type="button"
                               className="nf-toolcall__approve"
-                              onClick={() => approvePlan(m.toolCalls ?? [], i, tc)}
+                              onClick={() => approvePlan(i, tc)}
                             >
                               批准这批文件
                             </button>
@@ -1178,7 +1173,7 @@ export default function ConversationPanel({
                             <button
                               type="button"
                               className="nf-toolcall__approve"
-                              onClick={() => approveToolCall(m.toolCalls ?? [], i, tc)}
+                              onClick={() => approveToolCall(i, tc)}
                             >
                               允许执行
                             </button>
@@ -1208,7 +1203,7 @@ export default function ConversationPanel({
                         <button
                           type="button"
                           className="nf-toolcall__stop"
-                          onClick={() => stopToolCall(m.toolCalls ?? [], i)}
+                          onClick={() => stopToolCall()}
                         >
                           <IconSquare size={12} /> 停止
                         </button>

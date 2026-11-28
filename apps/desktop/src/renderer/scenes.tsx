@@ -2,7 +2,7 @@
 // 用户零学习成本入口：点击预填问题（启动页预填输入框 / 对话空态直接预填发送）
 import { IconFolder, IconWrench, IconSparkles, IconGamepad, IconRocket } from './icons'
 
-export interface Scene {
+interface Scene {
   icon: (p: { size?: number; className?: string }) => React.ReactNode
   label: string
   q: string

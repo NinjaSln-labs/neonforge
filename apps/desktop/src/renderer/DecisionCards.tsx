@@ -21,7 +21,7 @@ const REJECT_OPTIONS: Array<{ kind: RejectKind; label: string }> = [
 
 /** 拒绝原因选择器（设计 02 §RejectReasonPicker）：非模态、卡内展开；必选 kind 或填写「其他」。
  * 2026-11-24 审计：原拒绝按钮一次点击硬编码 kind——方案修改率/拒绝原因审计不可用。 */
-export function RejectReasonPicker({
+function RejectReasonPicker({
   onSubmit,
   onCancel,
   ariaLabel = '拒绝原因',

@@ -14,8 +14,8 @@
     "test": "vitest run",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "format": "prettier --write \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"*.mjs\" \"*.config.*\" \"../../.prettierrc.json\" \"../../lefthook.yml\" \"../../.github/workflows/qa.yml\"",
-    "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"*.mjs\" \"*.config.*\" \"../../.prettierrc.json\" \"../../lefthook.yml\" \"../../.github/workflows/qa.yml\"",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"*.mjs\" \"*.config.*\" \"eslint.config.js\" \"../../.prettierrc.json\" \"../../lefthook.yml\" \"../../.github/workflows/qa.yml\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\" \"*.mjs\" \"*.config.*\" \"eslint.config.js\" \"../../.prettierrc.json\" \"../../lefthook.yml\" \"../../.github/workflows/qa.yml\"",
     "dist": "npm run build && node -e \"require('fs').accessSync('dist/preload/preload.cjs')\" && electron-builder"
   },
   "lint-staged": {
@@ -35,8 +35,7 @@
     "@monaco-editor/react": "^4.7.0",
     "monaco-editor": "^0.52.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "zustand": "^5.0.0"
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

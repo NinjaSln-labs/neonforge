@@ -11,9 +11,7 @@ export type {
 export { DEFAULT_PROVIDER_ID, listProviders, getProvider, isProviderId } from './registry.js'
 export {
   MODEL_TIERS,
-  ALLOWED_MODELS,
   isModelTier,
-  isAllowedModel,
   isDeepSeekModelId,
   filterDeepSeekModels,
   pickModelForTier,

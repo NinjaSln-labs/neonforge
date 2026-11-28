@@ -386,14 +386,12 @@ export default function MainWorkspace({
   onBackStart,
   onKeyExpired,
   onProjectCreated,
-  zeroToOneMode: _zeroToOneMode = false,
   initialPrompt,
 }: {
   rootPath: string | null
   onBackStart: () => void
   onKeyExpired: () => void
   onProjectCreated?: (path: string) => void
-  zeroToOneMode?: boolean
   initialPrompt?: string // 2026-08-04 启动页方案 A：进入工作区预填对话输入框（不自动发送）
 }) {
   const [chatTab, setChatTab] = useState<'chat' | 'tasks'>('chat')
@@ -862,7 +860,6 @@ export default function MainWorkspace({
         content={content}
         deliveryPkg={deliveryPkg}
         onOpenFile={openFile}
-        onCloseProblem={() => setDeliveryPkg((p) => (p ? { ...p, status: 'closed' } : p))}
         onAdjustProblem={() =>
           setChatTab('chat')
         } /* 2026-08-03 A2 审计修复：继续调整 → 切回对话 Tab（原空函数无反应） */
