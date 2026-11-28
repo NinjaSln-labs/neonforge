@@ -24,7 +24,7 @@ import {
 import { getPlannedFilesStore } from './plannedFilesStore.instance.js'
 import { getPermissionRulesStore } from './permissionRulesStore.instance.js'
 import { getTrustPolicyStore } from './trustPolicyStore.instance.js'
-import { registerLspTools, lsp } from './lsp.js'
+import { registerLspTools, lsp, isLspServerAvailable } from './lsp.js'
 import { context } from './context.js'
 import { codeRag } from './codeRag.js'
 import { buildStandardPrefix, planPreheat, prefixCache, preheating } from './preheat.js'
@@ -654,11 +654,27 @@ export function registerIpc(): void {
     const win = BrowserWindow.fromWebContents(event.sender)
     const root = await workspace.openFolder(win)
     if (root) {
-      void lsp
-        .connect(root)
-        .catch((e) =>
-          console.log('[lsp] connect failed:', e instanceof Error ? e.message : String(e)),
-        )
+      // 2026-11-28 审计（D-3）：LSP 服务器未随包分发时不再静默吞错——记时间线事件，
+      // 让「LSP 不可用」在可观测面上可见（原实现只有 main 控制台一行日志）。
+      if (isLspServerAvailable()) {
+        void lsp.connect(root).catch((e) => {
+          const msg = e instanceof Error ? e.message : String(e)
+          console.log('[lsp] connect failed:', msg)
+          logTimeline({
+            session: root,
+            type: 'capability.checked',
+            role: 'system',
+            detail: { capabilities: [], missing: false, lsp: 'failed', error: msg },
+          })
+        })
+      } else {
+        logTimeline({
+          session: root,
+          type: 'capability.checked',
+          role: 'system',
+          detail: { capabilities: [], missing: false, lsp: 'missing' },
+        })
+      }
       // 09 预热：StandardPrefix + PrefixCache + 真实 API 预热（hash 变化且有 Key → 后台最小成本请求，不阻塞）
       try {
         const files = workspace
@@ -707,11 +723,25 @@ export function registerIpc(): void {
     if (!valid.ok) return { ok: false as const, error: `参数校验失败：${valid.error}` }
     const res = await workspace.initProject(title)
     if (res.ok && res.path) {
-      void lsp
-        .connect(res.path)
-        .catch((e) =>
-          console.log('[lsp] connect failed:', e instanceof Error ? e.message : String(e)),
-        )
+      if (isLspServerAvailable()) {
+        void lsp.connect(res.path).catch((e) => {
+          const msg = e instanceof Error ? e.message : String(e)
+          console.log('[lsp] connect failed:', msg)
+          logTimeline({
+            session: res.path,
+            type: 'capability.checked',
+            role: 'system',
+            detail: { capabilities: [], missing: false, lsp: 'failed', error: msg },
+          })
+        })
+      } else {
+        logTimeline({
+          session: res.path,
+          type: 'capability.checked',
+          role: 'system',
+          detail: { capabilities: [], missing: false, lsp: 'missing' },
+        })
+      }
     }
     return res
   })
