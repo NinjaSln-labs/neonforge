@@ -6,8 +6,9 @@
 > - `2603afa` + `3d67990` refactor：e2e 模拟器域 DDD 重构（设计 docs/design/e2e-simulator-domain-design.md；领域层 e2e-sim/*.mjs 5 模块 + L1 44 用例；StageMachine→JourneyRunner）
 > - `6358bf0` feat(#7)：换目标重新确认（ADR-006——领域层 + renderer 渲染守卫 + L1/L3）
 > - `cad9bca` chore(#10)：死 filesApproved mock 清理 + Landing/PH 草稿
->   复审方式：父会话双轴（Spec 轴对照 ADR-006/设计文档；Standards 轴单源/纯函数/守卫一致）
->   结论：**无 open（1 观察项 recorded）**
+>
+> 复审方式：父会话双轴（Spec 轴对照 ADR-006/设计文档；Standards 轴单源/纯函数/守卫一致）
+> 结论：**无 open（1 观察项 recorded）**
 
 ## Spec 轴
 
