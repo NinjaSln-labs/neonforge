@@ -14,7 +14,8 @@ test('渲染层工具事件载荷：tool.requested / capability.checked / tool.e
   const h = await installMockBridge(page, {
     project: 'none',
     manualEmit: true,
-    // read 执行失败 → 渲染层 tool.failed（mock execute 覆盖——非授权拦截路径）
+    // read 执行失败 → 渲染层 tool.failed（mock execute 覆盖——非授权拦截路径）；
+    // check-capability 成功 → capability.checked（且必须恰好一次——见下方 StrictMode 回归断言）
     executeResults: { read: { ok: false, error: 'boom' } },
     extraInit: `
       window.__nfToolTlog = [];
@@ -31,15 +32,17 @@ test('渲染层工具事件载荷：tool.requested / capability.checked / tool.e
   await expect(page.locator('.nf-msg__body--thinking').first()).toBeVisible({ timeout: 10000 })
   await h.emit([toolCall.checkCapability(), toolCall.read('/test/boom.ts'), chunk.done()])
 
+  // 两个工具调用各自异步执行、各自在 .then 里打点——只等 tool.failed 会在 capability.checked
+  // 尚未落地时读取快照（CI 慢机上更易命中）。等三类事件都到齐再统计。
   await expect
     .poll(
       async () =>
-        ((await h.readCapture<Array<{ type: string }>>('__nfToolTlog')) ?? []).filter(
-          (e) => e.type === 'tool.failed',
+        ((await h.readCapture<Array<{ type: string }>>('__nfToolTlog')) ?? []).filter((e) =>
+          ['capability.checked', 'tool.executed', 'tool.failed'].includes(e.type),
         ).length,
       { timeout: 10000 },
     )
-    .toBe(1)
+    .toBe(3)
 
   const evts =
     (await h.readCapture<Array<{ type: string; detail?: Record<string, unknown> }>>(
@@ -53,9 +56,12 @@ test('渲染层工具事件载荷：tool.requested / capability.checked / tool.e
   // check-capability 执行成功 → tool.executed（needApproval/error 缺省——成功路径载荷只剩 name）
   const executed = evts.filter((e) => e.type === 'tool.executed')
   expect(executed.map((e) => e.detail?.name)).toEqual(['check-capability'])
-  // 能力检测结果打点：mock 默认空能力表 + 无缺失（missing=false → 工具卡隐藏）
-  const cap = evts.find((e) => e.type === 'capability.checked')
-  expect(cap?.detail).toEqual({ capabilities: [], missing: false })
+  // 能力检测结果打点：mock 默认空能力表 + 无缺失（missing=false → 工具卡隐藏）。
+  // StrictMode 回归：打点曾写在 setMessages updater 内 → React 开发构建双调 updater → 事件双发
+  // （1 次 execute / 2 次 capability.checked）。此处断言恰好 1 条。
+  const cap = evts.filter((e) => e.type === 'capability.checked')
+  expect(cap).toHaveLength(1)
+  expect(cap[0]?.detail).toEqual({ capabilities: [], missing: false })
   // execute 失败 → tool.failed 携带 name + error（诊断可回放）
   const failed = evts.find((e) => e.type === 'tool.failed')
   expect(failed?.detail).toMatchObject({ name: 'read', error: 'boom' })
