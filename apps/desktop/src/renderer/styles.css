@@ -63,7 +63,7 @@ body {
 
 /* 2026-08-03 品牌字体应用（visual-direction §二 字体）：Display 用于品牌/标题/步骤数字
    2026-08-03 扩展（B3）：面板标题/会话标题/流程标题/交付徽章/台账标题——中文自动回退 PingFang */
-.nf-start__brand, .nf-config__title, .nf-flow__focus-step, .nf-flow__title,
+.nf-start__brand, .nf-config__title, .nf-flow__title,
 .nf-panel__header, .nf-session__header, .nf-filetree__title,
 .nf-delivery__badge, .nf-ledger__title,
 .nf-settings__plugins-title, .nf-scene__label {
@@ -72,8 +72,8 @@ body {
 
 /* 2026-08-03 视觉审计：交互元素统一 150ms 过渡（hover/focus 平滑）+ 键盘可见焦点 */
 button, a, input, textarea, select,
-.nf-tree__row, .nf-session__item, .nf-ledger__item, .nf-scene,
-.nf-flow__model-btn, .nf-settings__seg-btn, .nf-mention__item {
+.nf-tree__row, .nf-ledger__item, .nf-scene,
+.nf-settings__seg-btn, .nf-mention__item {
   transition: background-color 150ms ease, border-color 150ms ease,
               color 150ms ease, box-shadow 150ms ease, transform 160ms ease-out;
 }
@@ -103,7 +103,9 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-output { grid-area: output; }
 .nf-statusbar { grid-area: status; }
 
-.nf-panel, .nf-workspace, .nf-session, .nf-output { background: var(--nf-bg-panel); overflow: hidden; display: flex; flex-direction: column; }
+/* 2026-11-28 审计清理：.nf-workspace* / .nf-editor / .nf-filetree-tag / .nf-panel__fold / .nf-panel--collapsed
+   全库无源码引用（阶段布局重构后的遗留样式）——本次删除 */
+.nf-panel, .nf-session, .nf-output { background: var(--nf-bg-panel); overflow: hidden; display: flex; flex-direction: column; }
 
 .nf-panel__header {
   display: flex; align-items: center; gap: var(--nf-space-2);
@@ -113,41 +115,7 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   flex-shrink: 0;
 }
 
-.nf-panel__fold {
-  margin-left: auto;
-  background: none; border: none; color: var(--nf-text-dim);
-  cursor: pointer; font-size: var(--nf-font-sm); padding: 4px 8px;
-}
-.nf-panel__fold:hover { color: var(--nf-accent); }
-
-.nf-panel--collapsed .nf-panel__header { justify-content: center; padding: var(--nf-space-2); }
-.nf-panel--collapsed .nf-panel__fold { margin-left: 0; }
-
 .nf-panel__body { padding: var(--nf-space-3); overflow-y: auto; flex: 1; }
-
-.nf-workspace__split {
-  display: flex; flex: 1; min-height: 0; overflow: hidden;
-}
-
-.nf-editor {
-  display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0;
-}
-
-.nf-workspace__toolbar {
-  display: flex; align-items: center; gap: var(--nf-space-3);
-  padding: var(--nf-space-2) var(--nf-space-3);
-  border-bottom: 1px solid var(--nf-border);
-  font-size: var(--nf-font-sm); flex-shrink: 0;
-}
-
-.nf-workspace__toolbar button {
-  background: var(--nf-accent-soft); color: var(--nf-accent);
-  border: none; border-radius: var(--nf-radius-sm);
-  padding: 2px var(--nf-space-3); cursor: pointer; font-size: var(--nf-font-sm);
-  margin-left: auto;
-}
-
-.nf-filetree-tag { color: var(--nf-text-dim); }
 
 /* 文件树（D2 §9 / D7：宽 240px，行高 24px，字号 12px） */
 .nf-filetree {
@@ -642,8 +610,6 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-session__header { display: flex; align-items: center; padding: var(--nf-space-2) var(--nf-space-3); border-bottom: 1px solid var(--nf-border); font-size: var(--nf-font-sm); color: var(--nf-text-dim); flex-shrink: 0; }
 .nf-session__new { background: var(--nf-accent-soft); color: var(--nf-accent-text); border: none; border-radius: var(--nf-radius-sm); padding: 4px var(--nf-space-3); font-size: var(--nf-font-sm); cursor: pointer; margin-left: auto; }
 .nf-session__list { flex: 1; overflow-y: auto; padding: var(--nf-space-2); display: flex; flex-direction: column; gap: 2px; }
-.nf-session__item { color: var(--nf-text-dim); font-size: var(--nf-font-sm); padding: var(--nf-space-2) var(--nf-space-3); border-radius: var(--nf-radius-sm); cursor: pointer; }
-.nf-session__item:hover { background: var(--nf-bg-elevated); color: var(--nf-text); }
 
 /* 产物区（右）：工程 / 产物 Tabs */
 .nf-output__body { flex: 1; overflow-y: auto; padding: var(--nf-space-3); }
@@ -735,43 +701,21 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-scene__label { color: var(--nf-text); font-size: var(--nf-font-sm); font-weight: 600; }
 .nf-scene__q { color: var(--nf-text-dim); font-size: 12px; }
 
-/* 0-1 交付流（ticket 07）：阶段机 + 模型选择 + 分步推进
-   2026-08-04：面板移出滚动容器（.nf-flow__dock 固定）——对话滚动时交互常驻可见 */
-.nf-flow__dock { flex-shrink: 0; padding: var(--nf-space-2) var(--nf-space-3) 0; }
-.nf-flow { display: flex; flex-direction: column; gap: var(--nf-space-2); padding: var(--nf-space-2) var(--nf-space-3); border: 1px solid var(--nf-border); border-radius: var(--nf-radius-md); background: var(--nf-bg-elevated); }
+/* 2026-11-28 审计清理：阶段机整组样式（.nf-flow__dock/model/stages/stage*/models*/model-btn/hint/
+   advance/stage-label/gate-hint/done 与 .nf-flow 本体）全库无引用——UI 已随 2026-08-07 S4 重构删除。
+   仅保留 SettingsPanel 仍在使用的 flow 头部两行。 */
 .nf-flow__head { display: flex; align-items: center; justify-content: space-between; }
 .nf-flow__title { display: flex; align-items: center; gap: 6px; color: var(--nf-text); font-weight: 600; font-size: var(--nf-font-sm); }
 .nf-flow__title svg { color: var(--nf-accent); }
-.nf-flow__model { color: var(--nf-amber); font-size: var(--nf-font-sm); }
 
 /* 2026-08-03 面板层级区分（c12）：功能面板顶部渐变条 + 标题图标 accent */
-.nf-flow, .nf-settings { position: relative; }
-.nf-flow::before, .nf-settings::before {
+.nf-settings { position: relative; }
+.nf-settings::before {
   content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
   background: linear-gradient(90deg, #6366f1, #a855f7, #ff8a00);
   border-radius: var(--nf-radius-md) var(--nf-radius-md) 0 0;
   opacity: 0.55;
 }
-.nf-flow__stages { display: flex; flex-wrap: wrap; gap: var(--nf-space-2); }
-.nf-flow__stage { font-size: var(--nf-font-sm); color: var(--nf-text-dim); padding: 2px var(--nf-space-2); border-radius: var(--nf-radius-sm); background: var(--nf-bg-panel); }
-.nf-flow__stage--done { color: #22C55E; }
-.nf-flow__stage--active { color: var(--nf-accent-text); background: var(--nf-accent-soft); font-weight: 600; }
-/* 2026-08-03 B2：阶段机待开始圆点（○→SVG idle 色） */
-.nf-flow__stage .nf-flow__stage-idle { color: var(--nf-text-tertiary); }
-.nf-flow__models { display: flex; flex-wrap: wrap; gap: var(--nf-space-2); }
-/* 2026-08-04：模型选择引导文案（明确必选入口——独占一行） */
-.nf-flow__models-hint { font-size: 11px; color: var(--nf-text-dim); flex-basis: 100%; }
-.nf-flow__model-btn {
-  flex: 1 1 220px; display: flex; flex-direction: column; gap: 2px; text-align: left;
-  background: var(--nf-bg-panel); border: 1px solid var(--nf-border); color: var(--nf-text);
-  border-radius: var(--nf-radius-md); padding: var(--nf-space-2) var(--nf-space-3); cursor: pointer; font-size: var(--nf-font-sm);
-}
-.nf-flow__model-btn:hover { border-color: var(--nf-accent); box-shadow: 0 0 10px rgba(99, 102, 241, 0.2); }
-.nf-flow__hint { color: var(--nf-text-dim); font-size: 11px; }
-.nf-flow__advance { display: flex; align-items: center; gap: var(--nf-space-3); flex-wrap: wrap; }
-.nf-flow__stage-label { font-size: var(--nf-font-sm); color: var(--nf-text-dim); }
-.nf-flow__gate-hint { font-size: 11px; color: var(--nf-accent-text); }
-.nf-flow__done { color: #22C55E; font-size: var(--nf-font-sm); font-weight: 600; }
 
 /* 2026-08-07 无阶段重构：GoalCard（.nf-reqcard 需求确认卡）已删除——目标确认走对话澄清（候选选项卡 + 自由输入）
    2026-08-07 无阶段修复：ExecutionConfirmCard（.nf-exec-card 执行确认卡）也已删除——dock 顶部全清，
@@ -844,18 +788,7 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-settings__mcp-actions { display: flex; gap: var(--nf-space-2); }
 .nf-compact { font-size: 12px; color: var(--nf-text-dim); background: var(--nf-bg-elevated); border: 1px dashed var(--nf-border); border-radius: var(--nf-radius-sm); padding: 4px var(--nf-space-3); }
 
-/* 0-1 交付流 v2：当前步骤聚焦卡 */
-.nf-flow__focus {
-  display: flex; align-items: center; gap: var(--nf-space-3);
-  background-image: linear-gradient(#1a1530, #1a1530), linear-gradient(90deg, #6366F1, #A855F7, #FF8A00);
-  background-origin: border-box; background-clip: padding-box, border-box;
-  border: 1px solid transparent; border-radius: var(--nf-radius-md);
-  padding: var(--nf-space-3);
-}
-.nf-flow__focus-step { font-size: 18px; font-weight: 700; color: var(--nf-text); }
-/* 2026-08-04：聚焦卡「当前阶段」标签（明确状态指示非输入框） */
-.nf-flow__focus-tag { font-size: 11px; color: var(--nf-accent-text); background: var(--nf-accent-soft); padding: 1px var(--nf-space-2); border-radius: var(--nf-radius-sm); flex-shrink: 0; }
-.nf-flow__focus-hint { font-size: var(--nf-font-sm); color: var(--nf-text-dim); flex: 1; }
+/* 2026-11-28 审计清理：聚焦卡 .nf-flow__focus* 无源码引用（与阶段机同批删除） */
 
 /* 工具调用卡片（真实执行：read 自动 / write 等需授权）
    2026-08-03 行动节点链视觉化：左侧渐变链 + 状态色节点圆点（visual-direction §二 签名） */
@@ -963,10 +896,9 @@ textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
 .nf-delivery__error svg { flex-shrink: 0; }
 
 /* 2026-08-03 审计修复（B2）：内联 SVG 图标与文本基线对齐（状态点/勾选/标记） */
-.nf-ledger__dot, .nf-flow__stage svg {
+.nf-ledger__dot {
   display: inline-flex; vertical-align: -2px;
 }
-.nf-flow__stage { display: inline-flex; align-items: center; gap: 4px; }
 .nf-ledger__dot { display: inline-flex; align-items: center; justify-content: center; width: 14px; }
 .nf-ledger__dot svg { display: block; }
 

@@ -180,5 +180,5 @@ CI 的 L3 断言 `capability.checked` 期望 1 条、实际 2 条。取证：给
 - **D-1 已全部处置（2026-11-28）**：删 5（#170）、留 3 已接线（#177——设置页清除密钥 / 任务 Tab 导出 CSV / 交付面板验收豁免），三条均有 L3 用例。
 - **D-2 ~ D-6 均已处置**（#169–#176，见上文各节）。
 - 预留登记：`changeset.reviewed`（V1.5 变更审核——领域函数 `reviewItem()` 已有单测，但无 IPC 端点与逐项审核 UI）、`usage.period_closed`（V2 周期结算——预算按自然月累计但无关闭动作）。二者属于完整产品能力，不是审计收尾可顺手完成的量级。
-- **新发现的低优先级清理项（未处置，需独立决策）**：`styles.css` 有 23 个无源码引用的类（已剔除动态拼接误报），主要是 `nf-flow*` 一整组（阶段机 UI 已于 2026-08-07 S4 重构删除，样式遗留）与 `nf-workspace*` / `nf-editor` / `nf-filetree-tag` / `nf-panel__fold` / `nf-session__item`。均为 D-2 之前的历史残留，删除风险低但需逐条确认无跨文件动态使用。
+- **CSS 死类清理（2026-11-28 已处置，#179）**：`styles.css` 有 26 个无源码引用的类（已剔除 `nf-ledger__dot--${status}` 这类动态拼接误报），主要是 `nf-flow*` 一整组（阶段机 UI 已于 2026-08-07 S4 重构删除）与 `nf-workspace*` / `nf-editor` / `nf-filetree-tag` / `nf-panel__fold` / `nf-panel--collapsed` / `nf-session__item`。全部删除（−81 / +13 行），保留 `SettingsPanel` 仍在用的 `.nf-flow__head` / `.nf-flow__title`；两处共享选择器列表（字体、过渡）同步剔除死类。验证：L1 979/979、L3 99 passed / 3 skipped。
 - 外部验证缺口：真实网络抖动、多机 macOS、真人可用性研究（当前评测报告均为脚本化，`human=false`）。
