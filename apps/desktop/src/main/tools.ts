@@ -792,13 +792,17 @@ async function bashExecutor(
       else if (code !== 0) {
         // 2026-08-07 Ledger（坑 83 ⑥）：bash 失败归因到能力（node/python/dev-tools）——check-capability 后续降级 failed（自学习）
         try {
+          // 2026-11-28 审计：attribution 返回首个命中 capabilityId（null = 命令不归因任何能力——
+          // 此时不发事件，原实现恒发空串 capabilityId 的伪事件，无法诊断且污染台账）
           const attr = attributeCommandFailure(ctx.rootPath ?? '', cmd)
-          logTimeline({
-            session: ctx.sessionId ?? ctx.rootPath ?? undefined,
-            type: 'capability.ledger_updated',
-            role: 'tool',
-            detail: { capabilityId: String(attr ?? ''), ok: false },
-          })
+          if (attr) {
+            logTimeline({
+              session: ctx.sessionId ?? ctx.rootPath ?? undefined,
+              type: 'capability.ledger_updated',
+              role: 'tool',
+              detail: { capabilityId: attr, ok: false },
+            })
+          }
         } catch {
           /* 归因失败不影响命令错误返回 */
         }

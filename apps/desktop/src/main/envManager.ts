@@ -392,10 +392,18 @@ export function recordCapabilityResult(rootPath: string, capabilityId: string, o
 }
 
 // 命令失败归因到能力（bash exit≠0 时调用——按命令内容归因，非穷举白名单——常见 runtime/包管理命令）
-export function attributeCommandFailure(rootPath: string, cmd: string): void {
+// 2026-11-28 审计：返回首个归因到的 capabilityId（原 void → tools.ts 时间线 detail 恒为空串，
+// 失败归因事件无法诊断）；同时归因多个能力时按判定序返回首个（node-runtime > python-runtime > dev-tools）。
+export function attributeCommandFailure(rootPath: string, cmd: string): string | null {
   const c = cmd.trim()
+  let first: string | null = null
+  const attribute = (capabilityId: string): void => {
+    recordCapabilityResult(rootPath, capabilityId, false)
+    first ??= capabilityId
+  }
   if (/(^|\s)(node|npx)(\s|$)/.test(c) || /(^|\s)(npm|pnpm|yarn)(\s|$)/.test(c))
-    recordCapabilityResult(rootPath, 'node-runtime', false)
-  if (/(^|\s)python3?(\s|$)/.test(c)) recordCapabilityResult(rootPath, 'python-runtime', false)
-  if (/(^|\s)(npm|pnpm|yarn)(\s|$)/.test(c)) recordCapabilityResult(rootPath, 'dev-tools', false)
+    attribute('node-runtime')
+  if (/(^|\s)python3?(\s|$)/.test(c)) attribute('python-runtime')
+  if (/(^|\s)(npm|pnpm|yarn)(\s|$)/.test(c)) attribute('dev-tools')
+  return first
 }

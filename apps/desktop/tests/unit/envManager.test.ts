@@ -166,4 +166,14 @@ describe('CapabilityLedger（执行结果回填——失败降级/成功恢复�
       detectCapabilities('/proj/ledger5', 'darwin').find((c) => c.id === 'node-runtime')?.status,
     ).not.toBe('failed')
   })
+
+  // 2026-11-28 审计：归因返回值契约——时间线 capability.ledger_updated 的 capabilityId 由此而来
+  // （原函数 void + tools.ts String(attr ?? '') ⇒ 事件恒带空串 capabilityId）
+  it('attributeCommandFailure 返回首个命中能力 id（未命中 null——调用方据此不写事件）', () => {
+    expect(attributeCommandFailure('/proj/ledger6', 'node -v')).toBe('node-runtime')
+    // 同一命令可同时归因多能力（npm → node-runtime + dev-tools）——返回值取判定序首个
+    expect(attributeCommandFailure('/proj/ledger6', 'npm install')).toBe('node-runtime')
+    expect(attributeCommandFailure('/proj/ledger6', 'python3 --version')).toBe('python-runtime')
+    expect(attributeCommandFailure('/proj/ledger6', 'ls -la')).toBeNull()
+  })
 })
