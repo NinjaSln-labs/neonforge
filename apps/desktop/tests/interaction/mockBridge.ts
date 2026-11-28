@@ -122,6 +122,19 @@ export interface MockBridgeOptions {
   extra?: Record<string, unknown>
   /** config.hasKey（默认 true；config-page 视觉用 false） */
   hasKey?: boolean
+  /** D-1 留 3：config:getKeyStatus 返回值（默认 none）——设置页「清除已保存密钥」入口按来源显示 */
+  keyStatus?: {
+    source: 'env' | 'file' | 'encrypted' | 'plaintext' | 'none'
+    storedAt: string | null
+    plaintextCopy: boolean
+    rotateRecommended: boolean
+  }
+  /** D-1 留 3：usage:export 返回值（默认成功路径） */
+  usageExport?: { ok: boolean; path?: string; error?: string }
+  /** D-1 留 3：acceptance 记录（默认 null = 无记录）——豁免/通过按钮按记录渲染 */
+  acceptanceRecord?: unknown
+  /** D-1 留 3：acceptance:waive 被调用时的入参记录（handle.waiveCalls 读取） */
+  captureAcceptanceWaive?: boolean
 }
 
 export interface MockBridgeHandle {
@@ -138,6 +151,8 @@ export interface MockBridgeHandle {
   titleCalls(): Promise<Array<{ p: string; title: string }>>
   /** A-016：session.setPlanConfirmed 镜像调用记录（需 capture.planConfirmedCalls） */
   planConfirmedCalls(): Promise<boolean[]>
+  /** D-1 留 3：acceptance:waive 入参记录（需 captureAcceptanceWaive） */
+  waiveCalls(): Promise<Array<{ sessionId: string; itemId: string; reason: string }>>
   /** 读任意捕获值（含 escape hatch 自定义的 window.__*） */
   readCapture<T>(name: string): Promise<T | undefined>
 }
@@ -169,6 +184,15 @@ interface Spec {
     planConfirmedCalls: boolean
   }
   hasKey: boolean
+  keyStatus: {
+    source: 'env' | 'file' | 'encrypted' | 'plaintext' | 'none'
+    storedAt: string | null
+    plaintextCopy: boolean
+    rotateRecommended: boolean
+  }
+  usageExport: { ok: boolean; path?: string; error?: string }
+  acceptanceRecord: unknown
+  captureAcceptanceWaive: boolean
 }
 
 export async function installMockBridge(
@@ -199,6 +223,15 @@ export async function installMockBridge(
       planConfirmedCalls: opts.capture?.planConfirmedCalls ?? false,
     },
     hasKey: opts.hasKey ?? true,
+    keyStatus: opts.keyStatus ?? {
+      source: 'none',
+      storedAt: null,
+      plaintextCopy: false,
+      rotateRecommended: false,
+    },
+    usageExport: opts.usageExport ?? { ok: true, path: '/tmp/nf-usage.csv' },
+    acceptanceRecord: opts.acceptanceRecord ?? null,
+    captureAcceptanceWaive: opts.captureAcceptanceWaive ?? false,
   }
 
   const source = buildInitSource(spec, opts)
@@ -220,6 +253,15 @@ export async function installMockBridge(
     trustSetCalls: () => read<string[]>('__nfTrustSetCalls', page).then((v) => v ?? []),
     titleCalls: () => read<Array<{ p: string; title: string }>>('__nfTitleCalls', page),
     planConfirmedCalls: () => read<boolean[]>('__nfPlanConfirmedCalls', page),
+    waiveCalls: () =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __nfWaiveCalls?: Array<{ sessionId: string; itemId: string; reason: string }>
+            }
+          ).__nfWaiveCalls ?? [],
+      ),
     readCapture: <T>(name: string) => read<T>(name, page),
   }
 }
@@ -251,6 +293,7 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
   const trustSetCalls = []
   const titleCalls = []
   const planConfirmedCalls = []
+  const waiveCalls = []
   const cbRef = { cb: null }
 
   const executeImpl = ${
@@ -285,6 +328,7 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
         { id: 'opencode-zen', label: 'OpenCode Zen', howToGetKey: { zh: '', en: '' } },
         { id: 'opencode-go', label: 'OpenCode Go', howToGetKey: { zh: '', en: '' } },
       ],
+      getKeyStatus: async () => (${json(spec.keyStatus)}),
       getWebAccess: async () => ({
         enabled: false,
         probeOk: false,
@@ -350,11 +394,16 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
     // DeliveryPanel 只有 list 成功后才渲染「无验收来源」确认框（2026-11-17 审查修复）。
     acceptance: {
       derive: async () => null,
-      list: async () => null,
-      mark: async () => null,
-      waive: async () => null,
+      list: async () => (${json(spec.acceptanceRecord)}),
+      mark: async () => (${json(spec.acceptanceRecord)}),
+      // D-1 留 3：记录豁免入参（handle.waiveCalls 断言 reason 必填）
+      waive: async (sessionId, itemId, reason) => {
+        if (${json(spec.captureAcceptanceWaive)}) waiveCalls.push({ sessionId, itemId, reason })
+        return (${json(spec.acceptanceRecord)})
+      },
       applyEvidence: async () => null,
       evaluate: async () => null,
+      // 注：豁免测试只断言渲染与入参；门禁结论用 null（DeliveryPanel 容忍）
       acceptEmpty: async () => ({ items: [], source: 'none' }),
       clear: async () => {},
     },
@@ -413,6 +462,20 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
     plugins: { list: async () => [], toggle: async () => true },
     preheat: { status: async () => ({ plan: { shouldPreheat: false, why: '', actions: [] }, cache: null }) },
     compaction: { compact: async () => ({ ok: false, error: '未达阈值' }) },
+    // D-1 留 3：usage:export 入口（导出 CSV 台账）
+    usage: {
+      summary: async () => ({
+        entries: 0,
+        promptTokens: 0,
+        completionTokens: 0,
+        reasoningTokens: 0,
+        totalTokens: 0,
+        cost: 0,
+        unknownCostEntries: 0,
+        cacheHitRate: null,
+      }),
+      export: async () => (${json(spec.usageExport)}),
+    },
     chatLog: { log: async () => {}, export: async () => ({ ok: true, path: '/tmp/nf-test-export.md' }) },
     timeline: { log: async () => {} },
     ${opts.extra ? `...${json(opts.extra)},` : ''}
@@ -430,6 +493,7 @@ function buildInitSource(spec: Spec, opts: MockBridgeOptions): string {
   if (${json(spec.capture.trustSetCalls)}) window.__nfTrustSetCalls = trustSetCalls
   if (${json(spec.capture.titleCalls)}) window.__nfTitleCalls = titleCalls
   if (${json(spec.capture.planConfirmedCalls)}) window.__nfPlanConfirmedCalls = planConfirmedCalls
+  if (${json(spec.captureAcceptanceWaive)}) window.__nfWaiveCalls = waiveCalls
 })()
 `
 }

@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 import { gotoStart } from './scenarios'
+import { installMockBridge } from './mockBridge'
 
 // L3 组件交互测试（ddd-qa-chain 缺层——2026-08-02 补）：纯 DOM 断言无截图——跨平台稳定，CI 可跑
 // 覆盖核心交互流：进入工作区 → 发送 → 工具卡（授权/回滚）→ 交付包 → 批量接受 → 快捷键
@@ -2351,4 +2352,103 @@ test('A-016 硬序门时序：方案未确认早调 approve-files 被拒（不�
     () => (window as unknown as { __nfPlanCalls?: boolean[] }).__nfPlanCalls ?? [],
   )
   expect(planCalls).toEqual([false, true])
+})
+
+// ── 2026-11-28 审计（D-1 留 3）：三个「领域已实现、UI 未接」端点的产品入口 ─────────
+test('设置：清除已保存密钥（config:clear-key——轮换提醒有可执行动作）', async ({ page }) => {
+  await installMockBridge(page, {
+    project: 'open',
+    keyStatus: {
+      source: 'encrypted',
+      storedAt: '2026-08-01T00:00:00.000Z',
+      plaintextCopy: false,
+      rotateRecommended: true,
+    },
+    extraInit: `window.__clearKeyCalls = 0`,
+  })
+  // 覆盖 config.clearKey 计数（extra 会整块覆盖 config——用 extraInit 改写既有实现）
+  await page.addInitScript(() => {
+    const nf = (window as unknown as { neonforge: Record<string, unknown> }).neonforge
+    const cfg = nf.config as { clearKey: () => Promise<void> }
+    cfg.clearKey = async () => {
+      ;(window as unknown as { __clearKeyCalls: number }).__clearKeyCalls += 1
+    }
+  })
+  await enterWorkspace(page)
+  await page.keyboard.press('Meta+,')
+  await expect(page.locator('.nf-settings')).toBeVisible()
+  await expect(page.locator('.nf-settings')).toContainText('密钥已保存超过 90 天，建议轮换')
+  // 来源 = 本机加密存储 → 显示清除入口（env/file 不显示）
+  await page.getByRole('button', { name: '清除已保存的密钥' }).click()
+  await expect(page.locator('.nf-settings')).toContainText('已清除本机保存的密钥')
+  const calls = await page.evaluate(
+    () => (window as unknown as { __clearKeyCalls: number }).__clearKeyCalls,
+  )
+  expect(calls).toBe(1)
+})
+
+test('用量：导出 CSV（usage:export——导出区显示产物路径）', async ({ page }) => {
+  await installMockBridge(page, {
+    project: 'open',
+    usageExport: { ok: true, path: '/tmp/nf-usage.csv' },
+  })
+  await enterWorkspace(page)
+  // 用量区在「任务」Tab（默认停在「对话」）
+  await page.getByRole('button', { name: '任务', exact: true }).click()
+  const usageBlock = page.locator('details').filter({ hasText: '本轮用量' })
+  await expect(usageBlock).toContainText('导出用量台账')
+  await usageBlock.getByRole('button', { name: '导出用量台账 CSV' }).click()
+  await expect(usageBlock.locator('.nf-settings__export-msg')).toContainText(
+    '已导出：/tmp/nf-usage.csv',
+  )
+})
+
+test('验收：豁免需原因（acceptance:waive——原因必填、调用带 reason）', async ({ page }) => {
+  const h = await installMockBridge(page, {
+    project: 'open',
+    demo: {
+      delivery: {
+        status: 'delivered',
+        summary: '完成了任务',
+        artifacts: ['a.txt'],
+        acceptance: [],
+        nextSteps: [],
+      },
+    },
+    captureAcceptanceWaive: true,
+    acceptanceRecord: {
+      id: 'acc1',
+      source: 'plan-verification',
+      createdAt: '2026-11-28T00:00:00.000Z',
+      updatedAt: '2026-11-28T00:00:00.000Z',
+      items: [
+        {
+          id: 'i1',
+          label: '类型检查通过',
+          source: 'plan-verification',
+          status: 'pending',
+        },
+      ],
+    },
+  })
+  await enterWorkspace(page)
+  // 验收对照区挂在产物 Tab 的 DeliveryPanel（demo 交付包 → 面板渲染）
+  await page.getByRole('button', { name: '产物' }).click()
+  await page.waitForTimeout(300)
+  const list = page.locator('.nf-delivery__acceptance')
+  await expect(list).toContainText('类型检查通过')
+  await page.getByRole('button', { name: '豁免：类型检查通过' }).click()
+  const confirm = page.getByRole('button', { name: '确认豁免' })
+  // 原因空 → 按钮不可用（不产生无原因的豁免）
+  await expect(confirm).toBeDisabled()
+  await page.getByLabel('豁免原因').fill('本任务无类型定义，无需 tsc')
+  await expect(confirm).toBeEnabled()
+  await confirm.click()
+  await expect
+    .poll(async () => (await h.waiveCalls())[0])
+    .toEqual({
+      sessionId: expect.any(String),
+      itemId: 'i1',
+      reason: '本任务无类型定义，无需 tsc',
+    })
 })

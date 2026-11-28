@@ -282,9 +282,29 @@ export default function SettingsPanel({
 
   // P1-09：密钥来源/轮换提醒（只读，不回传密钥值）
   const [keyStatus, setKeyStatus] = useState<ApiKeyStatusView | null>(null)
-  useEffect(() => {
+  const [keyMsg, setKeyMsg] = useState<string | null>(null)
+  const [clearKeyBusy, setClearKeyBusy] = useState(false)
+  const refreshKeyStatus = () => {
     void window.neonforge.config.getKeyStatus?.().then((s) => setKeyStatus(s ?? null))
+  }
+  useEffect(() => {
+    refreshKeyStatus()
   }, [])
+  // 2026-11-28 审计（D-1 留 3）：config:clear-key 原无 UI——轮换提醒检测得到却无法执行。
+  // 只对「本机保存」的来源可清除；env/file 由外部管理（清除本机副本无意义）。
+  const clearSavedKey = () => {
+    if (clearKeyBusy) return
+    setClearKeyBusy(true)
+    setKeyMsg(null)
+    void window.neonforge.config
+      .clearKey()
+      .then(() => {
+        setKeyMsg('已清除本机保存的密钥——请重新配置后再使用模型')
+        refreshKeyStatus()
+      })
+      .catch((e: unknown) => setKeyMsg(e instanceof Error ? e.message : String(e)))
+      .finally(() => setClearKeyBusy(false))
+  }
 
   // ADR-017：当前接入方模型选择（显式模型优先；空 = 自动 flash 档）
   const [activeModel, setActiveModel] = useState<{
@@ -537,10 +557,28 @@ export default function SettingsPanel({
             {keyStatus.rotateRecommended && (
               <p className="nf-settings__key-status">密钥已保存超过 90 天，建议轮换</p>
             )}
+            {(keyStatus.source === 'encrypted' || keyStatus.source === 'plaintext') && (
+              <div className="nf-settings__row">
+                <span>
+                  清除本机保存的密钥{' '}
+                  <em>环境变量/凭据文件由外部管理，不在此清除；清除后需重新配置才能使用模型</em>
+                </span>
+                <button
+                  type="button"
+                  className="nf-settings__export"
+                  onClick={clearSavedKey}
+                  disabled={clearKeyBusy}
+                  aria-label="清除已保存的密钥"
+                >
+                  清除
+                </button>
+              </div>
+            )}
           </>
         ) : (
           <p className="nf-settings__key-status">未获取到密钥状态</p>
         )}
+        {keyMsg && <p className="nf-settings__export-msg">{keyMsg}</p>}
       </div>
 
       <div className="nf-settings__plugins">

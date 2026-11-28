@@ -113,6 +113,32 @@ export default function DeliveryPanel({
       }
     }
   }
+  // 2026-11-28 审计（D-1 留 3）：acceptance:waive 原无 UI——豁免是验收门禁的合法终态（有原因），
+  // 与「通过」区分：豁免不冒充已验证，门禁结论里按豁免单独呈现。
+  const [waiveFor, setWaiveFor] = useState<string | null>(null)
+  const [waiveReason, setWaiveReason] = useState('')
+  const waiveAcceptance = async (itemId: string) => {
+    const reason = waiveReason.trim()
+    if (!sessionId || !reason) return
+    try {
+      const r = await window.neonforge.acceptance?.waive(sessionId, itemId, reason)
+      if (sessionIdRef.current !== sessionId) return
+      if (r) {
+        setRecord(r)
+        const g = await window.neonforge.acceptance?.evaluate(sessionId)
+        if (sessionIdRef.current !== sessionId) return
+        setGate(g ?? null)
+      }
+      if (sessionIdRef.current === sessionId) {
+        setWaiveFor(null)
+        setWaiveReason('')
+      }
+    } catch (e) {
+      if (sessionIdRef.current === sessionId) {
+        setError(e instanceof Error ? e.message : String(e))
+      }
+    }
+  }
   const acceptNoAcceptance = async () => {
     if (!sessionId) {
       setAcceptEmpty(false)
@@ -352,8 +378,41 @@ export default function DeliveryPanel({
                           : '待确认'}
                     {it.evidenceRef ? ` · ${it.evidenceRef}` : ''}
                   </span>
+                  {it.status !== 'passed' && it.status !== 'waived' && (
+                    <button
+                      type="button"
+                      className="nf-settings__export"
+                      onClick={() => {
+                        setWaiveFor(waiveFor === it.id ? null : it.id)
+                        setWaiveReason('')
+                      }}
+                      aria-label={`豁免：${it.label}`}
+                    >
+                      豁免
+                    </button>
+                  )}
                 </li>
               ))}
+              {waiveFor && (
+                <li>
+                  <input
+                    className="nf-settings__select"
+                    type="text"
+                    aria-label="豁免原因"
+                    placeholder="豁免原因（必填——记录为什么不做）"
+                    value={waiveReason}
+                    onChange={(e) => setWaiveReason(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="nf-settings__export"
+                    disabled={!waiveReason.trim()}
+                    onClick={() => void waiveAcceptance(waiveFor)}
+                  >
+                    确认豁免
+                  </button>
+                </li>
+              )}
             </ul>
           ) : (
             <ul className="nf-delivery__acceptance">
