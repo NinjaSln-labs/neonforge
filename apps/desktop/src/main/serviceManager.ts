@@ -286,10 +286,6 @@ export function stopAllServices(): void {
   services.clear()
 }
 
-export function listServices(): Array<{ rootPath: string; url: string; port: number }> {
-  return [...services.values()].map((s) => ({ rootPath: s.rootPath, url: s.url, port: s.port }))
-}
-
 // 环境预检（开发阶段环境就绪——check-capability 工具核心）：返回项目环境报告（模型判断环境是否就绪）
 export function checkEnvironment(rootPath: string): ReturnType<typeof ensureEnvironment> {
   const env = ensureEnvironment(rootPath)

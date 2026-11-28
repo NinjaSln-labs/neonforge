@@ -387,11 +387,6 @@ class ToolRegistry {
     this.rules = rules
   }
 
-  /** 当前生效规则（permissions:list 返回执行侧快照，避免磁盘与内存不一致）。 */
-  getRules(): PermissionRule[] {
-    return [...this.rules]
-  }
-
   list(): Array<{
     name: string
     source: Tool['source']

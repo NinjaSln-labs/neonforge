@@ -140,12 +140,17 @@ export async function gitBranches(root: string): Promise<string[]> {
     .filter(Boolean)
 }
 
-/** 统一入口（供 ToolRegistry / IPC 使用；未知动作拒绝） */
+/** 统一入口（供 ToolRegistry / IPC 使用；未知动作拒绝）
+ * 2026-11-28 审计：action 原为裸 string（GitReadAction 类型零引用）——收窄为 GitReadAction
+ * 并在入口做一次运行时校验（IPC/工具参数来自模型输出，类型收窄不替代运行时边界）。 */
 export async function gitRead(
   action: string,
   root: string,
   opts: { path?: unknown; limit?: unknown } = {},
 ): Promise<unknown> {
+  if (!isGitReadAction(action)) {
+    throw new Error(`不支持的 Git 只读动作：${action}（可用：status/log/diff/branches）`)
+  }
   switch (action) {
     case 'status':
       return gitStatus(root)
@@ -155,7 +160,11 @@ export async function gitRead(
       return gitDiff(root, opts.path != null ? String(opts.path) : undefined)
     case 'branches':
       return gitBranches(root)
-    default:
-      throw new Error(`不支持的 Git 只读动作：${action}（可用：status/log/diff/branches）`)
   }
+}
+
+const GIT_READ_ACTIONS: readonly GitReadAction[] = ['status', 'log', 'diff', 'branches']
+
+export function isGitReadAction(value: unknown): value is GitReadAction {
+  return typeof value === 'string' && (GIT_READ_ACTIONS as readonly string[]).includes(value)
 }

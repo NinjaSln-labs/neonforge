@@ -49,11 +49,6 @@ function tryVersion(
   }
 }
 
-// 派生：node_modules/.bin 是否可注入 PATH（服务/命令执行环境）
-export function binDirOf(env: ProjectEnvironment): string {
-  return path.join(env.rootPath, 'node_modules', '.bin')
-}
-
 // === Domain Service: EnvironmentDetector——检测项目结构生成 ProjectEnvironment ===
 export function detectEnvironment(rootPath: string): ProjectEnvironment {
   const packageJsonPath = path.join(rootPath, 'package.json')
@@ -127,10 +122,6 @@ export function getEnvironment(rootPath: string): ProjectEnvironment | undefined
   return envs.get(rootPath)
 }
 
-export function registerEnvironment(env: ProjectEnvironment): void {
-  envs.set(env.rootPath, env)
-}
-
 // 校验：签名变了（依赖/runtime 变化）→ 重新检测
 export function ensureEnvironment(rootPath: string): ProjectEnvironment {
   const cur = envs.get(rootPath)
@@ -171,11 +162,6 @@ export function releasePort(rootPath: string): void {
       envs.set(rootPath, cur)
     }
   }
-}
-
-// 端口是否被本 Registry 分配/保留
-export function isPortAllocated(port: number): boolean {
-  return usedPorts.has(port)
 }
 
 // === 环境使用（spawn 统一注入——环境单源）：项目 node_modules/.bin 入 PATH——任何 npm 本地工具可跑（非 vite 特判——通用机制） ===
@@ -372,11 +358,6 @@ export function detectCapabilities(
     }
   }
   return caps
-}
-
-// 查能力（按 id——CapabilityResolver 查询接口）
-export function getCapability(rootPath: string, id: string): Capability | undefined {
-  return detectCapabilities(rootPath).find((c) => c.id === id)
 }
 
 // === 2026-08-07 Ledger 结果回填（坑 83 教训 ⑥——自学习进化锚点：能力真实可用性从执行结果学习） ===

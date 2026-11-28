@@ -5,7 +5,6 @@ import { TEST_HOOKS } from './testHooks.js'
 // V1.5 S1 Task 1.3：协议工具接入模型工具面（schema 单源——domain/protocolTools.ts）
 import { PROTOCOL_TOOL_DEFS } from '../domain/protocolTools.js'
 import {
-  type ModelID,
   type ModelTier,
   type ProviderId,
   type ThinkingLevel,
@@ -27,7 +26,7 @@ import {
   classifyFetchError,
 } from './providers/index.js'
 
-export type { ModelID, ModelTier, ThinkingLevel, ProviderId }
+export type { ModelTier, ThinkingLevel, ProviderId }
 export type { DeepSeekThinkingParams } from './providers/index.js'
 export { toDeepSeekParams, extractReasoningText, REASONING_FIELDS }
 
@@ -127,9 +126,10 @@ export const classifyGatewayError = (e: unknown): GatewayErrorType => {
 }
 
 // A0 §2：ThinkingLevel=定义、ModelRouter=档位；上游名 = /models DeepSeek 过滤 + fallback
+// 2026-11-28 审计：删 userRequestedPro 死分支——唯一调用点（streamChatOnce）只传 { thinking }，
+// 该字段从无生产者（IPC 载荷亦无此字段）。
 export class ModelRouter {
-  route(task: { userRequestedPro?: boolean; thinking: ThinkingLevel }): ModelTier {
-    if (task.userRequestedPro) return 'pro'
+  route(task: { thinking: ThinkingLevel }): ModelTier {
     if (task.thinking === 'high') return 'pro'
     return 'flash'
   }
@@ -701,7 +701,6 @@ export class DeepSeekGateway {
     apiKey: string,
     opts: {
       providerId: ProviderId
-      model?: ModelID
       /** 无 /models 时的手填上游 id */
       manualModelId?: string | null
       level?: ThinkingLevel
@@ -713,10 +712,8 @@ export class DeepSeekGateway {
         reasoning_content?: string
       }>
       tools?: boolean
-      // tool_choice 恒 auto（DeepSeek Profile）；forceTool 仅 timeline 取证，不进 API
-      forceTool?: boolean
-      // P2-03：推进语义规范名（forceTool 为兼容字段；timeline 消费）
-      progressMode?: 'auto' | 'require-action' | 'require-advance'
+      // 2026-11-28 审计：forceTool / progressMode 原挂在此类型，gateway 内零读取（timeline 取证在
+      // renderer/ipc 侧完成）——删字段；IPC 侧参数名保留兼容（renderer 传值用于自身推进判定）。
       onDelta: (chunk: {
         type: 'reasoning' | 'content' | 'tool-call' | 'done' | 'stream-reset'
         text?: string
@@ -726,7 +723,7 @@ export class DeepSeekGateway {
       onUsage?: (usage: GatewayUsage) => void
     },
   ): Promise<void> {
-    const tier = opts.model ?? this.router.route({ thinking: opts.level ?? 'basic' })
+    const tier = this.router.route({ thinking: opts.level ?? 'basic' })
     if (!this.resolvedModels.has(opts.providerId)) {
       await this.refreshModels(opts.providerId, apiKey, opts.manualModelId)
     }

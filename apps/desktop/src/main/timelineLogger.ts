@@ -35,11 +35,8 @@ export function resetTimelineDedupe(): void {
 }
 
 // P1-02：事件写失败可见化（原 catch 静默——审计不可靠时无人知道）
-let writeFailures = 0
+// 2026-11-28 审计：删 writeFailures 计数器（唯一读者 getTimelineWriteStats 亦为死导出）。
 let lastWriteError: string | null = null
-export function getTimelineWriteStats(): { failures: number; lastError: string | null } {
-  return { failures: writeFailures, lastError: lastWriteError }
-}
 
 // P1-02：写失败进入本机 DLQ（保留原事件行），下次启动可重放——避免审计事件静默丢失
 function timelineDlqFile(): string {
@@ -96,7 +93,6 @@ export function resetTimelineRuntimeState(): void {
   fileIndexes.clear()
   outbox = null
   outboxFilePath = null
-  writeFailures = 0
   lastWriteError = null
 }
 
@@ -311,13 +307,11 @@ export function logTimeline(evt: OutboxEvent, opts: { outboxId?: string } = {}):
     queue.enqueue(evt, timelineFile(evt.session), outboxId)
     const result = queue.drain()
     if (result.error) {
-      writeFailures += 1
       lastWriteError = result.error
       console.error('[timeline] Outbox 投递失败（已保留待重放）', evt.type, result.error)
       return false
     }
     if (result.remaining > 0) {
-      writeFailures += 1
       lastWriteError = 'outbox-pending'
       return false
     }
@@ -328,7 +322,6 @@ export function logTimeline(evt: OutboxEvent, opts: { outboxId?: string } = {}):
       // 带同一 outboxId 直写：若入队已部分成功，后续重放按 outboxId 判重，不会产生第二条
       appendTimelineEvent(evt, outboxId)
     } catch (e2) {
-      writeFailures += 1
       lastWriteError = e2 instanceof Error ? e2.message : String(e2)
       console.error('[timeline] 事件写入失败', evt.type, lastWriteError)
       writeTimelineDlq(evt, lastWriteError, outboxId)

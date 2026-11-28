@@ -10,9 +10,6 @@ export type ModelProfileId = 'deepseek-v4' | 'generic-openai'
 /** 产品档位——上游具体 id 由 /models 列表 + 挑选策略解析 */
 export type ModelTier = 'flash' | 'pro'
 
-/** @deprecated 用 ModelTier；保留别名避免旧 import 碎 */
-export type ModelID = ModelTier
-
 export type ThinkingLevel = 'none' | 'basic' | 'medium' | 'high'
 
 export interface DeepSeekThinkingParams {

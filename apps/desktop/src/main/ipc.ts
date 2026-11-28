@@ -271,6 +271,9 @@ export function registerIpc(): void {
         apiKey?: string
         level?: 'none' | 'basic' | 'medium' | 'high'
         tools?: boolean
+        // 2026-11-28 审计：forceTool / progressMode 曾用于 gateway 参数，但 gateway 内零读取
+        // （推进判定在 renderer 侧 decideProgressGuarantee 完成）——保留载荷字段仅为 IPC 契约兼容，
+        // main 不再转译给 gateway。
         forceTool?: boolean
         progressMode?: 'auto' | 'require-action' | 'require-advance'
         messages: Array<{
@@ -318,8 +321,6 @@ export function registerIpc(): void {
           manualModelId: configStore.getModelId(),
           level: opts.level ?? 'basic',
           tools: opts.tools ?? false,
-          forceTool: opts.forceTool ?? false,
-          progressMode: opts.progressMode ?? (opts.forceTool ? 'require-action' : 'auto'),
           messages: opts.messages,
           onDelta: (chunk) =>
             send(chunk.type, chunk.text, 'toolCall' in chunk ? chunk.toolCall : undefined),
