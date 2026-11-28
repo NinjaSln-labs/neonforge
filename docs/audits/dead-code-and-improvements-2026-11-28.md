@@ -3,7 +3,7 @@
 > 范围：`apps/desktop` 全部生产代码（`src/main`、`src/domain`、`src/renderer`、`src/preload`）+ 测试/构建/CI 配置。
 > 方法：codegraph 符号检索 + 全库 `rg -w` 交叉验证（src / tests / evals / preload / renderer 五侧）+ 逐项人工复核；
 > 主进程由独立审计代理全文件扫描（63 文件 import 图可达性验证），其余进程逐批人工审查。
-> 结论：**修复 28 项、产品决策 5 项待定、确认非问题 4 类**；无协议/数据迁移，无新增运行时依赖。
+> 结论：**修复 28 项、产品决策 6 项待定、确认非问题 4 类**；无协议/数据迁移，无新增运行时依赖。
 
 ## 一、修复项（按批次）
 
@@ -86,7 +86,7 @@ CI 的 L3 断言 `capability.checked` 期望 1 条、实际 2 条。取证：给
 | C-13 | `gateway: forceTool` / `progressMode` 字段 | gateway 内零读取（`streamChatOnce` 的 opts 读取清单无此二者）；IPC 载荷字段保留以兼容契约，main 不再转译 |
 | C-14 | `gitBridge: GitReadAction` | **非死码而是未接线**——`gitRead` 原为裸 `string`；改为 `isGitReadAction()` 运行时校验 + 穷尽 switch，错误文案不变 |
 
-## 二、产品决策项（5 项，待定）
+## 二、产品决策项（6 项，待定）
 
 ### D-1 八个无消费者的 IPC 端点（建议：删除端点 + 其 store 方法）
 
@@ -112,6 +112,10 @@ CI 的 L3 断言 `capability.checked` 期望 1 条、实际 2 条。取证：给
 ### D-5 electron-builder 重复打包（建议：排除 `node_modules` 中的 monaco/react）
 
 渲染器已由 Vite 打包，electron-builder 再从 `node_modules` 重打包会显著膨胀安装包。建议 `files` 排除并实测安装包体积。
+
+### D-6 `docs/` 未纳入 Prettier 门禁（建议：单独决策）
+
+CI 的 Prettier 步骤只覆盖 `apps/desktop/src|tests|*.config.*` 与仓库根配置文件，不含 `docs/`。实测 `docs/**/*.md` 有 **140 个文件**未通过 Prettier（含覆盖矩阵）。纳入门禁会一次性重写大量中文文档的换行与表格（diff 巨大且语义中性），因此不擅自执行；若要纳入，应作为独立格式化 PR 并在合并前只做一次 `prettier --write`。
 
 ## 三、compact 遗留策略（已修复——批次 20）
 
