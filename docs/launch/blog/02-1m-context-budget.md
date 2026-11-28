@@ -58,8 +58,9 @@ DeepSeek 有 1M 上下文。听起来可以把整个仓库塞进去。但三个�
 ---
 
 **系列（NeonForge 设计思考）**
+
 1. [缓存预热：把 DeepSeek 首字延迟从 275ms 压到 118ms](01-cache-preheating.md)（**快**）
 2. 1M 上下文预算：为什么我们给 agent 用 LSP 精准注入，而不是向量库（本篇——**省**）
 3. [为什么 NeonForge 只做 DeepSeek](03-why-deepseek-only.md)（**深**）
 
-*下一篇（终篇）：「为什么只做 DeepSeek」——单模型深度集成的工程理由（预热、前缀、成本）。*
+_下一篇（终篇）：「为什么只做 DeepSeek」——单模型深度集成的工程理由（预热、前缀、成本）。_

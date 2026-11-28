@@ -1,9 +1,11 @@
 # ADR-013：任务状态机跨重启（Task 快照完整化）
+
 - 状态: accepted
 - 日期: 2026-11-15
 - 相关: GitHub #11（会话快照完整化——ITaskRepository）；docs/design/stage-specs/D3.md §边界（producedFiles 不下沉——V1 不跨重启）；docs/domain/00-domain-authority.md §5；stage-specs/V2-task-snapshot.md
 
 ## Context
+
 D3（ADR-005）已把**批准事实**（plannedFiles + approved）下沉 main 并跨重启恢复，但 A1 Task 聚合（`ConversationState`）的其余状态仍是 renderer 内存态：
 
 1. `goalConfirmed` / `planConfirmed` / `resolutionConfirmed` 在重启后回落到初始值，用户已确认的目标/方案无法证明——恢复后可能重复要求确认或错误放行；
@@ -12,6 +14,7 @@ D3（ADR-005）已把**批准事实**（plannedFiles + approved）下沉 main �
 4. compaction 只改变发送给模型的请求历史，不改变消息存档；快照必须与消息存档使用同一份持久化记录，避免“消息已压缩/截断而任务状态仍是旧基准”。
 
 ## Decision
+
 **Task 状态机快照随会话消息一起跨重启持久化（renderer 侧 ITaskRepository 语义），不引入 main 侧第二权威：**
 
 1. **领域层单源序列化**（`src/domain/taskSnapshot.ts`）：
@@ -36,6 +39,7 @@ D3（ADR-005）已把**批准事实**（plannedFiles + approved）下沉 main �
    - compaction 摘要仍只用于请求上下文，不改写存档；快照与存档同记录保存。
 
 ## Consequences
+
 - 积极：重启后目标/方案/解决确认态、执行进度、拒绝记忆与 ADR-010 计数全部保留；恢复不再依赖“从消息重建设置 pending”的隐式路径；快照损坏可安全回退；消息与任务快照原子一致。
 - 代价：`nf-session` 格式升级（需兼容旧数组）；每次消息/状态变化多一次 JSON 序列化（localStorage 量级，可忽略）；恢复逻辑增加快照优先于消息快照的分支。
 - 边界：若用户在新任务边界清空会话，旧任务快照明确丢弃；跨设备迁移不在本 ADR 范围。

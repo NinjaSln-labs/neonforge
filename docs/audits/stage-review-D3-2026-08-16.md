@@ -7,20 +7,20 @@
 
 ## Spec 轴（对照 DoD 8 项 + ADR-005 5 条）
 
-| DoD 断言（D3 spec） | 证据 | 判定 |
-|---------------------|------|------|
-| L1 全量绿（新增 ≥10） | `npx vitest run` **434/434**（新增 13：plannedFilesStore 12 + tools D3 门控 1） | PASS |
-| L2 双 tsc 0 错 | tsc tsconfig.json + tsconfig.main.json **0 错**（preload types 契约、无悬挂引用） | PASS |
-| L3 交互回归 ≥47 + 新场景 | `npx playwright test --project=interaction` **49/49**（D3-1 恢复接线/D3-2 任务边界重置 + S7-1 flaky 修复） | PASS |
-| Lint 门禁 | `npx eslint .` 0 errors（6 既有 warnings——非 D3 引入，行号 298/578/591/613/618/1790 均不在改动区）；`npm run format:check` 全过 | PASS |
-| 行为验收：store 落盘持久化 | plannedFilesStore.test.ts 12 用例（追加幂等/reset/损坏容错/approved 联动/路径注入/跨重启往返） | PASS |
-| 行为验收：IPC 契约三件套 | ipc.ts planned-files:load/add/reset + preload 类型化 + tools:files-approved/-reset 移除（renderer 消费全切换） | PASS |
+| DoD 断言（D3 spec）             | 证据                                                                                                                                                                          | 判定 |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| L1 全量绿（新增 ≥10）           | `npx vitest run` **434/434**（新增 13：plannedFilesStore 12 + tools D3 门控 1）                                                                                               | PASS |
+| L2 双 tsc 0 错                  | tsc tsconfig.json + tsconfig.main.json **0 错**（preload types 契约、无悬挂引用）                                                                                             | PASS |
+| L3 交互回归 ≥47 + 新场景        | `npx playwright test --project=interaction` **49/49**（D3-1 恢复接线/D3-2 任务边界重置 + S7-1 flaky 修复）                                                                    | PASS |
+| Lint 门禁                       | `npx eslint .` 0 errors（6 既有 warnings——非 D3 引入，行号 298/578/591/613/618/1790 均不在改动区）；`npm run format:check` 全过                                               | PASS |
+| 行为验收：store 落盘持久化      | plannedFilesStore.test.ts 12 用例（追加幂等/reset/损坏容错/approved 联动/路径注入/跨重启往返）                                                                                | PASS |
+| 行为验收：IPC 契约三件套        | ipc.ts planned-files:load/add/reset + preload 类型化 + tools:files-approved/-reset 移除（renderer 消费全切换）                                                                | PASS |
 | 行为验收：renderer 批准写走 IPC | approvePlan → plannedFiles.add（L3 D3-1——add 恰一次 + 清单内 write 自动 done）；clearTrust → planned-files:reset（L3 D3-2）；方案块并入不同步（ADR-005 同步边界——recorded 3） | PASS |
-| 行为验收：启动恢复 | 挂载 load → restorePlanned（无 emit——时间线不污染；StrictMode 双挂载 ≥1 已适配）| PASS |
-| 行为验收：tools.ts 门控一致 | registerIpc syncPlanApprovedFromStore + L1 tools D3 用例（恢复 approved → 规划引导放行、needApproval 判定保留——门控语义正确：恢复 ≠ 授权放行） | PASS |
-| 行为验收：三基准统一（未修 1） | plannedComplete 绝对路径断言回归 + store 不加工路径（变换归调用方 trustPath）；force_input 打点保留 | PASS |
-| 审计状态/决策日志 | 覆盖矩阵表 8 更新；ADR-005 落库（000 索引登记） | PASS |
-| 已 push + CI 绿 | **qa.yml run 31953219423 success**（含 L5 视觉 36——D3 无视觉改动基线未崩） | PASS |
+| 行为验收：启动恢复              | 挂载 load → restorePlanned（无 emit——时间线不污染；StrictMode 双挂载 ≥1 已适配）                                                                                              | PASS |
+| 行为验收：tools.ts 门控一致     | registerIpc syncPlanApprovedFromStore + L1 tools D3 用例（恢复 approved → 规划引导放行、needApproval 判定保留——门控语义正确：恢复 ≠ 授权放行）                                | PASS |
+| 行为验收：三基准统一（未修 1）  | plannedComplete 绝对路径断言回归 + store 不加工路径（变换归调用方 trustPath）；force_input 打点保留                                                                           | PASS |
+| 审计状态/决策日志               | 覆盖矩阵表 8 更新；ADR-005 落库（000 索引登记）                                                                                                                               | PASS |
+| 已 push + CI 绿                 | **qa.yml run 31953219423 success**（含 L5 视觉 36——D3 无视觉改动基线未崩）                                                                                                    | PASS |
 
 ADR-005 5 条裁定：① 权威=main（PlannedFilesStore 落盘 userData）✓ ② 跨重启恢复（store 持久化 + 恢复窗口语义澄清——目标确认=任务边界铁律）✓ ③ IPC 三件套 ✓ ④ filesApprovedRef store 驱动 ✓ ⑤ 三基准统一 ✓
 
@@ -28,14 +28,14 @@ ADR-005 5 条裁定：① 权威=main（PlannedFilesStore 落盘 userData）✓ 
 
 ## Standards 轴
 
-| 规则 | 核查 | 判定 |
-|------|------|------|
+| 规则                        | 核查                                                                                                                      | 判定 |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ---- |
 | 领域层纯函数（IO 归应用层） | PlannedFilesStore 属 main 应用层（fs 落盘）；领域层 conversationState 未引 store——纯函数保持（L1 433 不变量测试不受影响） | PASS |
-| 单源原则（缝隙 4） | store=唯一落盘权威；renderer 镜像只读同步；filesApprovedRef=main 门控镜像（write 门控热路径不读盘）——无第二权威 | PASS |
-| 奇数风险防御 | planned-files:add 输入 Array.isArray 防御；store 0600 权限；损坏 JSON 容错（configStore 模式） | PASS |
-| 失败策略一致 | IPC 同步失败忽略（镜像优先）——与 localStorage 断点续做同策略（ADR-005 明确） | PASS |
-| 可测性 | 类构造注入路径（无 electron 依赖——vitest node 可跑）；单例惰性化（instance 文件——vitest 不触 app.getPath） | PASS |
-| 防双源 | spec/ADR/覆盖矩阵引用不复制 HANDOFF 内容；HANDOFF 只引用 ADR 编号 | PASS |
+| 单源原则（缝隙 4）          | store=唯一落盘权威；renderer 镜像只读同步；filesApprovedRef=main 门控镜像（write 门控热路径不读盘）——无第二权威           | PASS |
+| 奇数风险防御                | planned-files:add 输入 Array.isArray 防御；store 0600 权限；损坏 JSON 容错（configStore 模式）                            | PASS |
+| 失败策略一致                | IPC 同步失败忽略（镜像优先）——与 localStorage 断点续做同策略（ADR-005 明确）                                              | PASS |
+| 可测性                      | 类构造注入路径（无 electron 依赖——vitest node 可跑）；单例惰性化（instance 文件——vitest 不触 app.getPath）                | PASS |
+| 防双源                      | spec/ADR/覆盖矩阵引用不复制 HANDOFF 内容；HANDOFF 只引用 ADR 编号                                                         | PASS |
 
 ## 发现清单
 

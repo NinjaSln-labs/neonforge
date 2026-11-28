@@ -16,15 +16,15 @@
 | 005 | PlannedFiles 权威下沉 main + 批准事实跨重启（D3——IPlannedFilesRepository）         | accepted | 2026-08-16 |
 | 006 | 换目标重新确认（#7——goal 已确认后的新目标提议=新任务提议；拒绝=回澄清）            | accepted | 2026-08-16 |
 | 007 | provider 切换——DeepSeek 官方 → Command Code（模型仍 DeepSeek V4 系列；接入方可切） | accepted | 2026-08-21 |
-| 008 | 遗留问题不阻塞完成对账（S4 证据语义修订）                                         | accepted | 2026-08-30 |
-| 009 | 确认协议工具化（V1.5——文本标记 → schema 工具调用）                               | accepted | 2026-08-31 |
-| 010 | 多源 Provider 注册表 + DeepSeek 模型 Catalog（Zen/Go/官方/Command Code）         | accepted | 2026-09-28 |
-| 011 | 成功＝领域命题成立（非外壳返回）                                                 | accepted | 2026-09-29 |
-| 012 | 测完再修（测试轮禁止临修 · 硬闸）                                               | accepted | 2026-09-30 |
-| 013 | 任务状态机跨重启（Task 快照完整化——renderer ITaskRepository 语义）             | accepted | 2026-11-15 |
-| 014 | 结构化澄清与假设来源（AskToAct 式目标假设采集——ask_user 假设清单）             | accepted | 2026-11-16 |
-| 015 | 信任模式预设与低危委托边界（三档模式，main 持久化 + 执行边界二次校验）           | accepted | 2026-11-16 |
+| 008 | 遗留问题不阻塞完成对账（S4 证据语义修订）                                          | accepted | 2026-08-30 |
+| 009 | 确认协议工具化（V1.5——文本标记 → schema 工具调用）                                 | accepted | 2026-08-31 |
+| 010 | 多源 Provider 注册表 + DeepSeek 模型 Catalog（Zen/Go/官方/Command Code）           | accepted | 2026-09-28 |
+| 011 | 成功＝领域命题成立（非外壳返回）                                                   | accepted | 2026-09-29 |
+| 012 | 测完再修（测试轮禁止临修 · 硬闸）                                                  | accepted | 2026-09-30 |
+| 013 | 任务状态机跨重启（Task 快照完整化——renderer ITaskRepository 语义）                 | accepted | 2026-11-15 |
+| 014 | 结构化澄清与假设来源（AskToAct 式目标假设采集——ask_user 假设清单）                 | accepted | 2026-11-16 |
+| 015 | 信任模式预设与低危委托边界（三档模式，main 持久化 + 执行边界二次校验）             | accepted | 2026-11-16 |
 | 016 | 机制拒绝事件 gate.denied（canExecute 结构化拒绝来源 + timeline 领域事件）          | accepted | 2026-11-17 |
-| 017 | 多模型网关与扩展能力治理（显式模型选择 + ModelProfile 扩展 + 能力指纹信任重审）   | accepted | 2026-11-17 |
-| 018 | 问题台账 local-first 同步（main 权威 + 加密快照 + 多设备确定性合并）             | accepted | 2026-11-17 |
-| 019 | 死事件登记清理（删 3 个被取代事件；保留 2 个预留登记）                          | accepted | 2026-11-28 |
+| 017 | 多模型网关与扩展能力治理（显式模型选择 + ModelProfile 扩展 + 能力指纹信任重审）    | accepted | 2026-11-17 |
+| 018 | 问题台账 local-first 同步（main 权威 + 加密快照 + 多设备确定性合并）               | accepted | 2026-11-17 |
+| 019 | 死事件登记清理（删 3 个被取代事件；保留 2 个预留登记）                             | accepted | 2026-11-28 |

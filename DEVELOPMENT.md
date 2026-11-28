@@ -31,15 +31,15 @@ npm start       # 以已构建产物启动 electron
 
 ## 验证链
 
-| 层          | 命令（均在 `apps/desktop` 下）                                                |
-| ----------- | ----------------------------------------------------------------------------- |
-| L1 单元     | `npx vitest run`                                                              |
-| L2 类型     | `npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit` |
-| L2b 测试类型 | `npx tsc -p tsconfig.tests.json --noEmit`（tests/unit 与其引用的 src）         |
-| L3 交互     | `npx playwright test --project=interaction`                                   |
-| Lint / 格式 | `npx eslint .` · `npm run format:check`                                       |
-| L4 端到端   | e2e 脚本（自动检测 main/preload 产物过期并重 build）                          |
-| 打包        | `npm run dist`（electron-builder）                                            |
+| 层           | 命令（均在 `apps/desktop` 下）                                                |
+| ------------ | ----------------------------------------------------------------------------- |
+| L1 单元      | `npx vitest run`                                                              |
+| L2 类型      | `npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit` |
+| L2b 测试类型 | `npx tsc -p tsconfig.tests.json --noEmit`（tests/unit 与其引用的 src）        |
+| L3 交互      | `npx playwright test --project=interaction`                                   |
+| Lint / 格式  | `npx eslint .` · `npm run format:check`                                       |
+| L4 端到端    | e2e 脚本（自动检测 main/preload 产物过期并重 build）                          |
+| 打包         | `npm run dist`（electron-builder）                                            |
 
 全量命令清单以 `apps/desktop/package.json` `scripts` 为准。
 

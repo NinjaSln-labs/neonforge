@@ -1,4 +1,5 @@
 # ADR-016：机制拒绝事件 gate.denied（GitHub #16）
+
 - 状态: accepted
 - 日期: 2026-11-17
 - 相关: GitHub #16（机制事件补全）；`docs/design/intent-confirmation-domain-design.md` §3.4 C6 / §3.5；`docs/audits/stage-review-S7-2026-08-16.md`（gate.denied deferred）；stage-specs/V2-gate-denied-events.md
@@ -20,7 +21,7 @@
    - `session-gate`：会话冻结/确认点前置/清单边界（`sessionGate` 拒绝——不是 ActionGate 判定）；
    - `rejection-memory`：`deniedApprovals` 同任务同类短封；
    - `action-gate`：`actionGate` 的 `deny` 策略（`policy.hazardous='deny'`）。
-   `rejection-memory` / `action-gate` 同时携带 `attribute`（ActionAttribute：kind+basis）与 `risk`（low/medium/high），由 `actionGate` 单源输出，供事件审计。
+     `rejection-memory` / `action-gate` 同时携带 `attribute`（ActionAttribute：kind+basis）与 `risk`（low/medium/high），由 `actionGate` 单源输出，供事件审计。
 2. **timeline 注册（`timeline.ts`）**：
    - 新事件 `gate.denied`，domain `gate`（联合新增成员），role `system`；
    - 载荷 `detailKeys: ['name','gate','reason','attribute','risk']`；`gate` 取值 `'rejection-memory' | 'action-gate'`。

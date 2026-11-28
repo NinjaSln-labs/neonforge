@@ -1,4 +1,5 @@
 # Stage V2-Structured-Clarify Spec（结构化澄清与假设来源）
+
 > 来源：GitHub #13（AskToAct 式目标假设显式采集）；ADR：`docs/decisions/014-structured-clarify-assumptions.md`
 
 ## DoD（机器可验证断言——stage-gate 逐条执行）
@@ -14,15 +15,15 @@
 
 ## TDD 网格（本阶段新增功能——spec-first + test-first）
 
-| 功能 | 规范断言（来源 ADR-014） | 失败测试（红） | 实现（绿） | 重构 |
-|------|--------------------------|---------------|-----------|------|
-| ask_user 假设清单 schema | `assumptions: string[]` ≤6、逐条非空；非法路径化回灌 | `protocolTools.test.ts` | `PROTOCOL_TOOL_DEFS.ask_user` + `validateProtocolArgs` | 校验抽公共函数 |
-| 假设归一化 | `propose_goal/plan` 的 string 或 `{text,source}` → `Assumption[]`；非法 source 拒绝；缺省 `model_inference` | `protocolTools.test.ts` | `normalizeAssumptions` + `decideProtocolToolCall` | 归一化纯函数单源 |
-| 领域值对象 | `Assumption {text,source}`；来源枚举三值；卡片/事件/快照均使用对象 | `conversationState.test.ts`/`timelineEvents.test.ts` | `domain/conversationState.ts` | — |
-| 快照兼容 | 旧字符串假设 → `model_inference`；新对象来源保留；非法结构拒绝 | `taskSnapshot.test.ts` | `taskSnapshot` 假设解析器 | — |
-| 文本降级解析 | `【执行方案】关键假设` 行 → `model_inference` | `planProposalParser.test.ts` | `parsePlanProposal`/`extractAssumptionsSection` | — |
-| 假设核对卡 | 逐条「符合/不符合」+ 修正输入；JSON 结构化回答；双击/草稿/options 并存/兄弟卡独立性；已回应禁用 | `structuredClarify.interaction.ts` | `AssumptionCheckCard` + `clarifyAnswer` + ConversationPanel 接线 | 复用 CandidateButtons 样式 |
-| 来源标签与制裁 | 目标/方案卡显示「你的选择/你的澄清/模型推断」；无真实交互证据的模型自报来源降级模型推断；旧字符串防御渲染 | `assumptionEvidence.test.ts` / `structuredClarify.interaction.ts` | `assumptionEvidence` + `AssumptionList` | 来源标签映射/证据集合纯函数 |
+| 功能                     | 规范断言（来源 ADR-014）                                                                                    | 失败测试（红）                                                    | 实现（绿）                                                       | 重构                        |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------- |
+| ask_user 假设清单 schema | `assumptions: string[]` ≤6、逐条非空；非法路径化回灌                                                        | `protocolTools.test.ts`                                           | `PROTOCOL_TOOL_DEFS.ask_user` + `validateProtocolArgs`           | 校验抽公共函数              |
+| 假设归一化               | `propose_goal/plan` 的 string 或 `{text,source}` → `Assumption[]`；非法 source 拒绝；缺省 `model_inference` | `protocolTools.test.ts`                                           | `normalizeAssumptions` + `decideProtocolToolCall`                | 归一化纯函数单源            |
+| 领域值对象               | `Assumption {text,source}`；来源枚举三值；卡片/事件/快照均使用对象                                          | `conversationState.test.ts`/`timelineEvents.test.ts`              | `domain/conversationState.ts`                                    | —                           |
+| 快照兼容                 | 旧字符串假设 → `model_inference`；新对象来源保留；非法结构拒绝                                              | `taskSnapshot.test.ts`                                            | `taskSnapshot` 假设解析器                                        | —                           |
+| 文本降级解析             | `【执行方案】关键假设` 行 → `model_inference`                                                               | `planProposalParser.test.ts`                                      | `parsePlanProposal`/`extractAssumptionsSection`                  | —                           |
+| 假设核对卡               | 逐条「符合/不符合」+ 修正输入；JSON 结构化回答；双击/草稿/options 并存/兄弟卡独立性；已回应禁用             | `structuredClarify.interaction.ts`                                | `AssumptionCheckCard` + `clarifyAnswer` + ConversationPanel 接线 | 复用 CandidateButtons 样式  |
+| 来源标签与制裁           | 目标/方案卡显示「你的选择/你的澄清/模型推断」；无真实交互证据的模型自报来源降级模型推断；旧字符串防御渲染   | `assumptionEvidence.test.ts` / `structuredClarify.interaction.ts` | `assumptionEvidence` + `AssumptionList`                          | 来源标签映射/证据集合纯函数 |
 
 ## 产出物
 

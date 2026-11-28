@@ -5,38 +5,38 @@
 
 ## 基本信息
 
-| 字段 | 值 |
-|------|----|
-| 产品版本 / commit | NeonForge `d1aacbe` + BFCL 类别全量脚本（commit 见 PR） |
-| 模型 / Provider | 本机 Magpie（`http://127.0.0.1:3425/v1`）；API model id `opendesign/deepseek-v4.1-flash` |
-| 适配器 | NeonForge 无头适配器 v0（`prompt=product`） |
-| Harness 版本 | `bfcl-eval==2026.3.23`（BFCL v4） |
-| 评估日期（UTC） | 2026-11-18 |
-| 沙箱镜像 | `nf-eval-bfcl@sha256:0aeb737c70ec3519d955b3cf31e79ef951274d8291515ee6c820ceed6333b2c1` |
-| 类别与题量 | `simple_python` 400；`multiple` 200；`parallel` 200；`irrelevance` 240；`parallel_multiple` 200；`simple_java` 100；`simple_javascript` 50；`live_simple` 258；`live_parallel` 16；`live_parallel_multiple` 24；`live_relevance` 16；`live_multiple` 1053；`live_irrelevance` 884；`multi_turn_base` 200；合计 3841 |
-| 运行方式 | `bfcl generate --test-category ... --num-threads 1` + `bfcl evaluate`；无 `--run-ids`，无 `--partial-eval` |
-| 运行次数 | 每个类别 1 次（分四批：核心四类；扩展七类；两个 live 大类；multi_turn_base） |
-| 运行成本 | 本地模型无外部 API 计费；输入约 29,829,601 tokens、输出约 1,404,095 tokens |
+| 字段              | 值                                                                                                                                                                                                                                                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 产品版本 / commit | NeonForge `d1aacbe` + BFCL 类别全量脚本（commit 见 PR）                                                                                                                                                                                                                                                             |
+| 模型 / Provider   | 本机 Magpie（`http://127.0.0.1:3425/v1`）；API model id `opendesign/deepseek-v4.1-flash`                                                                                                                                                                                                                            |
+| 适配器            | NeonForge 无头适配器 v0（`prompt=product`）                                                                                                                                                                                                                                                                         |
+| Harness 版本      | `bfcl-eval==2026.3.23`（BFCL v4）                                                                                                                                                                                                                                                                                   |
+| 评估日期（UTC）   | 2026-11-18                                                                                                                                                                                                                                                                                                          |
+| 沙箱镜像          | `nf-eval-bfcl@sha256:0aeb737c70ec3519d955b3cf31e79ef951274d8291515ee6c820ceed6333b2c1`                                                                                                                                                                                                                              |
+| 类别与题量        | `simple_python` 400；`multiple` 200；`parallel` 200；`irrelevance` 240；`parallel_multiple` 200；`simple_java` 100；`simple_javascript` 50；`live_simple` 258；`live_parallel` 16；`live_parallel_multiple` 24；`live_relevance` 16；`live_multiple` 1053；`live_irrelevance` 884；`multi_turn_base` 200；合计 3841 |
+| 运行方式          | `bfcl generate --test-category ... --num-threads 1` + `bfcl evaluate`；无 `--run-ids`，无 `--partial-eval`                                                                                                                                                                                                          |
+| 运行次数          | 每个类别 1 次（分四批：核心四类；扩展七类；两个 live 大类；multi_turn_base）                                                                                                                                                                                                                                        |
+| 运行成本          | 本地模型无外部 API 计费；输入约 29,829,601 tokens、输出约 1,404,095 tokens                                                                                                                                                                                                                                          |
 
 ## 结果
 
-| 类别 | 正确/总数 | 准确率 | 输入 tokens | 输出 tokens | 平均延迟 |
-|------|-----------|--------|-------------|-------------|----------|
-| `simple_python` | 369/400 | **92.25%** | 919,193 | 49,393 | 2.02s |
-| `multiple` | 177/200 | **88.50%** | 510,042 | 24,853 | 2.11s |
-| `parallel` | 180/200 | **90.00%** | 466,641 | 52,304 | 2.55s |
-| `irrelevance` | 171/240 | **71.25%** | 550,229 | 103,260 | 4.49s |
-| `parallel_multiple` | 161/200 | **80.50%** | 516,145 | 57,198 | 2.76s |
-| `simple_java` | 57/100 | **57.00%** | 235,799 | 29,636 | 3.10s |
-| `simple_javascript` | 22/50 | **44.00%** | 118,419 | 23,683 | 4.23s |
-| `live_simple` | 198/258 | **76.74%** | 611,742 | 44,566 | 2.39s |
-| `live_parallel` | 12/16 | **75.00%** | 37,849 | 3,923 | 2.60s |
-| `live_parallel_multiple` | 15/24 | **62.50%** | 72,395 | 5,137 | 2.52s |
-| `live_relevance` | 13/16 | **81.25%** | 46,224 | 5,519 | 3.70s |
-| `live_multiple` | 772/1053 | **73.31%** | 3,278,740 | 181,435 | 2.39s |
-| `live_irrelevance` | 637/884 | **72.06%** | 2,443,588 | 407,712 | 4.74s |
-| `multi_turn_base` | 112/200 | **56.00%** | 20,022,595 | 415,476 | 41.0s/题 |
-| **十四类合计** | **2896/3841** | **75.40%** | 29,829,601 | 1,404,095 | — |
+| 类别                     | 正确/总数     | 准确率     | 输入 tokens | 输出 tokens | 平均延迟 |
+| ------------------------ | ------------- | ---------- | ----------- | ----------- | -------- |
+| `simple_python`          | 369/400       | **92.25%** | 919,193     | 49,393      | 2.02s    |
+| `multiple`               | 177/200       | **88.50%** | 510,042     | 24,853      | 2.11s    |
+| `parallel`               | 180/200       | **90.00%** | 466,641     | 52,304      | 2.55s    |
+| `irrelevance`            | 171/240       | **71.25%** | 550,229     | 103,260     | 4.49s    |
+| `parallel_multiple`      | 161/200       | **80.50%** | 516,145     | 57,198      | 2.76s    |
+| `simple_java`            | 57/100        | **57.00%** | 235,799     | 29,636      | 3.10s    |
+| `simple_javascript`      | 22/50         | **44.00%** | 118,419     | 23,683      | 4.23s    |
+| `live_simple`            | 198/258       | **76.74%** | 611,742     | 44,566      | 2.39s    |
+| `live_parallel`          | 12/16         | **75.00%** | 37,849      | 3,923       | 2.60s    |
+| `live_parallel_multiple` | 15/24         | **62.50%** | 72,395      | 5,137       | 2.52s    |
+| `live_relevance`         | 13/16         | **81.25%** | 46,224      | 5,519       | 3.70s    |
+| `live_multiple`          | 772/1053      | **73.31%** | 3,278,740   | 181,435     | 2.39s    |
+| `live_irrelevance`       | 637/884       | **72.06%** | 2,443,588   | 407,712     | 4.74s    |
+| `multi_turn_base`        | 112/200       | **56.00%** | 20,022,595  | 415,476     | 41.0s/题 |
+| **十四类合计**           | **2896/3841** | **75.40%** | 29,829,601  | 1,404,095   | —        |
 
 - 单轮/实时十三类（3641 题）合计 2784/3641 = 76.46%；其中核心四类 86.25%、扩展七类 71.99%、两个 live 大类 72.74%。
 - `multi_turn_base` 50.00 个百分点低于十三类合计，且平均每题 41 秒，说明多轮工具调用是当前明显短板，也是成本最高的类别。
@@ -51,14 +51,14 @@
 
 ## 失败/边界样例
 
-| 现象 | 归因 | 是否产品问题 |
-|------|------|--------------|
-| `simple_javascript` 44.00% | 模型对 JavaScript 参数/类型生成明显弱于 Python | 模型能力信号，非适配器故障 |
-| `simple_java` 57.00% | 同上；Java 类型与调用格式更复杂 | 模型能力信号 |
-| `multi_turn_base` 56.00% | 多轮状态跟踪、跨轮工具结果使用弱；平均 41 秒/题 | 模型能力信号，且成本高 |
-| `live_parallel_multiple` 62.50% | 实时多函数、多调用点组合更难 | 模型能力信号 |
-| `irrelevance` 71.25% / `live_irrelevance` 72.06% | “无需调用工具”的抑制较弱，输出 token 偏高 | 模型能力信号 |
-| 未跑其余 multi-turn 变体、memory、web_search | 需多轮环境、记忆前置数据或外部服务 | 未覆盖，不能外推 |
+| 现象                                             | 归因                                            | 是否产品问题               |
+| ------------------------------------------------ | ----------------------------------------------- | -------------------------- |
+| `simple_javascript` 44.00%                       | 模型对 JavaScript 参数/类型生成明显弱于 Python  | 模型能力信号，非适配器故障 |
+| `simple_java` 57.00%                             | 同上；Java 类型与调用格式更复杂                 | 模型能力信号               |
+| `multi_turn_base` 56.00%                         | 多轮状态跟踪、跨轮工具结果使用弱；平均 41 秒/题 | 模型能力信号，且成本高     |
+| `live_parallel_multiple` 62.50%                  | 实时多函数、多调用点组合更难                    | 模型能力信号               |
+| `irrelevance` 71.25% / `live_irrelevance` 72.06% | “无需调用工具”的抑制较弱，输出 token 偏高       | 模型能力信号               |
+| 未跑其余 multi-turn 变体、memory、web_search     | 需多轮环境、记忆前置数据或外部服务              | 未覆盖，不能外推           |
 
 ## 安全与限制
 

@@ -5,13 +5,13 @@
 
 ## 基本信息
 
-| 字段 | 值 |
-|------|----|
-| 产品版本 / commit | NeonForge `9701291`（main，`decide` 重构后） |
-| 日期 | 2026-11-19 |
-| 证据类型 | L1 单元测试 + L3 Playwright interaction |
-| 关联决策 | ADR-015（信任模式与委托边界）、ADR-016（`gate.denied`） |
-| 评估对象 | `apps/desktop/src/main/tools.ts` 的真实 `ToolRegistry` 与 renderer 授权卡 |
+| 字段              | 值                                                                        |
+| ----------------- | ------------------------------------------------------------------------- |
+| 产品版本 / commit | NeonForge `9701291`（main，`decide` 重构后）                              |
+| 日期              | 2026-11-19                                                                |
+| 证据类型          | L1 单元测试 + L3 Playwright interaction                                   |
+| 关联决策          | ADR-015（信任模式与委托边界）、ADR-016（`gate.denied`）                   |
+| 评估对象          | `apps/desktop/src/main/tools.ts` 的真实 `ToolRegistry` 与 renderer 授权卡 |
 
 ## 执行命令
 
@@ -23,10 +23,10 @@ npx playwright test --project=interaction tests/interaction/trustModes.interacti
 
 ## 结果
 
-| 层 | 文件 | 结果 | 覆盖重点 |
-|----|------|------|----------|
-| L1 | `tests/unit/tools.test.ts` | **44/44 通过**（1.2 秒） | 未授权 `needApproval`、`deny > allow`、`ask` fail-closed、`ask` 不被 `preApproval`/自动来源绕过、`allow read` 不能借 `..` 逃逸、symlink 根外逃逸、写前快照与回滚、计划门控、delegate 边界；新增 `decide` 只裁决不执行 4 项 |
-| L3 | `tests/interaction/trustModes.interaction.ts` | **3/3 通过**（2.4 分钟） | 旧 delegate 开关迁移、设置页 strict/standard/delegated 切换与持久化、delegated 清单内 edit 自动放行（来源 `delegate`）、strict 方案确认后 write 仍弹“需要授权”卡 |
+| 层  | 文件                                          | 结果                     | 覆盖重点                                                                                                                                                                                                                   |
+| --- | --------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| L1  | `tests/unit/tools.test.ts`                    | **44/44 通过**（1.2 秒） | 未授权 `needApproval`、`deny > allow`、`ask` fail-closed、`ask` 不被 `preApproval`/自动来源绕过、`allow read` 不能借 `..` 逃逸、symlink 根外逃逸、写前快照与回滚、计划门控、delegate 边界；新增 `decide` 只裁决不执行 4 项 |
+| L3  | `tests/interaction/trustModes.interaction.ts` | **3/3 通过**（2.4 分钟） | 旧 delegate 开关迁移、设置页 strict/standard/delegated 切换与持久化、delegated 清单内 edit 自动放行（来源 `delegate`）、strict 方案确认后 write 仍弹“需要授权”卡                                                           |
 
 ## 关键边界验证
 

@@ -43,45 +43,45 @@
 
 ### 1.2 上下文到代码模块
 
-| 上下文 | 应用层 / UI | 领域层 | 基础设施 / 仓储 |
-| :--- | :--- | :--- | :--- |
-| BC-01 会话与任务 | `ConversationPanel.tsx`、`useConversationState.ts`、`useToolApproval.ts` | `conversationState.ts`、`agentLoop.ts`、`protocolTools.ts`、`planProposalParser.ts`、`completionClaimParser.ts`、`timeline.ts` | 会话/问题 localStorage；时间线 IPC |
-| BC-02 执行与信任 | `useToolApproval.ts`、`authModel.ts` | `conversationState.ts`（门控/动作属性）、`sandboxPath.ts` | `tools.ts`、`applyDiff.ts`、`ipc.ts` |
-| BC-03 工作区与环境 | `FileTree.tsx`、`OutputPanel.tsx`、`MainWorkspace.tsx` | 无独立 domain 模块（路径/EOL 规则在 domain） | `workspace.ts`、`projectInit.ts`、`plannedFilesStore.ts`、`envManager.ts`、`serviceManager.ts` |
-| BC-04 交付与问题台账 | `DeliveryPanel.tsx`、`SessionPanel.tsx`、`MainWorkspace.tsx` | 无独立 domain 模块（`DeliveryPackage` 类型在 `types.d.ts`） | `applyDiff.ts`、`problemStore.ts`、`delivery:apply-diff` |
-| BC-05 模型接入 | `ConfigPage.tsx`、`SettingsPanel.tsx`（model label） | 无（协议传输在 main） | `gateway.ts`、`providers/*`、`preheat.ts`、`compact.ts` |
-| BC-06 会话时间线 | — | `timeline.ts` | `timelineLogger.ts`、`chatLog.ts`、`timeline:log/query` |
-| BC-07 配置与凭据 | `ConfigPage.tsx`、`SettingsPanel.tsx` | 无 | `configStore.ts`、`config:*` |
-| BC-08 上下文与检索 | `FileTree.tsx`（@mention 列表） | 无 | `context.ts`、`codeRag.ts`、`lsp.ts`、`compact.ts`、`preheat.ts` |
-| BC-09 平台运行 | `App.tsx`、`main.tsx` | 无 | `main.ts`、`pluginSystem.ts`、`preload.ts` |
-| BC-10 变更与版本（目标态） | `DeliveryPanel.tsx`（审核 UI，后续拆分） | 目标态 `domain/changeSet.ts` | `applyDiff.ts`、`ipc.ts` `delivery:*`、Git 只读桥（目标态） |
-| BC-11 任务编排（目标态） | `MainWorkspace.tsx`（任务 Tab，替换占位） | 目标态 `domain/taskQueue.ts` | 目标态 `main/taskQueueStore.ts` + 调度器 |
-| BC-12 用量与成本（目标态） | `MainWorkspace.tsx`（用量视图） | 目标态 `domain/usageLedger.ts` | `gateway.ts`（usage 解析）、目标态 `usageStore.ts` |
-| BC-13 扩展与集成（目标态） | `ConfigPage.tsx` / 插件视图 | 目标态 `domain/extension.ts` | `pluginSystem.ts`、MCP 客户端（目标态） |
-| BC-14 验收与质量门禁（目标态） | `DeliveryPanel.tsx`、`DoDAlignPanel.tsx`（去演示化） | 目标态 `domain/acceptance.ts` | 目标态验收 IPC + 交付包接线 |
+| 上下文                         | 应用层 / UI                                                              | 领域层                                                                                                                         | 基础设施 / 仓储                                                                                |
+| :----------------------------- | :----------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------- |
+| BC-01 会话与任务               | `ConversationPanel.tsx`、`useConversationState.ts`、`useToolApproval.ts` | `conversationState.ts`、`agentLoop.ts`、`protocolTools.ts`、`planProposalParser.ts`、`completionClaimParser.ts`、`timeline.ts` | 会话/问题 localStorage；时间线 IPC                                                             |
+| BC-02 执行与信任               | `useToolApproval.ts`、`authModel.ts`                                     | `conversationState.ts`（门控/动作属性）、`sandboxPath.ts`                                                                      | `tools.ts`、`applyDiff.ts`、`ipc.ts`                                                           |
+| BC-03 工作区与环境             | `FileTree.tsx`、`OutputPanel.tsx`、`MainWorkspace.tsx`                   | 无独立 domain 模块（路径/EOL 规则在 domain）                                                                                   | `workspace.ts`、`projectInit.ts`、`plannedFilesStore.ts`、`envManager.ts`、`serviceManager.ts` |
+| BC-04 交付与问题台账           | `DeliveryPanel.tsx`、`SessionPanel.tsx`、`MainWorkspace.tsx`             | 无独立 domain 模块（`DeliveryPackage` 类型在 `types.d.ts`）                                                                    | `applyDiff.ts`、`problemStore.ts`、`delivery:apply-diff`                                       |
+| BC-05 模型接入                 | `ConfigPage.tsx`、`SettingsPanel.tsx`（model label）                     | 无（协议传输在 main）                                                                                                          | `gateway.ts`、`providers/*`、`preheat.ts`、`compact.ts`                                        |
+| BC-06 会话时间线               | —                                                                        | `timeline.ts`                                                                                                                  | `timelineLogger.ts`、`chatLog.ts`、`timeline:log/query`                                        |
+| BC-07 配置与凭据               | `ConfigPage.tsx`、`SettingsPanel.tsx`                                    | 无                                                                                                                             | `configStore.ts`、`config:*`                                                                   |
+| BC-08 上下文与检索             | `FileTree.tsx`（@mention 列表）                                          | 无                                                                                                                             | `context.ts`、`codeRag.ts`、`lsp.ts`、`compact.ts`、`preheat.ts`                               |
+| BC-09 平台运行                 | `App.tsx`、`main.tsx`                                                    | 无                                                                                                                             | `main.ts`、`pluginSystem.ts`、`preload.ts`                                                     |
+| BC-10 变更与版本（目标态）     | `DeliveryPanel.tsx`（审核 UI，后续拆分）                                 | 目标态 `domain/changeSet.ts`                                                                                                   | `applyDiff.ts`、`ipc.ts` `delivery:*`、Git 只读桥（目标态）                                    |
+| BC-11 任务编排（目标态）       | `MainWorkspace.tsx`（任务 Tab，替换占位）                                | 目标态 `domain/taskQueue.ts`                                                                                                   | 目标态 `main/taskQueueStore.ts` + 调度器                                                       |
+| BC-12 用量与成本（目标态）     | `MainWorkspace.tsx`（用量视图）                                          | 目标态 `domain/usageLedger.ts`                                                                                                 | `gateway.ts`（usage 解析）、目标态 `usageStore.ts`                                             |
+| BC-13 扩展与集成（目标态）     | `ConfigPage.tsx` / 插件视图                                              | 目标态 `domain/extension.ts`                                                                                                   | `pluginSystem.ts`、MCP 客户端（目标态）                                                        |
+| BC-14 验收与质量门禁（目标态） | `DeliveryPanel.tsx`、`DoDAlignPanel.tsx`（去演示化）                     | 目标态 `domain/acceptance.ts`                                                                                                  | 目标态验收 IPC + 交付包接线                                                                    |
 
 ---
 
 ## 2. 数据模型与持久化
 
-| 数据 | 聚合 | 权威位置 | 持久化 | 恢复策略 |
-| :--- | :--- | :--- | :--- | :--- |
-| Task 状态 | A1 | renderer `stateRef` | 不直接持久化；决策内容快照随完整 assistant 消息存 localStorage | 会话消息恢复；状态从确认位/决策内容重建（当前恢复策略以消息为准） |
-| 会话消息 | A1 读模型 | renderer `messages` | localStorage `nf-session`，最多 50 条，只存完整消息 | 损坏 → 空；streaming 不覆盖 |
-| 计划清单 | A2 | main `plannedFilesStore` | `userData` 下 JSON（0600 模式） | 启动 `planned-files:load` 恢复；损坏 → 空 |
-| 工具调用 | A3 | assistant 消息 `toolCalls` | 随会话消息（完整状态）；时间线另有事件 | 旧存档无 id → name+args fallback |
-| 项目环境 | A4 | main 内存 Map | 不持久化（进程内） | 重启重检；签名变化重检 |
-| 服务实例 | A5 | main 内存 Map + 进程表 | 不持久化；PID 文件仅用于清理残留 | 重启丢失；应用退出清理 |
-| 问题台账 | A6 | renderer state + localStorage | `nf-problems`，最多 20 条 | 损坏 → fallback；旧 authorized 迁移 |
-| 交付包 | A7 | renderer state | 不持久化（会话内） | 重启丢失；由 realChanges 重建 |
-| 时间线 | A8 | main JSONL | `userData/logs/timeline-<session>.jsonl` | append-only；坏行跳过 |
-| 聊天日志 | A8 子集 | main JSONL | `userData/logs/chat-<session>.jsonl` | append-only；导出固定覆盖 |
-| 配置/密钥 | BC-07 | main `ConfigStore` | `userData/config/neonforge-config.json` | safeStorage 加密 + 明文 fallback |
-| 变更集（目标态） | A13 | 目标态 main/领域模块 | 目标态变更集 JSON + 基线快照/哈希 | 任务边界收口；冲突显式 |
-| 任务队列（目标态） | A14 | 目标态 main store | 目标态队列 JSON | 重启恢复；运行中标记 interrupted |
-| 用量台账（目标态） | A15 | 目标态 main JSONL/DB | 目标态 `usage-<session>.jsonl` | append-only；缺 usage 标 unknown |
-| 扩展注册表（目标态） | A16 | main `PluginRegistry` | 内存 + 本机配置 | 启动加载；损坏扩展隔离 |
-| 验收记录（目标态） | A17 | 目标态会话/交付 | 目标态随交付包/会话持久化 | 无来源显式为空；门禁可重算 |
+| 数据                 | 聚合      | 权威位置                      | 持久化                                                         | 恢复策略                                                          |
+| :------------------- | :-------- | :---------------------------- | :------------------------------------------------------------- | :---------------------------------------------------------------- |
+| Task 状态            | A1        | renderer `stateRef`           | 不直接持久化；决策内容快照随完整 assistant 消息存 localStorage | 会话消息恢复；状态从确认位/决策内容重建（当前恢复策略以消息为准） |
+| 会话消息             | A1 读模型 | renderer `messages`           | localStorage `nf-session`，最多 50 条，只存完整消息            | 损坏 → 空；streaming 不覆盖                                       |
+| 计划清单             | A2        | main `plannedFilesStore`      | `userData` 下 JSON（0600 模式）                                | 启动 `planned-files:load` 恢复；损坏 → 空                         |
+| 工具调用             | A3        | assistant 消息 `toolCalls`    | 随会话消息（完整状态）；时间线另有事件                         | 旧存档无 id → name+args fallback                                  |
+| 项目环境             | A4        | main 内存 Map                 | 不持久化（进程内）                                             | 重启重检；签名变化重检                                            |
+| 服务实例             | A5        | main 内存 Map + 进程表        | 不持久化；PID 文件仅用于清理残留                               | 重启丢失；应用退出清理                                            |
+| 问题台账             | A6        | renderer state + localStorage | `nf-problems`，最多 20 条                                      | 损坏 → fallback；旧 authorized 迁移                               |
+| 交付包               | A7        | renderer state                | 不持久化（会话内）                                             | 重启丢失；由 realChanges 重建                                     |
+| 时间线               | A8        | main JSONL                    | `userData/logs/timeline-<session>.jsonl`                       | append-only；坏行跳过                                             |
+| 聊天日志             | A8 子集   | main JSONL                    | `userData/logs/chat-<session>.jsonl`                           | append-only；导出固定覆盖                                         |
+| 配置/密钥            | BC-07     | main `ConfigStore`            | `userData/config/neonforge-config.json`                        | safeStorage 加密 + 明文 fallback                                  |
+| 变更集（目标态）     | A13       | 目标态 main/领域模块          | 目标态变更集 JSON + 基线快照/哈希                              | 任务边界收口；冲突显式                                            |
+| 任务队列（目标态）   | A14       | 目标态 main store             | 目标态队列 JSON                                                | 重启恢复；运行中标记 interrupted                                  |
+| 用量台账（目标态）   | A15       | 目标态 main JSONL/DB          | 目标态 `usage-<session>.jsonl`                                 | append-only；缺 usage 标 unknown                                  |
+| 扩展注册表（目标态） | A16       | main `PluginRegistry`         | 内存 + 本机配置                                                | 启动加载；损坏扩展隔离                                            |
+| 验收记录（目标态）   | A17       | 目标态会话/交付               | 目标态随交付包/会话持久化                                      | 无来源显式为空；门禁可重算                                        |
 
 ### 2.1 数据一致性规则
 
@@ -191,12 +191,12 @@ state transition (useConversationState.transition)
 
 ### 4.2 协议工具（模型工具面）
 
-| 工具 | 用途 | 关键约束 |
-| :--- | :--- | :--- |
-| `propose_goal` | 目标确认提议 | `statement` 必填；`assumptions` 可选（`{text,source}[]`，旧 string[] 兼容） |
-| `propose_plan` | 方案提议 | `summary` + 非空 `files[{path,reason}]`；`assumptions` 支持 `{text,source}[]`；goal 未确认 → 硬序拒绝 |
-| `report_completion` | 完成声明 | `summary` + 非空 `verification[{command,passed}]`；goal+plan 未确认 → 硬序拒绝 |
-| `ask_user` | 会话级澄清 | 任何时点合法；不置决策点；可带 options + `assumptions`（假设核对卡） |
+| 工具                | 用途         | 关键约束                                                                                              |
+| :------------------ | :----------- | :---------------------------------------------------------------------------------------------------- |
+| `propose_goal`      | 目标确认提议 | `statement` 必填；`assumptions` 可选（`{text,source}[]`，旧 string[] 兼容）                           |
+| `propose_plan`      | 方案提议     | `summary` + 非空 `files[{path,reason}]`；`assumptions` 支持 `{text,source}[]`；goal 未确认 → 硬序拒绝 |
+| `report_completion` | 完成声明     | `summary` + 非空 `verification[{command,passed}]`；goal+plan 未确认 → 硬序拒绝                        |
+| `ask_user`          | 会话级澄清   | 任何时点合法；不置决策点；可带 options + `assumptions`（假设核对卡）                                  |
 
 硬约束：数组一层为限；`additionalProperties:false`；`files[].path` 经 `splitPathReason` + `isLikelyPath` 校验。
 
@@ -216,17 +216,17 @@ state transition (useConversationState.transition)
 
 新增危险参数形态（不改变只读白名单的总体结构）：
 
-| 命令 | 只读条件 | 危险形态（→ hazardous） |
-| :--- | :--- | :--- |
-| `sed` | 无 `-i`/`--in-place` 且脚本不含写命令 | `-i`、`--in-place`、`w` 写文件脚本 |
-| `find` | 无 `-exec`/`-delete`/`-fprint`/`-fprintf`/`-ok` | 上述任一 |
-| `awk` | 脚本不含 `system(`/`print >`/`printf >` | 上述任一 |
-| `sort` | 无 `-o`/`--output` | `-o`、`--output` |
-| `git branch` | 无 `-d/-D/-m/-M/-c/-C` | 上述任一（创建/删除/重命名） |
-| `git remote` | 仅列出 | `add/remove/rename/set-url` |
-| `rg` | 无 `--pre` | `--pre`（执行外部命令） |
-| `wget` | 仅 `--spider` 或 `-O-`/`-qO-`（输出到 stdout） | 默认下载写文件、`-O file` |
-| `curl` | GET/HEAD 且无写副作用标志 | `-o`（非 /dev/null）、`-O`、`-T`、`-a`、`-C`、`-d`、`-F`、`-X POST/PUT/PATCH/DELETE` |
+| 命令         | 只读条件                                        | 危险形态（→ hazardous）                                                              |
+| :----------- | :---------------------------------------------- | :----------------------------------------------------------------------------------- |
+| `sed`        | 无 `-i`/`--in-place` 且脚本不含写命令           | `-i`、`--in-place`、`w` 写文件脚本                                                   |
+| `find`       | 无 `-exec`/`-delete`/`-fprint`/`-fprintf`/`-ok` | 上述任一                                                                             |
+| `awk`        | 脚本不含 `system(`/`print >`/`printf >`         | 上述任一                                                                             |
+| `sort`       | 无 `-o`/`--output`                              | `-o`、`--output`                                                                     |
+| `git branch` | 无 `-d/-D/-m/-M/-c/-C`                          | 上述任一（创建/删除/重命名）                                                         |
+| `git remote` | 仅列出                                          | `add/remove/rename/set-url`                                                          |
+| `rg`         | 无 `--pre`                                      | `--pre`（执行外部命令）                                                              |
+| `wget`       | 仅 `--spider` 或 `-O-`/`-qO-`（输出到 stdout）  | 默认下载写文件、`-O file`                                                            |
+| `curl`       | GET/HEAD 且无写副作用标志                       | `-o`（非 /dev/null）、`-O`、`-T`、`-a`、`-C`、`-d`、`-F`、`-X POST/PUT/PATCH/DELETE` |
 
 实现位置：`conversationState.ts` 的 `classifyReadonly`；`tools.ts` 的 `isReadOnlyBash` 消费同源判定。测试：`conversationState.test.ts` 新增“危险参数形态”用例；`tools.test.ts` 新增 `isReadOnlyBash` 回归。
 
@@ -288,16 +288,16 @@ state transition (useConversationState.transition)
 
 ## 7. 技术决策与权衡
 
-| 决策 | 选择 | 权衡 |
-| :--- | :--- | :--- |
-| read 边界 | 根内自动 / 根外授权 | 安全 vs 文件整理便利 |
-| 只读判定 | 参数级形态 + fail-closed | 安全 vs 误伤合法命令 |
-| 计划清单派生 | 只在方案确认时 | 不变量正确性 vs UI 不能提前显示清单（改用决策内容） |
-| 系统代跑 | 只读 + localhost 网络只读 | 安全 vs 外网证据不可代跑 |
-| web_fetch | 拒私网 + 手动重定向 | 安全 vs 本地文档调试（走 open/curl） |
-| pid 清理 | 跳过 <=0 | 安全 vs 可能漏清异常 pid（正常 pid 不受影响） |
-| Outbox | 轻量 Outbox + 跨存储事务性 WAL 已实现并硬化（2026-11-15） | 已发出事件不丢 / 状态与事件一致 vs 每次写入多一次 fsync |
-| 结构化澄清 | `ask_user.assumptions` 核对卡 + 提议假设 `{text,source}`（ADR-014） | 用户逐条核对降低目标歧义 vs 模型需标注来源、参数面扩大 |
+| 决策         | 选择                                                                | 权衡                                                    |
+| :----------- | :------------------------------------------------------------------ | :------------------------------------------------------ |
+| read 边界    | 根内自动 / 根外授权                                                 | 安全 vs 文件整理便利                                    |
+| 只读判定     | 参数级形态 + fail-closed                                            | 安全 vs 误伤合法命令                                    |
+| 计划清单派生 | 只在方案确认时                                                      | 不变量正确性 vs UI 不能提前显示清单（改用决策内容）     |
+| 系统代跑     | 只读 + localhost 网络只读                                           | 安全 vs 外网证据不可代跑                                |
+| web_fetch    | 拒私网 + 手动重定向                                                 | 安全 vs 本地文档调试（走 open/curl）                    |
+| pid 清理     | 跳过 <=0                                                            | 安全 vs 可能漏清异常 pid（正常 pid 不受影响）           |
+| Outbox       | 轻量 Outbox + 跨存储事务性 WAL 已实现并硬化（2026-11-15）           | 已发出事件不丢 / 状态与事件一致 vs 每次写入多一次 fsync |
+| 结构化澄清   | `ask_user.assumptions` 核对卡 + 提议假设 `{text,source}`（ADR-014） | 用户逐条核对降低目标歧义 vs 模型需标注来源、参数面扩大  |
 
 ---
 
@@ -314,22 +314,22 @@ state transition (useConversationState.transition)
 
 ## 9. Spec 映射
 
-| Spec | 覆盖 Requirement |
-| :--- | :--- |
-| `specs/conversation-task/spec.md` | 目标/方案/解决决策、证据核验、循环保护、会话恢复 |
-| `specs/execution-trust/spec.md` | 工具授权、只读判定、沙箱/快照、拒绝记忆、进程取消 |
-| `specs/workspace-environment/spec.md` | 项目打开/初始化、计划清单、环境/能力、服务生命周期 |
-| `specs/delivery-ledger/spec.md` | 交付包、diff 应用/回滚、问题台账 |
-| `specs/provider-gateway/spec.md` | 接入方/模型解析、流式重试、tool_call 修复、Key 验证 |
-| `specs/session-timeline/spec.md` | 事件注册、状态 diff 派生、append/query、聊天导出 |
-| `specs/configuration-secrets/spec.md` | 密钥存储、Provider/Model 配置、Web 访问 |
-| `specs/context-retrieval/spec.md` | @mention 注入、CodeRAG、LSP、压缩、预热 |
-| `specs/platform-runtime/spec.md` | 生命周期、单实例、进程清理、插件注册表 |
-| `specs/change-version/spec.md`（目标态） | 变更集生成/审核/应用冲突/回滚/Git 只读 |
-| `specs/task-orchestration/spec.md`（目标态） | 入队/调度/阻塞恢复/取消/视图 |
-| `specs/usage-cost/spec.md`（目标态） | 用量记录/成本/预算/汇总/缓存 |
-| `specs/extension-integration/spec.md`（目标态） | 扩展注册/生命周期/信任/MCP/Git |
-| `specs/acceptance-quality/spec.md`（目标态） | 验收来源/证据/门禁/交付联动 |
+| Spec                                            | 覆盖 Requirement                                    |
+| :---------------------------------------------- | :-------------------------------------------------- |
+| `specs/conversation-task/spec.md`               | 目标/方案/解决决策、证据核验、循环保护、会话恢复    |
+| `specs/execution-trust/spec.md`                 | 工具授权、只读判定、沙箱/快照、拒绝记忆、进程取消   |
+| `specs/workspace-environment/spec.md`           | 项目打开/初始化、计划清单、环境/能力、服务生命周期  |
+| `specs/delivery-ledger/spec.md`                 | 交付包、diff 应用/回滚、问题台账                    |
+| `specs/provider-gateway/spec.md`                | 接入方/模型解析、流式重试、tool_call 修复、Key 验证 |
+| `specs/session-timeline/spec.md`                | 事件注册、状态 diff 派生、append/query、聊天导出    |
+| `specs/configuration-secrets/spec.md`           | 密钥存储、Provider/Model 配置、Web 访问             |
+| `specs/context-retrieval/spec.md`               | @mention 注入、CodeRAG、LSP、压缩、预热             |
+| `specs/platform-runtime/spec.md`                | 生命周期、单实例、进程清理、插件注册表              |
+| `specs/change-version/spec.md`（目标态）        | 变更集生成/审核/应用冲突/回滚/Git 只读              |
+| `specs/task-orchestration/spec.md`（目标态）    | 入队/调度/阻塞恢复/取消/视图                        |
+| `specs/usage-cost/spec.md`（目标态）            | 用量记录/成本/预算/汇总/缓存                        |
+| `specs/extension-integration/spec.md`（目标态） | 扩展注册/生命周期/信任/MCP/Git                      |
+| `specs/acceptance-quality/spec.md`（目标态）    | 验收来源/证据/门禁/交付联动                         |
 
 ---
 

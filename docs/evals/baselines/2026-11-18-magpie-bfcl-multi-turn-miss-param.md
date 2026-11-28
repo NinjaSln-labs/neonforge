@@ -5,40 +5,40 @@
 
 ## 基本信息
 
-| 字段 | 值 |
-|------|----|
-| 产品版本 / commit | NeonForge `f855e7f`（main） |
-| 模型 / Provider | 本机 Magpie；DSV4.1FE-OD（API model id `opendesign/deepseek-v4.1-flash-eco`，与原 flash 同一模型的 eco/慢速模式） |
-| BFCL handler | `openbmb/MiniCPM-SALA-FC`（BFCL 通用 OpenAI-compatible FC handler） |
-| 适配器 | NeonForge 无头适配器 v0（`prompt=product`，默认参数修复，无容忍模式） |
-| 评估日期（UTC） | 2026-11-18 |
-| Harness 版本 | `bfcl-eval==2026.3.23`（BFCL v4） |
-| 沙箱镜像 | `nf-eval-bfcl@sha256:0aeb737c70ec3519d955b3cf31e79ef951274d8291515ee6c820ceed6333b2c1` |
-| 类别 / 题量 | `multi_turn_miss_param` / 200；非 `--partial-eval`；`--num-threads 1` |
-| 运行成本 | 本地模型无外部 API 计费；生成阶段 4 小时 18 分；输入 25,201,002 tokens，输出 750,879 tokens；3,270 次模型调用 |
+| 字段              | 值                                                                                                                |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 产品版本 / commit | NeonForge `f855e7f`（main）                                                                                       |
+| 模型 / Provider   | 本机 Magpie；DSV4.1FE-OD（API model id `opendesign/deepseek-v4.1-flash-eco`，与原 flash 同一模型的 eco/慢速模式） |
+| BFCL handler      | `openbmb/MiniCPM-SALA-FC`（BFCL 通用 OpenAI-compatible FC handler）                                               |
+| 适配器            | NeonForge 无头适配器 v0（`prompt=product`，默认参数修复，无容忍模式）                                             |
+| 评估日期（UTC）   | 2026-11-18                                                                                                        |
+| Harness 版本      | `bfcl-eval==2026.3.23`（BFCL v4）                                                                                 |
+| 沙箱镜像          | `nf-eval-bfcl@sha256:0aeb737c70ec3519d955b3cf31e79ef951274d8291515ee6c820ceed6333b2c1`                            |
+| 类别 / 题量       | `multi_turn_miss_param` / 200；非 `--partial-eval`；`--num-threads 1`                                             |
+| 运行成本          | 本地模型无外部 API 计费；生成阶段 4 小时 18 分；输入 25,201,002 tokens，输出 750,879 tokens；3,270 次模型调用     |
 
 ## 结果
 
-| 指标 | 值 |
-|------|----|
-| 正确 / 总数 | **79 / 200** |
-| 准确率 | **39.50%** |
+| 指标               | 值                                        |
+| ------------------ | ----------------------------------------- |
+| 正确 / 总数        | **79 / 200**                              |
+| 准确率             | **39.50%**                                |
 | 每题延迟（含多轮） | 均值 77.3 秒、中位 67.5 秒、最大 319.7 秒 |
-| 无效题 | 121 / 200 |
+| 无效题             | 121 / 200                                 |
 
 ### 无效题归因（BFCL 评分器）
 
-| 原因 | 数量 |
-|------|------|
-| `VehicleControlAPI` 状态与 ground truth 不一致 | 33 |
-| 缺少全部 ground truth 执行结果 | 16 |
-| `TravelAPI` 状态不一致 | 12 |
-| `TradingBot` 状态不一致 | 8 |
-| `GorillaFileSystem` 状态不一致 | 7 |
-| `TwitterAPI` 状态不一致 | 7 |
-| `TicketAPI` 状态不一致 | 6 |
-| `MessageAPI` 状态不一致 | 3 |
-| 其他（含 `Model response list is empty for turn 1` 12 题） | 45 |
+| 原因                                                       | 数量 |
+| ---------------------------------------------------------- | ---- |
+| `VehicleControlAPI` 状态与 ground truth 不一致             | 33   |
+| 缺少全部 ground truth 执行结果                             | 16   |
+| `TravelAPI` 状态不一致                                     | 12   |
+| `TradingBot` 状态不一致                                    | 8    |
+| `GorillaFileSystem` 状态不一致                             | 7    |
+| `TwitterAPI` 状态不一致                                    | 7    |
+| `TicketAPI` 状态不一致                                     | 6    |
+| `MessageAPI` 状态不一致                                    | 3    |
+| 其他（含 `Model response list is empty for turn 1` 12 题） | 45   |
 
 ### 轮次结束行为
 
@@ -48,23 +48,23 @@
 
 ## 与前序 multi-turn 对照
 
-| 类别 | 正确/总数 | 准确率 | 每题平均延迟 | 备注 |
-|------|-----------|--------|--------------|------|
-| `multi_turn_base`（flash 模式） | 112/200 | 56.00% | 41.0 秒 | 单次运行 |
-| `multi_turn_long_context`（eco 模式） | 92/200 | 46.00% | 82.2 秒 | 单次运行 |
-| `multi_turn_miss_func`（eco 模式） | 89/200 | 44.50% | 103.5 秒 | 单次运行 |
-| `multi_turn_miss_param`（eco 模式） | 79/200 | 39.50% | 77.3 秒 | 本卡；单次运行 |
+| 类别                                  | 正确/总数 | 准确率 | 每题平均延迟 | 备注           |
+| ------------------------------------- | --------- | ------ | ------------ | -------------- |
+| `multi_turn_base`（flash 模式）       | 112/200   | 56.00% | 41.0 秒      | 单次运行       |
+| `multi_turn_long_context`（eco 模式） | 92/200    | 46.00% | 82.2 秒      | 单次运行       |
+| `multi_turn_miss_func`（eco 模式）    | 89/200    | 44.50% | 103.5 秒     | 单次运行       |
+| `multi_turn_miss_param`（eco 模式）   | 79/200    | 39.50% | 77.3 秒      | 本卡；单次运行 |
 
 - 四个类别都是同一模型；`miss_param` 在四个多轮类别中最低，且 121 题无效、12 题首轮空响应。差异可能来自题目结构、参数缺失处理和输出长度，不能单独归因于某一能力。
 
 ## 失败/边界样例
 
-| 用例 | 现象 | 归因 | 是否产品问题 |
-|------|------|------|--------------|
-| 33 题 | `VehicleControlAPI` 状态不一致 | 工具执行序列与 ground truth 不一致 | 模型任务执行 |
-| 16 题 | 缺少全部 ground truth 执行结果 | 未完成必要工具调用 | 模型任务执行 |
-| 12 题 | `Model response list is empty for turn 1` | 模型返回空响应 | 模型/适配器需抽查 |
-| 199/200 题 | 轮次结束日志 | 自然语言结束轮次的预期路径 | 非异常 |
+| 用例       | 现象                                      | 归因                               | 是否产品问题      |
+| ---------- | ----------------------------------------- | ---------------------------------- | ----------------- |
+| 33 题      | `VehicleControlAPI` 状态不一致            | 工具执行序列与 ground truth 不一致 | 模型任务执行      |
+| 16 题      | 缺少全部 ground truth 执行结果            | 未完成必要工具调用                 | 模型任务执行      |
+| 12 题      | `Model response list is empty for turn 1` | 模型返回空响应                     | 模型/适配器需抽查 |
+| 199/200 题 | 轮次结束日志                              | 自然语言结束轮次的预期路径         | 非异常            |
 
 ## 安全与限制
 

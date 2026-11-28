@@ -5,25 +5,25 @@
 
 ## 基本信息
 
-| 字段 | 值 |
-|------|----|
-| 分析日期 | 2026-11-22（UTC job 2026-11-22T01:09–01:38Z） |
-| 模型 / Provider | 本机 Magpie `opendesign/deepseek-v4.1-flash-eco`（DSV4.1FE-OD） |
-| Harness | Harbor `0.26.0` |
-| 数据集 | `terminal-bench@2.0`（git commit `69671fbaac6d67a7ef0dfec016cc38a64ef7a77c`；任务镜像 tag `alexgshaw/*:20251031`） |
-| v4 agent | `neonforge-terminal-v4-trace` 0.4.0（commit `4f004c7`）：v1 基线 40 轮 + `commands_log`（命令截断 2000 字符；失败输出尾 800 字符） |
-| 配置 | 300 秒单命令、40 轮、2 并发；`--agent-timeout-multiplier 4`、`--verifier-timeout-multiplier 4` |
-| 沙箱 | 同一专用 QEMU/KVM VM：Ubuntu 24.04.5、6 vCPU、8 GB、100 GB；任务容器不挂宿主 Docker socket |
-| 凭据 | Magpie Key 只在宿主环境；任务/验证容器不持有；原始轨迹只留在 VM/`.scratch` |
+| 字段            | 值                                                                                                                                 |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 分析日期        | 2026-11-22（UTC job 2026-11-22T01:09–01:38Z）                                                                                      |
+| 模型 / Provider | 本机 Magpie `opendesign/deepseek-v4.1-flash-eco`（DSV4.1FE-OD）                                                                    |
+| Harness         | Harbor `0.26.0`                                                                                                                    |
+| 数据集          | `terminal-bench@2.0`（git commit `69671fbaac6d67a7ef0dfec016cc38a64ef7a77c`；任务镜像 tag `alexgshaw/*:20251031`）                 |
+| v4 agent        | `neonforge-terminal-v4-trace` 0.4.0（commit `4f004c7`）：v1 基线 40 轮 + `commands_log`（命令截断 2000 字符；失败输出尾 800 字符） |
+| 配置            | 300 秒单命令、40 轮、2 并发；`--agent-timeout-multiplier 4`、`--verifier-timeout-multiplier 4`                                     |
+| 沙箱            | 同一专用 QEMU/KVM VM：Ubuntu 24.04.5、6 vCPU、8 GB、100 GB；任务容器不挂宿主 Docker socket                                         |
+| 凭据            | Magpie Key 只在宿主环境；任务/验证容器不持有；原始轨迹只留在 VM/`.scratch`                                                         |
 
 ## 结果总览
 
-| 任务 | Reward | 测试通过 | 命令数 | 失败命令 | tokens（输入 / 输出） | 用时 | 轨迹 |
-|------|-------:|----------|-------:|---------:|----------------------|------|------|
-| `make-doom-for-mips` | 0.0 | 0/3 | 52 | 2 | 2,418,743 / 20,041 | 11m32 | 有 |
-| `pytorch-model-cli` | 0.0 | 5/6 | 32 | 2 | 262,964 / 17,477 | 5m40 | 有 |
-| `video-processing` | 0.0 | 2/5 | 39 | 4 | 2,721,622 / 38,345 | 14m27 | 有 |
-| `mteb-leaderboard` | 0.0（异常） | 0/2 | 未记录 | — | 未记录 | 13m40 | **无**（300 秒命令超时；v5 补跑见追加节） |
+| 任务                 |      Reward | 测试通过 | 命令数 | 失败命令 | tokens（输入 / 输出） | 用时  | 轨迹                                      |
+| -------------------- | ----------: | -------- | -----: | -------: | --------------------- | ----- | ----------------------------------------- |
+| `make-doom-for-mips` |         0.0 | 0/3      |     52 |        2 | 2,418,743 / 20,041    | 11m32 | 有                                        |
+| `pytorch-model-cli`  |         0.0 | 5/6      |     32 |        2 | 262,964 / 17,477      | 5m40  | 有                                        |
+| `video-processing`   |         0.0 | 2/5      |     39 |        4 | 2,721,622 / 38,345    | 14m27 | 有                                        |
+| `mteb-leaderboard`   | 0.0（异常） | 0/2      | 未记录 |        — | 未记录                | 13m40 | **无**（300 秒命令超时；v5 补跑见追加节） |
 
 - Job：4 trials、1 个 `RuntimeError`（mteb 单命令 300 秒超时）、0 通过；总运行 29m31。
 - 已知 3 个 trial 合计 5,403,329 / 75,863 tokens；mteb 异常 trial 的用量未汇总。
@@ -104,4 +104,5 @@
 - **mteb 轨迹补充**：v4 异常 trial 的 metadata 丢失；v5 600 秒补跑已获得 39 条命令轨迹，但仍未写出 `result.txt`，且无法判定任务期望的本地数据位置。不能把该次轨迹当作完整根因。
 - **不是官方成绩**：Harbor 版本、数据集 commit、自定义 agent 与 Magpie 路由均与官方评测不同。
 </content>
+
 </file_path>

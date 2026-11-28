@@ -41,37 +41,37 @@ neonforge/
 
 ### 产品经理 / 设计师
 
-| 顺序 | 文档 | 学什么 |
-|------|------|--------|
-| 1 | `product/00-product-design.md` | 完整产品定义：理念、页面、交互、状态、语气 |
-| 2 | `product/01-user-flows.md` | 所有用户路径和分支 |
-| 3 | `product/00-product-reference.md` | 竞品做了什么、我们怎么差异化 |
-| 4 | `product/02-components.md` | 每个组件的设计意图和变体 |
-| 5 | `product/03-design-tokens.md` | 视觉语言（做 Figma 稿时直接引用） |
-| 6 | `product/05-visual-spec.md` | 屏幕级视觉、动效时序、Figma 画板 |
-| 7 | `product/06-product-design-audit.md` | 交付前交叉审计：冲突、缺口、修复顺序 |
+| 顺序 | 文档                                 | 学什么                                     |
+| ---- | ------------------------------------ | ------------------------------------------ |
+| 1    | `product/00-product-design.md`       | 完整产品定义：理念、页面、交互、状态、语气 |
+| 2    | `product/01-user-flows.md`           | 所有用户路径和分支                         |
+| 3    | `product/00-product-reference.md`    | 竞品做了什么、我们怎么差异化               |
+| 4    | `product/02-components.md`           | 每个组件的设计意图和变体                   |
+| 5    | `product/03-design-tokens.md`        | 视觉语言（做 Figma 稿时直接引用）          |
+| 6    | `product/05-visual-spec.md`          | 屏幕级视觉、动效时序、Figma 画板           |
+| 7    | `product/06-product-design-audit.md` | 交付前交叉审计：冲突、缺口、修复顺序       |
 
 ### 前端工程师
 
-| 顺序 | 文档 | 学什么 |
-|------|------|--------|
-| 1 | `product/00-product-design.md` | 要建什么：所有页面和它们的逻辑 |
-| 2 | `product/01-user-flows.md` | 页面间怎么跳转、每个分支的处理 |
-| 3 | `product/02-components.md` | 每个组件的规格：尺寸、状态、动画参数 |
-| 4 | `product/03-design-tokens.md` | CSS 变量和 Tailwind 配置，直接复制到代码 |
-| 5 | `domain/05-architecture.md` | 整体架构，理解模块目录 |
-| 6 | `domain/07-api-gateway.md` | 与 DeepSeek API 的对接方式 |
+| 顺序 | 文档                           | 学什么                                   |
+| ---- | ------------------------------ | ---------------------------------------- |
+| 1    | `product/00-product-design.md` | 要建什么：所有页面和它们的逻辑           |
+| 2    | `product/01-user-flows.md`     | 页面间怎么跳转、每个分支的处理           |
+| 3    | `product/02-components.md`     | 每个组件的规格：尺寸、状态、动画参数     |
+| 4    | `product/03-design-tokens.md`  | CSS 变量和 Tailwind 配置，直接复制到代码 |
+| 5    | `domain/05-architecture.md`    | 整体架构，理解模块目录                   |
+| 6    | `domain/07-api-gateway.md`     | 与 DeepSeek API 的对接方式               |
 
 ### 后端 / Electron 工程师
 
-| 顺序 | 文档 | 学什么 |
-|------|------|--------|
-| 1 | `product/00-product-design.md` | 了解产品是什么（尤其 §十 非功能规格） |
-| 2 | `domain/05-architecture.md` | 架构总览 + 模块目录树 |
-| 3 | `domain/03-strategic-design.md` + `domain/04-tactical-design.md` | 领域模型和聚合根 |
-| 4 | `domain/06-domain-events.md` | 事件通信 |
-| 5 | `domain/07-api-gateway.md` | DeepSeek API 对接 |
-| 6 | `domain/02-domain-model.md` | 核心设计原则和统一语言 |
+| 顺序 | 文档                                                             | 学什么                                |
+| ---- | ---------------------------------------------------------------- | ------------------------------------- |
+| 1    | `product/00-product-design.md`                                   | 了解产品是什么（尤其 §十 非功能规格） |
+| 2    | `domain/05-architecture.md`                                      | 架构总览 + 模块目录树                 |
+| 3    | `domain/03-strategic-design.md` + `domain/04-tactical-design.md` | 领域模型和聚合根                      |
+| 4    | `domain/06-domain-events.md`                                     | 事件通信                              |
+| 5    | `domain/07-api-gateway.md`                                       | DeepSeek API 对接                     |
+| 6    | `domain/02-domain-model.md`                                      | 核心设计原则和统一语言                |
 
 ---
 
@@ -79,33 +79,33 @@ neonforge/
 
 ### 产品设计规范 → 其他文档
 
-| 产品规范中的引用 | 详见 |
-|----------------|------|
-| 页面布局和交互 | `product/01-user-flows.md` — 完整流转 |
-| 具体组件的样式 | `product/02-components.md` — 组件规格 |
+| 产品规范中的引用     | 详见                                     |
+| -------------------- | ---------------------------------------- |
+| 页面布局和交互       | `product/01-user-flows.md` — 完整流转    |
+| 具体组件的样式       | `product/02-components.md` — 组件规格    |
 | 颜色、字体、间距数值 | `product/03-design-tokens.md` — 设计令牌 |
-| 竞品对比 | `product/00-product-reference.md` |
+| 竞品对比             | `product/00-product-reference.md`        |
 
 ### 用户旅程图 → 其他文档
 
-| 旅程图中的引用 | 详见 |
-|-------------|------|
-| Flow 3 主工作区 | `product/00-product-design.md` §3.3 |
-| Flow 5 搭档工作流 | `product/00-product-design.md` §四 |
-| Flow 6 Diff 审核 | `product/00-product-design.md` §3.5 + `product/02-components.md` §8 |
-| 所有界面清单 S1-S14 | `product/00-product-design.md` §三 |
+| 旅程图中的引用      | 详见                                                                |
+| ------------------- | ------------------------------------------------------------------- |
+| Flow 3 主工作区     | `product/00-product-design.md` §3.3                                 |
+| Flow 5 搭档工作流   | `product/00-product-design.md` §四                                  |
+| Flow 6 Diff 审核    | `product/00-product-design.md` §3.5 + `product/02-components.md` §8 |
+| 所有界面清单 S1-S14 | `product/00-product-design.md` §三                                  |
 
 ### 组件规格 → 其他文档
 
-| 组件 | 设计令牌引用 |
-|------|------------|
-| Button | `--nf-accent`, `--nf-space-2`, `--nf-radius-md`, `--nf-duration-fast`（2026-08-16 第 17 轮审计 #1：原 --nf-blue——03 终版名 --nf-accent）|
-| Input | `--nf-bg-elevated`, `--nf-border`, `--nf-accent`, `--nf-radius-lg`（#1：原 --nf-bg-input）|
-| MessageBubble | `--nf-bubble-user`, `--nf-bubble-partner`, `--nf-radius-xl`, `--nf-duration-fast` |
-| BreathBar | `--nf-accent`, `--nf-amber`, `--nf-ease-in-out`（#1：原 --nf-blue）|
-| DiffView | `--nf-diff-add-bg`, `--nf-diff-remove-bg`, `--nf-green`, `--nf-red` |
-| ... | 见 `product/02-components.md` 各组件详细说明 |
-| 所有组件 | 颜色、间距、圆角等参见 `product/03-design-tokens.md` |
+| 组件          | 设计令牌引用                                                                                                                             |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Button        | `--nf-accent`, `--nf-space-2`, `--nf-radius-md`, `--nf-duration-fast`（2026-08-16 第 17 轮审计 #1：原 --nf-blue——03 终版名 --nf-accent） |
+| Input         | `--nf-bg-elevated`, `--nf-border`, `--nf-accent`, `--nf-radius-lg`（#1：原 --nf-bg-input）                                               |
+| MessageBubble | `--nf-bubble-user`, `--nf-bubble-partner`, `--nf-radius-xl`, `--nf-duration-fast`                                                        |
+| BreathBar     | `--nf-accent`, `--nf-amber`, `--nf-ease-in-out`（#1：原 --nf-blue）                                                                      |
+| DiffView      | `--nf-diff-add-bg`, `--nf-diff-remove-bg`, `--nf-green`, `--nf-red`                                                                      |
+| ...           | 见 `product/02-components.md` 各组件详细说明                                                                                             |
+| 所有组件      | 颜色、间距、圆角等参见 `product/03-design-tokens.md`                                                                                     |
 
 ---
 
@@ -113,12 +113,12 @@ neonforge/
 
 **意图确认领域模型重设计（进行中）**——重构期权威文档（scratch，不入 docs 索引）：
 
-| 文档 | 作用 |
-|------|------|
-| `.scratch/neonforge-v1/intent-confirmation-domain-design.md` | **重构期设计权威**（§1-9：决策点触发权/完成证据/PlanProposal/RejectReason/推进保障/双维门控/测试域 DDD；S0-S7 分阶段）|
-| `.scratch/neonforge-v1/intent-confirmation-doc-audit.md` | 设计文档五轮审计闭环（1C+16M+14m 全修）|
-| `F:\neonforge-competitors\reports\neonforge-intent-confirmation-research.md` | 三视角调研依据（9 竞品+14 源码+20+ 学术）——2026-08-16 第 14 轮审计 #5：**物理位置在项目外** `F:\neonforge-competitors\`（仓库内引用为逻辑路径——内容已内化设计文档）|
-| `docs/PRODUCT-DOC-AUDIT.md`（最新轮——当前第 23 轮；r4–r22 / r24–r25 归档）| 产品文档审计（领域/产品文档就绪度与验收标准——修复随轮次回写）|
+| 文档                                                                         | 作用                                                                                                                                                                |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.scratch/neonforge-v1/intent-confirmation-domain-design.md`                 | **重构期设计权威**（§1-9：决策点触发权/完成证据/PlanProposal/RejectReason/推进保障/双维门控/测试域 DDD；S0-S7 分阶段）                                              |
+| `.scratch/neonforge-v1/intent-confirmation-doc-audit.md`                     | 设计文档五轮审计闭环（1C+16M+14m 全修）                                                                                                                             |
+| `F:\neonforge-competitors\reports\neonforge-intent-confirmation-research.md` | 三视角调研依据（9 竞品+14 源码+20+ 学术）——2026-08-16 第 14 轮审计 #5：**物理位置在项目外** `F:\neonforge-competitors\`（仓库内引用为逻辑路径——内容已内化设计文档） |
+| `docs/PRODUCT-DOC-AUDIT.md`（最新轮——当前第 23 轮；r4–r22 / r24–r25 归档）   | 产品文档审计（领域/产品文档就绪度与验收标准——修复随轮次回写）                                                                                                       |
 
 > 冲突裁决：重构期实现语义以 scratch 设计文档为准（领域/产品文档同步已完成——A0 v4.0 / D0 v2.2 / 07 v1.1 / 07-api-gateway 推进保障同步）；本索引的旧 Phase 1-3 为 0-1 初始搭建序，重构按设计文档 S0-S7 执行。
 > 历史文档标注（2026-08-16 第 6/9 轮审计）：`product/06-product-design-audit.md`（07-31）与 `domain/08-domain-design-audit.md`（M1-M10）为历史审计——裁决已回写 A0，与新设计无冲突，仅作追溯参考；`domain/01-reference-analysis.md`（07-30）为历史竞品技术分析——无确认语义冲突（新调研引用见本表上方）。

@@ -7,41 +7,41 @@
 
 ## 一、全链验证（当前 HEAD 实测）
 
-| 层 | 结果 |
-|----|------|
-| L1 领域逻辑 | ✅ **436/436**（`npx vitest run`——D3 12+1 · #8 +2） |
-| L2 契约 | ✅ 双 tsc 0 错（tsconfig.json + tsconfig.main.json） |
-| L3 交互 | ✅ 49/49（`npx playwright test --project=interaction`——D3-1/2 + S7-1 flaky 修复） |
-| Lint | ✅ 0 errors（6 既有 warnings——非本范围引入） |
-| Format | ✅ Prettier 全过 |
-| 构建 | ✅ build:main（含 preload esbuild） |
-| CI | ✅ qa.yml run `31961156973` success（含 L5 36） |
+| 层          | 结果                                                                              |
+| ----------- | --------------------------------------------------------------------------------- |
+| L1 领域逻辑 | ✅ **436/436**（`npx vitest run`——D3 12+1 · #8 +2）                               |
+| L2 契约     | ✅ 双 tsc 0 错（tsconfig.json + tsconfig.main.json）                              |
+| L3 交互     | ✅ 49/49（`npx playwright test --project=interaction`——D3-1/2 + S7-1 flaky 修复） |
+| Lint        | ✅ 0 errors（6 既有 warnings——非本范围引入）                                      |
+| Format      | ✅ Prettier 全过                                                                  |
+| 构建        | ✅ build:main（含 preload esbuild）                                               |
+| CI          | ✅ qa.yml run `31961156973` success（含 L5 36）                                   |
 
 ## 二、双轴代码审查
 
 ### Spec 轴（对照 ADR-005 + D3 DoD + #8/#9 验收）
 
-| 裁定/断言 | 证据 | 判定 |
-|-----------|------|------|
-| ADR-005 ① 权威=main | PlannedFilesStore 落盘 + instance 惰性单例（vitest 不触 app.getPath） | ✅ |
-| ADR-005 ② 跨重启恢复（含恢复窗口语义） | store 持久化往返 L1 12 用例 + 目标确认=任务边界铁律澄清 | ✅ |
-| ADR-005 ③ IPC 三件套 | planned-files:load/add/reset + preload 类型化 + 旧契约移除 | ✅ |
-| ADR-005 ④ filesApprovedRef store 驱动 | syncPlanApprovedFromStore + L1 门控用例（恢复≠授权放行——needApproval 保留） | ✅ |
-| ADR-005 ⑤ 三基准统一 | plannedComplete 绝对路径回归 + store 不加工路径 | ✅ |
-| D3 DoD 8 项 | L1 434→436/L2/L3 49/lint/行为验收全项/ADR-005/CI 绿 | ✅ |
-| #8 拦截引导 | sessionGate 拒绝回填与 sysPrompt ⑬⑭ 格式契约**一致**（「先输出【目标确认：…】提议」↔ ⑬ 目标提议标记；「【执行方案】清单（文件+原因）」↔ ⑭ 文件行格式）——模型收到的引导可执行 | ✅ |
-| #9 e2e 收敛判定 | 探索容忍 + 四阶段停滞判死（见风险核查 1） | ✅ |
+| 裁定/断言                              | 证据                                                                                                                                                                         | 判定 |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| ADR-005 ① 权威=main                    | PlannedFilesStore 落盘 + instance 惰性单例（vitest 不触 app.getPath）                                                                                                        | ✅   |
+| ADR-005 ② 跨重启恢复（含恢复窗口语义） | store 持久化往返 L1 12 用例 + 目标确认=任务边界铁律澄清                                                                                                                      | ✅   |
+| ADR-005 ③ IPC 三件套                   | planned-files:load/add/reset + preload 类型化 + 旧契约移除                                                                                                                   | ✅   |
+| ADR-005 ④ filesApprovedRef store 驱动  | syncPlanApprovedFromStore + L1 门控用例（恢复≠授权放行——needApproval 保留）                                                                                                  | ✅   |
+| ADR-005 ⑤ 三基准统一                   | plannedComplete 绝对路径回归 + store 不加工路径                                                                                                                              | ✅   |
+| D3 DoD 8 项                            | L1 434→436/L2/L3 49/lint/行为验收全项/ADR-005/CI 绿                                                                                                                          | ✅   |
+| #8 拦截引导                            | sessionGate 拒绝回填与 sysPrompt ⑬⑭ 格式契约**一致**（「先输出【目标确认：…】提议」↔ ⑬ 目标提议标记；「【执行方案】清单（文件+原因）」↔ ⑭ 文件行格式）——模型收到的引导可执行 | ✅   |
+| #9 e2e 收敛判定                        | 探索容忍 + 四阶段停滞判死（见风险核查 1）                                                                                                                                    | ✅   |
 
 ### Standards 轴
 
-| 规则 | 核查 | 判定 |
-|------|------|------|
-| 单源（缝隙 4） | store=唯一落盘权威；renderer 镜像只读同步；无第二实现 | ✅ |
-| 领域纯函数（IO 归应用层） | PlannedFilesStore 属 main 应用层；领域层无 store 引用 | ✅ |
-| IPC 输入校验 | planned-files:add Array.isArray 防御 | ✅ |
-| 失败策略一致 | IPC 失败忽略（镜像优先）——与 localStorage 断点续做同策略 | ✅ |
-| 可测性 | 路径注入 + 惰性单例（工具/文档） | ✅ |
-| 防双源 | Blog=发布物（非工程 delta）；docs 引用不复制 HANDOFF | ✅ |
+| 规则                      | 核查                                                     | 判定 |
+| ------------------------- | -------------------------------------------------------- | ---- |
+| 单源（缝隙 4）            | store=唯一落盘权威；renderer 镜像只读同步；无第二实现    | ✅   |
+| 领域纯函数（IO 归应用层） | PlannedFilesStore 属 main 应用层；领域层无 store 引用    | ✅   |
+| IPC 输入校验              | planned-files:add Array.isArray 防御                     | ✅   |
+| 失败策略一致              | IPC 失败忽略（镜像优先）——与 localStorage 断点续做同策略 | ✅   |
+| 可测性                    | 路径注入 + 惰性单例（工具/文档）                         | ✅   |
+| 防双源                    | Blog=发布物（非工程 delta）；docs 引用不复制 HANDOFF     | ✅   |
 
 ### 风险核查（重点）
 
@@ -54,16 +54,16 @@
 
 ## 三、文档/发布一致性审查
 
-| 项 | 核查 | 判定 |
-|----|------|------|
-| README 计数 | L1 434 过时（#8 +2 → 436）——**fixed（998844e）** | ✅ |
-| README 确认卡命名 | 目标/方案/解决——与 D0 v2.2 一致；旧词残留 0 | ✅ |
-| Roadmap ↔ Issues | README Roadmap 与 16 条 issue + 3 Milestones 互链 | ✅ |
-| Release v0.1.0 | pre-release + dmg/zip 资产 + notes；README 下载入口 | ✅ |
-| Blog 定稿 | docs/launch/blog/01-03 系列头/导航一致；草稿区标记 | ✅ |
-| HANDOFF §2 最近完成 | 缺 #8/#9/dmg/Blog/Roadmap/标语行——**fixed（本报告修复）** | ✅ |
-| HANDOFF 质量基线 | L1 434 过时 + CI run 旧——**fixed（本报告修复）** | ✅ |
-| 覆盖矩阵 | 表 8 补 #8 断言 + #9 e2e 记录——**fixed（998844e）** | ✅ |
+| 项                  | 核查                                                      | 判定 |
+| ------------------- | --------------------------------------------------------- | ---- |
+| README 计数         | L1 434 过时（#8 +2 → 436）——**fixed（998844e）**          | ✅   |
+| README 确认卡命名   | 目标/方案/解决——与 D0 v2.2 一致；旧词残留 0               | ✅   |
+| Roadmap ↔ Issues    | README Roadmap 与 16 条 issue + 3 Milestones 互链         | ✅   |
+| Release v0.1.0      | pre-release + dmg/zip 资产 + notes；README 下载入口       | ✅   |
+| Blog 定稿           | docs/launch/blog/01-03 系列头/导航一致；草稿区标记        | ✅   |
+| HANDOFF §2 最近完成 | 缺 #8/#9/dmg/Blog/Roadmap/标语行——**fixed（本报告修复）** | ✅   |
+| HANDOFF 质量基线    | L1 434 过时 + CI run 旧——**fixed（本报告修复）**          | ✅   |
+| 覆盖矩阵            | 表 8 补 #8 断言 + #9 e2e 记录——**fixed（998844e）**       | ✅   |
 
 ## 四、发现清单
 

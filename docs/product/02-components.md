@@ -10,44 +10,44 @@
 
 ### 变体
 
-| 变体 | 类名 | 用途 |
-|------|------|------|
-| Primary | `.nf-button--primary` | 主要操作（继续、发送、确认全部） |
-| Secondary | `.nf-button--secondary` | 次要操作（调整、取消、稍后） |
-| Ghost | `.nf-button--ghost` | 最低优先级（换个方案、我知道了） |
-| Icon | `.nf-button--icon` | 纯图标（关闭、折叠、切换视图、发送） |
-| Link | `.nf-button--link` | 文字链接（打开已有项目、从零开始、+ 新任务、显示代码） |
+| 变体      | 类名                    | 用途                                                   |
+| --------- | ----------------------- | ------------------------------------------------------ |
+| Primary   | `.nf-button--primary`   | 主要操作（继续、发送、确认全部）                       |
+| Secondary | `.nf-button--secondary` | 次要操作（调整、取消、稍后）                           |
+| Ghost     | `.nf-button--ghost`     | 最低优先级（换个方案、我知道了）                       |
+| Icon      | `.nf-button--icon`      | 纯图标（关闭、折叠、切换视图、发送）                   |
+| Link      | `.nf-button--link`      | 文字链接（打开已有项目、从零开始、+ 新任务、显示代码） |
 
 ### 色值
 
-| 变体 | 背景 | 文字 | 边框 |
-|------|------|------|------|
-| Primary | `--nf-accent` (#6366F1) | #FFFFFF | none |
-| Secondary | `--nf-bg-elevated` (#262044) | `--nf-text-primary` | `--nf-border` |
-| Ghost | transparent | `--nf-text-secondary` | none |
-| Icon | transparent | `--nf-text-secondary` | none |
-| Link | transparent | `--nf-accent` | none |
+| 变体      | 背景                         | 文字                  | 边框          |
+| --------- | ---------------------------- | --------------------- | ------------- |
+| Primary   | `--nf-accent` (#6366F1)      | #FFFFFF               | none          |
+| Secondary | `--nf-bg-elevated` (#262044) | `--nf-text-primary`   | `--nf-border` |
+| Ghost     | transparent                  | `--nf-text-secondary` | none          |
+| Icon      | transparent                  | `--nf-text-secondary` | none          |
+| Link      | transparent                  | `--nf-accent`         | none          |
 
 (hover: 各背景亮度 +5%.)
 
 ### 尺寸
 
-| 尺寸 | 高度 | 水平 padding | 字号 | 适用 |
-|------|------|-------------|------|------|
-| `sm` | 28px | 12px | 12px | 标签、任务状态 |
-| `md` | 36px | 16px | 14px | 标准按钮 |
-| `lg` | 48px | 24px | 16px | 强调按钮（继续、全部接受） |
+| 尺寸 | 高度 | 水平 padding | 字号 | 适用                       |
+| ---- | ---- | ------------ | ---- | -------------------------- |
+| `sm` | 28px | 12px         | 12px | 标签、任务状态             |
+| `md` | 36px | 16px         | 14px | 标准按钮                   |
+| `lg` | 48px | 24px         | 16px | 强调按钮（继续、全部接受） |
 
 ### 状态
 
-| 状态 | 触发 | 视觉 |
-|------|------|------|
-| default | 初始 | 见色彩表 |
-| hover | 鼠标悬停 | 背景加深 5% |
-| active | 鼠标按下 | 背景加深 10%，scale 0.98 |
-| focus | Tab 聚焦 | 2px 蓝色外框（`box-shadow: 0 0 0 2px --nf-accent`） |
-| disabled | 不可操作 | opacity 0.4, cursor not-allowed |
-| loading | 操作进行中 | 文字替换为 16px spinner, 按钮保持原宽度 |
+| 状态     | 触发       | 视觉                                                |
+| -------- | ---------- | --------------------------------------------------- |
+| default  | 初始       | 见色彩表                                            |
+| hover    | 鼠标悬停   | 背景加深 5%                                         |
+| active   | 鼠标按下   | 背景加深 10%，scale 0.98                            |
+| focus    | Tab 聚焦   | 2px 蓝色外框（`box-shadow: 0 0 0 2px --nf-accent`） |
+| disabled | 不可操作   | opacity 0.4, cursor not-allowed                     |
+| loading  | 操作进行中 | 文字替换为 16px spinner, 按钮保持原宽度             |
 
 ### 间距
 
@@ -60,39 +60,41 @@
 
 ### 变体
 
-| 变体 | 用法 |
-|------|------|
-| Standalone | 独立输入框（启动页、新建项目页） |
-| Inline | 搭档对话框底部输入框 |
+| 变体       | 用法                                  |
+| ---------- | ------------------------------------- |
+| Standalone | 独立输入框（启动页、新建项目页）      |
+| Inline     | 搭档对话框底部输入框                  |
 | Expandable | diff 批注输入框（初始隐藏，点击出现） |
 
 ### 尺寸
 
-| 属性 | Standalone | Inline | Expandable |
-|------|-----------|--------|------------|
-| 宽度 | 520px 固定 | 100% | 100% |
-| 最小高度 | 48px | 36px | 36px |
-| 最大高度 | 120px（自动扩高） | 120px | 72px |
-| 字号 | 16px | 14px | 14px |
-| 行高 | 1.5 | 1.5 | 1.5 |
+| 属性     | Standalone        | Inline | Expandable |
+| -------- | ----------------- | ------ | ---------- |
+| 宽度     | 520px 固定        | 100%   | 100%       |
+| 最小高度 | 48px              | 36px   | 36px       |
+| 最大高度 | 120px（自动扩高） | 120px  | 72px       |
+| 字号     | 16px              | 14px   | 14px       |
+| 行高     | 1.5               | 1.5    | 1.5        |
 
 ### 状态
 
-| 状态 | 视觉 |
-|------|------|
-| default | border: 1px solid `--nf-border`, 背景: `--nf-bg-elevated` |
-| hover | border-color 加深 |
-| focus | border: 1px solid `--nf-accent`, box-shadow: 0 0 0 3px rgba(99,102,241,0.15) |
-| disabled | opacity 0.4 |
-| error | border: 1px solid `--nf-red` |
+| 状态     | 视觉                                                                         |
+| -------- | ---------------------------------------------------------------------------- |
+| default  | border: 1px solid `--nf-border`, 背景: `--nf-bg-elevated`                    |
+| hover    | border-color 加深                                                            |
+| focus    | border: 1px solid `--nf-accent`, box-shadow: 0 0 0 3px rgba(99,102,241,0.15) |
+| disabled | opacity 0.4                                                                  |
+| error    | border: 1px solid `--nf-red`                                                 |
 
 ### 附加元素
 
 **Inline 输入框右下角：**
+
 - 发送按钮（Icon 变体）：输入框有内容时显示（opacity 0→1, 0.15s），无内容时隐藏（opacity 1→0）
 - 按钮图标：↑（箭头向上）
 
 **占位文字：**
+
 - Standalone: "用自然语言描述..."
 - Inline: "告诉搭档你想做什么..."
 
@@ -102,31 +104,33 @@
 
 ### 变体
 
-| 变体 | 对齐 | 背景 |
-|------|------|------|
-| User | 靠右 | `--nf-bubble-user`（浅蓝） |
+| 变体    | 对齐 | 背景                          |
+| ------- | ---- | ----------------------------- |
+| User    | 靠右 | `--nf-bubble-user`（浅蓝）    |
 | Partner | 靠左 | `--nf-bubble-partner`（浅灰） |
 
 ### 尺寸
 
-| 属性 | 值 |
-|------|-----|
-| 最大宽度 | 85% |
-| padding | 8px 12px |
-| 圆角 | 12px |
-| 字号 | 14px |
-| 行高 | 1.5 |
-| 消息间距 | 12px |
+| 属性     | 值       |
+| -------- | -------- |
+| 最大宽度 | 85%      |
+| padding  | 8px 12px |
+| 圆角     | 12px     |
+| 字号     | 14px     |
+| 行高     | 1.5      |
+| 消息间距 | 12px     |
 
 ### 动画
 
 **搭档消息出现：**
+
 - opacity 0→1, translateY(4px→0)
 - duration: 0.15s, ease-out
 - 每条消息按段落分割，段落间隔 0.3s
 - 多条消息连续出现时，最后一条滚动到视口底部（smooth scroll）
 
 **用户消息出现：**
+
 - 瞬间显示，无动画
 
 ### 分段显示逻辑（搭档消息）
@@ -152,11 +156,11 @@
 
 ### 状态
 
-| 状态 | 颜色 | 动画 |
-|------|------|------|
-| idle（搭档未激活） | — | 隐藏（height: 0, opacity: 0） |
-| working（分析/修改中） | `--nf-accent` | opacity 在 0.4↔1.0 循环，周期 2s, ease-in-out |
-| waiting（等待用户确认） | `--nf-amber` | opacity 在 0.4↔1.0 循环，周期 1s（更快，暗示"需要你"） |
+| 状态                    | 颜色          | 动画                                                   |
+| ----------------------- | ------------- | ------------------------------------------------------ |
+| idle（搭档未激活）      | —             | 隐藏（height: 0, opacity: 0）                          |
+| working（分析/修改中）  | `--nf-accent` | opacity 在 0.4↔1.0 循环，周期 2s, ease-in-out          |
+| waiting（等待用户确认） | `--nf-amber`  | opacity 在 0.4↔1.0 循环，周期 1s（更快，暗示"需要你"） |
 
 ---
 
@@ -179,22 +183,22 @@
 
 ### 任务状态
 
-| 状态 | 圆点 | 颜色 | 含义 |
-|------|------|------|------|
-| executing | ● 实心 | `--nf-accent` | 当前正在执行（分析或修改） |
-| review | ◉ 半实心 | `--nf-accent` | 待审核 |
-| queued | ○ 空心 | `--nf-text-secondary` | 排队等待执行 |
-| done | ✓ | `--nf-green` | 已完成并写入 |
-| cancelled | ✗ | `--nf-text-secondary` | 已取消 |
+| 状态      | 圆点     | 颜色                  | 含义                       |
+| --------- | -------- | --------------------- | -------------------------- |
+| executing | ● 实心   | `--nf-accent`         | 当前正在执行（分析或修改） |
+| review    | ◉ 半实心 | `--nf-accent`         | 待审核                     |
+| queued    | ○ 空心   | `--nf-text-secondary` | 排队等待执行               |
+| done      | ✓        | `--nf-green`          | 已完成并写入               |
+| cancelled | ✗        | `--nf-text-secondary` | 已取消                     |
 
 **选中态独立于任务状态：** 用户点击任务列表项 → 背景变为 `--nf-accent-soft`，左侧 3px `--nf-accent` 竖条。选中态不代表任何任务状态——用户可以选中任何状态的任务查看详情。
 
 ### 交互
 
-| 行为 | 反馈 |
-|------|------|
-| hover | 背景色变为 `--nf-bg-elevated` |
-| 点击 | 切换到该问题。交付包和产物区更新。 |
+| 行为   | 反馈                                       |
+| ------ | ------------------------------------------ |
+| hover  | 背景色变为 `--nf-bg-elevated`              |
+| 点击   | 切换到该问题。交付包和产物区更新。         |
 | 选中态 | 背景色 `--nf-accent-soft`（比 hover 更深） |
 
 ---
@@ -235,13 +239,13 @@
 
 ### 操作按钮（按任务状态变化——无阶段确认驱动）
 
-| 任务状态 | 按钮 |
-|---------|------|
-| 分析完成 | [继续] [调整] |
-| 修改完成 | [查看改动] |
+| 任务状态    | 按钮                        |
+| ----------- | --------------------------- |
+| 分析完成    | [继续] [调整]               |
+| 修改完成    | [查看改动]                  |
 | 审核中·摘要 | [全部接受并写入] [逐处审查] |
 | 审核中·逐处 | [全部接受并写入] [全部拒绝] |
-| 已完成 | 无按钮，显示完成摘要 |
+| 已完成      | 无按钮，显示完成摘要        |
 
 > **与确认卡的关系（2026-08-16 第 22 轮审计 #2 注）**：本表为**交付包产物操作视图**——**确认决策（方案批准/证据对账确认解决/授权）由对话内嵌确认卡承载**（PlanCard/ResolutionCard/授权卡——意图确认组件章节）：分析完成 → 方案卡（批准/修改/重出）；修改完成 → 交付包呈现 + 解决卡（证据对账——无证据不弹）；「已完成」= 用户证据对账确认解决后（交付≠解决——02 §4.9）。
 
@@ -300,6 +304,7 @@
 ```
 
 > 底部次按钮按模式不同：
+>
 > - 摘要态：[全部接受并写入] [逐处审查]
 > - 逐处态：[全部接受并写入] [全部拒绝]
 
@@ -375,12 +380,12 @@ Diff 审核的默认入口。搭档修改完成后先展示改动摘要，而非
 
 ### 文件状态标记
 
-| 状态 | 视觉 |
-|------|------|
-| 正常 | 无标记 |
-| 搭档正在修改 | 文件名旁蓝色圆点 ●（12px, `--nf-accent`） |
-| 修改完待审核 | 文件名旁绿色圆点 ●（12px, `--nf-green`） |
-| 文件新建中 | 文件名旁闪烁的蓝色圆点 + 文件项从上方"落入"（见下方动画） |
+| 状态         | 视觉                                                      |
+| ------------ | --------------------------------------------------------- |
+| 正常         | 无标记                                                    |
+| 搭档正在修改 | 文件名旁蓝色圆点 ●（12px, `--nf-accent`）                 |
+| 修改完待审核 | 文件名旁绿色圆点 ●（12px, `--nf-green`）                  |
+| 文件新建中   | 文件名旁闪烁的蓝色圆点 + 文件项从上方"落入"（见下方动画） |
 
 ### 新文件出现动画
 
@@ -419,10 +424,10 @@ Diff 审核的默认入口。搭档修改完成后先展示改动摘要，而非
 
 ### 变体
 
-| 变体 | 图标 | 触发 |
-|------|------|------|
-| success | ✅ | 任务完成 |
-| warning | ⚠️ | 网络断开 |
+| 变体    | 图标 | 触发     |
+| ------- | ---- | -------- |
+| success | ✅   | 任务完成 |
+| warning | ⚠️   | 网络断开 |
 
 ---
 
@@ -487,10 +492,10 @@ Diff 审核的默认入口。搭档修改完成后先展示改动摘要，而非
 
 ### 变体
 
-| 变体 | 颜色 | 触发 |
-|------|------|------|
-| warning | `--nf-amber` | 网络断开 |
-| error | `--nf-red` | 文件权限不足、项目路径不存在 |
+| 变体    | 颜色         | 触发                         |
+| ------- | ------------ | ---------------------------- |
+| warning | `--nf-amber` | 网络断开                     |
+| error   | `--nf-red`   | 文件权限不足、项目路径不存在 |
 
 ---
 
@@ -600,10 +605,10 @@ Diff 审核中「全部接受并写入」的确认操作。非模态，不打断
 
 ### 变体
 
-| 变体 | 文案 | 触发 |
-|------|------|------|
-| diff 写入确认 | "确认写入全部 N 处改动？" | 点「全部接受并写入」或逐处「写入文件」 |
-| 关应用确认 | "有 N 处改动已暂存但未写入，关闭后保留" | Cmd+Q（有暂存时） |
+| 变体          | 文案                                    | 触发                                   |
+| ------------- | --------------------------------------- | -------------------------------------- |
+| diff 写入确认 | "确认写入全部 N 处改动？"               | 点「全部接受并写入」或逐处「写入文件」 |
+| 关应用确认    | "有 N 处改动已暂存但未写入，关闭后保留" | Cmd+Q（有暂存时）                      |
 
 **关应用变体保留模态遮罩**（系统级确认，防止误操作丢失数据）。
 
@@ -732,7 +737,7 @@ Diff 审核中「全部接受并写入」的确认操作。非模态，不打断
 
 ## 意图确认组件（2026-08-16 新增——第 6 轮产品文档审计 #1；规格依据：`intent-confirmation-domain-design.md` §3.2 值对象；S3 实现前置）
 
-> **视觉令牌（2026-08-16 第 18 轮审计 #3 注）**：本节为**结构规格**（数据源/按钮语义/出现时机）——视觉实现按 `product/03-design-tokens.md`（--nf-accent/--nf-bg-elevated/--nf-radius-*/--nf-ease-*）+ `product/05-visual-spec.md` §3 关键屏风格落地（S3 实现时锚定）。
+> **视觉令牌（2026-08-16 第 18 轮审计 #3 注）**：本节为**结构规格**（数据源/按钮语义/出现时机）——视觉实现按 `product/03-design-tokens.md`（`--nf-accent`/`--nf-bg-elevated`/`--nf-radius-*`/`--nf-ease-*`）+ `product/05-visual-spec.md` §3 关键屏风格落地（S3 实现时锚定）。
 
 ### 方案卡（PlanCard——PlanProposal 渲染）
 
@@ -810,8 +815,8 @@ Diff 审核中「全部接受并写入」的确认操作。非模态，不打断
 
 ### 组件与设计文档映射
 
-| 组件 | 值对象 | 事件 | S 阶段 |
-|------|--------|------|--------|
-| PlanCard | PlanProposal | proposal.plan / decision.requested / decision.resolved | S3 |
-| ResolutionCard | CompletionClaim/CompletionEvidence | proposal.completion / completion.evidence_missing / decision.resolved | S4 |
-| RejectReasonPicker | RejectReason | decision.resolved（reject+kind）| S3 |
+| 组件               | 值对象                             | 事件                                                                  | S 阶段 |
+| ------------------ | ---------------------------------- | --------------------------------------------------------------------- | ------ |
+| PlanCard           | PlanProposal                       | proposal.plan / decision.requested / decision.resolved                | S3     |
+| ResolutionCard     | CompletionClaim/CompletionEvidence | proposal.completion / completion.evidence_missing / decision.resolved | S4     |
+| RejectReasonPicker | RejectReason                       | decision.resolved（reject+kind）                                      | S3     |

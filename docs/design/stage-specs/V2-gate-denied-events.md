@@ -1,4 +1,5 @@
 # Stage V2-Gate-Denied-Spec（机制拒绝事件 gate.denied）
+
 > 来源：GitHub #16（机制事件补全——gate.denied 结构化拒绝事件）；ADR：`docs/decisions/016-gate-denied-mechanism-event.md`
 
 ## DoD（机器可验证断言——stage-gate 逐条执行）
@@ -14,12 +15,12 @@
 
 ## TDD 网格（本阶段新增功能——spec-first + test-first）
 
-| 功能 | 规范断言（来源 ADR-016 §Decision） | 失败测试（红） | 实现（绿） | 重构 |
-|------|-----------------------------------|---------------|-----------|------|
-| canExecute 结构化拒绝 | 拒绝来源 `deniedBy` 三值；rejection-memory/action-gate 带 attribute+risk；session-gate 不带 | `conversationState.test.ts` | `domain/conversationState.ts` | 先算 actionGate 再消费拒绝记忆（判定单源） |
-| 事件注册 | `gate.denied` domain=gate、role=system、detailKeys=name/gate/reason/attribute/risk | `timelineEvents.test.ts` | `domain/timeline.ts` | 复用既有注册表模式 |
-| 发送点 | 仅 rejection-memory/action-gate 且非 pending/confirm 抢先时发送；每次拦截一条；与 tool.blocked 共存 | `gateDenied.interaction.ts` | `renderer/useChatStream.ts` | 事件载荷由 toolGate 直取 |
-| 边界保持 | ask 不发送；session-gate（pending/确认点/清单）不发送；不改变门控顺序 | `conversationState.test.ts` / 交互首卡断言 | — | — |
+| 功能                  | 规范断言（来源 ADR-016 §Decision）                                                                  | 失败测试（红）                             | 实现（绿）                    | 重构                                       |
+| --------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------ | ----------------------------- | ------------------------------------------ |
+| canExecute 结构化拒绝 | 拒绝来源 `deniedBy` 三值；rejection-memory/action-gate 带 attribute+risk；session-gate 不带         | `conversationState.test.ts`                | `domain/conversationState.ts` | 先算 actionGate 再消费拒绝记忆（判定单源） |
+| 事件注册              | `gate.denied` domain=gate、role=system、detailKeys=name/gate/reason/attribute/risk                  | `timelineEvents.test.ts`                   | `domain/timeline.ts`          | 复用既有注册表模式                         |
+| 发送点                | 仅 rejection-memory/action-gate 且非 pending/confirm 抢先时发送；每次拦截一条；与 tool.blocked 共存 | `gateDenied.interaction.ts`                | `renderer/useChatStream.ts`   | 事件载荷由 toolGate 直取                   |
+| 边界保持              | ask 不发送；session-gate（pending/确认点/清单）不发送；不改变门控顺序                               | `conversationState.test.ts` / 交互首卡断言 | —                             | —                                          |
 
 ## 产出物
 

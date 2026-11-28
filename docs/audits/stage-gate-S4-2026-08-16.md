@@ -7,22 +7,22 @@
 
 ## 断言结果
 
-| # | 断言 | 判定 | 证据（新鲜输出） |
-|---|------|------|-----------------|
-| 1 | L1 全量绿（新增 ≥12 条） | PASS | vitest: **396 passed / 0 failed**（33 文件——新增 13：buildEvidenceBackfill 3 + completion.evidence_missing 3 + integration 7（真实命令代跑闭环）） |
-| 2 | L2 契约 0 错 | PASS | 双 tsc 0 errors（renderer + main——含新 src/main/verification.ts） |
-| 3 | L3 交互（相关场景重写 + 全量 ≥36） | PASS | playwright interaction: **40 passed**（36 旧 + 4 新 S4 场景——零回归） |
-| 4 | Lint 门禁 | PASS | eslint: 0 errors（6 既有 warnings）；prettier: All matched files |
-| 5 | 已解决卡条件 = verifyCompletion 通过 | PASS | S4-1a（证据不足 verification 空 → 已解决卡不出现 + evidence_missing 打点 ok:false）+ L1 verifyCompletion 8 用例（既有）；ok=false 分支无 setPendingState（Spec 轴核对） |
-| 6 | V1a 系统代跑接线 | PASS | verificationRunner.integration.test.ts 7 用例（真实 cat/ls 代跑 → 结果表 → verifyCompletion 闭环——复核失败推翻自报 passed）+ IPC completion:verify + preload completion.verify（可选——mock/降级走纯逻辑 S1 兼容）+ S4-2（verify 调用计数 = 1 锁定 V1a 真实生效） |
-| 7 | V1b diff 派生接线 | PASS | deriveDiffs 领域层单源（planned∩produced——renderer 注入 SystemVerifier）+ integration deriveDiffs 2 用例 + verifyCompletionSystem V1b 2 用例（既有） |
-| 8 | completion.evidence_missing 打点 | PASS | timeline.ts 登记（domain 'completion' + detailKeys ['ok','?missing','?unverifiable']）+ timelineEvents.test.ts 3 断言 + S4-1a/S4-3 打点断言（timeline 捕获 ok:false + missing 清单） |
-| 9 | 证据不足回填引导 | PASS | buildEvidenceBackfill 3 断言（L1——missing/unverifiable 清单 + ok=true 空串）+ S4-1a（引导 send 触发 chatCount）/S4-1b（重输出完整声明 → 弹卡闭环）+ 引导护栏（连续 2 次不足停止自动 send——S4-1a chatCount 停 5） |
-| 10 | A-010 关闭 | PASS | audit-items 010 fixed（commit 20e2f7f + integration 7 用例 + 关闭证据）+ README 索引同步 |
-| 11 | 审计状态 | PASS | audit-items：A-001~010 全 fixed（A-004~009 = a666459；A-010 = 20e2f7f）；无 open |
-| 12 | 覆盖矩阵已更新 | PASS | docs/tests/coverage-matrix.md（表 2 completion.evidence_missing 行 + 表 3 事件登记行 + 表 5 S4↔测试 6 行 + 缺口清单 A-010 关闭） |
-| 13 | 决策日志同步 | PASS | ADR-004 已裁定「领域层同步消费快照——IO 归应用层」——S4 接线忠实执行（无新裁定，无需新 ADR） |
-| 14 | 已 push + CI 绿 | PASS | 已 push（20e2f7f + e2b49b7）；qa.yml run 31939913741 **success**（L1/L2/L3/lint/format 全过） |
+| #   | 断言                                 | 判定 | 证据（新鲜输出）                                                                                                                                                                                                                                                 |
+| --- | ------------------------------------ | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | L1 全量绿（新增 ≥12 条）             | PASS | vitest: **396 passed / 0 failed**（33 文件——新增 13：buildEvidenceBackfill 3 + completion.evidence_missing 3 + integration 7（真实命令代跑闭环））                                                                                                               |
+| 2   | L2 契约 0 错                         | PASS | 双 tsc 0 errors（renderer + main——含新 src/main/verification.ts）                                                                                                                                                                                                |
+| 3   | L3 交互（相关场景重写 + 全量 ≥36）   | PASS | playwright interaction: **40 passed**（36 旧 + 4 新 S4 场景——零回归）                                                                                                                                                                                            |
+| 4   | Lint 门禁                            | PASS | eslint: 0 errors（6 既有 warnings）；prettier: All matched files                                                                                                                                                                                                 |
+| 5   | 已解决卡条件 = verifyCompletion 通过 | PASS | S4-1a（证据不足 verification 空 → 已解决卡不出现 + evidence_missing 打点 ok:false）+ L1 verifyCompletion 8 用例（既有）；ok=false 分支无 setPendingState（Spec 轴核对）                                                                                          |
+| 6   | V1a 系统代跑接线                     | PASS | verificationRunner.integration.test.ts 7 用例（真实 cat/ls 代跑 → 结果表 → verifyCompletion 闭环——复核失败推翻自报 passed）+ IPC completion:verify + preload completion.verify（可选——mock/降级走纯逻辑 S1 兼容）+ S4-2（verify 调用计数 = 1 锁定 V1a 真实生效） |
+| 7   | V1b diff 派生接线                    | PASS | deriveDiffs 领域层单源（planned∩produced——renderer 注入 SystemVerifier）+ integration deriveDiffs 2 用例 + verifyCompletionSystem V1b 2 用例（既有）                                                                                                             |
+| 8   | completion.evidence_missing 打点     | PASS | timeline.ts 登记（domain 'completion' + detailKeys ['ok','?missing','?unverifiable']）+ timelineEvents.test.ts 3 断言 + S4-1a/S4-3 打点断言（timeline 捕获 ok:false + missing 清单）                                                                             |
+| 9   | 证据不足回填引导                     | PASS | buildEvidenceBackfill 3 断言（L1——missing/unverifiable 清单 + ok=true 空串）+ S4-1a（引导 send 触发 chatCount）/S4-1b（重输出完整声明 → 弹卡闭环）+ 引导护栏（连续 2 次不足停止自动 send——S4-1a chatCount 停 5）                                                 |
+| 10  | A-010 关闭                           | PASS | audit-items 010 fixed（commit 20e2f7f + integration 7 用例 + 关闭证据）+ README 索引同步                                                                                                                                                                         |
+| 11  | 审计状态                             | PASS | audit-items：`A-001`–`010` 全 fixed（`A-004`–`009` = a666459；A-010 = 20e2f7f）；无 open                                                                                                                                                                         |
+| 12  | 覆盖矩阵已更新                       | PASS | docs/tests/coverage-matrix.md（表 2 completion.evidence_missing 行 + 表 3 事件登记行 + 表 5 S4↔测试 6 行 + 缺口清单 A-010 关闭）                                                                                                                                 |
+| 13  | 决策日志同步                         | PASS | ADR-004 已裁定「领域层同步消费快照——IO 归应用层」——S4 接线忠实执行（无新裁定，无需新 ADR）                                                                                                                                                                       |
+| 14  | 已 push + CI 绿                      | PASS | 已 push（20e2f7f + e2b49b7）；qa.yml run 31939913741 **success**（L1/L2/L3/lint/format 全过）                                                                                                                                                                    |
 
 ## 差异清单（交回开发）
 

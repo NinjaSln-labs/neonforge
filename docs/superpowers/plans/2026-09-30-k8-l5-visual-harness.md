@@ -16,28 +16,29 @@
 
 ## 根因 → 任务映射
 
-| 根簇 | 任务 |
-|------|------|
-| A 契约滞后（config/settings/手搓 mock） | Task 1 |
-| B 基线宿主 + AA | Task 2 |
-| C `.nf-start` 超时（未能确认） | Task 3（取证后才准修） |
+| 根簇                                    | 任务                   |
+| --------------------------------------- | ---------------------- |
+| A 契约滞后（config/settings/手搓 mock） | Task 1                 |
+| B 基线宿主 + AA                         | Task 2                 |
+| C `.nf-start` 超时（未能确认）          | Task 3（取证后才准修） |
 
 ## File map
 
-| 文件 | 职责 |
-|------|------|
-| `apps/desktop/tests/interaction/mockBridge.ts` | 权威 mock：补 `getWebAccess` / `setWebAccess` / `getModel` |
-| `apps/desktop/tests/visual/visualBridge.ts`（新建） | 薄包装：`installVisualBridge(page, opts)` → 调 `installMockBridge` + 常用视觉预设 |
-| `apps/desktop/tests/visual/*.visual.ts` | 删重复 `mockBridge`，改 `installVisualBridge` / `installMockBridge` |
-| `apps/desktop/playwright.config.ts` | 强化「仅 macOS 更新基线」注释；可选 `forbidOnly` 无关 |
-| `docs/tests/coverage-matrix.md` 或 `docs/tests/uat-tier-baseline.md` 旁新小节 | L5 基线更新纪律（一行指针即可） |
-| `apps/desktop/snapshots/**` | **仅 Mac** 复验后按需更新 |
+| 文件                                                                          | 职责                                                                              |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `apps/desktop/tests/interaction/mockBridge.ts`                                | 权威 mock：补 `getWebAccess` / `setWebAccess` / `getModel`                        |
+| `apps/desktop/tests/visual/visualBridge.ts`（新建）                           | 薄包装：`installVisualBridge(page, opts)` → 调 `installMockBridge` + 常用视觉预设 |
+| `apps/desktop/tests/visual/*.visual.ts`                                       | 删重复 `mockBridge`，改 `installVisualBridge` / `installMockBridge`               |
+| `apps/desktop/playwright.config.ts`                                           | 强化「仅 macOS 更新基线」注释；可选 `forbidOnly` 无关                             |
+| `docs/tests/coverage-matrix.md` 或 `docs/tests/uat-tier-baseline.md` 旁新小节 | L5 基线更新纪律（一行指针即可）                                                   |
+| `apps/desktop/snapshots/**`                                                   | **仅 Mac** 复验后按需更新                                                         |
 
 ---
 
 ### Task 1: 测试桥契约单源（消 A）
 
 **Files:**
+
 - Modify: `apps/desktop/tests/interaction/mockBridge.ts`
 - Create: `apps/desktop/tests/visual/visualBridge.ts`
 - Modify: 所有仍手搓 `async function mockBridge` 的 `tests/visual/*.visual.ts`（start / config-page / settings / conversation / compact / …）
@@ -95,6 +96,7 @@ export async function installVisualBridge(page: Page, opts: MockBridgeOptions = 
 - [ ] **Step 3: 迁移 visual 手搓 mock**
 
 规则：
+
 - 能直接 `installMockBridge` / `installVisualBridge` 的 → 删本地 `mockBridge`
 - `config-page`：`installVisualBridge(page, { /* hasKey:false 若 Step1 已支持 */ })`；若暂无 `hasKey` 选项，保留最小本地 mock **但必须**含与工厂同形的 `listProviders`/`getProvider`/`getModel`
 - `settings`：删掉重复的 `getWebAccess` 大块，改工厂默认
@@ -129,6 +131,7 @@ Expected: PASS（无 `.nf-config` 崩、无 settings 缺 API）
 ### Task 2: 基线宿主纪律 + bash AA 稳态（消 B）
 
 **Files:**
+
 - Modify: `apps/desktop/playwright.config.ts`（注释）
 - Modify: `docs/tests/coverage-matrix.md`（L5 小节加 3–5 行纪律）或 `docs/tests/uat-tier-baseline.md` 末尾「L5 指针」
 - Modify: `apps/desktop/tests/visual/toolcalls.visual.ts`（bash 截图前稳态）
@@ -188,6 +191,7 @@ cd apps/desktop && env -u NODE_ENV npx playwright test --project=visual 2>&1 | t
 ```
 
 分类：
+
 - 仅 B 失败 → **根=资源竞争**：文档写「L5 禁止与重任务并行」；可选在 `package.json` 脚本加注释。不改产品。
 - A 也失败且固定用例 → 打开该用例：是否停在 `boot`（空 `.nf-app`）、是否进了 `.nf-config`、console 是否 `hasKey failed` / `neonforge missing`。按日志修 **该用例 mock/goto**，不抬全局 timeout。
 - A/B 均绿 → C 关闭为「未能复现」；handoff 记 outcome，不改码。
@@ -195,6 +199,7 @@ cd apps/desktop && env -u NODE_ENV npx playwright test --project=visual 2>&1 | t
 - [ ] **Step 2: 仅当 A 复现时的最小修**
 
 优先序：
+
 1. 截图/可见前 `await expect(page.locator('.nf-start')).toBeVisible({ timeout: 15000 })` 仍失败 → 查 mock `hasKey`
 2. vite：确认无第二进程占 5175；`reuseExistingServer` 冲突时改测前 `lsof` 或文档要求独占
 3. 最后才考虑单测超时上调
@@ -215,22 +220,22 @@ cd apps/desktop && env -u NODE_ENV npx playwright test --project=visual 2>&1 | t
 
 ## 明确不做
 
-- 不改 ADR-011 / Keenable 产品行为  
-- 不把 L5 送进 CI  
-- 不全局抬 `maxDiffPixelRatio`  
+- 不改 ADR-011 / Keenable 产品行为
+- 不把 L5 送进 CI
+- 不全局抬 `maxDiffPixelRatio`
 - 不在测中途改码（ADR-012）
 
 ## 验收
 
-| 项 | 标准 |
-|----|------|
-| 契约 | visual 无缺字段手搓 config；settings/config/start Mac 绿 |
-| 基线 | 文档+config 写明仅 Mac update；无 WSL 新 PNG 入库 |
-| AA | bash-approval Mac 稳定绿（fonts 等待或单条局部阈值） |
+| 项   | 标准                                                             |
+| ---- | ---------------------------------------------------------------- |
+| 契约 | visual 无缺字段手搓 config；settings/config/start Mac 绿         |
+| 基线 | 文档+config 写明仅 Mac update；无 WSL 新 PNG 入库                |
+| AA   | bash-approval Mac 稳定绿（fonts 等待或单条局部阈值）             |
 | 超时 | Task3 有 `/tmp/nf-l5-*.txt` 结论；复现则最小修，否则关闭未能复现 |
 
 ## Self-check
 
-- A/B/C 三根均有任务；C 强制先取证  
-- 无 TBD；关键代码块已写出  
+- A/B/C 三根均有任务；C 强制先取证
+- 无 TBD；关键代码块已写出
 - 未越设计门槛改产品门

@@ -6,13 +6,13 @@
 
 ## 1. 问题定性（证据链）
 
-| 真机证据 | 根因层 |
-|----------|--------|
-| 方案块三种格式漂移 → malformed → 空卡（P1-4） | 自由文本形状不受控 |
-| 旁白/空文本被兜底词表误判为目标卡（遥测假象三例） | 文本探测固有歧义 |
-| 模型跳过【目标确认】直出【执行方案】/提前调 approve-files | 文本协议无机器可查的时序约束 |
-| 「已解决」词表与 sysPrompt 脱节 | 引导词与解析词表双源 |
-| isLikelyPath 三轮补丁仍漏（中文句读边界） | 自然语言 vs 路径的边界不可判定 |
+| 真机证据                                                  | 根因层                         |
+| --------------------------------------------------------- | ------------------------------ |
+| 方案块三种格式漂移 → malformed → 空卡（P1-4）             | 自由文本形状不受控             |
+| 旁白/空文本被兜底词表误判为目标卡（遥测假象三例）         | 文本探测固有歧义               |
+| 模型跳过【目标确认】直出【执行方案】/提前调 approve-files | 文本协议无机器可查的时序约束   |
+| 「已解决」词表与 sysPrompt 脱节                           | 引导词与解析词表双源           |
+| isLikelyPath 三轮补丁仍漏（中文句读边界）                 | 自然语言 vs 路径的边界不可判定 |
 
 **对照**：同一模型同期的**工具调用**（read/bash/write/approve-files）JSON 参数**零失败**——
 结构化通道（provider 原生 function calling）已被真机充分验证可靠。
@@ -20,7 +20,9 @@
 ## 2. 方案空间
 
 ### 方案 A：协议工具化（确认协议迁移到 tool-call 通道）——**推荐**
+
 把三个文本标记改为三个虚拟工具，模型以 function calling 输出 JSON args：
+
 - `propose_goal(statement, assumptions[])`
 - `propose_plan(files[{path,reason}], summary, assumptions[], verification_plan[])`
 - `report_completion(summary, verification[{command,result,passed}], pending_questions[])`
@@ -38,13 +40,16 @@
 - 兜底：文本标记解析保留一个版本作为降级（模型偶尔忘调工具时引导而非断流）
 
 ### 方案 B：JSON mode / response_format 约束
+
 DeepSeek API 有 `json_object` 模式但**非 schema 约束**（只保证合法 JSON 不保证结构）；且
 Command Code 网关对 response_format 实测 400。**不可行**（V4 也拒 tool_choice required——同族限制）。
 
 ### 方案 C：grammar 约束解码（outlines/xgrammar）
+
 仅本地模型推理栈可行；API 网关无法用。**排除**。
 
 ### 方案 D：现状修补（解析器继续打补丁）
+
 复验轮又添两补丁（候选制拆分/硬序门）——边际收益递减，格式空间无限。**不收敛，否决**。
 
 ## 3. 方案 A 迁移草图（供 stage-spec 展开）
@@ -60,12 +65,12 @@ Command Code 网关对 response_format 实测 400。**不可行**（V4 也拒 to
 
 ## 4. 风险与验证项（拍板前需真机/spike 确认）
 
-| 风险 | 验证方式 |
-|------|----------|
-| Command Code 网关对**新增工具定义**的透传（现 TOOL_DEFS 9 个——加 3 个是否截断/限流） | spike：dev 环境 10 轮工具调用探测 |
-| V4 对嵌套数组 schema（files[{path,reason}]）的 args 质量 | spike：propose_plan 50 次采样看 args 合格率 |
-| 模型忘调工具的频率（文本兜底触发率） | 真机一轮全程打点 |
-| provider 可切换（ADR-007——模型 DeepSeek-only 接入方可切）后 schema 行为漂移 | 接入方抽象保持（工具定义不动） |
+| 风险                                                                                 | 验证方式                                    |
+| ------------------------------------------------------------------------------------ | ------------------------------------------- |
+| Command Code 网关对**新增工具定义**的透传（现 TOOL_DEFS 9 个——加 3 个是否截断/限流） | spike：dev 环境 10 轮工具调用探测           |
+| V4 对嵌套数组 schema（files[{path,reason}]）的 args 质量                             | spike：propose_plan 50 次采样看 args 合格率 |
+| 模型忘调工具的频率（文本兜底触发率）                                                 | 真机一轮全程打点                            |
+| provider 可切换（ADR-007——模型 DeepSeek-only 接入方可切）后 schema 行为漂移          | 接入方抽象保持（工具定义不动）              |
 
 ## 5. 与现有修复的关系
 

@@ -9,6 +9,7 @@
 **真实用户模拟域（Simulated User BC）**——测试域（§9）的子域：模拟真实用户与 NeonForge 交互（读 → 理解 → 思考 → 决策 → 操作 → 验证），驱动 0-1 完整流程，产出**决策轨迹（可复现）**与**防假阳性验证判定**。
 
 **域不变式**：
+
 1. **决策点驱动**——旅程按产品决策点推进（goal → plan → approval → resolution → deliver），无阶段概念（产品 S4 已移除阶段——无阶段目标驱动）
 2. **确定性优先**——模型信号从消息/工具卡/状态栏**确定性派生**（纯函数——L1 可测）；LLM 只做自由文本意图增强，失败静默降级确定性
 3. **单一理解源**——「模型在说什么」只有一套信号派生（消除 UserAgent/UserSimulator/fallback 三实现——缝隙 4）
@@ -19,33 +20,33 @@
 
 **ModelSignal**（模型信号——从 transcript 最后一条消息 + 工具卡 + 状态栏确定性派生）：
 
-| 信号 | 派生来源（确定性） | 产品对应 |
-|------|-------------------|----------|
-| `goal-proposed` | 消息含【目标确认：】标记（parseGoalProposal 同源） | goal 决策点提议 |
-| `plan-proposed` | 消息含【执行方案】标记（parsePlanProposal 同源——ok 才计） | plan 决策点提议 |
-| `completion-claimed` | 消息含【已达成】标记 + 证据（parseCompletionClaim） | resolution 决策点提议 |
-| `approval-requested` | 工具卡 approve-files 待批 / 授权卡待批 | approval 决策点 |
-| `clarifying` | 消息以问句收尾 / 含候选块（candidates>0）/ 标准 4 问关键词 | 澄清阶段 |
-| `promising` | 状态栏「说要做但还没动手」/ 消息含承诺词（SEM_PROMISE 演进） | isActionPromise 同源 |
-| `exploring` | 最近工具卡为 read/search/check-capability（无副作用） | 探索轮（收敛判定用） |
-| `producing` | 最近工具卡为 write/edit/bash（副作用推进） | 执行推进 |
-| `inviting-test` | 消息含 http://localhost:\d+ + 试玩词 | play-test |
-| `asking-decision` | 消息含征询词（SEM_ASK 演进）且无确认标记 | 征求决策 |
-| `stuck` | 连续停滞轮达阈值（ConvergenceGuard） | 收敛判定 |
+| 信号                 | 派生来源（确定性）                                           | 产品对应              |
+| -------------------- | ------------------------------------------------------------ | --------------------- |
+| `goal-proposed`      | 消息含【目标确认：】标记（parseGoalProposal 同源）           | goal 决策点提议       |
+| `plan-proposed`      | 消息含【执行方案】标记（parsePlanProposal 同源——ok 才计）    | plan 决策点提议       |
+| `completion-claimed` | 消息含【已达成】标记 + 证据（parseCompletionClaim）          | resolution 决策点提议 |
+| `approval-requested` | 工具卡 approve-files 待批 / 授权卡待批                       | approval 决策点       |
+| `clarifying`         | 消息以问句收尾 / 含候选块（candidates>0）/ 标准 4 问关键词   | 澄清阶段              |
+| `promising`          | 状态栏「说要做但还没动手」/ 消息含承诺词（SEM_PROMISE 演进） | isActionPromise 同源  |
+| `exploring`          | 最近工具卡为 read/search/check-capability（无副作用）        | 探索轮（收敛判定用）  |
+| `producing`          | 最近工具卡为 write/edit/bash（副作用推进）                   | 执行推进              |
+| `inviting-test`      | 消息含 http://localhost:\d+ + 试玩词                         | play-test             |
+| `asking-decision`    | 消息含征询词（SEM_ASK 演进）且无确认标记                     | 征求决策              |
+| `stuck`              | 连续停滞轮达阈值（ConvergenceGuard）                         | 收敛判定              |
 
 **UserDecision**（用户决策——对应产品确认卡动作 + 真实用户动作）：
 
-| 决策 | 语义 | 产品对应 |
-|------|------|----------|
-| `answer` | 提供信息（澄清问答——自由文本） | 用户输入 |
-| `choose` | 候选块点选 | 候选按钮 |
-| `confirm-goal` | 确认目标卡 | 目标确认卡 |
-| `confirm-plan` | 确认方案卡 | 方案确认卡 |
-| `confirm-resolution` | 确认解决卡 | 解决确认卡 |
-| `approve` | 批准授权卡/approve-files | 授权批准 |
-| `nudge` | 推进（「继续」） | isActionPromise 处理 |
-| `playtest-feedback` | 试玩反馈（真实 HTTP 验证） | 用户实测 |
-| `wait` | 等模型（陈述/推进中） | — |
+| 决策                 | 语义                           | 产品对应             |
+| -------------------- | ------------------------------ | -------------------- |
+| `answer`             | 提供信息（澄清问答——自由文本） | 用户输入             |
+| `choose`             | 候选块点选                     | 候选按钮             |
+| `confirm-goal`       | 确认目标卡                     | 目标确认卡           |
+| `confirm-plan`       | 确认方案卡                     | 方案确认卡           |
+| `confirm-resolution` | 确认解决卡                     | 解决确认卡           |
+| `approve`            | 批准授权卡/approve-files       | 授权批准             |
+| `nudge`              | 推进（「继续」）               | isActionPromise 处理 |
+| `playtest-feedback`  | 试玩反馈（真实 HTTP 验证）     | 用户实测             |
+| `wait`               | 等模型（陈述/推进中）          | —                    |
 
 ## 3. 领域服务
 
@@ -68,6 +69,7 @@
 **ConvergenceGuard**（收敛守卫——#9 域对象化）：`observe(msgFingerprint): 'exploring'|'progressing'|'stale'`——进展轮重置计数；连续 N 轮 stale → stuck 信号（需求 20/设计开发测试 15——配置化）；总轮硬上限（60）。
 
 **Verifier**（防假阳性验证——纯函数）：
+
 - `verifyGoalEcho(decision, reply)`——模型是否正确复述用户选择（echoed）
 - `verifyPlanComplete(content)`——方案完整性（长度 + 要素——okLen/okKw 演进）
 - `verifyArtifacts(files, planned)`——产物齐全（planned ⊆ files）
@@ -93,24 +95,24 @@ e2e-0to1.mjs                 # 应用层：launch + SessionDriver（IO）+ LLM �
 
 > 命名：UNTIL（非 PHASE）——控制「跑到哪个旅程终止点为止」，**不是产品阶段**（产品无阶段，决策点驱动）。
 
-| UNTIL | 终止点（旅程决策点） |
-|-------|---------------------|
-| req | confirm-goal 完成（目标确认后停） |
-| design | confirm-plan 完成（方案确认后停） |
-| dev | 首个产物确认（write 后停） |
-| all | 交付（产物验证 + 解决确认 + 试玩） |
+| UNTIL  | 终止点（旅程决策点）               |
+| ------ | ---------------------------------- |
+| req    | confirm-goal 完成（目标确认后停）  |
+| design | confirm-plan 完成（方案确认后停）  |
+| dev    | 首个产物确认（write 后停）         |
+| all    | 交付（产物验证 + 解决确认 + 试玩） |
 
 ## 6. 现状问题 → 重构映射
 
-| 现状问题 | 重构 |
-|----------|------|
-| StageMachine 阶段残留（requirement/design/…+ currentStage 跟随）——产品已无阶段 | Journey 决策点驱动（§3）——UNTIL 映射终止点（§5） |
+| 现状问题                                                                                 | 重构                                                     |
+| ---------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| StageMachine 阶段残留（requirement/design/…+ currentStage 跟随）——产品已无阶段           | Journey 决策点驱动（§3）——UNTIL 映射终止点（§5）         |
 | 理解三实现（UserAgent.understand 正则 / UserSimulator LLM / fallback 正则）——缝隙 4 违反 | deriveModelSignal 单一信号源（§2）——LLM 只做自由文本增强 |
-| 决策逻辑内联各阶段循环（4 问/越界/okLen/okKw/清单/试玩） | decide 决策策略 + Verifier 验证域（§3） |
-| staleRounds 四阶段 4 份拷贝（#9） | ConvergenceGuard 域对象（单一实现） |
-| SEM_* 散落正则 | ModelSignal 表（§2——演进收编） |
-| waitSettled 收敛语义与 Playwright IO 混合 | 驱动层引用 convergence（领域） |
-| 验证逻辑散落（verdicts 内联） | Verifier 纯函数 + verdicts 汇总 |
+| 决策逻辑内联各阶段循环（4 问/越界/okLen/okKw/清单/试玩）                                 | decide 决策策略 + Verifier 验证域（§3）                  |
+| staleRounds 四阶段 4 份拷贝（#9）                                                        | ConvergenceGuard 域对象（单一实现）                      |
+| SEM_* 散落正则                                                                           | ModelSignal 表（§2——演进收编）                           |
+| waitSettled 收敛语义与 Playwright IO 混合                                                | 驱动层引用 convergence（领域）                           |
+| 验证逻辑散落（verdicts 内联）                                                            | Verifier 纯函数 + verdicts 汇总                          |
 
 ## 7. 测试与验证
 

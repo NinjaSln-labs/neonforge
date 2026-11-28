@@ -1,4 +1,5 @@
 # ADR-017：多模型网关与扩展能力治理（GitHub #14）
+
 - 状态: accepted
 - 日期: 2026-11-17
 - 相关: GitHub #14（多模型网关 + 插件体系深化）；README Roadmap V2 #4；ADR-010（多源 Provider + DeepSeek Catalog）；`docs/ddd-rebuild/09-openspec/specs/provider-gateway/spec.md`、`extension-integration/spec.md`；`docs/design/stage-specs/V2-multi-model-plugin.md`

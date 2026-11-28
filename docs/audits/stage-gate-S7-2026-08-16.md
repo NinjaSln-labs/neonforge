@@ -7,17 +7,17 @@
 
 ## 断言结果
 
-| # | 断言 | 判定 | 证据（新鲜输出） |
-|---|------|------|-----------------|
-| 1 | L1 全链 | PASS | vitest: **421 passed**（33 文件——S7 新增 7：P1-2 短封 4 + P1-3 事件 3 + P1-4 断言更新） |
-| 2 | L2 契约 | PASS | 双 tsc 0 errors |
-| 3 | L3 交互 | PASS | playwright interaction: **47 passed**（+3 S7 场景：C2 隐式拒绝/确认文本自动确认/approval 文本批准） |
-| 4 | L5 视觉 | PASS | playwright visual: **36 passed**（3 场景基线更新——确认卡门控适配 + 截图更新） |
-| 5 | L4 真实 API | PASS（部分观察） | e2e-suite **7/7**（B 类适配确认目标驱动 + 不卡死核心断言——模型行为依赖记录）；e2e-0to1 PHASE=req **通过**（场景 A/B 完整对话收敛——waitSettled 修复后不卡死 ✓）；design 阶段模型 read 探索 20 轮超限（非卡死——模拟器收敛判定观察项） |
-| 6 | A0 全文审校 | PASS | stage-review-S7-2026-08-16.md——P1 5/5 修复（触发权接线/S4 拒绝记忆/proposal.goal 事件/decision.resolved reason/C2）+ P2 确认 5 + P3 记录 4 |
-| 7 | 未修 1 取证 | recorded | execution.force_input 三集合打点既有（planned/produced/projectFiles）——未复现（无新实例）；D3 基准分裂裁决 = V2 规模（S7 不扩张） |
-| 8 | e2e-0to1 复验 | PASS（部分） | PHASE=req 通过（waitSettled 修复目标达成——不卡死）；PHASE=all 超时（真实流程长）+ design 模型探索超限——记录观察 |
-| 9 | HANDOFF 回填 | 本次完成 | §1-5 全量更新（S7 收尾） |
+| #   | 断言          | 判定             | 证据（新鲜输出）                                                                                                                                                                                                                    |
+| --- | ------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | L1 全链       | PASS             | vitest: **421 passed**（33 文件——S7 新增 7：P1-2 短封 4 + P1-3 事件 3 + P1-4 断言更新）                                                                                                                                             |
+| 2   | L2 契约       | PASS             | 双 tsc 0 errors                                                                                                                                                                                                                     |
+| 3   | L3 交互       | PASS             | playwright interaction: **47 passed**（+3 S7 场景：C2 隐式拒绝/确认文本自动确认/approval 文本批准）                                                                                                                                 |
+| 4   | L5 视觉       | PASS             | playwright visual: **36 passed**（3 场景基线更新——确认卡门控适配 + 截图更新）                                                                                                                                                       |
+| 5   | L4 真实 API   | PASS（部分观察） | e2e-suite **7/7**（B 类适配确认目标驱动 + 不卡死核心断言——模型行为依赖记录）；e2e-0to1 PHASE=req **通过**（场景 A/B 完整对话收敛——waitSettled 修复后不卡死 ✓）；design 阶段模型 read 探索 20 轮超限（非卡死——模拟器收敛判定观察项） |
+| 6   | A0 全文审校   | PASS             | stage-review-S7-2026-08-16.md——P1 5/5 修复（触发权接线/S4 拒绝记忆/proposal.goal 事件/decision.resolved reason/C2）+ P2 确认 5 + P3 记录 4                                                                                          |
+| 7   | 未修 1 取证   | recorded         | execution.force_input 三集合打点既有（planned/produced/projectFiles）——未复现（无新实例）；D3 基准分裂裁决 = V2 规模（S7 不扩张）                                                                                                   |
+| 8   | e2e-0to1 复验 | PASS（部分）     | PHASE=req 通过（waitSettled 修复目标达成——不卡死）；PHASE=all 超时（真实流程长）+ design 模型探索超限——记录观察                                                                                                                     |
+| 9   | HANDOFF 回填  | 本次完成         | §1-5 全量更新（S7 收尾）                                                                                                                                                                                                            |
 
 ## 差异清单（交回开发）
 

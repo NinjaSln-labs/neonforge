@@ -504,17 +504,17 @@ V1 仅深色主题。详细色值见 `product/03-design-tokens.md`。屏幕级�
 
 2026-11-24 设计与实现审计（`.scratch/neonforge-v1/audit-items/2026-11-24-design-implementation-audit.md` 第 4 节）确认以下设计有、实现无或 demo-only 的能力；**本轮裁定为 V1.5 延后**（不夹在 V1 修复批次中实现），相关文档段落保留为设计意图，但不再视为 V1 承诺：
 
-| 延后项 | 设计位置 | 现状 |
-|---|---|---|
-| 启动页「<5 字 / 未识别意图 → 二选一 chip」分支 | `01-user-flows.md` Flow 1 | 未实现；「从零开始」常驻可用 |
-| 新项目 S9/S11/S12（新建项目页 / 安装进度 / 安装失败：安装报错、端口占用、权限不足） | `01-user-flows.md` Flow 4、界面清单 S9/S11/S12 | 未实现；直接进工作区 |
-| 失败包（发生了什么/影响/回滚点/下一步）与 ErrorBanner | `01-user-flows.md` Flow 5 ③、`02-components.md` | 仅有错误气泡 + 重试 |
-| 非技术视图（PageCard / Switch） | 界面清单 S13、`05-visual-spec.md` | 未实现 |
-| 队列自动推进 / review 暂停 / 拖拽 / 7 态 | `01-user-flows.md` Flow 7 | 手动开始/完成、非自动串行 |
-| Flow 6 真实 diff 供给（逐处审核 / 批注 / 键盘 / ConfirmStrip / 原子 apply） | `01-user-flows.md` Flow 6、`02-components.md` §6 | 交付包 `diffs` 恒空；仅 demo bridge 有数据 |
-| 应用生命周期 Flow 8（上次项目恢复、退出暂存确认、崩溃恢复） | `01-user-flows.md` Flow 8 | 未实现（会话消息 + 任务快照恢复已做，项目级恢复未做） |
-| 状态栏分支 / 「待审核 / 已暂存」计数 | `00-product-design.md` §五、`05-visual-spec.md` | 无分支信息与计数 |
-| 问题台账 7 态全部赋值 | `01-user-flows.md` Flow 5、`07-success-metrics.md` | 只写 `executing` / `closed` |
-| 指标埋点（`task.started` / `task.written` / `diff.accepted` / `preheat.hit` / `project.created_nondev` / `project.preview_started` / `diff.accepted_summary`；SQLite events 表） | `07-success-metrics.md` | 0 命中；实现为 JSONL（`timelineLogger.ts` / `usageStore.ts`），文档应改述 JSONL 口径 |
+| 延后项                                                                                                                                                                           | 设计位置                                           | 现状                                                                                 |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| 启动页「<5 字 / 未识别意图 → 二选一 chip」分支                                                                                                                                   | `01-user-flows.md` Flow 1                          | 未实现；「从零开始」常驻可用                                                         |
+| 新项目 S9/S11/S12（新建项目页 / 安装进度 / 安装失败：安装报错、端口占用、权限不足）                                                                                              | `01-user-flows.md` Flow 4、界面清单 S9/S11/S12     | 未实现；直接进工作区                                                                 |
+| 失败包（发生了什么/影响/回滚点/下一步）与 ErrorBanner                                                                                                                            | `01-user-flows.md` Flow 5 ③、`02-components.md`    | 仅有错误气泡 + 重试                                                                  |
+| 非技术视图（PageCard / Switch）                                                                                                                                                  | 界面清单 S13、`05-visual-spec.md`                  | 未实现                                                                               |
+| 队列自动推进 / review 暂停 / 拖拽 / 7 态                                                                                                                                         | `01-user-flows.md` Flow 7                          | 手动开始/完成、非自动串行                                                            |
+| Flow 6 真实 diff 供给（逐处审核 / 批注 / 键盘 / ConfirmStrip / 原子 apply）                                                                                                      | `01-user-flows.md` Flow 6、`02-components.md` §6   | 交付包 `diffs` 恒空；仅 demo bridge 有数据                                           |
+| 应用生命周期 Flow 8（上次项目恢复、退出暂存确认、崩溃恢复）                                                                                                                      | `01-user-flows.md` Flow 8                          | 未实现（会话消息 + 任务快照恢复已做，项目级恢复未做）                                |
+| 状态栏分支 / 「待审核 / 已暂存」计数                                                                                                                                             | `00-product-design.md` §五、`05-visual-spec.md`    | 无分支信息与计数                                                                     |
+| 问题台账 7 态全部赋值                                                                                                                                                            | `01-user-flows.md` Flow 5、`07-success-metrics.md` | 只写 `executing` / `closed`                                                          |
+| 指标埋点（`task.started` / `task.written` / `diff.accepted` / `preheat.hit` / `project.created_nondev` / `project.preview_started` / `diff.accepted_summary`；SQLite events 表） | `07-success-metrics.md`                            | 0 命中；实现为 JSONL（`timelineLogger.ts` / `usageStore.ts`），文档应改述 JSONL 口径 |
 
 延后不等于删除：每项应在后续版本单独立项（含验收标准与测试承载）后再进入实现；在此之前，产品文档的新增段落不得把它们当作既有能力引用。

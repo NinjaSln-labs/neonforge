@@ -1,4 +1,5 @@
 # Stage V2-Multi-Model-Plugin Spec（多模型网关 + 扩展能力治理）
+
 > 来源：GitHub #14（多模型网关 + 插件体系深化）；ADR：`docs/decisions/017-multi-model-plugin-capability-governance.md`；开工前定稿（2026-11-17）
 
 ## DoD（机器可验证断言——stage-gate 逐条执行）
@@ -16,16 +17,16 @@
 
 ## TDD 网格（本阶段新增功能——spec-first + test-first）
 
-| 功能 | 规范断言（来源 ADR-017 §Decision） | 失败测试（红） | 实现（绿） | 重构 |
-|------|-----------------------------------|---------------|-----------|------|
-| ModelSelection 解析 | 显式 modelId 优先；无显式选择时 flash/pro 档位按旧规则；非法 modelId 拒绝 | `providersCatalog.test.ts` 扩充 | `src/main/providers/catalog.ts` | 从字符串布尔改为 selection 值对象 |
-| ModelProfile 扩展 | DeepSeek profile 参数不变；generic profile 不发送 thinking；未知模型 fail-safe generic | `providersCatalog.test.ts`（profile 参数矩阵） | `src/main/providers/profiles/*`、`types.ts` | profile 匹配集中到类型层 |
-| 网关显式模型 | 选中 modelId 后请求使用该模型；运行中的流不中断；旧配置路径不变 | `gatewayModelSelection.test.ts` | `gateway.ts` `refreshModels`/`streamChatOnce` | 上游解析单源 |
-| 模型 IPC/UI | `gateway:list-models` 失败保留上次列表；`gateway:set-model` 运行时校验；Settings 可选择（ConfigPage 保持验证/进入流程） | `ipcSchema.test.ts` + 新 `modelSelection.interaction.ts` | `ipc.ts`、`ipcSchema.ts`、`preload.ts`、SettingsPanel | 选择状态单源 |
-| 能力指纹 | digest 稳定排序（id+risk）；能力增删/风险变化改变 digest | `extension.test.ts` 扩充 | `src/domain/extension.ts` | 纯函数 |
-| 信任重审 | 重复注册能力变化 → user-authorized 回退 untrusted；builtin 不变；发 `extension.capabilities_changed` | `pluginSystem.test.ts`、`timelineEvents.test.ts` | `pluginSystem.ts`、`timeline.ts` | 注册路径单源 |
-| MCP 回收 | 移除服务器 → unregister + `extension.unregistered`；新增能力不自动扩大授权 | `mcpManager.test.ts` | `mcpManager.ts`、`pluginSystem.ts`、`timeline.ts` | refresh 差异计算 |
-| 扩展能力明细 UI | 设置页显示能力名称/风险；授权状态与失败原因保持 | `extensionCapabilities.interaction.ts`（新增） | `SettingsPanel.tsx` | 仅展示层 |
+| 功能                | 规范断言（来源 ADR-017 §Decision）                                                                                      | 失败测试（红）                                           | 实现（绿）                                            | 重构                              |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------- | --------------------------------- |
+| ModelSelection 解析 | 显式 modelId 优先；无显式选择时 flash/pro 档位按旧规则；非法 modelId 拒绝                                               | `providersCatalog.test.ts` 扩充                          | `src/main/providers/catalog.ts`                       | 从字符串布尔改为 selection 值对象 |
+| ModelProfile 扩展   | DeepSeek profile 参数不变；generic profile 不发送 thinking；未知模型 fail-safe generic                                  | `providersCatalog.test.ts`（profile 参数矩阵）           | `src/main/providers/profiles/*`、`types.ts`           | profile 匹配集中到类型层          |
+| 网关显式模型        | 选中 modelId 后请求使用该模型；运行中的流不中断；旧配置路径不变                                                         | `gatewayModelSelection.test.ts`                          | `gateway.ts` `refreshModels`/`streamChatOnce`         | 上游解析单源                      |
+| 模型 IPC/UI         | `gateway:list-models` 失败保留上次列表；`gateway:set-model` 运行时校验；Settings 可选择（ConfigPage 保持验证/进入流程） | `ipcSchema.test.ts` + 新 `modelSelection.interaction.ts` | `ipc.ts`、`ipcSchema.ts`、`preload.ts`、SettingsPanel | 选择状态单源                      |
+| 能力指纹            | digest 稳定排序（id+risk）；能力增删/风险变化改变 digest                                                                | `extension.test.ts` 扩充                                 | `src/domain/extension.ts`                             | 纯函数                            |
+| 信任重审            | 重复注册能力变化 → user-authorized 回退 untrusted；builtin 不变；发 `extension.capabilities_changed`                    | `pluginSystem.test.ts`、`timelineEvents.test.ts`         | `pluginSystem.ts`、`timeline.ts`                      | 注册路径单源                      |
+| MCP 回收            | 移除服务器 → unregister + `extension.unregistered`；新增能力不自动扩大授权                                              | `mcpManager.test.ts`                                     | `mcpManager.ts`、`pluginSystem.ts`、`timeline.ts`     | refresh 差异计算                  |
+| 扩展能力明细 UI     | 设置页显示能力名称/风险；授权状态与失败原因保持                                                                         | `extensionCapabilities.interaction.ts`（新增）           | `SettingsPanel.tsx`                                   | 仅展示层                          |
 
 ## 产出物
 
