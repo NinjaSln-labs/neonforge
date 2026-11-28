@@ -229,10 +229,9 @@ export interface NeonForgeBridge {
     resume: (sessionId: string, entryId: string) => Promise<QueueResult>
     pause: (sessionId: string, entryId: string) => Promise<QueueResult>
     complete: (sessionId: string, entryId: string) => Promise<QueueResult>
-    fail: (sessionId: string, entryId: string, reason: string) => Promise<QueueResult>
+    // 2026-11-28 审计（D-1）：fail / clear 已删——无 UI 语义（cancel 覆盖用户撤销）
     cancel: (sessionId: string, entryId: string) => Promise<QueueResult>
     reorder: (sessionId: string, entryId: string, position: number) => Promise<QueueResult>
-    clear: (sessionId: string) => Promise<void>
   }
   delivery: {
     applyDiff: (
@@ -316,11 +315,7 @@ export interface NeonForgeBridge {
       files: string[],
     ) => Promise<{ fragments: Array<{ path: string; content: string; truncated: boolean }> }>
   }
-  rag: {
-    search: (
-      query: string,
-    ) => Promise<{ hits: Array<{ path: string; line: number; snippet: string }>; note?: string }>
-  }
+  // 2026-11-28 审计（D-1）：rag.search 通道已删——CodeRag 走主进程内部 search 工具
   // ADR-018：问题台账 main 权威 + 加密同步目录
   problems: {
     load: () => Promise<{ problems: ProblemInstance[]; error?: string }>
@@ -387,7 +382,7 @@ export interface NeonForgeBridge {
       error?: string
     }>
     refresh: () => Promise<{ servers: McpServerStatus[]; configError?: string }>
-    status: () => Promise<McpServerStatus[]>
+    // 2026-11-28 审计（D-1）：status() 已删——refresh 的返回值含同样数据
   }
   git: {
     read: (

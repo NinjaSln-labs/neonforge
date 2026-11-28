@@ -221,13 +221,11 @@ contextBridge.exposeInMainWorld('neonforge', {
       ipcRenderer.invoke('queue:pause', { sessionId, entryId }),
     complete: (sessionId: string, entryId: string) =>
       ipcRenderer.invoke('queue:complete', { sessionId, entryId }),
-    fail: (sessionId: string, entryId: string, reason: string) =>
-      ipcRenderer.invoke('queue:fail', { sessionId, entryId, reason }),
+    // 2026-11-28 审计（D-1）：删 queue.fail / queue.clear——无 UI 语义（cancel 已覆盖用户撤销）。
     cancel: (sessionId: string, entryId: string) =>
       ipcRenderer.invoke('queue:cancel', { sessionId, entryId }),
     reorder: (sessionId: string, entryId: string, position: number) =>
       ipcRenderer.invoke('queue:reorder', { sessionId, entryId, position }),
-    clear: (sessionId: string) => ipcRenderer.invoke('queue:clear', sessionId),
   },
   delivery: {
     applyDiff: (
@@ -307,24 +305,8 @@ contextBridge.exposeInMainWorld('neonforge', {
       role?: 'user' | 'assistant' | 'system' | 'tool'
       detail?: Record<string, unknown>
     }) => ipcRenderer.invoke('timeline:log', evt) as Promise<void>,
-    // 2026-08-15 DDD 重建：时间线查询（通用接入——调试/分析）
-    query: (filter: {
-      session?: string
-      type?: string | string[]
-      from?: string
-      to?: string
-      limit?: number
-    }) =>
-      ipcRenderer.invoke('timeline:query', filter) as Promise<
-        Array<{
-          ts: string
-          seq: number
-          session: string
-          type: string
-          role?: string
-          detail: Record<string, unknown>
-        }>
-      >,
+    // 2026-11-28 审计（D-1）：timeline.query 通道已删——timeline 是只写审计存储，
+    // 消费方是人/分析工具而非 renderer（查询经 JSONL 文件直接读取）。
   },
   tools: {
     list: () =>
@@ -411,13 +393,7 @@ contextBridge.exposeInMainWorld('neonforge', {
         fragments: Array<{ path: string; content: string; truncated: boolean }>
       }>,
   },
-  rag: {
-    search: (query: string) =>
-      ipcRenderer.invoke('rag:search', { query }) as Promise<{
-        hits: Array<{ path: string; line: number; snippet: string }>
-        note?: string
-      }>,
-  },
+  // 2026-11-28 审计（D-1）：rag 通道已删——CodeRag 走主进程内部 search 工具。
   problems: {
     load: () =>
       ipcRenderer.invoke('problems:load') as Promise<{
@@ -532,10 +508,7 @@ contextBridge.exposeInMainWorld('neonforge', {
         }>
         configError?: string
       }>,
-    status: () =>
-      ipcRenderer.invoke('mcp:status') as Promise<
-        Array<{ name: string; ok: boolean; tools: Array<{ name: string }>; error?: string }>
-      >,
+    // 2026-11-28 审计（D-1）：mcp.status 通道已删——SettingsPanel 用 refresh 的返回值。
   },
   git: {
     read: (

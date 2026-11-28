@@ -14,7 +14,6 @@ import {
   resumeTask,
   pauseTask,
   completeTask,
-  failTask,
   cancelTask,
   reorderTask,
   recoverInterruptedTasks,
@@ -202,19 +201,8 @@ export class TaskQueueStore {
     )
   }
 
-  fail(sessionId: string, entryId: string, reason: string): TaskQueueState {
-    return this.mutate(
-      sessionId,
-      (state, at) => failTask(state, entryId, reason, at),
-      () => [
-        {
-          session: sessionId,
-          type: 'queue.entry_completed',
-          detail: { entryId, outcome: 'failed', reason },
-        },
-      ],
-    )
-  }
+  // 2026-11-28 审计（D-1）：删 fail / clear——对应 IPC 通道无 UI 消费方；
+  // 领域函数 failTask 保留（taskQueue 领域语义不变，供未来接线）。
 
   cancel(sessionId: string, entryId: string): TaskQueueState {
     return this.mutate(
@@ -230,12 +218,5 @@ export class TaskQueueStore {
       (state, at) => reorderTask(state, entryId, position, at),
       () => [{ session: sessionId, type: 'queue.entry_reordered', detail: { entryId, position } }],
     )
-  }
-
-  clear(sessionId: string): void {
-    const data = this.loadAll()
-    delete data[sessionId]
-    this.accessedSessions.delete(sessionId)
-    this.write(data, [])
   }
 }

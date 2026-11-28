@@ -115,10 +115,7 @@ export class McpManager {
     return { servers }
   }
 
-  status(): McpServerStatus[] {
-    return this.statuses
-  }
-
+  // 2026-11-28 审计（D-1）：删 status()——mcp:status 通道已删，refresh() 返回同样数据。
   async callTool(
     serverName: string,
     toolName: string,

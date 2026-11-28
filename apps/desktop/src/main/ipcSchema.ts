@@ -237,11 +237,7 @@ export const IPC_SCHEMAS = {
     },
     required: ['files'],
   },
-  ragSearch: {
-    type: 'object',
-    properties: { query: { type: 'string', minLength: 1, maxLength: 2000 } },
-    required: ['query'],
-  },
+  // 2026-11-28 审计（D-1）：ragSearch 已删（rag:search 通道移除——CodeRag 走内部 search 工具）
   pluginToggle: {
     type: 'object',
     properties: {
@@ -433,15 +429,5 @@ export const IPC_SCHEMAS = {
     },
     required: ['type'],
   },
-  timelineQuery: {
-    type: 'object',
-    properties: {
-      session: { type: 'string', maxLength: 200 },
-      // string | string[]——轻量校验器不支持联合类型，元素形态由 timelineLogger.query 消费
-      type: { type: 'any' },
-      from: { type: 'string', maxLength: 100 },
-      to: { type: 'string', maxLength: 100 },
-      limit: { type: 'number', integer: true, min: 0, max: 10000 },
-    },
-  },
+  // 2026-11-28 审计（D-1）：timelineQuery 已删（timeline:query 通道移除——审计存储无 renderer 消费方）
 } satisfies Record<string, IpcSchema>
