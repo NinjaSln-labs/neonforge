@@ -3,7 +3,7 @@
 > 范围：`apps/desktop` 全部生产代码（`src/main`、`src/domain`、`src/renderer`、`src/preload`）+ 测试/构建/CI 配置。
 > 方法：codegraph 符号检索 + 全库 `rg -w` 交叉验证（src / tests / evals / preload / renderer 五侧）+ 逐项人工复核；
 > 主进程由独立审计代理全文件扫描（63 文件 import 图可达性验证），其余进程逐批人工审查。
-> 结论：**修复 28 项、产品决策 6 项待定、确认非问题 4 类**；无协议/数据迁移，无新增运行时依赖。
+> 结论：**修复 28 项、产品决策 D-1 已处置（删 5 留 3）、剩余 5 项待定、确认非问题 4 类**；无协议/数据迁移，无新增运行时依赖。
 
 ## 一、修复项（按批次）
 
@@ -86,16 +86,29 @@ CI 的 L3 断言 `capability.checked` 期望 1 条、实际 2 条。取证：给
 | C-13 | `gateway: forceTool` / `progressMode` 字段 | gateway 内零读取（`streamChatOnce` 的 opts 读取清单无此二者）；IPC 载荷字段保留以兼容契约，main 不再转译 |
 | C-14 | `gitBridge: GitReadAction` | **非死码而是未接线**——`gitRead` 原为裸 `string`；改为 `isGitReadAction()` 运行时校验 + 穷尽 switch，错误文案不变 |
 
-## 二、产品决策项（6 项，待定）
+## 二、产品决策项（已处置 1 项，剩余 5 项待定）
 
-### D-1 八个无消费者的 IPC 端点（建议：删除端点 + 其 store 方法）
+### D-1 八个无消费者的 IPC 端点 —— 已处置（删 5 留 3）
 
-`config:clear-key`、`usage:export`、`acceptance:waive`、`queue:fail`、`queue:clear`、`timeline:query`、`rag:search`、`mcp:status`。
+**根因分类**（逐端点取证登记时间、设计文档出处、是否有过 UI）：
 
-证据：renderer 0 引用；preload 各 1 处仅为通道声明；测试仅 mockBridge stub 或 store 单测；e2e/evals 0 引用。注意 `ipcContractParity.test.ts` 双向断言「main handler ⇄ preload invoke」——删除需三处同步（main/preload/mockBridge）。
-关联死 store 方法：`ConfigStore.clearApiKey`、`UsageStore.exportCsv`、`TaskQueueStore.fail/clear`、`TimelineLogger.query`、`McpManager.status`、`CodeRag` 仅经 `rag:search` 的检索入口（工具侧 `search` 仍用 CodeRag，故 CodeRag 本身保留）。
+| 端点 | 根因 | 处置 |
+|---|---|---|
+| `mcp:status` | **被取代**：`SettingsPanel.tsx:120` 用 `mcp:refresh` 的返回值填同一状态 | **已删**（PR #170） |
+| `rag:search` | **内部能力被误暴露**：CodeRag 的真实消费者是主进程内部 `search` 工具（`tools.ts:1047`） | **已删**通道；CodeRag 保留 |
+| `queue:fail` | **领域命令全集登记，UI 实现子集**：设计列 11 个队列通道，UI 用 9 个 | **已删**；`failTask` 领域函数保留 |
+| `queue:clear` | 同上；UI 只有逐条 cancel | **已删** |
+| `timeline:query` | **领域读模型 ≠ 渲染层需求**：timeline 是只写审计存储 | **已删**通道；`TimelineLogger.query` 保留供未来调试工具 |
+| `config:clear-key` | **安全能力执行端缺失**：`configStore.rotateRecommended`（Key 龄超阈值建议轮换）已实现，ConfigPage 只有 `setKey` 覆盖写，**无清除入口** → 检测到该轮换却无法执行 | **保留**，待接 UI |
+| `usage:export` | **成组能力半接线**：`usage:summary` 有 UI（`MainWorkspace.tsx:113`），`export` 没有；DDD 蓝图 `00-domain-blueprint.md:109` 的 `ExportUsage` 是关键命令 | **保留**，待接 UI |
+| `acceptance:waive` | **同一能力的便捷别名未被采用**：`acceptance:mark` 的 status 已含 `'waived'` | **保留**，待接 UI |
 
-建议删除理由：死通道扩大攻击面（IPC 可被 renderer 任意调用）且长期维护成本高于「将来可能用」。若需保留 `timeline:query` 作调试接口，应移入仅开发构建可用的条件注册。
+**删 5 的验收**：`ipcContractParity.test.ts` 双向断言（main handler ⇄ preload invoke）保证 main/preload/`types.d.ts` 三处同步；`taskQueueStore` 的两个用例改为断言 `queue.entry_cancelled` 而非已删的 failed outcome；DDD 交互表对应行加删除标注与原因。
+
+**留 3 的待办**（都属「领域已实现、UI 未接」，删除通道等于砍掉半成品功能）：
+1. `config:clear-key` —— 在 ConfigPage 加「清除已保存 Key」按钮，让 `rotateRecommended` 提示有可执行动作
+2. `usage:export` —— 在用量区域加「导出 CSV」按钮（`UsageStore.exportCsv` 已实现）
+3. `acceptance:waive` —— 验收面板加豁免入口（`AcceptanceStore.mark(..., 'waived')` 已实现）
 
 ### D-2 三个演示面板（建议：删除）
 
