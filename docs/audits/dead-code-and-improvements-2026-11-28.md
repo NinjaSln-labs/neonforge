@@ -3,7 +3,7 @@
 > 范围：`apps/desktop` 全部生产代码（`src/main`、`src/domain`、`src/renderer`、`src/preload`）+ 测试/构建/CI 配置。
 > 方法：codegraph 符号检索 + 全库 `rg -w` 交叉验证（src / tests / evals / preload / renderer 五侧）+ 逐项人工复核；
 > 主进程由独立审计代理全文件扫描（63 文件 import 图可达性验证），其余进程逐批人工审查。
-> 结论：**修复 26 项、产品决策 5 项待定、确认非问题 4 类**；无协议/数据迁移，无新增运行时依赖。
+> 结论：**修复 28 项、产品决策 5 项待定、确认非问题 4 类**；无协议/数据迁移，无新增运行时依赖。
 
 ## 一、修复项（按批次）
 
@@ -59,6 +59,16 @@
 
 修复：`vitest.config.ts` 设 `ELECTRON_OVERRIDE_DIST_PATH` 指向不存在路径——`index.js` 在该变量判定的分支先于下载，彻底切断懒下载；不影响 `vi.mock('electron')`。隔离工作树两次冷跑 80/80 / 5.57s、5.58s，`dist` 从未生成。
 
+### 批次 21：CI-only L3 失败牵出的真缺陷（StrictMode 双发遥测）
+
+CI 的 L3 断言 `capability.checked` 期望 1 条、实际 2 条。取证：给 mock `tools.execute` 加调用计数，得到 `["check-capability","read"]`（**execute 只跑一次**），而事件打点两次——排除工具重复执行。
+
+根因：`useChatStream.ts` 的 `tlog('capability.checked', …)` 写在 `setMessages` 的 updater 内。React StrictMode（`main.tsx` 已启用）在开发构建下**双调 updater**，updater 内的副作用因此执行两次。同文件第 614 行已注释该危险模式（「工具执行副作用移出 updater——StrictMode 双调会执行两次」），但该遥测调用漏网。
+
+影响：开发/测试构建下每次能力检测产生一条重复时间线事件（生产构建不双调，但 JSX 约定要求 updater 纯函数，违反本身即缺陷）。
+
+修复：能力摘要计算与 `tlog` 移到 `setMessages` 之前，updater 只构建下一状态。L3 断言改为「恰好 1 条」，并做**负控验证**：把 tlog 移回 updater 内 → 测试失败（Expected 3 / Received 4），恢复后通过。
+
 | ID | 符号 | 证据 |
 |----|------|------|
 | C-01 | `envManager: binDirOf` | 0 引用；同一路径在 92/184 行内联重算 |
@@ -103,9 +113,11 @@
 
 渲染器已由 Vite 打包，electron-builder 再从 `node_modules` 重打包会显著膨胀安装包。建议 `files` 排除并实测安装包体积。
 
-## 三、compact 遗留策略（MEDIUM，建议单独决策）
+## 三、compact 遗留策略（已修复——批次 20）
 
-`src/main/compact.ts` 的 `decideCompact`/`compactHint`/`COMPACT_THRESHOLD`/`COMPACT_TARGET` 仅测试使用；生产走 `compaction.shouldCompact/compact`，而 renderer 在 `ConversationPanel.tsx:645-648` **内联复制**了 24/12 阈值与提示文案——双源漂移风险。建议：把阈值与文案收敛到 `src/domain` 单源，renderer 与 main 共同导入；`compact.ts` 遗留策略删除。
+`src/main/compact.ts` 的 `decideCompact`/`compactHint`/`COMPACT_THRESHOLD`/`COMPACT_TARGET` 仅测试使用；生产走 `compaction.shouldCompact/compact`，而 renderer 在 `ConversationPanel.tsx` **内联复制**了 24/12 阈值与提示文案——双源漂移风险。
+
+处置：提示阈值/保留条数/文案收敛到 `src/domain/compactionPolicy.ts`（renderer 可直接导入 domain），两侧共同导入；`compact.ts` 遗留策略删除。注意语义区分：提示阈值（24，温和提醒）≠ 触发阈值（`compaction.shouldCompact` 的 100 条 / 200K 字符，真正执行压缩）——已在 domain 文件头注释写明。
 
 ## 四、确认非问题（不改）
 
