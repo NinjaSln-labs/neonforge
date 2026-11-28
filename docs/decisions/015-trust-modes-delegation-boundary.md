@@ -9,7 +9,7 @@
 
 1. L4 低危委托只有 renderer 的一个 localStorage 布尔值（`nf-delegate-lowrisk`），跨设备/主进程无权威、无迁移、无审计；
 2. 该委托实现过宽：`delegateLowRisk && toolRisk === 'low'` 会为任意 write/edit 自动批准——**清单外文件与项目根外文件也会被放行**，违背 execution-trust spec「清单外/沙箱外永不因委托自动放行」；
-3. 信任阶梯面板（`TrustLadderPanel`）的等级/升级/授权记录是演示数据，产品运行时没有真实模式；
+3. 信任阶梯面板（`TrustLadderPanel`）的等级/升级/授权记录是演示数据，产品运行时没有真实模式（该面板已于 2026-11-28 审计 D-2 删除——生产入口只剩设置页三档选择与问题台账的已授权行）；
 4. 设置页与对话面板用 localStorage 事件联动，缺少 main 侧持久化与运行时契约校验。
 
 ## Decision
@@ -41,10 +41,10 @@
    - `tool.executing` 时间线载荷增加 `approvalSource`（审计自动批准来源）；新增 `security.trust_delegation_denied` 事件记录被拒的委托尝试。
 5. **UI**：
    - 设置页：把旧勾选框替换为三档模式选择（谨慎/标准/低危委托）并显示各档说明；`trust:set` 成功后广播 `nf-trust-changed`。
-   - `TrustLadderPanel`：展示真实 `trustMode`（strict/standard→L3、delegated→L4），移除假升级按钮/假等级状态；授权记录仍取真实问题快照，空则显示暂无。
+   - `TrustLadderPanel`：展示真实 `trustMode`（strict/standard→L3、delegated→L4），移除假升级按钮/假等级状态；授权记录仍取真实问题快照，空则显示暂无。（2026-11-28 审计 D-2：该面板整体删除，L1–L4 阶梯叙事保留在本文；生产 UI 为设置页三档选择 + 问题台账已授权行。）
    - 旧 `nf-delegate-changed` 事件由 `nf-trust-changed` 取代（保留一次性兼容监听不影响行为）。
 
 ## Consequences
-- 积极：低危委托有 main 权威、跨重启保留、可审计；修复「委托绕过计划清单/项目根」的安全缺口；三档预设让用户按任务风险选择授权疲劳/安全平衡；信任阶梯面板反映真实状态。
+- 积极：低危委托有 main 权威、跨重启保留、可审计；修复「委托绕过计划清单/项目根」的安全缺口；三档预设让用户按任务风险选择授权疲劳/安全平衡；信任阶梯面板反映真实状态（面板本身 2026-11-28 D-2 删除，模式语义不变）。
 - 代价：`approvalSource` 枚举扩展（preload/types/schema）；设置页与面板交互需迁移旧 localStorage；委托行为比旧版更严格（清单外文件仍需授权），可能让既有用户感到变化——用迁移说明与设置页文案解释。
 - 边界：不实现自动按模型自评提升信任/机器学习信任分；不改变权限规则引擎；不实现跨设备同步（#15）。

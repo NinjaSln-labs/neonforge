@@ -110,9 +110,19 @@ CI 的 L3 断言 `capability.checked` 期望 1 条、实际 2 条。取证：给
 2. `usage:export` —— 在用量区域加「导出 CSV」按钮（`UsageStore.exportCsv` 已实现）
 3. `acceptance:waive` —— 验收面板加豁免入口（`AcceptanceStore.mark(..., 'waived')` 已实现）
 
-### D-2 三个演示面板（建议：删除）
+### D-2 三个演示面板（已处置：删除）
 
-`DigitalDeliveryPanel`、`TrustLadderPanel`、`DoDAlignPanel`——纯 fixture 展示，无产品数据源。建议移除组件与路由引用，保留设计文档叙述。
+**2026-11-28 处置（用户选定「全删三个」）**：
+
+核查后修正了原判断：`DigitalDeliveryPanel` / `DoDAlignPanel` 确实是纯写死的假数据（发票清单、3 条 DoD 文案），生产等价物分别是 `OutputPanel`+`DeliveryPanel` 与验收项流程；但 `TrustLadderPanel` 吃的是真实 `trustMode` 与真实问题快照 `authorized`，只是被 demo 标志挡住——产品运行时永远不渲染，其 L1–L4 阶梯可视化在生产里无等价物（委托开关本身在设置页）。
+
+删除内容：
+
+- 3 个组件文件；`ConversationPanel` 的 3 个渲染位与 `onDeliver` 通道；`MainWorkspace` 传入的 `activeAuthorizedLogs` 与 `ConversationPanel` 对应 prop；`ConversationPanel` 里只为面板服务的 `handleTrustModeChange`
+- `DemoBridge` 的 `digitalDelivery` / `trustLadder` / `dodAlign` / `onDeliver` 注入位
+- 3 个 L5 视觉测试 + 目录下 7 张像素基线；`styles.css` 的 `.nf-digital` / `.nf-trust__*` / `.nf-dod` 规则块；`icons.tsx` 的 `IconMerge` / `IconTarget`
+- L3「信任阶梯」测试改写为断言生产路径：同一份问题快照 `authorized` 在 `SessionPanel` 台账展开为「已授权」行（数据来源与可回溯语义不变）
+- ADR-015 补注「面板已删，L1–L4 叙事保留在 ADR」
 
 ### D-3 LSP 打包（建议：`extraResources`）
 

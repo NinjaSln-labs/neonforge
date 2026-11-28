@@ -187,14 +187,15 @@ test('@引用：输入 @ → 浮层 → 点击插入（ContextEngine 入口）',
   await expect(input).toHaveValue(/@a\.ts\s*$/)
 })
 
-test('信任阶梯：授权记录接真实数据（06 问题快照 authorized——可回溯）', async ({ page }) => {
-  // 独立 mock：trustLadder + 问题快照 authorized（真实数据路径）
+test('问题台账：授权记录接真实快照（06 问题快照 authorized——可回溯）', async ({ page }) => {
+  // 2026-11-28 审计（D-2）：原断言渲染在 TrustLadderPanel（演示面板已删）。
+  // 同一份数据（问题快照 authorized）的产品消费方是 SessionPanel 台账的「已授权」行——
+  // 断言对象换成生产路径，数据来源与可回溯语义不变（真实数据优先，无 demo 记录回退）。
   await page.addInitScript(() => {
     const bridge = {
       version: 'test',
       config: {
         hasKey: async () => true,
-        // getKey removed (audit 2026-11-24): renderer uses hasKey only
         setKey: async () => {},
         clearKey: async () => {},
       },
@@ -221,14 +222,12 @@ test('信任阶梯：授权记录接真实数据（06 问题快照 authorized—
         revert: async () => ({ ok: true }),
       },
       context: { resolve: async () => ({ fragments: [] }) },
-      rag: { search: async () => ({ hits: [] }) },
       plugins: { list: async () => [], toggle: async () => true },
       preheat: {
         status: async () => ({ plan: { shouldPreheat: false, why: '', actions: [] }, cache: null }),
       },
       compaction: { compact: async () => ({ ok: false, error: '未达阈值' }) },
       demo: {
-        trustLadder: true,
         problems: [
           {
             id: 'p1',
@@ -238,7 +237,10 @@ test('信任阶梯：授权记录接真实数据（06 问题快照 authorized—
             snapshot: {
               goal: '整理发票',
               decisions: [],
-              authorized: ['[write] /tmp/a.txt', '[write] /tmp/b.txt'],
+              authorized: [
+                { tool: 'write', file: '/tmp/a.txt' },
+                { tool: 'write', file: '/tmp/b.txt' },
+              ],
               pending: [],
             },
           },
@@ -250,14 +252,13 @@ test('信任阶梯：授权记录接真实数据（06 问题快照 authorized—
   await gotoStart(page)
   await page.getByRole('button', { name: '打开已有项目' }).click()
   await page.waitForSelector('.nf-chat__input textarea', { timeout: 8000 })
-  // 选中问题（activeProblem 生效 → 快照 authorized 传给 TrustLadder）
+  // 选中问题 → 台账展开快照（已授权行取真实 authorized，只显示文件名）
   await page.locator('.nf-ledger__item').first().click()
   await page.waitForTimeout(300)
-  // 授权记录显示真实文件操作（demo 记录不存在——真实数据优先）
-  await expect(page.locator('.nf-trust')).toContainText('/tmp/a.txt')
-  await expect(page.locator('.nf-trust')).toContainText('/tmp/b.txt')
-  // demo 记录不显示（真实数据替换——demo 记录 action 含「旅行手册」）
-  await expect(page.locator('.nf-trust')).not.toContainText('旅行手册')
+  const snapshot = page.locator('.nf-ledger__snapshot')
+  await expect(snapshot).toContainText('已授权')
+  await expect(snapshot).toContainText('a.txt')
+  await expect(snapshot).toContainText('b.txt')
 })
 
 test('工具卡：同批多个 write 待授权 → 合并授权按钮（ticket 14 疲劳防护——L3 合并授权，全 low 才合并）', async ({

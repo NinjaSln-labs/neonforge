@@ -416,4 +416,4 @@ PluginRegistry.register(descriptor)
 - 领域模块：目标态 `domain/acceptance.ts`（验收项状态机 + 门禁谓词）。
 - 与完成证据：证据回答“是否做到”，验收回答“按什么标准算做到”；两者不互相替代。
 - 与交付：`DeliveryPackage.acceptance` 由 AcceptanceRecord 填充；无来源时显式为空。
-- 演示隔离：`DoDAlignPanel` / `DigitalDeliveryPanel` 仅 demo bridge 可达，生产路径不得注入。
+- 演示隔离：`DoDAlignPanel` / `DigitalDeliveryPanel` 仅 demo bridge 可达，生产路径不得注入。（2026-11-28 审计 D-2：两者已删；生产验收路径为 `DeliveryPanel` 验收项。）

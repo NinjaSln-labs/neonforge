@@ -837,9 +837,6 @@ export default function MainWorkspace({
               initialPrompt={initialPrompt}
               onSessionStart={handleSessionStart}
               sessionId={sessionId}
-              activeAuthorizedLogs={
-                problems.find((p) => p.id === activeProblem)?.snapshot?.authorized
-              }
             />
           ) : (
             <TaskPanel

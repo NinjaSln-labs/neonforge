@@ -1,8 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import DigitalDeliveryPanel from './DigitalDeliveryPanel'
-import TrustLadderPanel from './TrustLadderPanel'
-import DoDAlignPanel from './DoDAlignPanel'
-import type { DeliveryPackage } from './types'
 // P1-05 阶段 5：会话时间线/消息持久化/遥测/证据对账（应用层逻辑从组件移出）
 import { useTimelineLog } from './useTimelineLog'
 import { useMessageStore } from './useMessageStore'
@@ -122,7 +118,6 @@ export default function ConversationPanel({
   planConfirmed,
   goalSeq,
   recentFilesExternal,
-  activeAuthorizedLogs,
   initialPrompt,
   onSessionStart,
   sessionId: sessionIdProp,
@@ -154,7 +149,6 @@ export default function ConversationPanel({
   recentFilesExternal?: string[]
   // 2026-08-04 体验修复：启动页首句 → 进入工作区自动发送（说了就直接开始；输入框不预填）
   initialPrompt?: string
-  activeAuthorizedLogs?: Array<{ tool: string; file: string } | string> // 06/14 授权记录可回溯：当前问题快照 authorized（TrustLadder 展示）
   // 2026-08-08 会话日志（用户「每次应该是单独的会话日志」）：挂载（进入对话）生成 UUID 会话 ID → 上报 MainWorkspace
   // （goal-confirmed/exec-confirmed 等 MainWorkspace 侧事件归属同一会话；chatKey+1 新会话 remount → 新 ID）
   onSessionStart?: (sessionId: string) => void
@@ -230,10 +224,7 @@ export default function ConversationPanel({
   }>({})
   // ADR-015：信任模式（strict/standard/delegated）——main 持久化权威，renderer 镜像；
   // 旧 nf-delegate-lowrisk 由 useTrustPolicy 一次性迁移（'1' → delegated）后删除。
-  const { mode: trustMode, setMode: setTrustMode } = useTrustPolicy()
-  const handleTrustModeChange = (mode: 'strict' | 'standard' | 'delegated') => {
-    void setTrustMode(mode)
-  }
+  const { mode: trustMode } = useTrustPolicy()
   const listRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef('')
   // 2026-08-04 审计修复（A3）：textarea DOM ref——场景卡点击预填后聚焦输入框（原焦点停卡片，需再点输入框）
@@ -641,26 +632,14 @@ export default function ConversationPanel({
 
   const demo = getDemoBridge()
   // 2026-08-07 无阶段重构 S4：demoFlow（DeliveryFlowPanel demo 通道）删除——阶段卡随阶段体系移除
-  const demoDigital = !!demo?.digitalDelivery
-  const demoTrust = !!demo?.trustLadder
-  const demoDod = !!demo?.dodAlign
+  // 2026-11-28 审计（D-2）：DigitalDeliveryPanel / TrustLadderPanel / DoDAlignPanel 三块演示面板删除——
+  // 产品运行时不可达（demo 标志只由测试 mock 注入）；生产等价物分别是 OutputPanel+DeliveryPanel、
+  // 设置页信任模式控件、验收项流程（TrustLadder 的 L1–L4 阶梯叙事保留在 ADR-015）
   const compactCount = demo?.compactHistory ?? 0
   const compactNote = compactHint(compactCount)
-  const onDeliver = (pkg: DeliveryPackage) => {
-    getDemoBridge()?.onDeliver?.(pkg)
-  }
 
   return (
     <div className="nf-chat">
-      {demoDigital && <DigitalDeliveryPanel onDeliver={onDeliver} />}
-      {demoTrust && (
-        <TrustLadderPanel
-          authorizedLogs={activeAuthorizedLogs}
-          trustMode={trustMode}
-          onTrustModeChange={handleTrustModeChange}
-        />
-      )}
-      {demoDod && <DoDAlignPanel />}
       {compactNote && (
         <div className="nf-compact">
           <IconClock size={12} /> {compactNote}

@@ -22,7 +22,7 @@
 | 委托 main 边界 | delegate 仅 write/edit；根内 + `loadPlan().planConfirmed` 包含；路径异常也回 needApproval；否则事件 | `tools.test.ts` | `tools.ts` execute 守卫 | 路径归一复用 resolvePath/isInSandboxRealpath |
 | 自动来源审计 | `tool.executing` 带 approvalSource；委托拒绝记 `security.trust_delegation_denied` | `tools.test.ts`/`timelineEvents.test.ts` | `tools.ts`/`timeline.ts` | — |
 | 旧开关迁移 | 首次加载旧 `nf-delegate-lowrisk=1` → delegated；**main trust:set 成功后才删除旧键/置 `nf-trust-v2`**（失败保留重试） | `useTrustPolicy.test.ts`（读取/标记分离）+ `trustModes.interaction.ts`（真实旧键种子） | `useTrustPolicy.ts`/`ConversationPanel` | 迁移逻辑抽纯函数 |
-| 设置页与面板 | 三档选择写 main 并广播；面板显示真实模式，无演示升级/日志 | `trustModes.interaction.ts` | `SettingsPanel`/`TrustLadderPanel` | 保留样式类，替换假状态 |
+| 设置页与面板 | 三档选择写 main 并广播；面板显示真实模式，无演示升级/日志 | `trustModes.interaction.ts` | `SettingsPanel`（`TrustLadderPanel` 2026-11-28 D-2 删除） | 保留样式类，替换假状态 |
 | 计划确认与批量批准分离 | `sync-plan` 置 planConfirmed 不置 approved；reset 撤销不受落盘失败影响 | `plannedFilesStore.test.ts` | `plannedFilesStore.ts`/`ipc.ts` | 进程内缓存优先 |
 
 ## 产出物

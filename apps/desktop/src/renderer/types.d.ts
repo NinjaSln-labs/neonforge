@@ -559,15 +559,12 @@ export interface ProblemSyncStatus {
 
 // ToolRegistry（ticket 10/14）：renderer 侧工具接口（risk：none=L1 观察 / low=L3 文件操作 / high=L3 命令执行）
 // 测试/演示注入通道（2026-08-15 Q10 类型化——仅测试 mock bridge 存在；产品运行时无 demo 字段）
+// 2026-11-28 审计（D-2）：digitalDelivery / trustLadder / dodAlign 三块演示面板删除，对应注入位一并移除
 export interface DemoBridge {
   delivery?: DeliveryPackage
   problems?: ProblemInstance[]
   recentFiles?: string[]
-  digitalDelivery?: boolean
-  trustLadder?: boolean
-  dodAlign?: boolean
   compactHistory?: number
-  onDeliver?: (pkg: DeliveryPackage) => void
 }
 
 export interface NeonForgeTools {
