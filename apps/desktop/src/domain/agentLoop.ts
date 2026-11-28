@@ -213,14 +213,15 @@ export type StuckEvent =
 // === Domain Service: StuckDetector——输入 TurnProgress + 当前 StuckState → 新状态 + 事件（纯函数） ===
 // 行业对标：dev.to StuckDetector（no_progress_threshold 连续无进展才升级 + needs_human 转人工）
 // 参数贴合 0-1 流程（轮次少）：连续 2 轮无进展升级、升级 2 次后转用户（不再固定 autoNudge 3 次配额——「配额耗尽」问题）
-export function detectStuck(input: {
-  turn: TurnProgress
-  prev: StuckState
-  config?: { noProgressThreshold?: number; escalationLimit?: number }
-}): { state: StuckState; event?: StuckEvent } {
+export function detectStuck(input: { turn: TurnProgress; prev: StuckState }): {
+  state: StuckState
+  event?: StuckEvent
+} {
   const { turn, prev } = input
-  const noProgressThreshold = input.config?.noProgressThreshold ?? 2
-  const escalationLimit = input.config?.escalationLimit ?? 2
+  // 2026-11-28 审计：原 config 参数（noProgressThreshold/escalationLimit）无任何调用方传值——
+  // 阈值即产品常量（2 轮升级 / 升级 2 次转人工），内联避免「可配置」的假承诺
+  const noProgressThreshold = 2
+  const escalationLimit = 2
   // 问句/沟通/完成态 = 正常对话（非停滞）——重置（模型在等用户/在对话/已完成）
   // 2026-08-07 待授权轮（根因 2）：need-approval = 模型停住等用户批准——重置（不 escalate——授权流不许打断）
   if (turn.isQuestion || turn.isCommunication || turn.isDone || turn.needsApproval) {

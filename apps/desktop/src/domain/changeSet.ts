@@ -8,8 +8,9 @@
 export type ChangeItemStatus =
   'pending' | 'approved' | 'rejected' | 'applied' | 'reverted' | 'conflicted'
 
-export type ChangeSetStatus =
-  'proposed' | 'reviewed' | 'applied' | 'reverted' | 'conflicted' | 'superseded'
+// 2026-11-28 审计：'superseded' 删除——唯一产生者是 supersedeChangeSet（无调用方）；
+// deriveStatus 的 previous==='superseded' 分支随之不可达（ADR-019 同类死值清理）
+export type ChangeSetStatus = 'proposed' | 'reviewed' | 'applied' | 'reverted' | 'conflicted'
 
 export interface ChangeItemInput {
   id: string
@@ -53,7 +54,7 @@ function replaceItem(
   return touch({ ...set, items }, at)
 }
 
-function deriveStatus(items: ChangeItem[], previous: ChangeSetStatus): ChangeSetStatus {
+function deriveStatus(items: ChangeItem[]): ChangeSetStatus {
   if (items.some((i) => i.status === 'conflicted')) return 'conflicted'
   const appliedLike = items.filter((i) => i.status === 'applied' || i.status === 'reverted')
   if (appliedLike.length > 0) {
@@ -65,7 +66,7 @@ function deriveStatus(items: ChangeItem[], previous: ChangeSetStatus): ChangeSet
     return 'applied'
   }
   if (items.some((i) => i.status === 'approved' || i.status === 'rejected')) return 'reviewed'
-  return previous === 'superseded' ? 'superseded' : 'proposed'
+  return 'proposed'
 }
 
 export function createChangeSet(
@@ -99,7 +100,7 @@ export function reviewItem(
     }),
     at,
   )
-  return { ...next, status: deriveStatus(next.items, next.status) }
+  return { ...next, status: deriveStatus(next.items) }
 }
 
 export function applyChangeSet(
@@ -119,7 +120,7 @@ export function applyChangeSet(
     )
   }
   const next: ChangeSet = { ...set, items, updatedAt: at ?? new Date().toISOString() }
-  return { ...next, status: deriveStatus(items, set.status) }
+  return { ...next, status: deriveStatus(items) }
 }
 
 export function revertChangeSet(
@@ -137,7 +138,7 @@ export function revertChangeSet(
     )
   }
   const next: ChangeSet = { ...set, items, updatedAt: at ?? new Date().toISOString() }
-  return { ...next, status: deriveStatus(items, set.status) }
+  return { ...next, status: deriveStatus(items) }
 }
 
 export function markConflict(
@@ -154,8 +155,4 @@ export function markConflict(
     at,
   )
   return { ...next, status: 'conflicted' }
-}
-
-export function supersedeChangeSet(set: ChangeSet, at?: string): ChangeSet {
-  return { ...set, status: 'superseded', updatedAt: at ?? new Date().toISOString() }
 }

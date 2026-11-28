@@ -2,7 +2,10 @@
 import type { ProblemInstance, ProblemSnapshot } from './types'
 
 export const PROBLEMS_KEY = 'nf-problems'
-export const PROBLEMS_MAX = 20 // 台账上限（防膨胀）
+// 2026-11-28 审计：上限单源——domain/problemLedger 的 PROBLEMS_MAX（原字面量重复，两处可漂移）
+export { PROBLEMS_MAX } from '../domain/problemLedger'
+import { PROBLEMS_MAX as MAX } from '../domain/problemLedger'
+const PROBLEMS_MAX = MAX // 本地别名保持既有调用点不变
 
 // 发送消息 → 创建问题实例（title 截断 20 字；status 执行中；updatedAt 时分；快照 goal=首句）
 export function createProblem(text: string): ProblemInstance {

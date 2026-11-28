@@ -34,12 +34,6 @@ export type TimelineEventType =
   | 'task.goal_proposed' // 模型提议目标（【目标确认】标记）
   | 'task.goal_confirmed' // 用户确认目标
   | 'task.goal_rejected' // 用户重新描述
-  | 'task.execution_proposed' // @deprecated 旧读窗口（新事件 task.plan_proposed）
-  | 'task.execution_confirmed' // @deprecated 旧读窗口（新事件 task.plan_confirmed）
-  | 'task.execution_rejected' // @deprecated 旧读窗口（新事件 task.plan_rejected）
-  | 'task.achievement_proposed' // @deprecated 旧读窗口（新事件 task.resolution_proposed）
-  | 'task.achievement_confirmed' // @deprecated 旧读窗口（新事件 task.resolution_confirmed）
-  | 'task.achievement_rejected' // @deprecated 旧读窗口（新事件 task.resolution_rejected）
   | 'task.plan_proposed' // P2-01：方案提议（规范名）
   | 'task.plan_confirmed' // 用户确认方案
   | 'task.plan_rejected' // 用户修改方案
@@ -58,6 +52,8 @@ export type TimelineEventType =
   // —— PlannedFiles：宿主边界（06 §1.2）——
   | 'plan.approved' // approve-files 批准（载荷：files 新增清单——追加语义）
   // 2026-11-28 审计：plan.rejected 删除（清单外拦截由 tool.blocked gate=out-of-plan 承载——见 ADR-019）
+  // 2026-11-28 审计：6 个历史别名（task.execution_*/task.achievement_*）删除——「读取窗口」不存在
+  // （时间线是 write-only：重放/DLQ 按原始 type 字符串直写，不查注册表；query 也不按旧名过滤——ADR-019）
   // —— ToolRegistry：工具（06 §1.3）——
   | 'tool.requested' // 模型请求工具（载荷：name/args）
   | 'tool.blocked' // 工具被拦（载荷：gate——pending/confirm/out-of-plan/policy + reason）
@@ -193,12 +189,6 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
   'task.goal_proposed': { domain: 'task', role: 'assistant', detailKeys: ['goalText'] },
   'task.goal_confirmed': { domain: 'task', role: 'system', detailKeys: ['point'] },
   'task.goal_rejected': { domain: 'task', role: 'system', detailKeys: ['point'] },
-  'task.execution_proposed': { domain: 'task', role: 'assistant', detailKeys: ['plan', 'files'] },
-  'task.execution_confirmed': { domain: 'task', role: 'system', detailKeys: ['point'] },
-  'task.execution_rejected': { domain: 'task', role: 'system', detailKeys: ['point'] },
-  'task.achievement_proposed': { domain: 'task', role: 'assistant', detailKeys: ['summary'] },
-  'task.achievement_confirmed': { domain: 'task', role: 'system', detailKeys: ['point'] },
-  'task.achievement_rejected': { domain: 'task', role: 'system', detailKeys: ['point'] },
   'task.plan_proposed': { domain: 'task', role: 'assistant', detailKeys: ['plan', 'files'] },
   'task.plan_confirmed': { domain: 'task', role: 'system', detailKeys: ['point'] },
   'task.plan_rejected': { domain: 'task', role: 'system', detailKeys: ['point'] },
@@ -618,7 +608,8 @@ export function dedupeKey(type: string, detail: Record<string, unknown>): string
 
 // === 模型提议检测（task.*_proposed——assistant_done content 标记 → 提议事件；纯函数 L1 可测） ===
 // 06 §1.1：task.goal_proposed（【目标确认】标记）/ task.plan_proposed（【执行方案】）/ task.resolution_proposed（【已达成】）
-// P2-01：新事件名（plan/resolution）；旧 task.execution_*/achievement_* 仅保留读取窗口
+// P2-01：新事件名（plan/resolution）。2026-11-28 审计：旧别名（task.execution_*/task.achievement_*）已删除
+// ——时间线是 write-only，无读取窗口（ADR-019）
 export function detectProposed(content: string): Array<{
   type: 'task.goal_proposed' | 'task.plan_proposed' | 'task.resolution_proposed'
   detail: Record<string, unknown>

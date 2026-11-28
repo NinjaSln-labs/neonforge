@@ -760,7 +760,7 @@ test('D3-1：启动恢复接线——挂载时 planned-files:load 被调（main 
     script: compose(
       goalConfirm('做一个待办应用'),
       planProposeWithApproval([{ path: '/test/app.ts', reason: '核心' }]),
-      [toolCall.write('/test/app.ts'), chunk.done()],
+      [[toolCall.write('/test/app.ts'), chunk.done()]],
     ),
   })
   await startFromScratch(page, '做个待办应用')

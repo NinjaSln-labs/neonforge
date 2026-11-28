@@ -201,7 +201,7 @@ export interface NeonForgeBridge {
   changeset: {
     list: (sessionId: string) => Promise<{
       id: string
-      status: 'proposed' | 'reviewed' | 'applied' | 'reverted' | 'conflicted' | 'superseded'
+      status: 'proposed' | 'reviewed' | 'applied' | 'reverted' | 'conflicted'
       items: Array<{
         id: string
         path: string

@@ -2,7 +2,20 @@ name: QA Chain（ddd-qa-chain）
 
 on:
   push:
-    paths: ['apps/desktop/**', '.github/workflows/qa.yml']
+    paths:
+      - 'apps/desktop/**'
+      - '.github/workflows/qa.yml'
+      - '.prettierrc.json'
+      - 'lefthook.yml'
+      - '.npmrc'
+  # 2026-11-28 审计：原仅 push——PR 阶段无门禁（CONTRIBUTING 要求「CI 绿才收口」）
+  pull_request:
+    paths:
+      - 'apps/desktop/**'
+      - '.github/workflows/qa.yml'
+      - '.prettierrc.json'
+      - 'lefthook.yml'
+      - '.npmrc'
   workflow_dispatch:
     inputs:
       run_e2e:

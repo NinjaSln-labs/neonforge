@@ -2,7 +2,7 @@
 
 ## 环境
 
-- **Node** ≥ 20（推荐 nvm 管理当前 LTS）
+- **Node** ≥ 22.22.1（`engines` 下限：lint-staged 17 要求 ≥22.22.1；CI 固定 22；Electron 43 运行时自带 Node 24.18）——推荐 nvm（仓库有 `.nvmrc`）
 - **主开发环境**：WSL2（Linux）；macOS 用于真机验收
 - **monorepo 布局**：仓库根无 `package.json`，所有工程命令在 `apps/desktop` 下执行
 
