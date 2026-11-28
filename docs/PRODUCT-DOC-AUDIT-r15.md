@@ -11,52 +11,52 @@
 
 与第 13/14 轮同——**新增核查项**：
 
-| 项 | 现状 | 判定 |
-|----|------|------|
-| 领域层实现文件（5 个）| conversationState/turnPolicy/agentLoop/timeline/sysPrompt 全部存在——**现状 = 旧模型**（与设计 §5 差距表逐一吻合）| ✅ |
-| 设计 §5 差距表（12 行）↔ 实现 | 每行处置均有对应实现符号可核（见二）——**迁移清单完整准确** | ✅ |
-| 术语表三处（A0 §9 19 项 / 设计 §2 8 项 / 02 §8 19 项）| A0=02 完全对齐（19=19）；设计 §2 多「授权 Approval」——**A0 §9 缺授权条目** | ⚠️（问题 #2）|
-| 09 追溯矩阵覆盖度 | 15 行追溯 + 3 行未映射——**D0 原则 4/5/6（不装能/上手不学/安静可信）未追溯也未列入未映射表** | ⚠️（问题 #3）|
+| 项                                                     | 现状                                                                                                              | 判定          |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- | ------------- |
+| 领域层实现文件（5 个）                                 | conversationState/turnPolicy/agentLoop/timeline/sysPrompt 全部存在——**现状 = 旧模型**（与设计 §5 差距表逐一吻合） | ✅            |
+| 设计 §5 差距表（12 行）↔ 实现                          | 每行处置均有对应实现符号可核（见二）——**迁移清单完整准确**                                                        | ✅            |
+| 术语表三处（A0 §9 19 项 / 设计 §2 8 项 / 02 §8 19 项） | A0=02 完全对齐（19=19）；设计 §2 多「授权 Approval」——**A0 §9 缺授权条目**                                        | ⚠️（问题 #2） |
+| 09 追溯矩阵覆盖度                                      | 15 行追溯 + 3 行未映射——**D0 原则 4/5/6（不装能/上手不学/安静可信）未追溯也未列入未映射表**                       | ⚠️（问题 #3） |
 
 ## 二、文档↔实现对照（层②——首次实现层审计）
 
-| 设计 §5 差距表行 | 实现符号（现状） | 判定 |
-|----------------|----------------|------|
-| pendingCardToShow（模型文本触发）→ 推翻 | `pendingCardToShow` 存在（conversationState.ts:181）+ sysPrompt ⑬「必须输出【目标确认】标记（没有它 UI 无法识别）」 | ✅ 差距文档化准确——S1/S2 目标明确 |
-| executionConfirmed → planConfirmed | `userConfirmed(s, 'goal'|'execution'|'achievement')` 旧签名（:41/:64）+ `PendingKind = 'none'|'goal'|'execution'|'achievement'|'approval'`（:11）| ✅ 旧枚举——S1 重写 |
-| classifyAction → classifyReadonly | `classifyAction`（:115）+ `BASH_READONLY_HEADS`（:110——classifyReadonly 命令头白名单基础）| ✅ 基础保留——S6 升级 |
-| canExecute（单维）→ sessionGate×actionGate | `canExecute(s, action, inPlanned)`（:131）| ✅ S6 重构 |
-| forceTool → decideProgressGuarantee | `forceToolInput`（:157）+ turnPolicy `decideTurnPolicy`（:46）| ✅ S5 重设计 |
-| parseExecutionPlan → parsePlanProposal | `parseExecutionPlan(text): string[]`（agentLoop:58）| ✅ S2 推翻 |
-| achievementConfirmed → resolutionConfirmed | 旧枚举同上（:11）| ✅ S1 |
-| shouldStopContinuation 继承 | `shouldStopContinuation`（:203——坑 103 已修复）| ✅ 继承 |
-| StuckDetector/推进语义统一 | `evaluateTurnProgress`（:80）/`detectStuck`（:133）——「无工具调用=停滞」旧判定 | ✅ S5 扩展 |
-| goalFallback 语义重定义 | `goalFallbackTrigger(content)`（:205）| ✅ §8.5.2 目标明确 |
-| timeline 事件 domain 联合扩展 | `domain: 'conversation'|'task'|'session'|'plan'|'tool'|'capability'|'execution'|'stuck'|'problem'|'card'`（timeline:79）——**10 成员缺 proposal/decision/completion/gate** | ✅ 与设计 §3.5 注记完全一致——S1 扩展 |
-| sysHint ⑬⑭⑮ 格式契约（S2）| ⑬【目标确认】（无假设行）/ ⑭【执行方案】（文件清单+一句话方案——无假设/验证计划）/ ⑮【已达成】（产物+如何验证——无结构化证据）| ✅ 旧格式确认——S2 同步（**但见问题 #1**）|
+| 设计 §5 差距表行                           | 实现符号（现状）                                                                                                             | 判定                                      |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| pendingCardToShow（模型文本触发）→ 推翻    | `pendingCardToShow` 存在（conversationState.ts:181）+ sysPrompt ⑬「必须输出【目标确认】标记（没有它 UI 无法识别）」          | ✅ 差距文档化准确——S1/S2 目标明确         |
+| executionConfirmed → planConfirmed         | `userConfirmed(s, 'goal'                                                                                                     | 'execution'                               | 'achievement')`旧签名（:41/:64）+`PendingKind = 'none' | 'goal' | 'execution' | 'achievement' | 'approval'`（:11） | ✅ 旧枚举——S1 重写 |
+| classifyAction → classifyReadonly          | `classifyAction`（:115）+ `BASH_READONLY_HEADS`（:110——classifyReadonly 命令头白名单基础）                                   | ✅ 基础保留——S6 升级                      |
+| canExecute（单维）→ sessionGate×actionGate | `canExecute(s, action, inPlanned)`（:131）                                                                                   | ✅ S6 重构                                |
+| forceTool → decideProgressGuarantee        | `forceToolInput`（:157）+ turnPolicy `decideTurnPolicy`（:46）                                                               | ✅ S5 重设计                              |
+| parseExecutionPlan → parsePlanProposal     | `parseExecutionPlan(text): string[]`（agentLoop:58）                                                                         | ✅ S2 推翻                                |
+| achievementConfirmed → resolutionConfirmed | 旧枚举同上（:11）                                                                                                            | ✅ S1                                     |
+| shouldStopContinuation 继承                | `shouldStopContinuation`（:203——坑 103 已修复）                                                                              | ✅ 继承                                   |
+| StuckDetector/推进语义统一                 | `evaluateTurnProgress`（:80）/`detectStuck`（:133）——「无工具调用=停滞」旧判定                                               | ✅ S5 扩展                                |
+| goalFallback 语义重定义                    | `goalFallbackTrigger(content)`（:205）                                                                                       | ✅ §8.5.2 目标明确                        |
+| timeline 事件 domain 联合扩展              | `domain: 'conversation'                                                                                                      | 'task'                                    | 'session'                                              | 'plan' | 'tool'      | 'capability'  | 'execution'        | 'stuck'            | 'problem' | 'card'`（timeline:79）——**10 成员缺 proposal/decision/completion/gate** | ✅ 与设计 §3.5 注记完全一致——S1 扩展 |
+| sysHint ⑬⑭⑮ 格式契约（S2）                 | ⑬【目标确认】（无假设行）/ ⑭【执行方案】（文件清单+一句话方案——无假设/验证计划）/ ⑮【已达成】（产物+如何验证——无结构化证据） | ✅ 旧格式确认——S2 同步（**但见问题 #1**） |
 
 **对照结论（正面）**：设计 §5 差距表与实现现状**零偏差**——每个处置项都有对应实现符号可核；S1-S6 迁移清单完整——S1 开工无实现侧盲区。
 
 ## 三、交叉验证矩阵（层③）
 
-| 对齐关系 | 文档 A 说法 | 文档 B 说法 | 判定 |
-|---------|-----------|-----------|------|
-| 设计 §2 ↔ A0 §9（术语表）| 8 项（含**授权 Approval**）| 19 项（**无授权**）| ⚠️ 权威表差 1 项（#2）|
-| 设计 §8.1 C ↔ sysPrompt.ts（编号）| 「⑱ 拒绝原因应对（模型收到 RejectReason 后的调整规则）」| 现状⑱ = 「工具失败处理」（错误重试纪律）| ⚠️ **编号占用冲突**（#1）|
-| D0 §1.2 原则 4/5/6 ↔ 09 追溯 | 不装能/上手不学/安静可信（产品核心原则）| 未追溯且未列入 §2 未映射表 | ⚠️ 追溯缺口（#3）|
-| 07 埋点 ↔ timeline 注册表 | decision.requested/resolved 等 7 新事件 | domain 联合缺 4 成员（现状）| ✅ 差距已注记（S1 扩展）——非冲突 |
+| 对齐关系                           | 文档 A 说法                                              | 文档 B 说法                              | 判定                             |
+| ---------------------------------- | -------------------------------------------------------- | ---------------------------------------- | -------------------------------- |
+| 设计 §2 ↔ A0 §9（术语表）          | 8 项（含**授权 Approval**）                              | 19 项（**无授权**）                      | ⚠️ 权威表差 1 项（#2）           |
+| 设计 §8.1 C ↔ sysPrompt.ts（编号） | 「⑱ 拒绝原因应对（模型收到 RejectReason 后的调整规则）」 | 现状⑱ = 「工具失败处理」（错误重试纪律） | ⚠️ **编号占用冲突**（#1）        |
+| D0 §1.2 原则 4/5/6 ↔ 09 追溯       | 不装能/上手不学/安静可信（产品核心原则）                 | 未追溯且未列入 §2 未映射表               | ⚠️ 追溯缺口（#3）                |
+| 07 埋点 ↔ timeline 注册表          | decision.requested/resolved 等 7 新事件                  | domain 联合缺 4 成员（现状）             | ✅ 差距已注记（S1 扩展）——非冲突 |
 
 **spot-check 第 14 轮修复（抽验 7/7）**：
 
-| 修复 | 抽验 | 采信 |
-|------|------|------|
-| #1 行为边界三处统一 | A0 §3.1 classifyReadonly ✓ 02 §4.1 例外 ✓ 04 §1.1 例外 ✓ | 采信（L3 闭环）|
-| #2 ProgressionGate 裁决 | 04 §3.2 裁决注 + 02 §5 标注 + A0 §2 归并 ✓ | 采信（L3 闭环）|
-| #3 D0 §4.2 failed-recoverable | 状态表 7 行 ✓ | 采信（L2 语义级）|
-| #4 07 埋点映射 | decision.requested(kind=approval) 两处 ✓ | 采信（L2 语义级）|
-| #5 crawler 路径标注 | 04-alignment/01/设计三处 ✓ | 采信（L2 语义级）|
-| #6 require-action 档 | 04 §3.1 不变式补行 ✓ | 采信（L2 语义级）|
-| #7 参数形状 | 04 §3.6 形状块 ✓ | 采信（L2 语义级）|
+| 修复                          | 抽验                                                     | 采信              |
+| ----------------------------- | -------------------------------------------------------- | ----------------- |
+| #1 行为边界三处统一           | A0 §3.1 classifyReadonly ✓ 02 §4.1 例外 ✓ 04 §1.1 例外 ✓ | 采信（L3 闭环）   |
+| #2 ProgressionGate 裁决       | 04 §3.2 裁决注 + 02 §5 标注 + A0 §2 归并 ✓               | 采信（L3 闭环）   |
+| #3 D0 §4.2 failed-recoverable | 状态表 7 行 ✓                                            | 采信（L2 语义级） |
+| #4 07 埋点映射                | decision.requested(kind=approval) 两处 ✓                 | 采信（L2 语义级） |
+| #5 crawler 路径标注           | 04-alignment/01/设计三处 ✓                               | 采信（L2 语义级） |
+| #6 require-action 档          | 04 §3.1 不变式补行 ✓                                     | 采信（L2 语义级） |
+| #7 参数形状                   | 04 §3.6 形状块 ✓                                         | 采信（L2 语义级） |
 
 ## 四、问题
 

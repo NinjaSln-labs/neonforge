@@ -7,21 +7,21 @@
 
 ## 断言结果
 
-| # | 断言 | 判定 | 证据（新鲜输出） |
-|---|------|------|-----------------|
-| 1 | L1 全量绿（新增 ≥10 条） | PASS | vitest: **414 passed / 0 failed**（33 文件——新增 11：isSideEffectAction 5 + isLocalhostCommand 3（含子串误报）+ curl 写标志补全 7 + 继承迁移 1——S6-2 旧断言更新） |
-| 2 | L2 契约 0 错（classifyAction 移除无悬挂引用） | PASS | 双 tsc 0 errors（renderer 6 处 + main isReadOnlyBash + agentLoop + isProgressing 全切换——零消费） |
-| 3 | L3 交互（相关场景重写 + 全量 ≥42） | PASS | playwright interaction: **44 passed**（42 旧 + 2 新 S6 场景——零回归） |
-| 4 | 冒烟（四路径——只读自动/清单内自动/越界 ask/高危 deny） | PASS | L3 承载：只读自动 S6-1 + bash 白名单既有；清单内自动 根因3/T0-2；越界 ask S6-2 + write 需授权既有；高危 deny write→回滚既有 |
-| 5 | Lint 门禁 | PASS | eslint: 0 errors（6 既有 warnings）；prettier: All matched files |
-| 6 | main preApproval 改引用 classifyReadonly（拍板 3 main 侧同步） | PASS | tools.ts isReadOnlyBash 改调 classifyReadonly + isLocalhostCommand（readonly auto/network-read localhost auto/外网非 auto/-O 写副作用 hazardous）+ tools.test.ts 升级断言 |
-| 7 | renderer side-effect 判定统一领域层同源（坑 97） | PASS | 6 处 classifyAction === 'side-effect' 全切 isSideEffectAction（readonly/localhost 非副作用/外网与写类副作用）+ agentLoop/isProgressing 同步——classifyAction 兼容壳移除零消费 |
-| 8 | 拍板 3 全链（curl localhost 自动/外网 ask） | PASS | L3 S6-1（localhost done 无授权卡）/S6-2（外网 need-approval 弹卡）+ L1 isLocalhostCommand/写标志补全断言（子串误报不自动放行——复审修复） |
-| 9 | classifyAction 兼容壳移除 | PASS | conversationState.classifyAction 删除——renderer/main/agentLoop/tests 零活引用（L2 双 tsc 守卫） |
-| 10 | 审计状态 | PASS | audit-items：A-001~010 全 fixed；无 open（本阶段无新增审计项——复审 3 fixed 5 recorded 全闭环） |
-| 11 | 覆盖矩阵已更新 | PASS | docs/tests/coverage-matrix.md（表 7 S6↔测试 6 行 + 缺口清单） |
-| 12 | 决策日志同步 | PASS | 无新语义裁定（拍板 3 已有设计来源——actionGate 策略 S1 已实现，S6 为接线）——无需新 ADR |
-| 13 | 已 push + CI 绿 | PASS | 已 push（0c7d881 + 3ebc4e5）；qa.yml run 31942369869 **success** |
+| #   | 断言                                                           | 判定 | 证据（新鲜输出）                                                                                                                                                             |
+| --- | -------------------------------------------------------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | L1 全量绿（新增 ≥10 条）                                       | PASS | vitest: **414 passed / 0 failed**（33 文件——新增 11：isSideEffectAction 5 + isLocalhostCommand 3（含子串误报）+ curl 写标志补全 7 + 继承迁移 1——S6-2 旧断言更新）            |
+| 2   | L2 契约 0 错（classifyAction 移除无悬挂引用）                  | PASS | 双 tsc 0 errors（renderer 6 处 + main isReadOnlyBash + agentLoop + isProgressing 全切换——零消费）                                                                            |
+| 3   | L3 交互（相关场景重写 + 全量 ≥42）                             | PASS | playwright interaction: **44 passed**（42 旧 + 2 新 S6 场景——零回归）                                                                                                        |
+| 4   | 冒烟（四路径——只读自动/清单内自动/越界 ask/高危 deny）         | PASS | L3 承载：只读自动 S6-1 + bash 白名单既有；清单内自动 根因3/T0-2；越界 ask S6-2 + write 需授权既有；高危 deny write→回滚既有                                                  |
+| 5   | Lint 门禁                                                      | PASS | eslint: 0 errors（6 既有 warnings）；prettier: All matched files                                                                                                             |
+| 6   | main preApproval 改引用 classifyReadonly（拍板 3 main 侧同步） | PASS | tools.ts isReadOnlyBash 改调 classifyReadonly + isLocalhostCommand（readonly auto/network-read localhost auto/外网非 auto/-O 写副作用 hazardous）+ tools.test.ts 升级断言    |
+| 7   | renderer side-effect 判定统一领域层同源（坑 97）               | PASS | 6 处 classifyAction === 'side-effect' 全切 isSideEffectAction（readonly/localhost 非副作用/外网与写类副作用）+ agentLoop/isProgressing 同步——classifyAction 兼容壳移除零消费 |
+| 8   | 拍板 3 全链（curl localhost 自动/外网 ask）                    | PASS | L3 S6-1（localhost done 无授权卡）/S6-2（外网 need-approval 弹卡）+ L1 isLocalhostCommand/写标志补全断言（子串误报不自动放行——复审修复）                                     |
+| 9   | classifyAction 兼容壳移除                                      | PASS | conversationState.classifyAction 删除——renderer/main/agentLoop/tests 零活引用（L2 双 tsc 守卫）                                                                              |
+| 10  | 审计状态                                                       | PASS | audit-items：A-001~010 全 fixed；无 open（本阶段无新增审计项——复审 3 fixed 5 recorded 全闭环）                                                                               |
+| 11  | 覆盖矩阵已更新                                                 | PASS | docs/tests/coverage-matrix.md（表 7 S6↔测试 6 行 + 缺口清单）                                                                                                                |
+| 12  | 决策日志同步                                                   | PASS | 无新语义裁定（拍板 3 已有设计来源——actionGate 策略 S1 已实现，S6 为接线）——无需新 ADR                                                                                        |
+| 13  | 已 push + CI 绿                                                | PASS | 已 push（0c7d881 + 3ebc4e5）；qa.yml run 31942369869 **success**                                                                                                             |
 
 ## 差异清单（交回开发）
 

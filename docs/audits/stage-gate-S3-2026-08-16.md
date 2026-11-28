@@ -7,23 +7,23 @@
 
 ## 断言结果
 
-| # | 断言 | 判定 | 证据（新鲜输出） |
-|---|------|------|-----------------|
-| 1 | L1 全量绿（新增 ≥10 条） | PASS | vitest: **377 passed / 0 failed**（31 文件——新增 6：sessionStore decisionContent 往返 3 + timelineEvents proposal.* 3） |
-| 2 | L2 契约 0 错 | PASS | 双 tsc 0 errors（renderer + main） |
-| 3 | L3 交互（相关场景 + 全量 ≥31） | PASS | playwright interaction: **35 passed**（31 旧 + 4 新 S3 场景） |
-| 4 | Lint 门禁 | PASS | eslint: 0 errors（6 既有 warnings）；prettier: All matched files |
-| 5 | 触发权切换（卡从 decisionContent 派生） | PASS | cards-from-decision-content::S3-3（goal 卡内容来自快照含关键假设）+ S3-1（plan 卡三要素） |
-| 6 | 方案卡渲染三要素 | PASS | S3-1（文件清单含原因/关键假设/验证计划 DOM 断言） |
-| 7 | 拒绝原因 UI（不变量 8） | PASS | S3-2（reject 带 kind='scope' → 卡隐藏 + 模型收到方向）+ useConversationState.reject(reason) 签名 |
-| 8 | 会话持久化 decisionContent | PASS | sessionStore.test.ts::decisionContent 序列化（往返/兼容/结构完整 3 用例） |
-| 9 | 清单匹配统一（Q5） | PASS | renderer inPlannedFiles 引用领域层（conversationState.inPlannedFiles 导出——双实现消除；trustPath 归一传参） |
-| 10 | 拒绝超限回退（§4.1） | PASS | S3-4（rejectStreak ≥3 → .nf-reject-overflow 澄清提示——3 连拒后出现） |
-| 11 | A-003 关闭 | PASS | timelineEvents.test.ts proposal.* 3 断言（schema/成功/失败载荷）——fixed（c91079e） |
-| 12 | 审计状态 | PASS | audit-items：001/002/003 全 fixed；无 open |
-| 13 | 覆盖矩阵已更新 | PASS | docs/tests/coverage-matrix.md（表 4 S3 ↔ L3；proposal.* 断言补全；缺口清零） |
-| 14 | 决策日志同步 | PASS | ADR-001 已覆盖 rejectStreak 消费方（S3 接线在案）——无新语义裁定，无需新 ADR |
-| 15 | 已 push + CI 绿 | PASS | 已 push（32ba192/c91079e/095fec8）；qa.yml run 31930747140 **success** |
+| #   | 断言                                    | 判定 | 证据（新鲜输出）                                                                                                        |
+| --- | --------------------------------------- | ---- | ----------------------------------------------------------------------------------------------------------------------- |
+| 1   | L1 全量绿（新增 ≥10 条）                | PASS | vitest: **377 passed / 0 failed**（31 文件——新增 6：sessionStore decisionContent 往返 3 + timelineEvents proposal.* 3） |
+| 2   | L2 契约 0 错                            | PASS | 双 tsc 0 errors（renderer + main）                                                                                      |
+| 3   | L3 交互（相关场景 + 全量 ≥31）          | PASS | playwright interaction: **35 passed**（31 旧 + 4 新 S3 场景）                                                           |
+| 4   | Lint 门禁                               | PASS | eslint: 0 errors（6 既有 warnings）；prettier: All matched files                                                        |
+| 5   | 触发权切换（卡从 decisionContent 派生） | PASS | cards-from-decision-content::S3-3（goal 卡内容来自快照含关键假设）+ S3-1（plan 卡三要素）                               |
+| 6   | 方案卡渲染三要素                        | PASS | S3-1（文件清单含原因/关键假设/验证计划 DOM 断言）                                                                       |
+| 7   | 拒绝原因 UI（不变量 8）                 | PASS | S3-2（reject 带 kind='scope' → 卡隐藏 + 模型收到方向）+ useConversationState.reject(reason) 签名                        |
+| 8   | 会话持久化 decisionContent              | PASS | sessionStore.test.ts::decisionContent 序列化（往返/兼容/结构完整 3 用例）                                               |
+| 9   | 清单匹配统一（Q5）                      | PASS | renderer inPlannedFiles 引用领域层（conversationState.inPlannedFiles 导出——双实现消除；trustPath 归一传参）             |
+| 10  | 拒绝超限回退（§4.1）                    | PASS | S3-4（rejectStreak ≥3 → .nf-reject-overflow 澄清提示——3 连拒后出现）                                                    |
+| 11  | A-003 关闭                              | PASS | timelineEvents.test.ts proposal.* 3 断言（schema/成功/失败载荷）——fixed（c91079e）                                      |
+| 12  | 审计状态                                | PASS | audit-items：001/002/003 全 fixed；无 open                                                                              |
+| 13  | 覆盖矩阵已更新                          | PASS | docs/tests/coverage-matrix.md（表 4 S3 ↔ L3；proposal.* 断言补全；缺口清零）                                            |
+| 14  | 决策日志同步                            | PASS | ADR-001 已覆盖 rejectStreak 消费方（S3 接线在案）——无新语义裁定，无需新 ADR                                             |
+| 15  | 已 push + CI 绿                         | PASS | 已 push（32ba192/c91079e/095fec8）；qa.yml run 31930747140 **success**                                                  |
 
 ## 差异清单（交回开发）
 

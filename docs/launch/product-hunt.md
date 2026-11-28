@@ -25,12 +25,12 @@
 
 ## 渠道（备选/平行）
 
-| 渠道 | 内容 | 平台字段 |
-|------|------|---------|
-| HN（Show HN） | 标题：Show HN: NeonForge — AI problem workbench for DeepSeek（确认卡门槛 + 批准文件计划）| 同上工程故事 + 下载直链 |
-| Twitter/X | 短帖 + 动图 | 标语 + Releases 链接 + Roadmap 链接 |
-| Reddit（r/LocalLLaMA / r/aiagents） | 技术向：单模型深度集成 + KV 预热实测 | 同上 |
-| 中文社区（知乎/掘金） | Blog 系列中文版发布 | 平台后定 |
+| 渠道                                | 内容                                                                                      | 平台字段                            |
+| ----------------------------------- | ----------------------------------------------------------------------------------------- | ----------------------------------- |
+| HN（Show HN）                       | 标题：Show HN: NeonForge — AI problem workbench for DeepSeek（确认卡门槛 + 批准文件计划） | 同上工程故事 + 下载直链             |
+| Twitter/X                           | 短帖 + 动图                                                                               | 标语 + Releases 链接 + Roadmap 链接 |
+| Reddit（r/LocalLLaMA / r/aiagents） | 技术向：单模型深度集成 + KV 预热实测                                                      | 同上                                |
+| 中文社区（知乎/掘金）               | Blog 系列中文版发布                                                                       | 平台后定                            |
 
 ## 待拍板/待补
 

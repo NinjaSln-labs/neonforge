@@ -17,19 +17,19 @@
 
 文档覆盖：
 
-| 编号 | 文档 | 对应 DDD 阶段 | 主要用途 |
-| :--- | :--- | :--- | :--- |
-| 00 | [领域蓝图](00-domain-blueprint.md) | 发现 / Blueprint | 完整领域目录、现状标记、目标态领域、隐藏缺口、演进顺序 |
-| 01 | [范围收敛](01-scope.md) | 发现 / Scope | 问题、价值、目标/非目标、约束、术语种子、风险 |
-| 02 | [领域发现](02-discovery.md) | 发现 / Discover | 事件流、命令/事件候选、热点、歧义、边界线索 |
-| 03 | [子域划分](03-subdomains.md) | 战略 / Subdomains | 能力清单、Core/Supporting/Generic、核心域声明、所有权 |
-| 04 | [限界上下文](04-bounded-contexts.md) | 战略 / Contexts | 上下文目录、通用语言、反术语、边界 ADR、演进规则 |
-| 05 | [上下文映射](05-context-map.md) | 战略 / Context Map | 关系矩阵、集成模式、契约所有权、失败模式、版本策略 |
-| 06 | [聚合设计](06-aggregates.md) | 战术 / Aggregates | 聚合目录、不变量、实体/值对象、事务边界、一致性策略 |
-| 07 | [领域交互](07-domain-interactions.md) | 战术 / Interactions | 领域事件目录、集成契约、幂等/重放、领域服务、仓储、工厂 |
-| 08 | [模型评审](08-model-review.md) | 验证 / Review | 评分、问题清单、行业对标、回溯触发、就绪判定 |
-| 09 | [OpenSpec 衔接](09-openspec/proposal.md) | 规范 / Bridge | Proposal、Design、Spec、Tasks（按限界上下文分目录） |
-| 10 | [代码证据索引](10-code-evidence.md) | 附录 | 文档结论到源文件/行号的映射 |
+| 编号 | 文档                                     | 对应 DDD 阶段       | 主要用途                                                |
+| :--- | :--------------------------------------- | :------------------ | :------------------------------------------------------ |
+| 00   | [领域蓝图](00-domain-blueprint.md)       | 发现 / Blueprint    | 完整领域目录、现状标记、目标态领域、隐藏缺口、演进顺序  |
+| 01   | [范围收敛](01-scope.md)                  | 发现 / Scope        | 问题、价值、目标/非目标、约束、术语种子、风险           |
+| 02   | [领域发现](02-discovery.md)              | 发现 / Discover     | 事件流、命令/事件候选、热点、歧义、边界线索             |
+| 03   | [子域划分](03-subdomains.md)             | 战略 / Subdomains   | 能力清单、Core/Supporting/Generic、核心域声明、所有权   |
+| 04   | [限界上下文](04-bounded-contexts.md)     | 战略 / Contexts     | 上下文目录、通用语言、反术语、边界 ADR、演进规则        |
+| 05   | [上下文映射](05-context-map.md)          | 战略 / Context Map  | 关系矩阵、集成模式、契约所有权、失败模式、版本策略      |
+| 06   | [聚合设计](06-aggregates.md)             | 战术 / Aggregates   | 聚合目录、不变量、实体/值对象、事务边界、一致性策略     |
+| 07   | [领域交互](07-domain-interactions.md)    | 战术 / Interactions | 领域事件目录、集成契约、幂等/重放、领域服务、仓储、工厂 |
+| 08   | [模型评审](08-model-review.md)           | 验证 / Review       | 评分、问题清单、行业对标、回溯触发、就绪判定            |
+| 09   | [OpenSpec 衔接](09-openspec/proposal.md) | 规范 / Bridge       | Proposal、Design、Spec、Tasks（按限界上下文分目录）     |
+| 10   | [代码证据索引](10-code-evidence.md)      | 附录                | 文档结论到源文件/行号的映射                             |
 
 另有：
 
@@ -76,12 +76,12 @@
 
 为避免把“原型”当成“已落地”，本套文档统一使用以下标记：
 
-| 标记 | 含义 | 例子 |
-| :--- | :--- | :--- |
-| `已落地` | 产品运行路径真实使用，有单元/交互测试或运行时代码 | 决策点状态机、工具授权、完成证据核验、问题台账持久化 |
-| `部分落地` | 有真实代码与状态，但仅覆盖部分场景，或只在特定入口生效 | L4 低危委托（开关真实、信任阶梯可视化是演示）；长期记忆为非目标 |
-| `原型/演示` | 只在 demo bridge 注入时渲染，产品运行时不可达 | （2026-11-28 审计 D-2：`DigitalDeliveryPanel`、`DoDAlignPanel`、`TrustLadderPanel` 已删除——当前无此类渲染路径） |
-| `缺失（应有）` | 代码中有字段/占位/文案证明产品需要，但完整领域尚未实现 | 长期记忆/知识库（明确非目标）；后续新发现的缺口按此标记 |
+| 标记           | 含义                                                   | 例子                                                                                                            |
+| :------------- | :----------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------- |
+| `已落地`       | 产品运行路径真实使用，有单元/交互测试或运行时代码      | 决策点状态机、工具授权、完成证据核验、问题台账持久化                                                            |
+| `部分落地`     | 有真实代码与状态，但仅覆盖部分场景，或只在特定入口生效 | L4 低危委托（开关真实、信任阶梯可视化是演示）；长期记忆为非目标                                                 |
+| `原型/演示`    | 只在 demo bridge 注入时渲染，产品运行时不可达          | （2026-11-28 审计 D-2：`DigitalDeliveryPanel`、`DoDAlignPanel`、`TrustLadderPanel` 已删除——当前无此类渲染路径） |
+| `缺失（应有）` | 代码中有字段/占位/文案证明产品需要，但完整领域尚未实现 | 长期记忆/知识库（明确非目标）；后续新发现的缺口按此标记                                                         |
 
 这类状态差异会在各文档中显式标注，而不是被当成完整能力。新增的目标态领域见 `00-domain-blueprint.md` 第 3 节；BC-10～BC-14 已于 2026-11-14 落地，相应文档中的“缺失/占位”描述仅保留为历史证据（`10-code-evidence.md`）。
 
@@ -107,14 +107,14 @@
 
 在文档建模完成后，按 `08-model-review.md` 的阻塞项清单修正了源码，并补充回归测试：
 
-| 编号 | 修正 | 验证 |
-| :--- | :--- | :--- |
-| P0-01 | `read` 读取边界：项目根内自动、根外授权；ENOENT 目录提示仅根内 | `tests/unit/tools.test.ts` |
+| 编号  | 修正                                                                                                                                                              | 验证                                                |
+| :---- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------- |
+| P0-01 | `read` 读取边界：项目根内自动、根外授权；ENOENT 目录提示仅根内                                                                                                    | `tests/unit/tools.test.ts`                          |
 | P0-02 | 只读判定补强：`sed -i`、`find -exec/-delete/-fprint`、`awk system()`、`sort -o`、`git branch/remote` 写形态、`rg --pre`、`wget` 下载、`curl` 写标志均判 hazardous | `tests/unit/conversationState.test.ts` 新增安全用例 |
-| P0-03 | 方案提议阶段不再写 `plannedFiles`；清单只由用户确认方案派生 | 渲染层两处调用删除；领域派生单点保留 |
-| P0-04 | 进程清理/服务停止统一 `isKillablePid` 守卫，跳过 `pid<=0` | `tests/unit/tools.test.ts`、`processGuard.ts` |
-| P0-05 | 系统代跑仅 `readonly` 与 localhost `network-read`；外网证据不可代跑 | `tests/unit/verifyCompletionSystem.test.ts` |
-| P1-01 | `web_fetch` 拒绝本机/私网/元数据地址；重定向手动逐跳校验（≤5 跳） | `tests/unit/webTools.test.ts` |
+| P0-03 | 方案提议阶段不再写 `plannedFiles`；清单只由用户确认方案派生                                                                                                       | 渲染层两处调用删除；领域派生单点保留                |
+| P0-04 | 进程清理/服务停止统一 `isKillablePid` 守卫，跳过 `pid<=0`                                                                                                         | `tests/unit/tools.test.ts`、`processGuard.ts`       |
+| P0-05 | 系统代跑仅 `readonly` 与 localhost `network-read`；外网证据不可代跑                                                                                               | `tests/unit/verifyCompletionSystem.test.ts`         |
+| P1-01 | `web_fetch` 拒绝本机/私网/元数据地址；重定向手动逐跳校验（≤5 跳）                                                                                                 | `tests/unit/webTools.test.ts`                       |
 
 验证结果（截至 2026-11-17，PR #19-#22 合并 + #15 实现后）：双 tsconfig 类型检查通过；`npx vitest run` **79 文件 / 939 用例**全部通过；`npx eslint .` 0 error（6 条既有 React Hook 依赖 warning）；interaction **90/90**；L5 视觉（macOS 宿主）**37/37**，设置页模型/同步区块基线已随 PR #24 重刷；构建通过。审查修复批（15 findings）新增路径/URL 前缀边界、`read` realpath、交付 diff 根边界、MCP `envFrom`、SSRF DNS/IPv4-mapped、WAL mtime 守卫、新任务边界与会话 ID 持久化回归；恢复竞态回归（启动首渲染空消息不得清掉任务快照 approval pending）；结构化澄清（#13）新增假设核对卡、来源制裁与 JSON 回答格式回归；信任模式（#12）新增三档持久化、renderer 判定、main 委托边界与旧开关迁移回归；机制拒绝事件（#16）新增 `gate.denied` 结构化拒绝回归；多模型网关与扩展能力治理（#14）新增显式模型选择/generic profile/能力指纹信任重审/MCP 回收回归；问题台账同步（#15）新增 main 权威存储、加密快照、确定性合并/tombstone 与设置页同步区块回归。
 

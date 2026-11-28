@@ -3,53 +3,53 @@
 > 范围：`apps/desktop` 全部生产代码（`src/main`、`src/domain`、`src/renderer`、`src/preload`）+ 测试/构建/CI 配置。
 > 方法：codegraph 符号检索 + 全库 `rg -w` 交叉验证（src / tests / evals / preload / renderer 五侧）+ 逐项人工复核；
 > 主进程由独立审计代理全文件扫描（63 文件 import 图可达性验证），其余进程逐批人工审查。
-> 结论：**修复 28 项、产品决策 D-1 已处置（删 5 留 3）、剩余 5 项待定、确认非问题 4 类**；无协议/数据迁移，无新增运行时依赖。
+> 结论：**修复 28 项、产品决策 D-1/D-2/D-3/D-4/D-5/D-6 六项全部处置、确认非问题 4 类**；无协议/数据迁移，无新增运行时依赖。
 
 ## 一、修复项（按批次）
 
 ### 批次 13–15：取证补强（发现并修复 1 个产品缺陷）
 
-| ID | 位置 | 问题 | 修复 |
-|----|------|------|------|
+| ID   | 位置                                  | 问题                                                                                             | 修复                                                                                                                      |
+| ---- | ------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
 | A-01 | `src/main/tools.ts` + `envManager.ts` | `capability.ledger_updated` 恒发射 `capabilityId: ''`（归因函数返回 void）——失败归因事件不可诊断 | `attributeCommandFailure` 返回首个命中 `capabilityId`（判定序 node-runtime > python-runtime > dev-tools）；无归因不发事件 |
-| A-02 | `src/main/tools.ts` | `isValidOpenUrl` 生产导出仅测试使用（`@deprecated`） | 移入 `tests/unit/tools.test.ts` 本地 helper |
-| A-03 | `docs/tests/coverage-matrix.md` | 批次 13/15 行标记未更新 | 补 ✅ 与断言描述 |
+| A-02 | `src/main/tools.ts`                   | `isValidOpenUrl` 生产导出仅测试使用（`@deprecated`）                                             | 移入 `tests/unit/tools.test.ts` 本地 helper                                                                               |
+| A-03 | `docs/tests/coverage-matrix.md`       | 批次 13/15 行标记未更新                                                                          | 补 ✅ 与断言描述                                                                                                          |
 
 ### 批次 16：ADR-019 死事件清理（93 → 90）
 
 5 个零发射点事件逐项根因取证后：3 个被更好机制取代 → 删除；2 个为 V1.5/V2 预留 → 保留并标注。
 
-| 事件 | 根因 | 处置 |
-|---|---|---|
-| `plan.rejected` | 登记当日即被 `tool.blocked` gate=`out-of-plan`（载荷更全）取代，全历史 0 发射点 | 删除 |
-| `card.dismissed` | 卡终结由 `card.resolved`/`card.rejected` 覆盖；任务重置由 `conversation.created` 承载 | 删除 |
-| `dialogue.needs_human` | ADR-010 三级梯度只落地一、二级；三级语义由 `stuck.needs_human` 实际承载 | 删除 |
-| `changeset.reviewed` | 领域函数 `reviewItem()` 已实现有单测，IPC/UI 随批次 4 裁定 V1.5 延后 | 保留（标注 V1.5） |
-| `usage.period_closed` | 注册表注释自证预留；预算按自然月累计但无周期关闭动作 | 保留（标注 V2） |
+| 事件                   | 根因                                                                                  | 处置              |
+| ---------------------- | ------------------------------------------------------------------------------------- | ----------------- |
+| `plan.rejected`        | 登记当日即被 `tool.blocked` gate=`out-of-plan`（载荷更全）取代，全历史 0 发射点       | 删除              |
+| `card.dismissed`       | 卡终结由 `card.resolved`/`card.rejected` 覆盖；任务重置由 `conversation.created` 承载 | 删除              |
+| `dialogue.needs_human` | ADR-010 三级梯度只落地一、二级；三级语义由 `stuck.needs_human` 实际承载               | 删除              |
+| `changeset.reviewed`   | 领域函数 `reviewItem()` 已实现有单测，IPC/UI 随批次 4 裁定 V1.5 延后                  | 保留（标注 V1.5） |
+| `usage.period_closed`  | 注册表注释自证预留；预算按自然月累计但无周期关闭动作                                  | 保留（标注 V2）   |
 
 ### 批次 17–18：渲染器/域层死代码与构建卫生
 
-| ID | 位置 | 问题 | 修复 |
-|----|------|------|------|
-| B-01 | `.github/workflows/qa.yml` | CI 只跑默认 tsconfig → **`src/main` 从未被类型检查** | 双 tsc 步骤 |
-| B-02 | `.github/workflows/qa.yml` | 无 `pull_request` 触发 → PR 阶段无门禁 | 补触发（4 路径过滤） |
-| B-03 | `eslint.config.js` | `files: ['apps/desktop/{...}']` 双前缀 glob 永不匹配 → 死规则 | 修为 `**/*.config.*` |
-| B-04 | `tsconfig.main.json` | 无 `lib` 声明 → DOM 类型泄漏进主进程；`include` 含 preload（产物为死 `.js`） | `lib: ["ES2022"]` + include 收为 main/domain |
-| B-05 | `package.json` | zustand 为无用运行时依赖；esbuild/playwright/@types/node 未声明 | 删 zustand；三者入 devDependencies |
-| B-06 | `.npmrc` | 仓库根副本对 npm 无效（依赖根在 apps/desktop） | 复制到 `apps/desktop/.npmrc` |
-| B-07 | `package.json` | 无 `engines`；`overrides.extract-zip` 为 no-op | 补 engines ≥22.22.1；删 override |
-| B-08 | `package.json` `dev:electron` | 未设 `VITE_DEV_SERVER_URL` → 开发模式不连 Vite | 补环境变量 |
-| B-09 | `.gitignore` | playwright 报告产物未忽略 | 补两条 |
-| B-10 | `changeSet.ts` | `supersedeChangeSet`、`'superseded'` 成员、`deriveStatus` 全库零引用 | 删除（含 renderer 镜像与标签） |
-| B-11 | `conversationState.ts` | `PlanFileEntry`、`TaskState` 别名、`userDecided` 内 no-op `if (point === 'approval')` | 删除 |
-| B-12 | `agentLoop.ts` | `detectStuck` 的 `config` 参数从无调用者传值 | 删除参数，常量 2/2 内联 |
-| B-13 | `problemLedger.ts` / `problemStore.ts` | `PROBLEM_LEDGER_SCHEMA` 死导出；`PROBLEMS_MAX` 双源 | 删 schema；store 改从 domain 导入 |
-| B-14 | `useToolApproval.ts` | `calls` 参数三个方法内未用；`pending.forEach` 三次 `indexOf` | 删参数；`calls.indexOf(c)` 内联 |
-| B-15 | `useConversationTelemetry.ts` | `goalConfirmed`/`planConfirmed` 依赖项从不被调方使用 | 删字段与调用点 |
-| B-16 | `useChatStream.ts` | `onReasoning` 回调链从未接线 | 删链路 |
-| B-17 | `DeliveryPanel/OutputPanel/MainWorkspace` | `onClose` 死 prop 链；`zeroToOneMode` prop + App 状态 | 删除 |
-| B-18 | `providers/catalog.ts` | `isAllowedModel`/`ALLOWED_MODELS` 死导出 | 删除 |
-| B-19 | `src/domain/timeline.ts` | 6 个 `task.execution_*`/`task.achievement_*` 旧别名——timeline 为**只写**存储，所谓「读取窗口」不存在（replay/DLQ 按原始 type 字符串消费，`query` 只按请求类型精确过滤） | 删除（注册表 90 → 84） |
+| ID   | 位置                                      | 问题                                                                                                                                                                    | 修复                                         |
+| ---- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| B-01 | `.github/workflows/qa.yml`                | CI 只跑默认 tsconfig → **`src/main` 从未被类型检查**                                                                                                                    | 双 tsc 步骤                                  |
+| B-02 | `.github/workflows/qa.yml`                | 无 `pull_request` 触发 → PR 阶段无门禁                                                                                                                                  | 补触发（4 路径过滤）                         |
+| B-03 | `eslint.config.js`                        | `files: ['apps/desktop/{...}']` 双前缀 glob 永不匹配 → 死规则                                                                                                           | 修为 `**/*.config.*`                         |
+| B-04 | `tsconfig.main.json`                      | 无 `lib` 声明 → DOM 类型泄漏进主进程；`include` 含 preload（产物为死 `.js`）                                                                                            | `lib: ["ES2022"]` + include 收为 main/domain |
+| B-05 | `package.json`                            | zustand 为无用运行时依赖；esbuild/playwright/@types/node 未声明                                                                                                         | 删 zustand；三者入 devDependencies           |
+| B-06 | `.npmrc`                                  | 仓库根副本对 npm 无效（依赖根在 apps/desktop）                                                                                                                          | 复制到 `apps/desktop/.npmrc`                 |
+| B-07 | `package.json`                            | 无 `engines`；`overrides.extract-zip` 为 no-op                                                                                                                          | 补 engines ≥22.22.1；删 override             |
+| B-08 | `package.json` `dev:electron`             | 未设 `VITE_DEV_SERVER_URL` → 开发模式不连 Vite                                                                                                                          | 补环境变量                                   |
+| B-09 | `.gitignore`                              | playwright 报告产物未忽略                                                                                                                                               | 补两条                                       |
+| B-10 | `changeSet.ts`                            | `supersedeChangeSet`、`'superseded'` 成员、`deriveStatus` 全库零引用                                                                                                    | 删除（含 renderer 镜像与标签）               |
+| B-11 | `conversationState.ts`                    | `PlanFileEntry`、`TaskState` 别名、`userDecided` 内 no-op `if (point === 'approval')`                                                                                   | 删除                                         |
+| B-12 | `agentLoop.ts`                            | `detectStuck` 的 `config` 参数从无调用者传值                                                                                                                            | 删除参数，常量 2/2 内联                      |
+| B-13 | `problemLedger.ts` / `problemStore.ts`    | `PROBLEM_LEDGER_SCHEMA` 死导出；`PROBLEMS_MAX` 双源                                                                                                                     | 删 schema；store 改从 domain 导入            |
+| B-14 | `useToolApproval.ts`                      | `calls` 参数三个方法内未用；`pending.forEach` 三次 `indexOf`                                                                                                            | 删参数；`calls.indexOf(c)` 内联              |
+| B-15 | `useConversationTelemetry.ts`             | `goalConfirmed`/`planConfirmed` 依赖项从不被调方使用                                                                                                                    | 删字段与调用点                               |
+| B-16 | `useChatStream.ts`                        | `onReasoning` 回调链从未接线                                                                                                                                            | 删链路                                       |
+| B-17 | `DeliveryPanel/OutputPanel/MainWorkspace` | `onClose` 死 prop 链；`zeroToOneMode` prop + App 状态                                                                                                                   | 删除                                         |
+| B-18 | `providers/catalog.ts`                    | `isAllowedModel`/`ALLOWED_MODELS` 死导出                                                                                                                                | 删除                                         |
+| B-19 | `src/domain/timeline.ts`                  | 6 个 `task.execution_*`/`task.achievement_*` 旧别名——timeline 为**只写**存储，所谓「读取窗口」不存在（replay/DLQ 按原始 type 字符串消费，`query` 只按请求类型精确过滤） | 删除（注册表 90 → 84）                       |
 
 ### 批次 19：CI 根因修复 + 主进程死符号（14 项）
 
@@ -69,43 +69,44 @@ CI 的 L3 断言 `capability.checked` 期望 1 条、实际 2 条。取证：给
 
 修复：能力摘要计算与 `tlog` 移到 `setMessages` 之前，updater 只构建下一状态。L3 断言改为「恰好 1 条」，并做**负控验证**：把 tlog 移回 updater 内 → 测试失败（Expected 3 / Received 4），恢复后通过。
 
-| ID | 符号 | 证据 |
-|----|------|------|
-| C-01 | `envManager: binDirOf` | 0 引用；同一路径在 92/184 行内联重算 |
-| C-02 | `envManager: registerEnvironment` | 0 引用；`envs` 仅由 ensure/allocate/release 直写 |
-| C-03 | `envManager: isPortAllocated` | 0 引用 |
-| C-04 | `envManager: getCapability` | 0 引用；能力读取走 `detectCapabilities` |
-| C-05 | `serviceManager: listServices` | 0 引用 |
-| C-06 | `timelineLogger: getTimelineWriteStats` + `writeFailures` | 0 引用；计数器只写不读（`lastWriteError` 仍被 DLQ 消费，保留） |
-| C-07 | `lsp: LspService.isConnected` | 0 调用；`requireConn` 直接查 `conn.isRunning()` |
-| C-08 | `workspace: WorkspaceService.setCurrentRoot` | 0 调用；`currentRoot` 三处直写 |
-| C-09 | `tools: ToolRegistry.getRules` | 0 调用；`permissions:list` 返回 `store.load()` 结果（注释声称的「执行侧快照」与实现不符，一并修正） |
-| C-10 | `ipcSchema: IPC_SCHEMAS.apiKey` | 0 引用；`apiKeySet` 为在用条目 |
-| C-11 | `gateway: ModelRouter.userRequestedPro` | 唯一调用点只传 `{ thinking }`，字段无生产者 |
-| C-12 | `gateway: ModelID` 弃用别名 + `model?` 选项 | 唯一消费者为 gateway 自身；IPC 从不传 `model` |
-| C-13 | `gateway: forceTool` / `progressMode` 字段 | gateway 内零读取（`streamChatOnce` 的 opts 读取清单无此二者）；IPC 载荷字段保留以兼容契约，main 不再转译 |
-| C-14 | `gitBridge: GitReadAction` | **非死码而是未接线**——`gitRead` 原为裸 `string`；改为 `isGitReadAction()` 运行时校验 + 穷尽 switch，错误文案不变 |
+| ID   | 符号                                                      | 证据                                                                                                             |
+| ---- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| C-01 | `envManager: binDirOf`                                    | 0 引用；同一路径在 92/184 行内联重算                                                                             |
+| C-02 | `envManager: registerEnvironment`                         | 0 引用；`envs` 仅由 ensure/allocate/release 直写                                                                 |
+| C-03 | `envManager: isPortAllocated`                             | 0 引用                                                                                                           |
+| C-04 | `envManager: getCapability`                               | 0 引用；能力读取走 `detectCapabilities`                                                                          |
+| C-05 | `serviceManager: listServices`                            | 0 引用                                                                                                           |
+| C-06 | `timelineLogger: getTimelineWriteStats` + `writeFailures` | 0 引用；计数器只写不读（`lastWriteError` 仍被 DLQ 消费，保留）                                                   |
+| C-07 | `lsp: LspService.isConnected`                             | 0 调用；`requireConn` 直接查 `conn.isRunning()`                                                                  |
+| C-08 | `workspace: WorkspaceService.setCurrentRoot`              | 0 调用；`currentRoot` 三处直写                                                                                   |
+| C-09 | `tools: ToolRegistry.getRules`                            | 0 调用；`permissions:list` 返回 `store.load()` 结果（注释声称的「执行侧快照」与实现不符，一并修正）              |
+| C-10 | `ipcSchema: IPC_SCHEMAS.apiKey`                           | 0 引用；`apiKeySet` 为在用条目                                                                                   |
+| C-11 | `gateway: ModelRouter.userRequestedPro`                   | 唯一调用点只传 `{ thinking }`，字段无生产者                                                                      |
+| C-12 | `gateway: ModelID` 弃用别名 + `model?` 选项               | 唯一消费者为 gateway 自身；IPC 从不传 `model`                                                                    |
+| C-13 | `gateway: forceTool` / `progressMode` 字段                | gateway 内零读取（`streamChatOnce` 的 opts 读取清单无此二者）；IPC 载荷字段保留以兼容契约，main 不再转译         |
+| C-14 | `gitBridge: GitReadAction`                                | **非死码而是未接线**——`gitRead` 原为裸 `string`；改为 `isGitReadAction()` 运行时校验 + 穷尽 switch，错误文案不变 |
 
-## 二、产品决策项（已处置 1 项，剩余 5 项待定）
+## 二、产品决策项（6 项全部处置）
 
 ### D-1 八个无消费者的 IPC 端点 —— 已处置（删 5 留 3）
 
 **根因分类**（逐端点取证登记时间、设计文档出处、是否有过 UI）：
 
-| 端点 | 根因 | 处置 |
-|---|---|---|
-| `mcp:status` | **被取代**：`SettingsPanel.tsx:120` 用 `mcp:refresh` 的返回值填同一状态 | **已删**（PR #170） |
-| `rag:search` | **内部能力被误暴露**：CodeRag 的真实消费者是主进程内部 `search` 工具（`tools.ts:1047`） | **已删**通道；CodeRag 保留 |
-| `queue:fail` | **领域命令全集登记，UI 实现子集**：设计列 11 个队列通道，UI 用 9 个 | **已删**；`failTask` 领域函数保留 |
-| `queue:clear` | 同上；UI 只有逐条 cancel | **已删** |
-| `timeline:query` | **领域读模型 ≠ 渲染层需求**：timeline 是只写审计存储 | **已删**通道；`TimelineLogger.query` 保留供未来调试工具 |
-| `config:clear-key` | **安全能力执行端缺失**：`configStore.rotateRecommended`（Key 龄超阈值建议轮换）已实现，ConfigPage 只有 `setKey` 覆盖写，**无清除入口** → 检测到该轮换却无法执行 | **保留**，待接 UI |
-| `usage:export` | **成组能力半接线**：`usage:summary` 有 UI（`MainWorkspace.tsx:113`），`export` 没有；DDD 蓝图 `00-domain-blueprint.md:109` 的 `ExportUsage` 是关键命令 | **保留**，待接 UI |
-| `acceptance:waive` | **同一能力的便捷别名未被采用**：`acceptance:mark` 的 status 已含 `'waived'` | **保留**，待接 UI |
+| 端点               | 根因                                                                                                                                                            | 处置                                                    |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `mcp:status`       | **被取代**：`SettingsPanel.tsx:120` 用 `mcp:refresh` 的返回值填同一状态                                                                                         | **已删**（PR #170）                                     |
+| `rag:search`       | **内部能力被误暴露**：CodeRag 的真实消费者是主进程内部 `search` 工具（`tools.ts:1047`）                                                                         | **已删**通道；CodeRag 保留                              |
+| `queue:fail`       | **领域命令全集登记，UI 实现子集**：设计列 11 个队列通道，UI 用 9 个                                                                                             | **已删**；`failTask` 领域函数保留                       |
+| `queue:clear`      | 同上；UI 只有逐条 cancel                                                                                                                                        | **已删**                                                |
+| `timeline:query`   | **领域读模型 ≠ 渲染层需求**：timeline 是只写审计存储                                                                                                            | **已删**通道；`TimelineLogger.query` 保留供未来调试工具 |
+| `config:clear-key` | **安全能力执行端缺失**：`configStore.rotateRecommended`（Key 龄超阈值建议轮换）已实现，ConfigPage 只有 `setKey` 覆盖写，**无清除入口** → 检测到该轮换却无法执行 | **保留**，待接 UI                                       |
+| `usage:export`     | **成组能力半接线**：`usage:summary` 有 UI（`MainWorkspace.tsx:113`），`export` 没有；DDD 蓝图 `00-domain-blueprint.md:109` 的 `ExportUsage` 是关键命令          | **保留**，待接 UI                                       |
+| `acceptance:waive` | **同一能力的便捷别名未被采用**：`acceptance:mark` 的 status 已含 `'waived'`                                                                                     | **保留**，待接 UI                                       |
 
 **删 5 的验收**：`ipcContractParity.test.ts` 双向断言（main handler ⇄ preload invoke）保证 main/preload/`types.d.ts` 三处同步；`taskQueueStore` 的两个用例改为断言 `queue.entry_cancelled` 而非已删的 failed outcome；DDD 交互表对应行加删除标注与原因。
 
 **留 3 的待办**（都属「领域已实现、UI 未接」，删除通道等于砍掉半成品功能）：
+
 1. `config:clear-key` —— 在 ConfigPage 加「清除已保存 Key」按钮，让 `rotateRecommended` 提示有可执行动作
 2. `usage:export` —— 在用量区域加「导出 CSV」按钮（`UsageStore.exportCsv` 已实现）
 3. `acceptance:waive` —— 验收面板加豁免入口（`AcceptanceStore.mark(..., 'waived')` 已实现）
@@ -136,9 +137,15 @@ CI 的 L3 断言 `capability.checked` 期望 1 条、实际 2 条。取证：给
 
 渲染器已由 Vite 打包，electron-builder 再从 `node_modules` 重打包会显著膨胀安装包。建议 `files` 排除并实测安装包体积。
 
-### D-6 `docs/` 未纳入 Prettier 门禁（建议：单独决策）
+### D-6 `docs/` 未纳入 Prettier 门禁（已处置：纳入 + 一次性重排）
 
-CI 的 Prettier 步骤只覆盖 `apps/desktop/src|tests|*.config.*` 与仓库根配置文件，不含 `docs/`。实测 `docs/**/*.md` 有 **140 个文件**未通过 Prettier（含覆盖矩阵）。纳入门禁会一次性重写大量中文文档的换行与表格（diff 巨大且语义中性），因此不擅自执行；若要纳入，应作为独立格式化 PR 并在合并前只做一次 `prettier --write`。
+**2026-11-28 处置（用户选定「现在纳入」）**：
+
+原本 CI 的 Prettier 步骤只覆盖 `apps/desktop/src|tests|*.config.*` 与仓库根配置文件；`lint-staged` 的配置在 `apps/desktop` 下（lefthook `root: apps/desktop`），因此 `docs/` 与仓库根 `*.md` 既不在提交前格式化，也不在 CI 校验——实测 157 个文件、约 10,346 行需要重排。
+
+- 一次性 `prettier --write` 重排存量（157 个 md + `DEVELOPMENT.md`；纯换行/表格对齐，语义中性）
+- CI `Format check` 与 `npm run format` / `format:check` 扩到 `../../docs/**/*.md` 与 `../../*.md`
+- `lint-staged` 增加 `../../docs/**/*.md` / `../../*.md` 两条（已验证 lint-staged 能接受仓库根相对 glob 并回写暂存区）
 
 ## 三、compact 遗留策略（已修复——批次 20）
 
@@ -155,14 +162,14 @@ CI 的 Prettier 步骤只覆盖 `apps/desktop/src|tests|*.config.*` 与仓库根
 
 ## 五、门禁与验证
 
-| 层 | 结果 |
-|----|------|
-| 双 tsc | ✅ 0 错（`tsconfig.json` + `tsconfig.main.json`） |
-| ESLint | ✅ 0 error（6 条既有 React Hook 依赖 warning） |
-| Prettier | ✅ 全过 |
-| L1 | ✅ 80 文件 / 977 用例 |
-| L3 interaction | ✅ 96 passed / 3 skipped |
-| 事件注册表 | 93 → 90（ADR-019）→ **84**（批次 18） |
+| 层             | 结果                                              |
+| -------------- | ------------------------------------------------- |
+| 双 tsc         | ✅ 0 错（`tsconfig.json` + `tsconfig.main.json`） |
+| ESLint         | ✅ 0 error（6 条既有 React Hook 依赖 warning）    |
+| Prettier       | ✅ 全过                                           |
+| L1             | ✅ 80 文件 / 977 用例                             |
+| L3 interaction | ✅ 96 passed / 3 skipped                          |
+| 事件注册表     | 93 → 90（ADR-019）→ **84**（批次 18）             |
 
 ## 六、遗留
 

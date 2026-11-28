@@ -6,11 +6,11 @@
 
 ### 0. 接入方与 Catalog（ADR-010）
 
-| 轴 | 落位 | 职责 |
-| --- | --- | --- |
-| Provider | `providers/descriptors/*` + `transport/openaiCompat` | baseURL、鉴权、错误分类 |
-| Catalog | `providers/catalog.ts` | 档位 flash/pro；`/models` DeepSeek 过滤 + fallback |
-| ModelProfile | `providers/profiles/deepseek.ts` | thinking / tool_choice / reasoning 字段 |
+| 轴           | 落位                                                 | 职责                                               |
+| ------------ | ---------------------------------------------------- | -------------------------------------------------- |
+| Provider     | `providers/descriptors/*` + `transport/openaiCompat` | baseURL、鉴权、错误分类                            |
+| Catalog      | `providers/catalog.ts`                               | 档位 flash/pro；`/models` DeepSeek 过滤 + fallback |
+| ModelProfile | `providers/profiles/deepseek.ts`                     | thinking / tool_choice / reasoning 字段            |
 
 首期 provider：`deepseek` / `commandcode` / `opencode-zen` / `opencode-go`。Config 存 `providerId`；旧配置默认 `commandcode`。运行时默认 flash。
 
@@ -20,7 +20,7 @@
 
 | 参数                                                                                            | 说明                                                                                                                                                                                                                                                              |
 | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `model`                                                                                         | 上游 id：各源 `/models` 过滤 DeepSeek 后挑 flash（默认 v4.1）/ pro；失败用 descriptor.fallback                                                                                                                                                                 |
+| `model`                                                                                         | 上游 id：各源 `/models` 过滤 DeepSeek 后挑 flash（默认 v4.1）/ pro；失败用 descriptor.fallback                                                                                                                                                                    |
 | `thinking`                                                                                      | `{type: 'enabled' \| 'disabled'}`                                                                                                                                                                                                                                 |
 | `reasoning_effort` ★                                                                            | `'high'` / `'max'`（仅 thinking=enabled 时有效）                                                                                                                                                                                                                  |
 | `messages`                                                                                      | OpenAI 兼容格式                                                                                                                                                                                                                                                   |

@@ -19,29 +19,30 @@
 
 ## File map
 
-| File | Responsibility |
-|------|----------------|
-| `docs/design/intent-confirmation-domain-design.md` | Inv4 / §2 Evidence / §3.3 ok 条件 → ADR-011 谓词 |
-| `docs/decisions/003-invariant4-single-source.md` | Decision 正文改「≥1 条可代跑」 |
-| `docs/decisions/008-pending-questions-non-blocking.md` | blockers 修订注 → ADR-011 |
-| `docs/domain/00-domain-authority.md` §4.2 | 清掉 pendingQuestions 阻塞 + 对齐谓词 |
-| `docs/domain/02-domain-model.md` | verifyCompletion 行「未核验」措辞 |
-| `docs/product/02-components.md` | 已解决卡「未核验项」≠卡不弹 |
-| `docs/product/07-success-metrics.md` | 通过率口径 |
-| `docs/domain/04-tactical-design.md` / `docs/tests/coverage-matrix.md` | 一句指针 |
-| `apps/desktop/src/domain/conversationState.ts` | `evidenceVerifiable` + `verifyCompletion.ok` + stdout 对齐 + 回填文案 |
-| `apps/desktop/src/main/verification.ts` | `runOne`：失败时仍优先带 stdout（grep -c） |
-| `apps/desktop/src/main/tools.ts` | Registry 内层 `{ok:false}` → 外层 false |
-| `apps/desktop/src/main/webTools.ts` | probe = DDG 搜索路径 |
-| `apps/desktop/src/renderer/ConversationPanel.tsx` | service 续跑：`goalConfirmed \|\| planConfirmed` |
-| `apps/desktop/scripts-cdp/uat-lib.mjs` | `rejectPlan>0` 禁止确认执行捷径 |
-| L1 tests | Inv4 / V1a / Registry / probe |
+| File                                                                  | Responsibility                                                        |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `docs/design/intent-confirmation-domain-design.md`                    | Inv4 / §2 Evidence / §3.3 ok 条件 → ADR-011 谓词                      |
+| `docs/decisions/003-invariant4-single-source.md`                      | Decision 正文改「≥1 条可代跑」                                        |
+| `docs/decisions/008-pending-questions-non-blocking.md`                | blockers 修订注 → ADR-011                                             |
+| `docs/domain/00-domain-authority.md` §4.2                             | 清掉 pendingQuestions 阻塞 + 对齐谓词                                 |
+| `docs/domain/02-domain-model.md`                                      | verifyCompletion 行「未核验」措辞                                     |
+| `docs/product/02-components.md`                                       | 已解决卡「未核验项」≠卡不弹                                           |
+| `docs/product/07-success-metrics.md`                                  | 通过率口径                                                            |
+| `docs/domain/04-tactical-design.md` / `docs/tests/coverage-matrix.md` | 一句指针                                                              |
+| `apps/desktop/src/domain/conversationState.ts`                        | `evidenceVerifiable` + `verifyCompletion.ok` + stdout 对齐 + 回填文案 |
+| `apps/desktop/src/main/verification.ts`                               | `runOne`：失败时仍优先带 stdout（grep -c）                            |
+| `apps/desktop/src/main/tools.ts`                                      | Registry 内层 `{ok:false}` → 外层 false                               |
+| `apps/desktop/src/main/webTools.ts`                                   | probe = DDG 搜索路径                                                  |
+| `apps/desktop/src/renderer/ConversationPanel.tsx`                     | service 续跑：`goalConfirmed \|\| planConfirmed`                      |
+| `apps/desktop/scripts-cdp/uat-lib.mjs`                                | `rejectPlan>0` 禁止确认执行捷径                                       |
+| L1 tests                                                              | Inv4 / V1a / Registry / probe                                         |
 
 ---
 
 ### Task 1: 设计/权威文档谓词对齐（无代码）
 
 **Files:**
+
 - Modify: `docs/design/intent-confirmation-domain-design.md`（§2 Evidence 行、§3.3 verifyCompletion 注释、§4 Inv4）
 - Modify: `docs/decisions/003-invariant4-single-source.md`（Decision 条）
 - Modify: `docs/decisions/008-pending-questions-non-blocking.md`（Decision §1 blockers + 注）
@@ -54,6 +55,7 @@
 - 不改：S2/S4 stage-spec 历史正文、旧 audit 报告
 
 **Interfaces:**
+
 - Consumes: ADR-011 Decision §2–3 谓词原文
 - Produces: 文档真源与实现任务共用的 Inv4 句子：「verification 非空 ∧ ≥1 条 `isSystemVerifiable` 且 V1a/纯逻辑通过对账 ∧ missing 空；unverifiable 仅清单+提示，不单独否决 ok」
 
@@ -118,12 +120,14 @@ EOF
 ### Task 2: Inv4 谓词——`evidenceVerifiable` + `verifyCompletion.ok`
 
 **Files:**
+
 - Modify: `apps/desktop/src/domain/conversationState.ts`（`evidenceVerifiable` ~691–694；`verifyCompletion` return ~760；注释 687–720）
 - Modify: `apps/desktop/tests/unit/conversationState.test.ts`（Inv 4 describe ~381+）
 - Modify: `apps/desktop/tests/unit/verifyCompletionSystem.test.ts`（非只读用例 ~58–68）
 - Modify: `apps/desktop/src/domain/conversationState.ts` `buildEvidenceBackfill`（去掉 `node -e` 示例）
 
 **Interfaces:**
+
 - Consumes: `isSystemVerifiable(command: string): boolean`（文件内现有）
 - Produces:
   - `evidenceVerifiable(evidence): boolean` — `verification.length > 0 && some(isSystemVerifiable)`
@@ -237,12 +241,14 @@ EOF
 ### Task 3: V1a「核对输出」——stdout 与 claim 对齐
 
 **Files:**
+
 - Modify: `apps/desktop/src/main/verification.ts`（`runOne` close 分支：非 0 时优先 `stdout`）
 - Modify: `apps/desktop/src/domain/conversationState.ts`（V1a 循环：非 ok 时用 output 包含关系对齐 claim）
 - Modify: `apps/desktop/tests/unit/verificationRunner.integration.test.ts`
 - Modify: `apps/desktop/tests/unit/verifyCompletionSystem.test.ts`（mock 非 ok + output 对齐）
 
 **Interfaces:**
+
 - Consumes: `SystemVerifier.verificationResults[cmd]: { ok: boolean; output?: string }`；claim item 可选 `output?: string`
 - Produces: `verificationResults[].ok === true` 当 `exit===0`；领域层：若 `!result.ok` 但 `align(claim.output, result.output)` 则**不**推入 missing
 
@@ -332,8 +338,7 @@ child.on('close', (code) => {
 ```ts
 const result = systemState.verificationResults[item.command]
 if (!result) continue
-const aligned =
-  !result.ok && outputAligns(item.output, result.output)
+const aligned = !result.ok && outputAligns(item.output, result.output)
 if (result.ok || aligned) continue
 if (!missing.includes(`verification:${item.command}`)) {
   missing.push(`verification:${item.command}`)
@@ -361,10 +366,12 @@ EOF
 ### Task 4: ToolRegistry 内层 `{ok:false}` → 外层失败
 
 **Files:**
+
 - Modify: `apps/desktop/src/main/tools.ts`（`ToolRegistry.execute` try 块 ~177–179）
 - Modify: `apps/desktop/tests/unit/tools.test.ts`（新增用例；若无 Registry 单测入口则在现有 execute 测试旁加）
 
 **Interfaces:**
+
 - Consumes: `tool.execute(...): Promise<unknown>`
 - Produces: 若 `data` 为对象且 `data.ok === false` → `{ ok: false, error: string, data }`；否则 `{ ok: true, data }`
 
@@ -418,10 +425,12 @@ return { ok: true, data }
 ### Task 5: 外网探活 = 实际搜索路径
 
 **Files:**
+
 - Modify: `apps/desktop/src/main/webTools.ts`（`probeWebAccess`：探 `DDG_API` 而非 `example.com`；有 `searchUrl` 覆盖时探覆盖端点由 ipc 已跳过）
 - Modify: `apps/desktop/tests/unit/webTools.test.ts`
 
 **Interfaces:**
+
 - Consumes: 无覆盖端点时内置搜索用 `DDG_API`
 - Produces: `probeWebAccess()` 对 DDG Instant Answer URL 发 GET（或与 `searchBuiltin` 同 host）；失败 → `ok:false`，设置页不可显示「已开启」
 
@@ -481,10 +490,12 @@ export async function probeWebAccess(timeoutMs = 8000): Promise<{ ok: boolean; e
 ### Task 6: service 自动续跑——goal 或 plan 已确认
 
 **Files:**
+
 - Modify: `apps/desktop/src/renderer/ConversationPanel.tsx`（`finishError` ~2459–2468）
 - Test: 若已有 interaction「plan 后 service 续跑」——扩一条 goal 后；否则 L1 不可测 UI，用注释 + 手工/UAT；**不要**新造框架
 
 **Interfaces:**
+
 - Consumes: `stateRef.current.goalConfirmed | planConfirmed`；`pending === 'none'`（若易取则加；现码未查 pending——最小改：`(goalConfirmed || planConfirmed)`）
 - Produces: `errorType==='service'` 且未续过 → 自动 `retryFailedTurn` 一次
 
@@ -515,9 +526,11 @@ cd apps/desktop && rg -n 'autoRetried|重试|service' tests/interaction/*.ts | h
 ### Task 7: UAT harness——`rejectPlan>0` 禁止确认执行捷径
 
 **Files:**
+
 - Modify: `apps/desktop/scripts-cdp/uat-lib.mjs`（`autopilot` `__goal_done__` 分支 ~437–455）
 
 **Interfaces:**
+
 - Consumes: `persona.rejectPlan`、`persona.__planRejects`
 - Produces: 当 `(persona.rejectPlan || 0) > 0` 且仍有剩余拒绝次数 → **不**直接点「确认执行」；走 `personaAct(page, persona, 'plan')`（含「修改方案」）
 
@@ -533,8 +546,7 @@ if (
   !has('批准这批文件')
 ) {
   const stillRejecting =
-    (persona.rejectPlan || 0) > 0 &&
-    (persona.__planRejects || 0) < (persona.rejectPlan || 0)
+    (persona.rejectPlan || 0) > 0 && (persona.__planRejects || 0) < (persona.rejectPlan || 0)
   if (stillRejecting) {
     acted = await personaAct(page, persona, 'plan')
     if (acted && acted.includes('确认执行')) planConfirmed = true
@@ -610,6 +622,6 @@ NF_UAT_LOCAL=1 bash scripts-cdp/run-uat-personas.sh
 Plan complete and saved to `docs/superpowers/plans/2026-09-29-adr011-success-means-proposition.md`. Two execution options:
 
 **1. Subagent-Driven (recommended)** — 每任务新开子代理，任务间审查  
-**2. Inline Execution** — 本会话按任务推进，检查点停顿  
+**2. Inline Execution** — 本会话按任务推进，检查点停顿
 
 Which approach?

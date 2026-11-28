@@ -11,10 +11,10 @@
 
 本蓝图使用三种证据，而不是只使用“已经能跑通的代码”：
 
-| 证据类型 | 含义 | 例子 |
-| :--- | :--- | :--- |
-| **运行时实现** | 代码真实执行、有测试或明确入口 | Task 状态机、工具授权、SSE 流、问题台账 |
-| **占位 / 演示** | 代码明确标注“即将支持 / V1 占位 / demo”，入口存在但无真实能力 | DoD/数字交付/信任阶梯演示面板（仅 demo bridge 可达）；插件市场/公开分发非目标 |
+| 证据类型         | 含义                                                                    | 例子                                                                                          |
+| :--------------- | :---------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------- |
+| **运行时实现**   | 代码真实执行、有测试或明确入口                                          | Task 状态机、工具授权、SSE 流、问题台账                                                       |
+| **占位 / 演示**  | 代码明确标注“即将支持 / V1 占位 / demo”，入口存在但无真实能力           | DoD/数字交付/信任阶梯演示面板（仅 demo bridge 可达）；插件市场/公开分发非目标                 |
 | **产品语义暗示** | 类型、字段、注释、UI 文案、契约共同指向一个应有领域，但实现缺失或不完整 | `DeliveryPackage.acceptance` 字段、`verificationPlan`、`plan.files`、`preview`/`diff` 审核 UI |
 
 领域判定四问：
@@ -33,22 +33,22 @@
 > 编号稳定：BC-01～BC-09 是首轮从代码识别的上下文；BC-10～BC-14 是本轮按“应该有什么”补充的目标上下文。
 > 状态沿用 `已落地` / `部分落地` / `原型/演示`，新增 `缺失（应有）`。
 
-| 编号 | 领域 | 类型 | 现状 | 代码证据 | 目标文档 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| BC-01 | 会话与任务 | Core | 已落地 | `conversationState.ts`、`agentLoop.ts`、`protocolTools.ts` | 04/06/07 + `conversation-task` spec |
-| BC-02 | 执行与信任 | Core | 已落地（本轮修 P0） | `tools.ts`、`useToolApproval.ts`、`sandboxPath.ts` | 04/06/07 + `execution-trust` spec |
-| BC-03 | 工作区与环境 | Supporting | 已落地 | `workspace.ts`、`plannedFilesStore.ts`、`envManager.ts`、`serviceManager.ts` | 04/06/07 + `workspace-environment` spec |
-| BC-04 | 交付与问题台账 | Supporting | 已落地（BC-10/14 补齐交付与验收） | `DeliveryPanel.tsx`、`problemStore.ts`、`applyDiff.ts` | 04/06/07 + `delivery-ledger` spec |
-| BC-05 | 模型接入 | Supporting | 已落地（BC-12 补齐用量） | `gateway.ts`、`providers/*`、`preheat.ts` | 04/06/07 + `provider-gateway` spec |
-| BC-06 | 会话时间线 | Generic | 已落地（含跨上下文事务性 Outbox） | `timeline.ts`、`timelineLogger.ts`、`stateTransaction.ts` | 04/06/07 + `session-timeline` spec |
-| BC-07 | 配置与凭据 | Generic | 已落地 | `configStore.ts` | 04/06/07 + `configuration-secrets` spec |
-| BC-08 | 上下文与检索 | Supporting | 已落地 | `context.ts`、`codeRag.ts`、`lsp.ts`、`compact.ts` | 04/06/07 + `context-retrieval` spec |
-| BC-09 | 平台运行 | Generic | 已落地（扩展注册 + MCP；插件市场非目标） | `main.ts`、`pluginSystem.ts`、`preload.ts` | 04/06/07 + `platform-runtime` spec |
-| **BC-10** | **变更与版本** | Supporting | **已落地** | `domain/changeSet.ts`、`main/changeSetService.ts`、`main/gitBridge.ts`、`ipc.ts` `changeset:*`/`git:read` | 本节 + `change-version` spec |
-| **BC-11** | **任务编排** | Supporting | **已落地** | `domain/taskQueue.ts`、`main/taskQueueStore.ts`、`ipc.ts` `queue:*`、`MainWorkspace.tsx` TaskPanel | 本节 + `task-orchestration` spec |
-| **BC-12** | **用量与成本** | Generic | **已落地** | `domain/usageLedger.ts`、`main/usageStore.ts`、`gateway.ts` usage 解析、`ipc.ts` `usage:*` | 本节 + `usage-cost` spec |
-| **BC-13** | **扩展与集成** | Supporting | **已落地** | `domain/extension.ts`、`main/pluginSystem.ts`、`main/mcpClient.ts`、`main/gitBridge.ts`、`ipc.ts` `extensions:*`/`mcp:*`/`git:read` | 本节 + `extension-integration` spec |
-| **BC-14** | **验收与质量门禁** | Core | **已落地** | `domain/acceptance.ts`、`main/acceptanceStore.ts`、`ipc.ts` `acceptance:*`、`DeliveryPanel.tsx` 门禁 | 本节 + `acceptance-quality` spec |
+| 编号      | 领域               | 类型       | 现状                                     | 代码证据                                                                                                                            | 目标文档                                |
+| :-------- | :----------------- | :--------- | :--------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------- |
+| BC-01     | 会话与任务         | Core       | 已落地                                   | `conversationState.ts`、`agentLoop.ts`、`protocolTools.ts`                                                                          | 04/06/07 + `conversation-task` spec     |
+| BC-02     | 执行与信任         | Core       | 已落地（本轮修 P0）                      | `tools.ts`、`useToolApproval.ts`、`sandboxPath.ts`                                                                                  | 04/06/07 + `execution-trust` spec       |
+| BC-03     | 工作区与环境       | Supporting | 已落地                                   | `workspace.ts`、`plannedFilesStore.ts`、`envManager.ts`、`serviceManager.ts`                                                        | 04/06/07 + `workspace-environment` spec |
+| BC-04     | 交付与问题台账     | Supporting | 已落地（BC-10/14 补齐交付与验收）        | `DeliveryPanel.tsx`、`problemStore.ts`、`applyDiff.ts`                                                                              | 04/06/07 + `delivery-ledger` spec       |
+| BC-05     | 模型接入           | Supporting | 已落地（BC-12 补齐用量）                 | `gateway.ts`、`providers/*`、`preheat.ts`                                                                                           | 04/06/07 + `provider-gateway` spec      |
+| BC-06     | 会话时间线         | Generic    | 已落地（含跨上下文事务性 Outbox）        | `timeline.ts`、`timelineLogger.ts`、`stateTransaction.ts`                                                                           | 04/06/07 + `session-timeline` spec      |
+| BC-07     | 配置与凭据         | Generic    | 已落地                                   | `configStore.ts`                                                                                                                    | 04/06/07 + `configuration-secrets` spec |
+| BC-08     | 上下文与检索       | Supporting | 已落地                                   | `context.ts`、`codeRag.ts`、`lsp.ts`、`compact.ts`                                                                                  | 04/06/07 + `context-retrieval` spec     |
+| BC-09     | 平台运行           | Generic    | 已落地（扩展注册 + MCP；插件市场非目标） | `main.ts`、`pluginSystem.ts`、`preload.ts`                                                                                          | 04/06/07 + `platform-runtime` spec      |
+| **BC-10** | **变更与版本**     | Supporting | **已落地**                               | `domain/changeSet.ts`、`main/changeSetService.ts`、`main/gitBridge.ts`、`ipc.ts` `changeset:*`/`git:read`                           | 本节 + `change-version` spec            |
+| **BC-11** | **任务编排**       | Supporting | **已落地**                               | `domain/taskQueue.ts`、`main/taskQueueStore.ts`、`ipc.ts` `queue:*`、`MainWorkspace.tsx` TaskPanel                                  | 本节 + `task-orchestration` spec        |
+| **BC-12** | **用量与成本**     | Generic    | **已落地**                               | `domain/usageLedger.ts`、`main/usageStore.ts`、`gateway.ts` usage 解析、`ipc.ts` `usage:*`                                          | 本节 + `usage-cost` spec                |
+| **BC-13** | **扩展与集成**     | Supporting | **已落地**                               | `domain/extension.ts`、`main/pluginSystem.ts`、`main/mcpClient.ts`、`main/gitBridge.ts`、`ipc.ts` `extensions:*`/`mcp:*`/`git:read` | 本节 + `extension-integration` spec     |
+| **BC-14** | **验收与质量门禁** | Core       | **已落地**                               | `domain/acceptance.ts`、`main/acceptanceStore.ts`、`ipc.ts` `acceptance:*`、`DeliveryPanel.tsx` 门禁                                | 本节 + `acceptance-quality` spec        |
 
 > 实现状态（2026-11-14）：BC-10～BC-14 目标态领域已全部落地（领域状态机 + 本机持久化 + IPC/preload + 生产 UI + 单测）；演示面板仍保留为演示，但生产交付路径不再依赖它们。
 
@@ -151,18 +151,18 @@
 
 > 这些不是新上下文，但属于“代码里已有暗示、文档/实现不完整”的部分，已并入相应上下文的文档与 spec。
 
-| 上下文 | 隐藏缺口 | 代码证据 | 处理 |
-| :--- | :--- | :--- | :--- |
-| BC-01 | 对话策略（系统提示、nudge、阶段提示、确认词）没有作为领域对象表达 | `sysPrompt.ts`、`systemNudge.ts`、`agentLoop.ts` 的 nudges | 在 BC-01 中定义为“对话策略服务”，不属于新聚合 |
-| BC-01 | 会话恢复只恢复消息，不恢复完整 Task 确认位 | `sessionStore.ts`、`useConversationState.ts` 重建 | 在 spec 中明确“以消息重建”的恢复语义 |
-| BC-02 | 权限规则持久化（2026-11-15）与三档信任模式（2026-11-16，ADR-015：`trustPolicyStore` + `trust:*` IPC + `authModel` 判定 + main 委托边界二次校验 + 真实信任阶梯）已落地 | `tools.ts` rules/`delegationBoundaryViolation`、`permissionRulesStore.ts`、`trustPolicyStore.ts`、`authModel.ts`、`useTrustPolicy.ts`、`SettingsPanel.tsx`、`TrustLadderPanel.tsx` | 委托越界/清单外/bash 均不自动放行；L5 基线待 Mac 更新 |
-| BC-03 | 项目初始化只创建最小骨架，没有模板/场景工程初始化 | `projectInit.ts`、`scenes.tsx` | 模板化列为候选，不建新上下文 |
-| BC-04 | 交付包验收项为空；diff 审核与变更集未统一 | `MainWorkspace.tsx`、`DeliveryPanel.tsx` | 由 BC-10/BC-14 补齐 |
-| BC-05 | 无 usage 解析、无价格表、无模型健康/降级策略 | `gateway.ts` | 由 BC-12 补齐；健康策略列入后续 |
-| BC-06 | 事件版本/DLQ/重放/去重；轻量 Outbox 与跨存储事务性 Outbox 均已落地（2026-11-15：入队 fsync + 启动重放 + outboxId 幂等 + 投递/压缩 fsync 顺序 + 半行/跨午夜防护；WAL 事务覆盖 BC-10/11/14 状态+基线+事件） | `timeline.ts`、`timelineLogger.ts`、`timelineOutbox.ts`、`stateTransaction.ts` | 工作区文件写入仍为快照+补偿（非跨文件系统事务） |
-| BC-07 | 明文 fallback 的风险决策未产品化 | `configStore.ts` | 保留为安全决策项 |
-| BC-08 | 无长期记忆/项目知识库；RAG 是关键词级 | `codeRag.ts`、`context.ts` | 明确为非目标（无代码证据），避免虚构 |
-| BC-09 | 无自动更新/签名/崩溃上报；插件市场/公开分发非目标 | `main.ts`、`pluginSystem.ts` | 内置扩展 + MCP 已落地（BC-13）；平台发布与插件市场列为非目标 |
+| 上下文 | 隐藏缺口                                                                                                                                                                                                  | 代码证据                                                                                                                                                                           | 处理                                                         |
+| :----- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------- |
+| BC-01  | 对话策略（系统提示、nudge、阶段提示、确认词）没有作为领域对象表达                                                                                                                                         | `sysPrompt.ts`、`systemNudge.ts`、`agentLoop.ts` 的 nudges                                                                                                                         | 在 BC-01 中定义为“对话策略服务”，不属于新聚合                |
+| BC-01  | 会话恢复只恢复消息，不恢复完整 Task 确认位                                                                                                                                                                | `sessionStore.ts`、`useConversationState.ts` 重建                                                                                                                                  | 在 spec 中明确“以消息重建”的恢复语义                         |
+| BC-02  | 权限规则持久化（2026-11-15）与三档信任模式（2026-11-16，ADR-015：`trustPolicyStore` + `trust:*` IPC + `authModel` 判定 + main 委托边界二次校验 + 真实信任阶梯）已落地                                     | `tools.ts` rules/`delegationBoundaryViolation`、`permissionRulesStore.ts`、`trustPolicyStore.ts`、`authModel.ts`、`useTrustPolicy.ts`、`SettingsPanel.tsx`、`TrustLadderPanel.tsx` | 委托越界/清单外/bash 均不自动放行；L5 基线待 Mac 更新        |
+| BC-03  | 项目初始化只创建最小骨架，没有模板/场景工程初始化                                                                                                                                                         | `projectInit.ts`、`scenes.tsx`                                                                                                                                                     | 模板化列为候选，不建新上下文                                 |
+| BC-04  | 交付包验收项为空；diff 审核与变更集未统一                                                                                                                                                                 | `MainWorkspace.tsx`、`DeliveryPanel.tsx`                                                                                                                                           | 由 BC-10/BC-14 补齐                                          |
+| BC-05  | 无 usage 解析、无价格表、无模型健康/降级策略                                                                                                                                                              | `gateway.ts`                                                                                                                                                                       | 由 BC-12 补齐；健康策略列入后续                              |
+| BC-06  | 事件版本/DLQ/重放/去重；轻量 Outbox 与跨存储事务性 Outbox 均已落地（2026-11-15：入队 fsync + 启动重放 + outboxId 幂等 + 投递/压缩 fsync 顺序 + 半行/跨午夜防护；WAL 事务覆盖 BC-10/11/14 状态+基线+事件） | `timeline.ts`、`timelineLogger.ts`、`timelineOutbox.ts`、`stateTransaction.ts`                                                                                                     | 工作区文件写入仍为快照+补偿（非跨文件系统事务）              |
+| BC-07  | 明文 fallback 的风险决策未产品化                                                                                                                                                                          | `configStore.ts`                                                                                                                                                                   | 保留为安全决策项                                             |
+| BC-08  | 无长期记忆/项目知识库；RAG 是关键词级                                                                                                                                                                     | `codeRag.ts`、`context.ts`                                                                                                                                                         | 明确为非目标（无代码证据），避免虚构                         |
+| BC-09  | 无自动更新/签名/崩溃上报；插件市场/公开分发非目标                                                                                                                                                         | `main.ts`、`pluginSystem.ts`                                                                                                                                                       | 内置扩展 + MCP 已落地（BC-13）；平台发布与插件市场列为非目标 |
 
 ---
 
@@ -182,10 +182,10 @@
 
 ## 6. 演进顺序（目标态）
 
-| 阶段 | 内容 | 理由 |
-| :--- | :--- | :--- |
-| 已完成 | P0 安全/不变量修正（P0-01～P0-05、P1-01） | 先保证现有核心可信 |
-| 已完成（2026-11-14） | BC-10 变更集、BC-14 验收门禁、BC-12 用量台账、BC-11 任务队列、BC-13 MCP/Git 集成 | 目标态五领域已落地 |
+| 阶段                 | 内容                                                                                                                                                                                                                                   | 理由                             |
+| :------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------- |
+| 已完成               | P0 安全/不变量修正（P0-01～P0-05、P1-01）                                                                                                                                                                                              | 先保证现有核心可信               |
+| 已完成（2026-11-14） | BC-10 变更集、BC-14 验收门禁、BC-12 用量台账、BC-11 任务队列、BC-13 MCP/Git 集成                                                                                                                                                       | 目标态五领域已落地               |
 | 已完成（2026-11-15） | IPC 契约校验（P1-04）、ConversationPanel 拆分（P1-05）、演示隔离机制化、轻量 Outbox（P1-02：入队 fsync + 启动重放 + outboxId 幂等）、完整跨存储事务性 Outbox（WAL：状态+基线+事件同提交，启动 FIFO 重放；工作区文件写入保留快照+补偿） | 工程边界、安全边界与事件投递硬化 |
 
 ---

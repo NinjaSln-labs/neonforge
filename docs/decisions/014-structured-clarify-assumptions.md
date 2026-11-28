@@ -1,4 +1,5 @@
 # ADR-014：结构化澄清与假设来源（AskToAct 式目标假设采集）
+
 - 状态: accepted
 - 日期: 2026-11-16
 - 相关: GitHub #13（结构化澄清工具）；README Roadmap V2 #3；docs/design/intent-confirmation-domain-design.md §3.2/§4.1/§8.4；stage-specs/V2-structured-clarify.md
@@ -46,6 +47,7 @@
    - 旧消息快照恢复也经过 `normalizeDecisionContent` 校验/归一化，非法 source 不进入状态。
 
 ## Consequences
+
 - 积极：目标假设从「用户整段打字」变为「逐条结构化核对」；模型得到的回答可直接映射为工具参数/假设；确认卡可追溯假设来源；旧会话与旧模型输出兼容；来源标签有真实交互证据背书。
 - 代价：假设结构从字符串数组升级为对象数组（渲染/解析/快照均需归一化）；`ask_user` 参数面扩大，提示词需同步教学；假设核对卡交互状态仅存组件内（刷新后按「匹配本卡问题的结构化回答/选项标签」判定已回应，兄弟卡不会被误禁用）。
 - 边界：不引入多问题问卷/可编辑计划文件/澄清训练数据；不改变决策点枚举（澄清仍非 DecisionPoint，不置 pending）。

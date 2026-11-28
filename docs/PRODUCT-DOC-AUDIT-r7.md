@@ -10,39 +10,40 @@
 
 ## 一、文档全景核查（层①）
 
-| 文档 | 必需性 | 现状 | 判定 |
-|------|--------|------|------|
-| product/00 | 必需 | v2.2——范围清单完整（V1 含 9 项/不做 9 项，0-1 流已同步 PlanProposal/证据对账）✅ | ✅ |
-| product/01 | 必需 | v2.2 头部同步 ✅——**Flow 5 正文 ② 方案确认按钮仍是旧语义**（Minor）| ⚠️ |
-| product/02/03/05/07/04 | 必需 | 02 组件规格（第 6 轮修复 ✅）；03/05 可复用/随 S3；07 v1.1；04 重构期表 ✅ | ✅ |
-| domain/00/02/04/06/07/09 | 必需 | 已同步闭环（07-api-gateway 第 6 轮修复 ✅）| ✅ |
-| domain/03-strategic / 05-architecture | 必需 | **旧确认语义未同步**（Major）——第 6 轮「00-06 已审闭环」误判，本轮纠正 | ⚠️ |
-| domain/01-reference | 可选 | 07-30 竞品技术分析——无确认语义冲突（新调研引用已入 04 重构期表）✅ | ✅ |
-| 意图确认设计（scratch）+ README | 必需 | §1-9 完整；README 08-15 重制 ✅ | ✅ |
+| 文档                                  | 必需性 | 现状                                                                             | 判定 |
+| ------------------------------------- | ------ | -------------------------------------------------------------------------------- | ---- |
+| product/00                            | 必需   | v2.2——范围清单完整（V1 含 9 项/不做 9 项，0-1 流已同步 PlanProposal/证据对账）✅ | ✅   |
+| product/01                            | 必需   | v2.2 头部同步 ✅——**Flow 5 正文 ② 方案确认按钮仍是旧语义**（Minor）              | ⚠️   |
+| product/02/03/05/07/04                | 必需   | 02 组件规格（第 6 轮修复 ✅）；03/05 可复用/随 S3；07 v1.1；04 重构期表 ✅       | ✅   |
+| domain/00/02/04/06/07/09              | 必需   | 已同步闭环（07-api-gateway 第 6 轮修复 ✅）                                      | ✅   |
+| domain/03-strategic / 05-architecture | 必需   | **旧确认语义未同步**（Major）——第 6 轮「00-06 已审闭环」误判，本轮纠正           | ⚠️   |
+| domain/01-reference                   | 可选   | 07-30 竞品技术分析——无确认语义冲突（新调研引用已入 04 重构期表）✅               | ✅   |
+| 意图确认设计（scratch）+ README       | 必需   | §1-9 完整；README 08-15 重制 ✅                                                  | ✅   |
 
 **完整性**：无缺必需文档 ✅（2 项 Major 为同步缺失）
 
 ## 二、逐类独立审计（层②）
 
-| 文档 | 检查点 | 核心维度 | 速评 |
-|------|--------|---------|------|
-| product/00 | 范围明确（V1 做/不做）✅；用户故事/指标/六核心领域 ✅ | 可实现性 | ✅ 版本范围完整且与新设计一致 |
-| product/01 | 旅程完整（Flow 4/5/6）| 可实现性 | ⚠️ Flow 5 ②「方案确认（L2 建议）[继续]/[调整]/[撤销]」为旧按钮语义——新设计为方案卡（批准并执行/修改方案/重出）；⑤ 拒绝原因未展开（#3 Minor）|
-| domain/03-strategic | BC 职责边界（确认点/执行保障）| **一致性** | ⚠️ 7 处旧语义（目标/执行/达成、TurnExecutionPolicy、forceTool——#1 Major）|
-| domain/05-architecture | 架构分层引用（服务名/网关链路）| **一致性** | ⚠️ 2 处旧引用（TurnExecutionPolicy（forceTool 决策）、Gateway forceTool 传递——#2 Major）|
-| domain/01-reference | 竞品技术分析（历史）| — | ✅ 无冲突 |
+| 文档                   | 检查点                                                | 核心维度   | 速评                                                                                                                                         |
+| ---------------------- | ----------------------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| product/00             | 范围明确（V1 做/不做）✅；用户故事/指标/六核心领域 ✅ | 可实现性   | ✅ 版本范围完整且与新设计一致                                                                                                                |
+| product/01             | 旅程完整（Flow 4/5/6）                                | 可实现性   | ⚠️ Flow 5 ②「方案确认（L2 建议）[继续]/[调整]/[撤销]」为旧按钮语义——新设计为方案卡（批准并执行/修改方案/重出）；⑤ 拒绝原因未展开（#3 Minor） |
+| domain/03-strategic    | BC 职责边界（确认点/执行保障）                        | **一致性** | ⚠️ 7 处旧语义（目标/执行/达成、TurnExecutionPolicy、forceTool——#1 Major）                                                                    |
+| domain/05-architecture | 架构分层引用（服务名/网关链路）                       | **一致性** | ⚠️ 2 处旧引用（TurnExecutionPolicy（forceTool 决策）、Gateway forceTool 传递——#2 Major）                                                     |
+| domain/01-reference    | 竞品技术分析（历史）                                  | —          | ✅ 无冲突                                                                                                                                    |
 
 ## 三、交叉验证矩阵（层③）
 
-| 对齐关系 | 文档 A 说法 | 文档 B 说法 | 判定 |
-|---------|-----------|-----------|------|
-| A0 §2 BC ↔ 03-strategic | v4.0：推进保障策略（ProgressGuarantee）/Goal→Plan→Resolution | 「执行保障策略（TurnExecutionPolicy——forceTool）」「目标/执行/达成」| ❌ 冲突（#1）——战略文档是 BC 职责权威之一 |
-| A0 §1/§4 ↔ 05-architecture | tool_choice 传递（推进保障）| 「TurnExecutionPolicy（forceTool 决策）」「Gateway forceTool 传递」| ❌ 冲突（#2）|
-| 设计 §3.2 ↔ 01 Flow 5 | PlanCard（批准并执行/修改方案/重出）| ② 方案确认 [继续]/[调整]/[撤销] | ⚠️ 头部已声明方案卡、正文按钮未同步（#3 Minor）|
-| 07 v1.1 ↔ 设计（指标↔机制）| 4 确认指标 | decision.resolved/verifyCompletion | ✅ 一致 |
-| 02 组件 ↔ 设计值对象 | PlanCard/ResolutionCard/RejectReasonPicker | PlanProposal/CompletionClaim/RejectReason | ✅ 一致（第 6 轮修复）|
+| 对齐关系                    | 文档 A 说法                                                  | 文档 B 说法                                                          | 判定                                            |
+| --------------------------- | ------------------------------------------------------------ | -------------------------------------------------------------------- | ----------------------------------------------- |
+| A0 §2 BC ↔ 03-strategic     | v4.0：推进保障策略（ProgressGuarantee）/Goal→Plan→Resolution | 「执行保障策略（TurnExecutionPolicy——forceTool）」「目标/执行/达成」 | ❌ 冲突（#1）——战略文档是 BC 职责权威之一       |
+| A0 §1/§4 ↔ 05-architecture  | tool_choice 传递（推进保障）                                 | 「TurnExecutionPolicy（forceTool 决策）」「Gateway forceTool 传递」  | ❌ 冲突（#2）                                   |
+| 设计 §3.2 ↔ 01 Flow 5       | PlanCard（批准并执行/修改方案/重出）                         | ② 方案确认 [继续]/[调整]/[撤销]                                      | ⚠️ 头部已声明方案卡、正文按钮未同步（#3 Minor） |
+| 07 v1.1 ↔ 设计（指标↔机制） | 4 确认指标                                                   | decision.resolved/verifyCompletion                                   | ✅ 一致                                         |
+| 02 组件 ↔ 设计值对象        | PlanCard/ResolutionCard/RejectReasonPicker                   | PlanProposal/CompletionClaim/RejectReason                            | ✅ 一致（第 6 轮修复）                          |
 
 **既有审计 spot-check（第 6 轮 84→修复后 ≥90）——抽验 2/2**：
+
 - 断言 1「02 补 3 组件规格」→ **采信（L3 闭环）**：6 处命中（PlanCard/ResolutionCard/RejectReasonPicker 各含结构/数据源/按钮语义/S 阶段映射），关键语义（假设显式呈现 757 行/无证据不对账 782 行）真实存在
 - 断言 2「07-api-gateway 同步推进保障」→ **采信（L3 闭环）**：ProgressGuarantee 链路表（mode 三态/pending 恒 auto/required=强制推进）/不变式/历史标注齐全
 - 结论：第 6 轮修复闭环 ✅；但第 6 轮「domain 00-06 已审闭环」**存在误判**（03/05 未做新设计同步检查）——本轮纠正（#1/#2）

@@ -11,48 +11,48 @@
 
 与第 13 轮同（10 份领域 + 8 份产品 + 设计文档 + 调研报告 + 索引）——**新增核查项**：
 
-| 项 | 现状 | 判定 |
-|----|------|------|
-| 竞品调研报告（三视角）| 内容完好（90 行——9 竞品全景表/源码修正 5 条/学术共识 10 条/6+3 启示）——**但物理位置在项目外** `~/Documents/myself/analysis/competitor-crawler/`——文档引用（04-alignment/设计 §1/01）在仓库内**解析失败** | ⚠️（问题 #5）|
-| 测试域（tests/unit 28 文件 + tests/interaction 1 文件 27 用例）| 存在——组织方式与设计 §9.1 诊断一致（按函数堆叠、锁旧 API `userConfirmed(s,'goal')`/`pendingCardToShow`/`forceToolInput`——pendingCardToShow 已被新设计推翻——S1 重写计划正确）| ✅（设计 §9 描述准确——无冲突）|
-| 组件↔值对象映射 | 02-components 意图确认组件章（PlanCard/ResolutionCard/RejectReasonPicker）字段与值对象逐一对应；RejectReasonPicker 选项与 kind 枚举对齐（modify 由「修改方案」按钮直触——设计使然）| ✅ |
+| 项                                                              | 现状                                                                                                                                                                                                     | 判定                           |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| 竞品调研报告（三视角）                                          | 内容完好（90 行——9 竞品全景表/源码修正 5 条/学术共识 10 条/6+3 启示）——**但物理位置在项目外** `~/Documents/myself/analysis/competitor-crawler/`——文档引用（04-alignment/设计 §1/01）在仓库内**解析失败** | ⚠️（问题 #5）                  |
+| 测试域（tests/unit 28 文件 + tests/interaction 1 文件 27 用例） | 存在——组织方式与设计 §9.1 诊断一致（按函数堆叠、锁旧 API `userConfirmed(s,'goal')`/`pendingCardToShow`/`forceToolInput`——pendingCardToShow 已被新设计推翻——S1 重写计划正确）                             | ✅（设计 §9 描述准确——无冲突） |
+| 组件↔值对象映射                                                 | 02-components 意图确认组件章（PlanCard/ResolutionCard/RejectReasonPicker）字段与值对象逐一对应；RejectReasonPicker 选项与 kind 枚举对齐（modify 由「修改方案」按钮直触——设计使然）                       | ✅                             |
 
 ## 二、逐类独立审计（层②——行为边界/服务角色深查）
 
-| 文档 | 检查点 | 判据 | 速评 |
-|------|--------|------|------|
-| A0 §3.1（PlanConfirmed 活动边界）| 一致性 | 可实现性 | 有「探索性只读命令放行」澄清（2026-08-14）——但**引用旧名 classifyAction**（§3.1 括号——02 §5 已更名 classifyReadonly）|
-| 02 §4.1（PlanConfirmed 行）| 一致性 | 可实现性 | 「只给方案（不 write/edit/bash）」——**无 A0 的只读 bash 例外澄清**（#1）|
-| 04 §1.1（不变式）| 一致性 | 可实现性 | 「未批准方案 → 不产生执行动作（write/edit/bash）」——**与 A0 §3.1 例外冲突**；且与**同文档 §3.6 actionGate 只读自动**有内部张力（#1）|
-| 04 §3.1（ProgressGuarantee）| 完整性 | 可实现性 | mode 枚举 3 档 ✓——**require-action 档位触发条件未说明**（设计 §3.3 注释有：确认后无产出且工具可用——04 只写 require-advance）（#6）|
-| 04 §3.6 / 设计 §3.3（服务签名）| 完整性 | 可实现性 | **参数形状未定义**：`proposals`/`pendingActions`/`systemState`/`policy`（#7）|
-| 02 §5 / 04 §3.2（ProgressionGate）| 一致性 | 可实现性 | **ProgressionGate 新模型角色未对齐**——设计 §3.3 服务清单无 ProgressionGate（sessionGate×actionGate）；02 §5/04 §3.2 保留；A0 §2 保留职责——sessionGate 与 ProgressionGate 语义重叠未澄清（#2）|
-| 02-components 意图确认组件章 | 产品对齐 | 可行动 | PlanCard/ResolutionCard/RejectReasonPicker 与值对象/事件/S 阶段映射齐全——无问题 |
-| D0 §4.2（问题状态机表）| 完整性 | 可行动 | **6 行状态表缺 failed-recoverable**（01-user-flows L84 有 7 项——D0/01 不一致）（#3）|
-| D0 §十一 / A0 §8（范围）| 产品对齐 | 一致性 | V1 清单与 A0 §8 矩阵 9 行逐项对应（DoD ⏸V2 一致）——无问题 |
-| 07 §2（埋点）| 一致性 | 可行动 | 指标组与事件名基本对应——**`approval.requested` 埋点名在事件目录（06/设计 §3.5）不存在**（应为 decision.requested kind=approval）（#4）|
-| 测试域对照（设计 §9 ↔ tests/）| 一致性 | 可实现性 | §9.1 现状诊断（按函数组织/剧本堆叠/L4 阶段残留）与实际一致——T0/S1 计划正确——无冲突 |
+| 文档                               | 检查点   | 判据     | 速评                                                                                                                                                                                          |
+| ---------------------------------- | -------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A0 §3.1（PlanConfirmed 活动边界）  | 一致性   | 可实现性 | 有「探索性只读命令放行」澄清（2026-08-14）——但**引用旧名 classifyAction**（§3.1 括号——02 §5 已更名 classifyReadonly）                                                                         |
+| 02 §4.1（PlanConfirmed 行）        | 一致性   | 可实现性 | 「只给方案（不 write/edit/bash）」——**无 A0 的只读 bash 例外澄清**（#1）                                                                                                                      |
+| 04 §1.1（不变式）                  | 一致性   | 可实现性 | 「未批准方案 → 不产生执行动作（write/edit/bash）」——**与 A0 §3.1 例外冲突**；且与**同文档 §3.6 actionGate 只读自动**有内部张力（#1）                                                          |
+| 04 §3.1（ProgressGuarantee）       | 完整性   | 可实现性 | mode 枚举 3 档 ✓——**require-action 档位触发条件未说明**（设计 §3.3 注释有：确认后无产出且工具可用——04 只写 require-advance）（#6）                                                            |
+| 04 §3.6 / 设计 §3.3（服务签名）    | 完整性   | 可实现性 | **参数形状未定义**：`proposals`/`pendingActions`/`systemState`/`policy`（#7）                                                                                                                 |
+| 02 §5 / 04 §3.2（ProgressionGate） | 一致性   | 可实现性 | **ProgressionGate 新模型角色未对齐**——设计 §3.3 服务清单无 ProgressionGate（sessionGate×actionGate）；02 §5/04 §3.2 保留；A0 §2 保留职责——sessionGate 与 ProgressionGate 语义重叠未澄清（#2） |
+| 02-components 意图确认组件章       | 产品对齐 | 可行动   | PlanCard/ResolutionCard/RejectReasonPicker 与值对象/事件/S 阶段映射齐全——无问题                                                                                                               |
+| D0 §4.2（问题状态机表）            | 完整性   | 可行动   | **6 行状态表缺 failed-recoverable**（01-user-flows L84 有 7 项——D0/01 不一致）（#3）                                                                                                          |
+| D0 §十一 / A0 §8（范围）           | 产品对齐 | 一致性   | V1 清单与 A0 §8 矩阵 9 行逐项对应（DoD ⏸V2 一致）——无问题                                                                                                                                     |
+| 07 §2（埋点）                      | 一致性   | 可行动   | 指标组与事件名基本对应——**`approval.requested` 埋点名在事件目录（06/设计 §3.5）不存在**（应为 decision.requested kind=approval）（#4）                                                        |
+| 测试域对照（设计 §9 ↔ tests/）     | 一致性   | 可实现性 | §9.1 现状诊断（按函数组织/剧本堆叠/L4 阶段残留）与实际一致——T0/S1 计划正确——无冲突                                                                                                            |
 
 ## 三、交叉验证矩阵（层③）
 
-| 对齐关系 | 文档 A 说法 | 文档 B 说法 | 判定 |
-|---------|-----------|-----------|------|
-| **A0 §3.1 ↔ 02 §4.1 ↔ 04 §1.1（方案未确认时 bash 边界）** | 探索性只读 bash 放行（ls/cat——preApproval 同源判定）| 「不 write/edit/bash」「不产生执行动作（write/edit/bash）」——无例外 | ❌ **冲突（#1）——行为边界实现依据分歧（S1/S3 门控）** |
-| **设计 §3.3 ↔ 02 §5 ↔ 04 §3.2 ↔ A0 §2（ProgressionGate）** | 服务清单 = sessionGate×actionGate（无 ProgressionGate）| ProgressionGate 保留（推进门控——确认点活动边界）| ❌ **角色未对齐（#2）——sessionGate 与 ProgressionGate 语义重叠** |
-| 04 §3.1 ↔ 设计 §3.3（require-action 档）| 不变式只列 require-advance | 注释含 require-action（无产出且工具可用）| ⚠️ 档位说明缺失（#6）|
-| 07 §2 ↔ 06/设计 §3.5（埋点↔事件）| approval.requested→decision.resolved 时长 | 事件目录无 approval.requested（授权请求出现 = decision.requested kind=approval）| ⚠️ 埋点名未映射（#4）|
-| D0 §4.2 ↔ 01 L84 ↔ 02 §4.13（Problem 状态）| 6 行状态表 | 7 态（含 failed-recoverable）| ⚠️ D0 缺行（#3）|
-| 文档引用 ↔ 实际文件（crawler 路径）| `analysis/competitor-crawler/...`（04-alignment/设计/01）| 实际在 `~/Documents/myself/analysis/competitor-crawler/` | ⚠️ 引用悬空（#5）|
+| 对齐关系                                                   | 文档 A 说法                                               | 文档 B 说法                                                                      | 判定                                                             |
+| ---------------------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| **A0 §3.1 ↔ 02 §4.1 ↔ 04 §1.1（方案未确认时 bash 边界）**  | 探索性只读 bash 放行（ls/cat——preApproval 同源判定）      | 「不 write/edit/bash」「不产生执行动作（write/edit/bash）」——无例外              | ❌ **冲突（#1）——行为边界实现依据分歧（S1/S3 门控）**            |
+| **设计 §3.3 ↔ 02 §5 ↔ 04 §3.2 ↔ A0 §2（ProgressionGate）** | 服务清单 = sessionGate×actionGate（无 ProgressionGate）   | ProgressionGate 保留（推进门控——确认点活动边界）                                 | ❌ **角色未对齐（#2）——sessionGate 与 ProgressionGate 语义重叠** |
+| 04 §3.1 ↔ 设计 §3.3（require-action 档）                   | 不变式只列 require-advance                                | 注释含 require-action（无产出且工具可用）                                        | ⚠️ 档位说明缺失（#6）                                            |
+| 07 §2 ↔ 06/设计 §3.5（埋点↔事件）                          | approval.requested→decision.resolved 时长                 | 事件目录无 approval.requested（授权请求出现 = decision.requested kind=approval） | ⚠️ 埋点名未映射（#4）                                            |
+| D0 §4.2 ↔ 01 L84 ↔ 02 §4.13（Problem 状态）                | 6 行状态表                                                | 7 态（含 failed-recoverable）                                                    | ⚠️ D0 缺行（#3）                                                 |
+| 文档引用 ↔ 实际文件（crawler 路径）                        | `analysis/competitor-crawler/...`（04-alignment/设计/01） | 实际在 `~/Documents/myself/analysis/competitor-crawler/`                         | ⚠️ 引用悬空（#5）                                                |
 
 **spot-check 第 13 轮修复（抽验 5/5——修复闭环核验）**：
 
-| 第 13 轮修复 | 抽验结果 | 采信级别 |
-|------------|---------|---------|
-| #1 A0 §5 RejectReason 6 值 | 枚举含 modify；与 04 §2.3b/设计 §3.2 逐值一致 | 采信（L3 闭环——三处统一）|
-| #2 04 §1.1 状态机 5 态 | unresolved 仅存于修正注记；图/§6 类型/设计三布尔一致 | 采信（L3 闭环）|
-| #3 05 §3 管线新语义 | require-advance + pending 恒不强制 + goal/plan 名——与 A0 §4/07 §1.1 一致 | 采信（L3 闭环）|
-| #4 07 §6 stageAgent 移除 | 仅存移除注记——路由无 stageAgent 引用 | 采信（L3 闭环）|
-| #5 索引补全 | 04-alignment 含 A0/08/09/07 + README v4.0/v2.2 | 采信（L3 闭环）|
+| 第 13 轮修复               | 抽验结果                                                                 | 采信级别                  |
+| -------------------------- | ------------------------------------------------------------------------ | ------------------------- |
+| #1 A0 §5 RejectReason 6 值 | 枚举含 modify；与 04 §2.3b/设计 §3.2 逐值一致                            | 采信（L3 闭环——三处统一） |
+| #2 04 §1.1 状态机 5 态     | unresolved 仅存于修正注记；图/§6 类型/设计三布尔一致                     | 采信（L3 闭环）           |
+| #3 05 §3 管线新语义        | require-advance + pending 恒不强制 + goal/plan 名——与 A0 §4/07 §1.1 一致 | 采信（L3 闭环）           |
+| #4 07 §6 stageAgent 移除   | 仅存移除注记——路由无 stageAgent 引用                                     | 采信（L3 闭环）           |
+| #5 索引补全                | 04-alignment 含 A0/08/09/07 + README v4.0/v2.2                           | 采信（L3 闭环）           |
 
 ## 四、问题
 

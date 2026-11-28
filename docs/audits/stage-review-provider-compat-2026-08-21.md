@@ -11,12 +11,14 @@
 ## PHASE→UNTIL 改名复审（`c7ba337`——2026-08-21）
 
 **Spec 轴**（对照设计文档 §5 + 用户命名主张）：
+
 - ✅ `PHASE`/`PHASE_END`/`phaseEnd` → `UNTIL`/`UNTIL_END`/`untilEnd`——命名揭示用途（「跑到哪个终止点为止」），修正 Mysterious Name（PHASE=阶段误导读物）
 - ✅ 枚举值（req/design/dev/all）保持——语义是旅程决策点，无需改
 - ✅ 设计文档 §5 改名 + 注记「非产品阶段——无阶段决策点驱动」；e2e-0to1 注释/日志/环境变量全同步
 - ✅ 无 scope creep（纯改名，无行为变化）
 
 **Standards 轴**：
+
 - ✅ 代码层 PHASE 残留 0 处（排除改名说明注释）；decide/convergence 不读 phase/until（解耦正确）
 - ✅ `JourneyRunner.run` 只用 `terminated(this.journey)`（内部 untilEnd）+ `journey.confirmed.*`（未改名字段）——引用完整
 - ✅ CI 工作流 / e2e-nostage-smoke / e2e-suite / e2e-supplement 均不用 PHASE——无外部依赖破坏
@@ -29,12 +31,14 @@
 ## 坑 44 流程化复审（`78dfcfe`——2026-08-21）
 
 **Spec 轴**（对照目标：改 main/preload 后 e2e 自动用最新代码）：
+
 - ✅ ensureMainBuild() 检测 dist/main 是否比任一 src/main/*.ts / preload.ts 旧 → 过期自动 `npm run build:main`
 - ✅ 三 e2e 脚本（0to1/suite/supplement）入口接入；实测 touch 源码 → 自动 build ✓ / dist 最新 → 幂等无操作 ✓
 - ✅ e2e-0to1 PHASE=req 场景 A/B 通过（修复后）
 - ✅ 无 scope creep（只加启动前置，不改 e2e 逻辑）
 
 **Standards 轴**：
+
 - **[fixed] 注释漏 e2e-supplement**——「e2e-0to1 / e2e-suite 共用」→ 补「/ e2e-supplement」（实际已接入三脚本，注释更新）
 - **[recorded] `execSync` 同步阻塞 + `statSync` 时间戳比较**——e2e 为开发工具，build 仅在过期时触发（`stdio: inherit` 输出可见），时间戳边界（同秒修改漏检）在 e2e 场景可接受（真机失败会重新触发）——裁决不修
 
@@ -42,28 +46,28 @@
 
 ## 续轮审计发现（reasoning 回传链路全路径——2026-08-21 第 2 轮）
 
-| # | 发现 | 严重度 | 修复 |
-|---|------|--------|------|
-| 1 | **buildHistory（跨轮历史）assistant 消息不回传 reasoning_content**——工具循环内（L1428）回传、buildHistory 不回传，违反 07 §2「回放统一 reasoning_content」；DeepSeek V4 多轮 thinking 回放缺失可能导致 400（pi #3636）| high | **fixed**——buildHistory 工具轮 + 普通轮均回填 `reasoning_content: m.reasoning ?? ''` + 返回类型补声明 |
-| 2 | **compaction 路径丢弃 reasoning_content**——L1944-1947 重建 chatHistory 显式只取 role/content；compact.ts 类型签名也不声明（运行时 slice 引用保留但类型窄化 + 重建时丢）| medium | **fixed**——renderer 重建保留 reasoning_content + compact.ts 新增 `CompactHistoryItem`（含可选 reasoning_content）+ preload/types 同步 |
+| #   | 发现                                                                                                                                                                                                                   | 严重度 | 修复                                                                                                                                  |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **buildHistory（跨轮历史）assistant 消息不回传 reasoning_content**——工具循环内（L1428）回传、buildHistory 不回传，违反 07 §2「回放统一 reasoning_content」；DeepSeek V4 多轮 thinking 回放缺失可能导致 400（pi #3636） | high   | **fixed**——buildHistory 工具轮 + 普通轮均回填 `reasoning_content: m.reasoning ?? ''` + 返回类型补声明                                 |
+| 2   | **compaction 路径丢弃 reasoning_content**——L1944-1947 重建 chatHistory 显式只取 role/content；compact.ts 类型签名也不声明（运行时 slice 引用保留但类型窄化 + 重建时丢）                                                | medium | **fixed**——renderer 重建保留 reasoning_content + compact.ts 新增 `CompactHistoryItem`（含可选 reasoning_content）+ preload/types 同步 |
 
 **回归测试**：compact.test.ts 新增「保留 reasoning_content」用例（kept 引用保留完整字段）——L1 491（490+1）全绿。
 
 ## 续轮审计记录项（第 2 轮——不修，待真机/观察）
 
-| # | 发现 | 判定 |
-|---|------|------|
-| R1 | e2e-0to1.mjs LLM 模拟用 `response_format: {type:'json_object'}`——Command Code 拒绝该参数（真机实测 400「Invalid input, param: response_format」）| **fixed**（2026-08-21 真机验证）——e2e-0to1.mjs 移除 response_format + prompt 明确 JSON 输出（LLM 模拟失败仍有 decideFallback 兜底）|
-| R2 | preheat 预热经聚合代理（Command Code）的 KV 缓存命中率未验证——性能优化项，失败有降级（不阻塞）| **recorded**——真机观察项（性能）|
+| #   | 发现                                                                                                                                              | 判定                                                                                                                                |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| R1  | e2e-0to1.mjs LLM 模拟用 `response_format: {type:'json_object'}`——Command Code 拒绝该参数（真机实测 400「Invalid input, param: response_format」） | **fixed**（2026-08-21 真机验证）——e2e-0to1.mjs 移除 response_format + prompt 明确 JSON 输出（LLM 模拟失败仍有 decideFallback 兜底） |
+| R2  | preheat 预热经聚合代理（Command Code）的 KV 缓存命中率未验证——性能优化项，失败有降级（不阻塞）                                                    | **recorded**——真机观察项（性能）                                                                                                    |
 
 ## 真机验证结论（2026-08-21——Command Code key）
 
-| 项 | 结果 | 判定 |
-|----|------|------|
-| `tool_choice: 'auto'` + thinking disabled + 工具 | ✅ 200，正常返回 tool_calls | 改造后核心路径正常 |
-| thinking enabled + reasoning_effort high | ✅ 200，`reasoning` 字段 214 字符正常读取 | extractReasoningText 多源兼容生效 |
-| 多轮回放 `reasoning_content` | ✅ 200（第一轮 reasoning 有值 → 第二轮回传 200）| buildHistory/compaction 回传补缺正确 |
-| `response_format: json_object` | ❌ 400「Invalid input, param: response_format」| R1 证实——e2e 已修 |
+| 项                                               | 结果                                             | 判定                                 |
+| ------------------------------------------------ | ------------------------------------------------ | ------------------------------------ |
+| `tool_choice: 'auto'` + thinking disabled + 工具 | ✅ 200，正常返回 tool_calls                      | 改造后核心路径正常                   |
+| thinking enabled + reasoning_effort high         | ✅ 200，`reasoning` 字段 214 字符正常读取        | extractReasoningText 多源兼容生效    |
+| 多轮回放 `reasoning_content`                     | ✅ 200（第一轮 reasoning 有值 → 第二轮回传 200） | buildHistory/compaction 回传补缺正确 |
+| `response_format: json_object`                   | ❌ 400「Invalid input, param: response_format」  | R1 证实——e2e 已修                    |
 
 ## e2e-0to1 真机复验（2026-08-21 PHASE=req——完整链路）
 

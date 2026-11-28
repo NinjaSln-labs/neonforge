@@ -53,9 +53,15 @@ jobs:
         run: npx eslint .
 
       # B1 格式化一致性（CI 全量校验——pre-commit 已增量修复；含 repo-root 配置文件自身）
+      # 2026-11-28 审计 D-6：docs/**/*.md 与仓库根 *.md 一并纳入——此前 lint-staged 只覆盖
+      # apps/desktop，docs 的 Markdown 既不在提交前格式化也不在 CI 检查（存量 157 个文件一次性重排）
       - name: Format check（Prettier）
         working-directory: apps/desktop
-        run: npx prettier --check "src/**/*.{ts,tsx}" "tests/**/*.{ts,tsx}" "*.mjs" "*.config.*" "eslint.config.js" "../../.prettierrc.json" "../../lefthook.yml" "../../.github/workflows/qa.yml"
+        run: >-
+          npx prettier --check
+          "src/**/*.{ts,tsx}" "tests/**/*.{ts,tsx}" "*.mjs" "*.config.*" "eslint.config.js"
+          "../../docs/**/*.md" "../../*.md"
+          "../../.prettierrc.json" "../../lefthook.yml" "../../.github/workflows/qa.yml"
 
       # L1 领域逻辑（确定性——CI 必跑）
       - name: L1 领域逻辑（Vitest）

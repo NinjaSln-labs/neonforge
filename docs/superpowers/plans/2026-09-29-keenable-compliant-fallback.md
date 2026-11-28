@@ -36,19 +36,20 @@
 
 ## 产品行为（验收口径）
 
-| 场景 | 期望 |
-|------|------|
-| DDG 通 | `builtin=ddg`；搜索走 DDG；可不配 Keenable Key |
-| DDG 不通、Keenable 通、**已配 Key** | `builtin=keenable`；搜索 `/v1/search` |
+| 场景                                      | 期望                                                         |
+| ----------------------------------------- | ------------------------------------------------------------ |
+| DDG 通                                    | `builtin=ddg`；搜索走 DDG；可不配 Keenable Key               |
+| DDG 不通、Keenable 通、**已配 Key**       | `builtin=keenable`；搜索 `/v1/search`                        |
 | DDG 不通、Keenable 通、**无 Key、试用关** | 开启可成功（探活过）；**第一次 web_search 拒绝**并提示配 Key |
-| 同上 + **试用开** | 允许 `/public`（文案含限额 + 赴美） |
-| 有 `searchUrl` | 仍覆盖内置；跳过 builtin 探测分配 |
+| 同上 + **试用开**                         | 允许 `/public`（文案含限额 + 赴美）                          |
+| 有 `searchUrl`                            | 仍覆盖内置；跳过 builtin 探测分配                            |
 
 ---
 
 ### Task 1: configStore + IPC + 类型
 
 **Files:**
+
 - Modify: `apps/desktop/src/main/configStore.ts`
 - Modify: `apps/desktop/src/main/ipc.ts`（get/set-web-access 透传新字段）
 - Modify: `apps/desktop/src/renderer/types.d.ts`
@@ -57,9 +58,9 @@
 **Interfaces — `WebAccessConfig` 增补：**
 
 ```ts
-keenableApiKey: string | null      // 明文本机；UI 可回填编辑（同 searchKey）
-hasKeenableKey: boolean            // 派生
-keenablePublicTrial: boolean       // 默认 false
+keenableApiKey: string | null // 明文本机；UI 可回填编辑（同 searchKey）
+hasKeenableKey: boolean // 派生
+keenablePublicTrial: boolean // 默认 false
 ```
 
 持久化字段名：`webKeenableApiKey`、`webKeenablePublicTrial`。
@@ -73,6 +74,7 @@ keenablePublicTrial: boolean       // 默认 false
 ### Task 2: Settings UI
 
 **Files:**
+
 - Modify: `apps/desktop/src/renderer/SettingsPanel.tsx`
 
 - [ ] **Step 1:** 外网区块增加：
@@ -91,13 +93,14 @@ keenablePublicTrial: boolean       // 默认 false
 ### Task 3: webTools 合规路由 + 测试
 
 **Files:**
+
 - Modify: `apps/desktop/src/main/webTools.ts`
 - Modify: `apps/desktop/tests/unit/webTools.test.ts`
 
 **常量：**
 
 ```ts
-const KEENABLE_SEARCH = 'https://api.keenable.ai/v1/search'         // keyed
+const KEENABLE_SEARCH = 'https://api.keenable.ai/v1/search' // keyed
 const KEENABLE_SEARCH_PUBLIC = 'https://api.keenable.ai/v1/search/public'
 const KEENABLE_HEALTH = 'https://api.keenable.ai/health'
 const KEENABLE_TITLE = 'NeonForge'
@@ -132,6 +135,7 @@ IPC 调用 probe 时传入当前 patch/cur 的 keenableApiKey。
 ### Task 4: 文档 / handoff
 
 **Files:**
+
 - Modify: `.scratch/neonforge-v1/research/keenable-web-search-2026-09-29.md` §5 实现现状
 - `handoff add pitfall`：`禁止静默 Keenable /public 作生产默认；须 Key 或用户显式试用`（若尚无）
 
@@ -142,21 +146,21 @@ IPC 调用 probe 时传入当前 patch/cur 的 keenableApiKey。
 ### Task 5: 验证
 
 - [ ] **本地:** `npx vitest run tests/unit/webTools.test.ts`
-- [ ] **Mac（有网）:**  
-  - 无 Key / 试用关 / DDG 不通：开启外网成功；`web_search` 得引导错，且抓包无 public 搜索  
+- [ ] **Mac（有网）:**
+  - 无 Key / 试用关 / DDG 不通：开启外网成功；`web_search` 得引导错，且抓包无 public 搜索
   - 配真实 `keen_`：中文 query 有 `results`
 
 ---
 
 ## Self-review
 
-| 合规原则 | 任务 |
-|----------|------|
-| 禁静默 public | Task 3 |
-| DDG→Keenable 探测 | Task 3 |
-| Key 生产路径 | Task 1–3 |
-| 显式试用可选 | Task 1–2 |
-| 赴美披露 | Task 2 |
+| 合规原则          | 任务     |
+| ----------------- | -------- |
+| 禁静默 public     | Task 3   |
+| DDG→Keenable 探测 | Task 3   |
+| Key 生产路径      | Task 1–3 |
+| 显式试用可选      | Task 1–2 |
+| 赴美披露          | Task 2   |
 
 无 TBD；probe 策略已钉死（health vs keyed search）。
 
@@ -164,7 +168,7 @@ IPC 调用 probe 时传入当前 patch/cur 的 keenableApiKey。
 
 **执行选项：**
 
-1. **Subagent-Driven（推荐）** — 每任务新开子代理  
-2. **Inline** — 本会话连续做完  
+1. **Subagent-Driven（推荐）** — 每任务新开子代理
+2. **Inline** — 本会话连续做完
 
 选哪个？

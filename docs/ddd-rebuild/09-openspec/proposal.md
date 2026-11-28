@@ -65,68 +65,68 @@ NeonForge 的领域模型主干（用户决策驱动的任务状态机、证据�
 
 ### Capabilities
 
-| Capability | 受影响 | 说明 |
-| :--- | :--- | :--- |
-| `conversation-task/plan-confirmation` | 是 | 计划清单派生时机修正（P0-03） |
-| `conversation-task/completion-verification` | 是 | 系统代跑范围收紧（P0-05） |
-| `execution-trust/read-boundary` | 是 | read 根外授权（P0-01） |
-| `execution-trust/action-classification` | 是 | 只读判定补强（P0-02） |
-| `execution-trust/process-lifecycle` | 是 | pid 守卫（P0-04） |
-| `provider-gateway/streaming-retry` | 否 | 不改 |
-| `session-timeline/event-catalog` | 否（文档） | 记录缺口，后续治理 |
-| `workspace-environment/planned-files` | 是 | 与 P0-03 协同 |
-| `delivery-ledger/delivery-package` | 否（文档） | 记录验收空项缺口 |
-| `configuration-secrets/web-access` | 是 | web_fetch 边界（P1-01） |
-| `change-version` | 否（新增目标态） | 变更集/基线/Git 只读桥 |
-| `task-orchestration` | 否（新增目标态） | 队列/调度/阻塞/取消 |
-| `usage-cost` | 否（新增目标态） | usage 台账/成本/预算 |
-| `extension-integration` | 否（新增目标态） | 扩展/MCP/Git 集成 |
-| `acceptance-quality` | 否（新增目标态） | 验收来源/证据/门禁 |
+| Capability                                  | 受影响           | 说明                          |
+| :------------------------------------------ | :--------------- | :---------------------------- |
+| `conversation-task/plan-confirmation`       | 是               | 计划清单派生时机修正（P0-03） |
+| `conversation-task/completion-verification` | 是               | 系统代跑范围收紧（P0-05）     |
+| `execution-trust/read-boundary`             | 是               | read 根外授权（P0-01）        |
+| `execution-trust/action-classification`     | 是               | 只读判定补强（P0-02）         |
+| `execution-trust/process-lifecycle`         | 是               | pid 守卫（P0-04）             |
+| `provider-gateway/streaming-retry`          | 否               | 不改                          |
+| `session-timeline/event-catalog`            | 否（文档）       | 记录缺口，后续治理            |
+| `workspace-environment/planned-files`       | 是               | 与 P0-03 协同                 |
+| `delivery-ledger/delivery-package`          | 否（文档）       | 记录验收空项缺口              |
+| `configuration-secrets/web-access`          | 是               | web_fetch 边界（P1-01）       |
+| `change-version`                            | 否（新增目标态） | 变更集/基线/Git 只读桥        |
+| `task-orchestration`                        | 否（新增目标态） | 队列/调度/阻塞/取消           |
+| `usage-cost`                                | 否（新增目标态） | usage 台账/成本/预算          |
+| `extension-integration`                     | 否（新增目标态） | 扩展/MCP/Git 集成             |
+| `acceptance-quality`                        | 否（新增目标态） | 验收来源/证据/门禁            |
 
 ### 聚合变更
 
-| 聚合 | 变更 |
-| :--- | :--- |
-| A1 Task | I06 的执行路径修正；无状态字段变更 |
-| A2 PlannedFiles | 写入时机从“提议”改为“方案确认”；追加语义不变 |
-| A3 ToolInvocation | read 授权策略、只读判定补强、pid 守卫 |
-| A4 ProjectEnvironment | 无 |
-| A5 ServiceInstance | pid 守卫 |
-| A6 ProblemInstance | 无 |
-| A7 DeliveryPackage | 无（文档记录） |
-| A8 SessionTimeline | 无（文档记录缺口） |
-| A13 ChangeSet（已实现） | 新增：变更集/基线/审核/应用/回滚 |
-| A14 TaskQueueEntry（已实现） | 新增：队列/调度/阻塞/取消 |
-| A15 UsageLedger（已实现） | 新增：usage/成本/预算 |
-| A16 Extension（已实现） | 新增：注册/生命周期/信任 |
-| A17 AcceptanceRecord（已实现） | 新增：验收来源/证据/门禁 |
+| 聚合                           | 变更                                         |
+| :----------------------------- | :------------------------------------------- |
+| A1 Task                        | I06 的执行路径修正；无状态字段变更           |
+| A2 PlannedFiles                | 写入时机从“提议”改为“方案确认”；追加语义不变 |
+| A3 ToolInvocation              | read 授权策略、只读判定补强、pid 守卫        |
+| A4 ProjectEnvironment          | 无                                           |
+| A5 ServiceInstance             | pid 守卫                                     |
+| A6 ProblemInstance             | 无                                           |
+| A7 DeliveryPackage             | 无（文档记录）                               |
+| A8 SessionTimeline             | 无（文档记录缺口）                           |
+| A13 ChangeSet（已实现）        | 新增：变更集/基线/审核/应用/回滚             |
+| A14 TaskQueueEntry（已实现）   | 新增：队列/调度/阻塞/取消                    |
+| A15 UsageLedger（已实现）      | 新增：usage/成本/预算                        |
+| A16 Extension（已实现）        | 新增：注册/生命周期/信任                     |
+| A17 AcceptanceRecord（已实现） | 新增：验收来源/证据/门禁                     |
 
 ---
 
 ## Goals
 
-| 目标 | 验收指标 |
-| :--- | :--- |
-| 文档完整 | 00-10 全部存在；每份文档通过对应 Skill 校验清单 |
+| 目标         | 验收指标                                                                   |
+| :----------- | :------------------------------------------------------------------------- |
+| 文档完整     | 00-10 全部存在；每份文档通过对应 Skill 校验清单                            |
 | 目标领域完整 | BC-10～BC-14 均有上下文定义、聚合/不变量、事件与 spec；现状/目标态标记清晰 |
-| 代码可追溯 | 10-code-evidence 中每个关键结论有文件/符号/行号 |
-| P0 关闭 | P0-01 ~ P0-05 全部有修复 + 测试；安全回归通过 |
-| 不变量回归 | Inv 1-8 全绿；新增 I06 渲染层测试 |
-| 类型/构建 | 双 `tsc` 通过；`eslint` 通过 |
-| 交互回归 | `vitest` 单测 + interaction 测试通过；主路径 e2e-sim 收敛 |
-| 无回归 | 现有 provider/workspace/service/delivery 测试不因修复而失败 |
+| 代码可追溯   | 10-code-evidence 中每个关键结论有文件/符号/行号                            |
+| P0 关闭      | P0-01 ~ P0-05 全部有修复 + 测试；安全回归通过                              |
+| 不变量回归   | Inv 1-8 全绿；新增 I06 渲染层测试                                          |
+| 类型/构建    | 双 `tsc` 通过；`eslint` 通过                                               |
+| 交互回归     | `vitest` 单测 + interaction 测试通过；主路径 e2e-sim 收敛                  |
+| 无回归       | 现有 provider/workspace/service/delivery 测试不因修复而失败                |
 
 ---
 
 ## 风险与缓解
 
-| 风险 | 缓解 |
-| :--- | :--- |
-| read 根外授权增加交互，影响文件整理场景 | 仅在根外触发；保留根内自动；候选可配置文件范围（后续） |
-| 只读判定补强误伤合法只读命令 | 用参数级形态而非整命令禁用；新增测试锁定 |
-| 计划清单延迟派生影响 UI 展示 | UI 从 `decisionContent.proposal` 读取；不依赖 `plannedFiles` 展示 |
-| web_fetch 拦截私网影响本地文档调试 | 仅拦截 `web_fetch`；本地开发可用 `open` 或 `read`/`curl localhost` |
-| pid 守卫改变现有清理行为 | 正 pid 行为不变；仅跳过 0/负数 |
+| 风险                                    | 缓解                                                               |
+| :-------------------------------------- | :----------------------------------------------------------------- |
+| read 根外授权增加交互，影响文件整理场景 | 仅在根外触发；保留根内自动；候选可配置文件范围（后续）             |
+| 只读判定补强误伤合法只读命令            | 用参数级形态而非整命令禁用；新增测试锁定                           |
+| 计划清单延迟派生影响 UI 展示            | UI 从 `decisionContent.proposal` 读取；不依赖 `plannedFiles` 展示  |
+| web_fetch 拦截私网影响本地文档调试      | 仅拦截 `web_fetch`；本地开发可用 `open` 或 `read`/`curl localhost` |
+| pid 守卫改变现有清理行为                | 正 pid 行为不变；仅跳过 0/负数                                     |
 
 ---
 

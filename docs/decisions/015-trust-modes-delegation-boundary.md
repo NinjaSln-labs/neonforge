@@ -1,4 +1,5 @@
 # ADR-015：信任模式预设与低危委托边界（GitHub #12）
+
 - 状态: accepted
 - 日期: 2026-11-16
 - 相关: GitHub #12（信任分级——授权疲劳治理）；README Roadmap V2 #2；docs/ddd-rebuild/09-openspec/specs/execution-trust/spec.md；stage-specs/V2-trust-modes.md
@@ -45,6 +46,7 @@
    - 旧 `nf-delegate-changed` 事件由 `nf-trust-changed` 取代（保留一次性兼容监听不影响行为）。
 
 ## Consequences
+
 - 积极：低危委托有 main 权威、跨重启保留、可审计；修复「委托绕过计划清单/项目根」的安全缺口；三档预设让用户按任务风险选择授权疲劳/安全平衡；信任阶梯面板反映真实状态（面板本身 2026-11-28 D-2 删除，模式语义不变）。
 - 代价：`approvalSource` 枚举扩展（preload/types/schema）；设置页与面板交互需迁移旧 localStorage；委托行为比旧版更严格（清单外文件仍需授权），可能让既有用户感到变化——用迁移说明与设置页文案解释。
 - 边界：不实现自动按模型自评提升信任/机器学习信任分；不改变权限规则引擎；不实现跨设备同步（#15）。

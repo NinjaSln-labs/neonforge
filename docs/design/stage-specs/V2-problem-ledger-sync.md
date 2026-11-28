@@ -1,4 +1,5 @@
 # Stage V2-Problem-Ledger-Sync Spec（问题台账 Local-first 同步）
+
 > 来源：GitHub #15（问题台账云端同步 / 多设备）；ADR：`docs/decisions/018-problem-ledger-sync.md`；开工日期：2026-11-17
 
 ## DoD（机器可验证断言——stage-gate 逐条执行）
@@ -17,15 +18,15 @@
 
 ## TDD 网格（本阶段新增功能——spec-first + test-first）
 
-| 功能 | 规范断言（来源 ADR-018 §Decision） | 失败测试（红） | 实现（绿） | 重构 |
-|------|-----------------------------------|---------------|-----------|------|
-| 台账合并 | revision 高者胜；同 revision updatedAt 晚者胜；再同 deviceId 大者胜；tombstone 传播 | 新 `problemLedger.test.ts` | `src/domain/problemLedger.ts` | 纯函数单源 |
-| 台账规范化 | 白名单字段、上限 20、损坏项跳过、schemaVersion 校验 | 同上 | 同上 | 迁移器与合并器分离 |
-| main 权威存储 | 0600/原子写/损坏回退/旧 localStorage 导入 | 新 `problemLedgerStore.test.ts` | `src/main/problemLedgerStore.ts` | 存储与加密分离 |
-| 加密快照 | scrypt+AES-GCM roundtrip；错口令/损坏失败；无口令拒绝 | 新 `problemSyncCrypto.test.ts` | `src/main/problemSyncCrypto.ts` | 密钥来源解析单源 |
-| 同步编排 | 读本地/远端 → merge → 写回；冲突摘要；目录边界/大小/schema 拒绝 | `problemLedgerStore.test.ts` | `problemLedgerStore.ts` | transport 可替换接口 |
-| IPC/UI | load/save/status/choose-folder/sync-now；设置页提示与按钮状态 | `ipcSchema.test.ts` + 新 `problemSync.interaction.ts` | `ipc.ts`、`ipcSchema.ts`、`preload.ts`、SettingsPanel | 选择/错误状态单源 |
-| renderer 迁移 | 启动 main 加载；保存 main + localStorage 降级；main 不可用仍可用 | `problemStore.test.ts`（扩充）+ interaction | `MainWorkspace.tsx`、`problemStore.ts` | 存储适配层 |
+| 功能          | 规范断言（来源 ADR-018 §Decision）                                                  | 失败测试（红）                                        | 实现（绿）                                            | 重构                 |
+| ------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------- | -------------------- |
+| 台账合并      | revision 高者胜；同 revision updatedAt 晚者胜；再同 deviceId 大者胜；tombstone 传播 | 新 `problemLedger.test.ts`                            | `src/domain/problemLedger.ts`                         | 纯函数单源           |
+| 台账规范化    | 白名单字段、上限 20、损坏项跳过、schemaVersion 校验                                 | 同上                                                  | 同上                                                  | 迁移器与合并器分离   |
+| main 权威存储 | 0600/原子写/损坏回退/旧 localStorage 导入                                           | 新 `problemLedgerStore.test.ts`                       | `src/main/problemLedgerStore.ts`                      | 存储与加密分离       |
+| 加密快照      | scrypt+AES-GCM roundtrip；错口令/损坏失败；无口令拒绝                               | 新 `problemSyncCrypto.test.ts`                        | `src/main/problemSyncCrypto.ts`                       | 密钥来源解析单源     |
+| 同步编排      | 读本地/远端 → merge → 写回；冲突摘要；目录边界/大小/schema 拒绝                     | `problemLedgerStore.test.ts`                          | `problemLedgerStore.ts`                               | transport 可替换接口 |
+| IPC/UI        | load/save/status/choose-folder/sync-now；设置页提示与按钮状态                       | `ipcSchema.test.ts` + 新 `problemSync.interaction.ts` | `ipc.ts`、`ipcSchema.ts`、`preload.ts`、SettingsPanel | 选择/错误状态单源    |
+| renderer 迁移 | 启动 main 加载；保存 main + localStorage 降级；main 不可用仍可用                    | `problemStore.test.ts`（扩充）+ interaction           | `MainWorkspace.tsx`、`problemStore.ts`                | 存储适配层           |
 
 ## 产出物
 

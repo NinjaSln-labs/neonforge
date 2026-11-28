@@ -22,14 +22,14 @@
 
 ## 阶段总览与审计路径
 
-| 阶段 | 内容 | 测试 | 审计门 |
-|------|------|------|--------|
-| S0 | 6 项 spike | spike 脚本输出即证据 | 结论入 stage-spec 附录 B；schema 细节按数据锁定 |
-| S1 | 协议工具 + 拦截纯函数 + 接线 | L1 乱序矩阵 + 校验器单测 | 阶段末双轴评审（状态化报告） |
-| S2 | renderer 接线（双通道并存） | L3 派生路径枚举断言（字段级相等） | 阶段末双轴评审 |
-| S3 | sysPrompt 契约 + 文本降级原子落地 | L3 一轮改道断言 + 词表校验保持 | 阶段末双轴评审 |
-| S4 | 解析层退役 + 测试迁移 + 覆盖矩阵 | 全量回归 + grep 清零检查 | 阶段末双轴评审 + A-015/A-016 关闭核对 |
-| S5 | Mac 真机验收 | 真机 runbook（本计划 Task 5.x） | stage-gate 终局（枚举 A-015/A-016 + 全 DoD）→ #6 关闭 |
+| 阶段 | 内容                              | 测试                              | 审计门                                                |
+| ---- | --------------------------------- | --------------------------------- | ----------------------------------------------------- |
+| S0   | 6 项 spike                        | spike 脚本输出即证据              | 结论入 stage-spec 附录 B；schema 细节按数据锁定       |
+| S1   | 协议工具 + 拦截纯函数 + 接线      | L1 乱序矩阵 + 校验器单测          | 阶段末双轴评审（状态化报告）                          |
+| S2   | renderer 接线（双通道并存）       | L3 派生路径枚举断言（字段级相等） | 阶段末双轴评审                                        |
+| S3   | sysPrompt 契约 + 文本降级原子落地 | L3 一轮改道断言 + 词表校验保持    | 阶段末双轴评审                                        |
+| S4   | 解析层退役 + 测试迁移 + 覆盖矩阵  | 全量回归 + grep 清零检查          | 阶段末双轴评审 + A-015/A-016 关闭核对                 |
+| S5   | Mac 真机验收                      | 真机 runbook（本计划 Task 5.x）   | stage-gate 终局（枚举 A-015/A-016 + 全 DoD）→ #6 关闭 |
 
 审计执行方式：每阶段收口跑 code-review skill 阶段末模式（双轴并行 agent），产出 `docs/audits/stage-review-V1.5-S{N}-<date>.md`（open/fixed/recorded 状态化）；open 项入 `.scratch/neonforge-v1/audit-items/`。
 
@@ -40,10 +40,12 @@
 ### Task 0.1：spike 脚手架（公共）
 
 **Files:**
+
 - Create: `scripts/spike/spike-lib.mjs`（本机私有——scripts/ 已 git-exclude）
 - Create: `scripts/spike/run.sh`
 
 **Interfaces:**
+
 - Produces: `spikeChat(messages, tools, opts)` → `{ content, toolCalls[{name,args}], reasoning, raw }`；从 `~/.dsh/.credentials.yaml` 读 key（`grep COMMANDCODE_API_KEY`）；endpoint `https://api.commandcode.ai/provider/v1/chat/completions`，model `deepseek-v4`（以 .credentials/config 实际为准，先 `curl /models` 确认）
 
 - [ ] **Step 1**: 写 `spike-lib.mjs`——fetch 封装：SSE 流式解析（对齐 gateway.ts:482 分片重组逻辑的简化版）+ 非流式两种模式；`tools` 参数直传请求体 `tools` 字段，`tool_choice: 'auto'`
@@ -89,10 +91,12 @@
 ### Task 1.1：`protocolTools.ts` schema 单源（TDD）
 
 **Files:**
+
 - Create: `apps/desktop/src/domain/protocolTools.ts`
 - Test: `apps/desktop/tests/unit/protocolTools.test.ts`
 
 **Interfaces:**
+
 - Produces:
   - `PROTOCOL_TOOL_DEFS`（gateway TOOL_DEFS 同构对象数组——name/description/parameters JSON Schema）
   - `decideProtocolToolCall(state: ConversationState, tool: string, args: unknown): { action: 'pending'; kind: DecisionKind; content: DecisionContent } | { action: 'reject'; resultText: string } | { action: 'invalid'; resultText: string }`
@@ -106,6 +110,7 @@
 ### Task 1.2：`decideProtocolToolCall` 纯函数（TDD——乱序矩阵）
 
 **Files:**
+
 - Modify: `apps/desktop/src/domain/protocolTools.ts`
 - Test: `apps/desktop/tests/unit/protocolTools.test.ts`（追加 describe）
 
@@ -120,10 +125,12 @@
 ### Task 1.3：gateway TOOL_DEFS 增补 + renderer chunk 分支接线
 
 **Files:**
+
 - Modify: `apps/desktop/src/main/gateway.ts`（TOOL_DEFS 追加 `...PROTOCOL_TOOL_DEFS`——import 自 domain）
 - Modify: `apps/desktop/src/renderer/ConversationPanel.tsx`（chunk 处理器：协议工具分支在 approve-files 特例之前）
 
 **Interfaces:**
+
 - Consumes: Task 1.2 `decideProtocolToolCall`；现有 `setPendingState` / `tlog`
 - Produces: 新 Timeline 事件 `protocol.text_fallback`（S3 用，本任务先登记 SPECS）
 
@@ -145,6 +152,7 @@
 ### Task 2.1：派生路径枚举断言（L3）
 
 **Files:**
+
 - Modify: `apps/desktop/tests/interaction/cards-from-decision-content.interaction.ts`（新增 describe）
 
 - [ ] **Step 1**: mockBridge streamChat 脚本改为协议工具形态（toolCall.proposeGoal/proposePlan/reportCompletion helper——加进 mockBridge.ts），逐条断言「工具路径 decisionContent 与文本路径字段级相等」：goal 卡 statement/assumptions；plan 卡 files/summary；resolution 卡 verification/pendingQuestions
@@ -162,6 +170,7 @@
 ### Task 3.1：sysPrompt ⑬⑭⑮ 重写
 
 **Files:**
+
 - Modify: `apps/desktop/src/renderer/sysPrompt.ts`
 
 - [ ] **Step 1**: ⑬ 改「接到问题先澄清目标：用 ask_user 工具提问/给选项；收敛后必须调 propose_goal（没有它 UI 无法识别目标已确认）」；⑭ 改「动手前必须调 propose_plan（文件清单+summary+假设+验证计划）→ 等用户确认执行 → 调 approve-files 批量放行」；⑮ 改「完成后自检 → 必须调 report_completion（验证证据=真实跑过的命令+结果；不确定事项进 pending_questions）」；**保留**文本标记语法的说明段（降级通道声明）
@@ -170,6 +179,7 @@
 ### Task 3.2：文本降级原子落地（与 3.1 同一 commit）
 
 **Files:**
+
 - Modify: `apps/desktop/src/renderer/ConversationPanel.tsx`（done 分支：标记命中 → `protocol.text_fallback` 事件 + 合成引导 result；**删除**标记直接 setPendingState 的三处路径）
 
 - [ ] **Step 1**: L3 失败测试：文本标记消息 → 不弹卡 + toolcall result 含「请改用 propose_* 工具」+ 下一轮模型改用工具（mock 脚本两轮）

@@ -5,19 +5,19 @@
 
 ## 基本信息
 
-| 字段 | 值 |
-|------|----|
-| 产品版本 / commit | NeonForge `c66c46d`（main，600 秒重跑证据合并后） |
-| 模型 / Provider | 本机 Magpie `opendesign/deepseek-v4.1-flash-eco`（DSV4.1FE-OD，eco/慢速模式） |
-| 适配器 | NeonForge 无头适配器 v0：`prompt=none`、`tolerantArgs=1`、请求超时 900 秒、`fetch` TypeError 单次重试（PR #74） |
-| Agent | 自定义 `neonforge-terminal` 0.1.0：单个 `execute_bash` 工具；最多 40 轮；单命令超时 300 秒 |
-| Harness | Harbor `0.26.0` |
-| 数据集 | `terminal-bench@2.0`（git commit `69671fbaac6d67a7ef0dfec016cc38a64ef7a77c`；任务镜像 tag `alexgshaw/*:20251031`） |
-| 任务范围 | 10 个新任务 × 1 次尝试，共 10 trials；2 并发；`--environment-build-timeout-multiplier 4`、`--agent-timeout-multiplier 4` |
-| 评估日期（UTC） | 2026-11-19；job 23:10:01 → 23:51:28（41m26s） |
-| 沙箱 | 同一专用 QEMU/KVM VM：Ubuntu 24.04.5、6 vCPU、8 GB、100 GB；Docker 29.1.3；任务容器不挂宿主 Docker socket |
-| 网络与凭据 | VM 内 `socat` 中继宿主适配器；Harbor 进程显式设置 `NO_PROXY/no_proxy` 豁免 `172.17.0.1`；任务/验证容器不持有 `MAGPIE_GATEWAY_KEY` |
-| 运行成本 | 本地 Magpie，无外部 API 账单；总 token **4,781,089 输入 / 166,022 输出**（自定义 agent 不报缓存） |
+| 字段              | 值                                                                                                                                |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 产品版本 / commit | NeonForge `c66c46d`（main，600 秒重跑证据合并后）                                                                                 |
+| 模型 / Provider   | 本机 Magpie `opendesign/deepseek-v4.1-flash-eco`（DSV4.1FE-OD，eco/慢速模式）                                                     |
+| 适配器            | NeonForge 无头适配器 v0：`prompt=none`、`tolerantArgs=1`、请求超时 900 秒、`fetch` TypeError 单次重试（PR #74）                   |
+| Agent             | 自定义 `neonforge-terminal` 0.1.0：单个 `execute_bash` 工具；最多 40 轮；单命令超时 300 秒                                        |
+| Harness           | Harbor `0.26.0`                                                                                                                   |
+| 数据集            | `terminal-bench@2.0`（git commit `69671fbaac6d67a7ef0dfec016cc38a64ef7a77c`；任务镜像 tag `alexgshaw/*:20251031`）                |
+| 任务范围          | 10 个新任务 × 1 次尝试，共 10 trials；2 并发；`--environment-build-timeout-multiplier 4`、`--agent-timeout-multiplier 4`          |
+| 评估日期（UTC）   | 2026-11-19；job 23:10:01 → 23:51:28（41m26s）                                                                                     |
+| 沙箱              | 同一专用 QEMU/KVM VM：Ubuntu 24.04.5、6 vCPU、8 GB、100 GB；Docker 29.1.3；任务容器不挂宿主 Docker socket                         |
+| 网络与凭据        | VM 内 `socat` 中继宿主适配器；Harbor 进程显式设置 `NO_PROXY/no_proxy` 豁免 `172.17.0.1`；任务/验证容器不持有 `MAGPIE_GATEWAY_KEY` |
+| 运行成本          | 本地 Magpie，无外部 API 账单；总 token **4,781,089 输入 / 166,022 输出**（自定义 agent 不报缓存）                                 |
 
 ## 任务列表
 
@@ -27,18 +27,18 @@
 
 ## 结果
 
-| 任务 | 结果 | Reward | 输入 / 输出 tokens | 命令数 | Agent 用时 | 备注 |
-|------|------|-------:|-------------------|-------:|----------|------|
-| `adaptive-rejection-sampler` | 验证失败 | 0.0 | 2,072,495 / 61,329 | 38 | 22m48s | 无异常；任务要求 R `ars.R` 实现，验证器未通过；未保留命令轨迹 |
-| `build-cython-ext` | 通过 | 1.0 | 785,927 / 10,859 | 40 | 6m29s | 40 条命令（单轮可含多个工具调用） |
-| `count-dataset-tokens` | 验证失败 | 0.0 | 620,397 / 13,950 | 47 | 10m18s | 无异常；`answer.txt` 未匹配预期 `79586` |
-| `distribution-search` | 通过 | 1.0 | 47,818 / 7,166 | 5 | 1m49s | — |
-| `headless-terminal` | 通过 | 1.0 | 169,296 / 17,064 | 14 | 4m13s | — |
-| `kv-store-grpc` | 通过 | 1.0 | 13,129 / 2,398 | 5 | 0m58s | — |
-| `largest-eigenval` | 通过 | 1.0 | 967,072 / 42,143 | 34 | 12m11s | — |
-| `prove-plus-comm` | 通过 | 1.0 | 12,180 / 2,151 | 7 | 1m01s | — |
-| `pypi-server` | 通过 | 1.0 | 27,195 / 1,878 | 7 | 1m04s | — |
-| `query-optimize` | 通过 | 1.0 | 65,580 / 7,084 | 16 | 5m30s | — |
+| 任务                         | 结果     | Reward | 输入 / 输出 tokens | 命令数 | Agent 用时 | 备注                                                          |
+| ---------------------------- | -------- | -----: | ------------------ | -----: | ---------- | ------------------------------------------------------------- |
+| `adaptive-rejection-sampler` | 验证失败 |    0.0 | 2,072,495 / 61,329 |     38 | 22m48s     | 无异常；任务要求 R `ars.R` 实现，验证器未通过；未保留命令轨迹 |
+| `build-cython-ext`           | 通过     |    1.0 | 785,927 / 10,859   |     40 | 6m29s      | 40 条命令（单轮可含多个工具调用）                             |
+| `count-dataset-tokens`       | 验证失败 |    0.0 | 620,397 / 13,950   |     47 | 10m18s     | 无异常；`answer.txt` 未匹配预期 `79586`                       |
+| `distribution-search`        | 通过     |    1.0 | 47,818 / 7,166     |      5 | 1m49s      | —                                                             |
+| `headless-terminal`          | 通过     |    1.0 | 169,296 / 17,064   |     14 | 4m13s      | —                                                             |
+| `kv-store-grpc`              | 通过     |    1.0 | 13,129 / 2,398     |      5 | 0m58s      | —                                                             |
+| `largest-eigenval`           | 通过     |    1.0 | 967,072 / 42,143   |     34 | 12m11s     | —                                                             |
+| `prove-plus-comm`            | 通过     |    1.0 | 12,180 / 2,151     |      7 | 1m01s      | —                                                             |
+| `pypi-server`                | 通过     |    1.0 | 27,195 / 1,878     |      7 | 1m04s      | —                                                             |
+| `query-optimize`             | 通过     |    1.0 | 65,580 / 7,084     |     16 | 5m30s      | —                                                             |
 
 ### 汇总
 
@@ -62,10 +62,10 @@
 
 `tbench2-breadth3-zero-repeat-600-3x`：同样 2 个任务各 3 次（6 trials，2 并发，`NEONFORGE_COMMAND_TIMEOUT_SEC=600`，其余配置不变；修复后的原生 HTTP 适配器）。00:42:45 → 01:59:48 UTC（1h17m03s），无 502，1 次 600 秒命令超时异常。
 
-| 任务 | 尝试数 | 干净通过 | Reward 序列（含异常） | 有效输入 / 输出 tokens |
-|------|-------:|---------:|----------------------|------------------------|
-| `adaptive-rejection-sampler` | 3 | 1/3 | 1.0 / 0.0 / 0.0 | 2,402,735 + 2,783,035 + 2,989,754 / 72,612 + 81,196 + 105,435 |
-| `count-dataset-tokens` | 3 | 1/2 有效 | 1.0 / 0.0 / 0.0（600 秒超时异常） | 459,603 + 787,520 / 13,680 + 17,502 |
+| 任务                         | 尝试数 | 干净通过 | Reward 序列（含异常）             | 有效输入 / 输出 tokens                                        |
+| ---------------------------- | -----: | -------: | --------------------------------- | ------------------------------------------------------------- |
+| `adaptive-rejection-sampler` |      3 |      1/3 | 1.0 / 0.0 / 0.0                   | 2,402,735 + 2,783,035 + 2,989,754 / 72,612 + 81,196 + 105,435 |
+| `count-dataset-tokens`       |      3 | 1/2 有效 | 1.0 / 0.0 / 0.0（600 秒超时异常） | 459,603 + 787,520 / 13,680 + 17,502                           |
 
 - **6 trials**：2 个 reward 1.0、4 个 reward 0.0（其中 1 个是 600 秒命令超时异常）、0 个 502。
 - **干净有效尝试**：5 个（排除 1 个异常），通过 **2/5 = 40.0%**；按全部 6 trials（异常按 0）为 2/6 = 33.3%，与 Harbor mean 0.333、Pass@2 0.667 一致。
@@ -75,10 +75,10 @@
 
 ## 失败说明
 
-| 用例 | 现象 | 归因 | 是否产品问题 |
-|------|------|------|--------------|
+| 用例                         | 现象                                                                    | 归因                                                             | 是否产品问题          |
+| ---------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------- | --------------------- |
 | `adaptive-rejection-sampler` | 验证器 0.0，无异常；任务要求 `/app/ars.R` 中的 R 实现，测试覆盖多个分布 | 任务/模型实现失败；自定义 agent 未持久化命令轨迹，无法逐命令归因 | 否（模型/agent 行为） |
-| `count-dataset-tokens` | 验证器 0.0，无异常；`/app/answer.txt` 未包含预期 token 数 `79586` | 计数/实现失败；无轨迹 | 否（模型/agent 行为） |
+| `count-dataset-tokens`       | 验证器 0.0，无异常；`/app/answer.txt` 未包含预期 token 数 `79586`       | 计数/实现失败；无轨迹                                            | 否（模型/agent 行为） |
 
 ## 安全与边界
 

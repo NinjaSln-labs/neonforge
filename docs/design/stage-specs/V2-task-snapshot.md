@@ -1,4 +1,5 @@
 # Stage V2-Task-Snapshot Spec（任务状态机跨重启）
+
 > 来源：GitHub #11（会话快照完整化——ITaskRepository）；开工日期：2026-11-15；ADR：`docs/decisions/013-task-snapshot-cross-restart.md`
 
 ## DoD（机器可验证断言——stage-gate 逐条执行）
@@ -14,15 +15,15 @@
 
 ## TDD 网格（本阶段新增功能——spec-first + test-first）
 
-| 功能 | 规范断言（来源 ADR-013 §Decision） | 失败测试（红） | 实现（绿） | 重构 |
-|------|----------------------------------|---------------|-----------|------|
-| 任务快照序列化往返 | 全部 A1 字段（Set/决策点/拒绝计数）JSON 往返不变 | `tests/unit/taskSnapshot.test.ts` | `src/domain/taskSnapshot.ts` | 校验分支抽纯函数 |
-| 损坏/版本快照容错 | 非法版本、字段类型、pending 枚举 → `null` 不崩 | 同上 | `fromTaskSnapshot` | 复用类型守卫 |
-| 会话快照原子写 | `saveSession(msgs, task)` → 单键 V2；`loadTaskSnapshot` 返回同对象 | `tests/unit/sessionStore.test.ts` | `sessionStore` V2 | 保持 `saveSession` 兼容签名 |
-| V1 存档兼容 | 旧数组存档 → 消息可读、任务快照 `null` | 同上 | `parseSessionFile` 分支 | — |
-| 恢复不产生事件 | `restoreTaskState` 不改写 `deriveStateEvents` 时间线 | `tests/unit/useConversationState.test.ts`（纯函数等价） | `useConversationState.restoreTaskState` | — |
-| 恢复卡显示 | 种子化 V2 快照后重启 → pending 卡可见且内容为快照 | `tests/interaction/sessionRestore.interaction.ts` | `useMessageStore` 恢复接线 | 快照优先于消息旧快照 |
-| 持久化优先级 | 有任务快照时不被旧 `decisionContent` 覆盖 | 同交互测试 | `useMessageStore` 分支 | — |
+| 功能               | 规范断言（来源 ADR-013 §Decision）                                 | 失败测试（红）                                          | 实现（绿）                              | 重构                        |
+| ------------------ | ------------------------------------------------------------------ | ------------------------------------------------------- | --------------------------------------- | --------------------------- |
+| 任务快照序列化往返 | 全部 A1 字段（Set/决策点/拒绝计数）JSON 往返不变                   | `tests/unit/taskSnapshot.test.ts`                       | `src/domain/taskSnapshot.ts`            | 校验分支抽纯函数            |
+| 损坏/版本快照容错  | 非法版本、字段类型、pending 枚举 → `null` 不崩                     | 同上                                                    | `fromTaskSnapshot`                      | 复用类型守卫                |
+| 会话快照原子写     | `saveSession(msgs, task)` → 单键 V2；`loadTaskSnapshot` 返回同对象 | `tests/unit/sessionStore.test.ts`                       | `sessionStore` V2                       | 保持 `saveSession` 兼容签名 |
+| V1 存档兼容        | 旧数组存档 → 消息可读、任务快照 `null`                             | 同上                                                    | `parseSessionFile` 分支                 | —                           |
+| 恢复不产生事件     | `restoreTaskState` 不改写 `deriveStateEvents` 时间线               | `tests/unit/useConversationState.test.ts`（纯函数等价） | `useConversationState.restoreTaskState` | —                           |
+| 恢复卡显示         | 种子化 V2 快照后重启 → pending 卡可见且内容为快照                  | `tests/interaction/sessionRestore.interaction.ts`       | `useMessageStore` 恢复接线              | 快照优先于消息旧快照        |
+| 持久化优先级       | 有任务快照时不被旧 `decisionContent` 覆盖                          | 同交互测试                                              | `useMessageStore` 分支                  | —                           |
 
 ## 产出物
 

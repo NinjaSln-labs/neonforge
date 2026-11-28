@@ -8,13 +8,13 @@
 
 2026-11-24 设计-实现审计发现 timeline 注册表（93 事件）中有 5 个事件全代码库无发射点（死事件）：`plan.rejected`、`changeset.reviewed`、`usage.period_closed`、`dialogue.needs_human`、`card.dismissed`。2026-11-28 逐事件根因取证（登记提交、被何机制取代、后续是否有发射点）结论：
 
-| 事件 | 根因 |
-|---|---|
-| `plan.rejected` | 2026-08-15 登记；同日的 DDD 重建把「清单外写入拦截」实现为 `tool.blocked` gate=`out-of-plan`（载荷更完整：name/gate/reason/args）。`plan.rejected` 全历史 0 发射点——设计升级后的旧登记残留。 |
-| `card.dismissed` | 设计文档定义「卡消失/任务重置」；实现中卡终结已被 `card.resolved`/`card.rejected` 覆盖，任务重置由新会话 `conversation.created` + 确认位复位承载。第三种「任务重置时旧卡静默消失」路径无信息价值（重放可由 conversation.created 推导）。 |
-| `dialogue.needs_human` | 2026-09-07 随 ADR-010 四级梯度登记，设计为三级兜底（「强制卡也被拒」）；实现只落地了一级 `dialogue.loop_guard` 与二级 `dialogue.forced_clarify`，三级从未接线；同问题域的「转人工」由 `stuck.needs_human`（停滞升级）实际承载。 |
-| `changeset.reviewed` | 设计有（C26 变更审核子域），领域函数 `reviewItem()` 已实现且有单测，但 IPC/renderer 逐项审核未接线——该能力已随批次 4 裁定 **V1.5 延后**（`00-product-design.md` Flow 6 真实 diff 供给）。保留登记以备 V1.5 接线。 |
-| `usage.period_closed` | 注册表注释自证「预留」；产品预算按自然月累计但无周期关闭动作。保留登记以备 V2 周期结算。 |
+| 事件                   | 根因                                                                                                                                                                                                                                     |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `plan.rejected`        | 2026-08-15 登记；同日的 DDD 重建把「清单外写入拦截」实现为 `tool.blocked` gate=`out-of-plan`（载荷更完整：name/gate/reason/args）。`plan.rejected` 全历史 0 发射点——设计升级后的旧登记残留。                                             |
+| `card.dismissed`       | 设计文档定义「卡消失/任务重置」；实现中卡终结已被 `card.resolved`/`card.rejected` 覆盖，任务重置由新会话 `conversation.created` + 确认位复位承载。第三种「任务重置时旧卡静默消失」路径无信息价值（重放可由 conversation.created 推导）。 |
+| `dialogue.needs_human` | 2026-09-07 随 ADR-010 四级梯度登记，设计为三级兜底（「强制卡也被拒」）；实现只落地了一级 `dialogue.loop_guard` 与二级 `dialogue.forced_clarify`，三级从未接线；同问题域的「转人工」由 `stuck.needs_human`（停滞升级）实际承载。          |
+| `changeset.reviewed`   | 设计有（C26 变更审核子域），领域函数 `reviewItem()` 已实现且有单测，但 IPC/renderer 逐项审核未接线——该能力已随批次 4 裁定 **V1.5 延后**（`00-product-design.md` Flow 6 真实 diff 供给）。保留登记以备 V1.5 接线。                        |
+| `usage.period_closed`  | 注册表注释自证「预留」；产品预算按自然月累计但无周期关闭动作。保留登记以备 V2 周期结算。                                                                                                                                                 |
 
 ## Decision
 

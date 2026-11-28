@@ -25,35 +25,35 @@
 
 ## Global Constraints
 
-| ID | 约束 |
-|----|------|
-| G1 | 设计门槛未达 → 禁止借 timeout 改门/任务语义（p000128/d000002） |
-| G2 | 不 force 协议工具（propose_* / report_completion） |
-| G3 | 禁静默 `/public`（p000134）。UAT **关单路径必须** `NF_UAT_KEENABLE_KEY` 非空；无 Key **禁止**进入 Task4。试用仅允许 Task1 **诊断**（须打 `keenSource=trial`），不得用于关单证明 |
-| G4 | 凭据只经 env / 本机路径，不入库 |
-| G5 | Mac **串行**（p000016）；禁止并行占 9222 |
-| G6 | Task1 结束 **不得**跳过 Task2 |
-| G7 | **关单硬闸：** `/tmp/nf-uat-tier-results.txt` 含 `T1=0`…`T4=0` **且** `/tmp/nf-uat-persona-results.txt` 含 `G-impatient=0`…`G-web=0`（脚本约定 0=PASS）。任一非 0 → **禁止** `close t000057`；只 `edit` + `add action` 拆残留。禁止用部分断言冒充绿 |
-| G8 | 模块或 K4/2b 产品补丁后：先 `uat-T1.mjs` PASS，再单跑被修档 |
-| G9 | 未要求不 commit；Conventional Commits |
-| G10 | 硬闸 **ADR-012**（p000127：测完再修；测试轮禁止临修） |
-| G11 | Task4 启动前 shell 必须 `test -n "${NF_UAT_KEENABLE_KEY}"` |
-| G12 | asar 门禁只用 **稳定字面量**（URL/中文文案）；不用易被 minify 吞掉的函数名作唯一依据 |
+| ID  | 约束                                                                                                                                                                                                                                                |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| G1  | 设计门槛未达 → 禁止借 timeout 改门/任务语义（p000128/d000002）                                                                                                                                                                                      |
+| G2  | 不 force 协议工具（propose_* / report_completion）                                                                                                                                                                                                  |
+| G3  | 禁静默 `/public`（p000134）。UAT **关单路径必须** `NF_UAT_KEENABLE_KEY` 非空；无 Key **禁止**进入 Task4。试用仅允许 Task1 **诊断**（须打 `keenSource=trial`），不得用于关单证明                                                                     |
+| G4  | 凭据只经 env / 本机路径，不入库                                                                                                                                                                                                                     |
+| G5  | Mac **串行**（p000016）；禁止并行占 9222                                                                                                                                                                                                            |
+| G6  | Task1 结束 **不得**跳过 Task2                                                                                                                                                                                                                       |
+| G7  | **关单硬闸：** `/tmp/nf-uat-tier-results.txt` 含 `T1=0`…`T4=0` **且** `/tmp/nf-uat-persona-results.txt` 含 `G-impatient=0`…`G-web=0`（脚本约定 0=PASS）。任一非 0 → **禁止** `close t000057`；只 `edit` + `add action` 拆残留。禁止用部分断言冒充绿 |
+| G8  | 模块或 K4/2b 产品补丁后：先 `uat-T1.mjs` PASS，再单跑被修档                                                                                                                                                                                         |
+| G9  | 未要求不 commit；Conventional Commits                                                                                                                                                                                                               |
+| G10 | 硬闸 **ADR-012**（p000127：测完再修；测试轮禁止临修）                                                                                                                                                                                               |
+| G11 | Task4 启动前 shell 必须 `test -n "${NF_UAT_KEENABLE_KEY}"`                                                                                                                                                                                          |
+| G12 | asar 门禁只用 **稳定字面量**（URL/中文文案）；不用易被 minify 吞掉的函数名作唯一依据                                                                                                                                                                |
 
 ---
 
 ## 文件地图
 
-| 文件 | 职责 |
-|------|------|
-| `apps/desktop` dist / Mac asar | 水位 |
-| `scripts-cdp/uat-lib.mjs` | Keenable；**Task1.0 待加** `keenSource=` 日志；candidate 澄清 |
-| `scripts-cdp/uat-T*.mjs` / `uat-G-*.mjs` | 硬断言 |
-| `scripts-cdp/run-uat-tiers.sh` | → `/tmp/nf-uat-tier-results.txt` |
-| `scripts-cdp/run-uat-personas.sh` | → `/tmp/nf-uat-persona-results.txt` |
-| `src/domain/*` 等 | 仅 2b/3b |
-| Mac `/tmp/nf-uat-*-ud/` | 取证 |
-| t000057 | 关单 |
+| 文件                                     | 职责                                                          |
+| ---------------------------------------- | ------------------------------------------------------------- |
+| `apps/desktop` dist / Mac asar           | 水位                                                          |
+| `scripts-cdp/uat-lib.mjs`                | Keenable；**Task1.0 待加** `keenSource=` 日志；candidate 澄清 |
+| `scripts-cdp/uat-T*.mjs` / `uat-G-*.mjs` | 硬断言                                                        |
+| `scripts-cdp/run-uat-tiers.sh`           | → `/tmp/nf-uat-tier-results.txt`                              |
+| `scripts-cdp/run-uat-personas.sh`        | → `/tmp/nf-uat-persona-results.txt`                           |
+| `src/domain/*` 等                        | 仅 2b/3b                                                      |
+| Mac `/tmp/nf-uat-*-ud/`                  | 取证                                                          |
+| t000057                                  | 关单                                                          |
 
 ---
 
@@ -103,13 +103,13 @@ rg -q 'keenablePublicTrial' dist/ || exit 1
 
 对 **T4** 与 **G-picky** 分别勾选；每档 **恰好一个**字母。判定顺序：**先扫证据 → 自上而下第一条命中即勾；皆不命中 → E**。
 
-| 叶因 | 触发证据（须在 timeline/UI 可观察） | 互斥（不当成其它字母的理由） | → 2b |
-|------|--------------------------------------|------------------------------|------|
-| **A** | ≥2 次 `completion.evidence_missing`（或等价），且中间无 `decision.resolved`；detail 列出 missing 键名 | 不是「从未 report」→ 那是 C；不是「forced 空转主因」→ B | 模块：backfill / V1a 边角 |
-| **B** | `execution.forced`（或 force 打点）密集，且 `plannedComplete` 语义上应完成仍 require-action；附 planned vs produced **路径字符串各 ≥1 例** 形态不一致 | 有 evidence_missing 循环仍优先 A（证据门未过才是主因） | 模块：`matchesPlannedPath` 调用点 |
-| **C** | 边界/人格探针已发（或 T4 探针断言相关事件已出现），其后 **无** `report_completion` / 无 completion 提议直至超时 | 已多次 evidence_missing → A；已 resolved → D | 文本 nudge / sysPrompt；禁 force report |
-| **D** | timeline 已有 `decision.resolved`（或 UI 已解决卡），但脚本 `terminal!==resolved` / exit≠0 | 产品未到已解决 → 非 D | **仅 harness** 认终态 |
-| **E** | 证据不足、矛盾、或非模块/harness 可修（纯模型超时且无 A–D 模式） | — | **禁止 2b**；关单轮若仍 FAIL → 拆残留 action |
+| 叶因  | 触发证据（须在 timeline/UI 可观察）                                                                                                                   | 互斥（不当成其它字母的理由）                            | → 2b                                         |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- | -------------------------------------------- |
+| **A** | ≥2 次 `completion.evidence_missing`（或等价），且中间无 `decision.resolved`；detail 列出 missing 键名                                                 | 不是「从未 report」→ 那是 C；不是「forced 空转主因」→ B | 模块：backfill / V1a 边角                    |
+| **B** | `execution.forced`（或 force 打点）密集，且 `plannedComplete` 语义上应完成仍 require-action；附 planned vs produced **路径字符串各 ≥1 例** 形态不一致 | 有 evidence_missing 循环仍优先 A（证据门未过才是主因）  | 模块：`matchesPlannedPath` 调用点            |
+| **C** | 边界/人格探针已发（或 T4 探针断言相关事件已出现），其后 **无** `report_completion` / 无 completion 提议直至超时                                       | 已多次 evidence_missing → A；已 resolved → D            | 文本 nudge / sysPrompt；禁 force report      |
+| **D** | timeline 已有 `decision.resolved`（或 UI 已解决卡），但脚本 `terminal!==resolved` / exit≠0                                                            | 产品未到已解决 → 非 D                                   | **仅 harness** 认终态                        |
+| **E** | 证据不足、矛盾、或非模块/harness 可修（纯模型超时且无 A–D 模式）                                                                                      | —                                                       | **禁止 2b**；关单轮若仍 FAIL → 拆残留 action |
 
 R1#7 止损操作化：**勾 E ⇒ 禁止 Task2b 任何代码**；该档 Task4 FAIL ⇒ 不得 close t000057。
 
@@ -132,18 +132,18 @@ R1#7 止损操作化：**勾 E ⇒ 禁止 Task2b 任何代码**；该档 Task4 F
 
 #### 1.2 记录两层结果（不得混为一谈）
 
-| 层 | 含义 | 判定 |
-|----|------|------|
-| **K5-env** | 外网可开可搜 | `keenSource=*` ∧ `webAccessUiOk=true` ∧ 非 probe failed ∧ 见 web 工具 |
-| **K5-script** | 该档脚本验收 | 进程 exit 0 且脚本打印 PASS |
+| 层            | 含义         | 判定                                                                  |
+| ------------- | ------------ | --------------------------------------------------------------------- |
+| **K5-env**    | 外网可开可搜 | `keenSource=*` ∧ `webAccessUiOk=true` ∧ 非 probe failed ∧ 见 web 工具 |
+| **K5-script** | 该档脚本验收 | 进程 exit 0 且脚本打印 PASS                                           |
 
 - [ ] **分叉：**
 
-| 情况 | 下一步 |
-|------|--------|
-| K5-env 假 | **停**。查 Key/试用/health/代理。禁止改探活回 example.com / 改 verifyCompletion |
-| K5-env 真 ∧ K5-script 假 | → Task2；detail 标 **K4 候选** |
-| K5-env 真 ∧ K5-script 真（两档） | → Task2（**仍必做**） |
+| 情况                             | 下一步                                                                          |
+| -------------------------------- | ------------------------------------------------------------------------------- |
+| K5-env 假                        | **停**。查 Key/试用/health/代理。禁止改探活回 example.com / 改 verifyCompletion |
+| K5-env 真 ∧ K5-script 假         | → Task2；detail 标 **K4 候选**                                                  |
+| K5-env 真 ∧ K5-script 真（两档） | → Task2（**仍必做**）                                                           |
 
 **Done when:** 上表一行 + 日志路径入 detail。
 
@@ -164,13 +164,13 @@ R1#7 止损操作化：**勾 E ⇒ 禁止 Task2b 任何代码**；该档 Task4 F
 
 ### Task 2b:（条件）补丁
 
-| 叶因 | 允许 | 禁止 | 补丁后 |
-|------|------|------|--------|
-| A | backfill / V1a 边角（合 ADR-011） | 空 verification 放行 | G8：T1→该档 |
-| B | matchesPlannedPath 调用点 | 关 ProgressGuarantee | G8 |
-| C | sysPrompt / 文本 nudge | force report_completion | G8 |
-| D | **仅 harness** 认 resolved | 改产品已解决语义 | 该档脚本 |
-| E | — | 任何代码 | — |
+| 叶因 | 允许                              | 禁止                    | 补丁后      |
+| ---- | --------------------------------- | ----------------------- | ----------- |
+| A    | backfill / V1a 边角（合 ADR-011） | 空 verification 放行    | G8：T1→该档 |
+| B    | matchesPlannedPath 调用点         | 关 ProgressGuarantee    | G8          |
+| C    | sysPrompt / 文本 nudge            | force report_completion | G8          |
+| D    | **仅 harness** 认 resolved        | 改产品已解决语义        | 该档脚本    |
+| E    | —                                 | 任何代码                | —           |
 
 - [ ] L1 先红后绿（文件+用例名入 detail）。
 - [ ] 最小实现。
@@ -182,8 +182,9 @@ R1#7 止损操作化：**勾 E ⇒ 禁止 Task2b 任何代码**；该档 Task4 F
 ### Task 3: K4 candidate 多轮（条件）
 
 **门禁（全满足，否则整节跳过）：**
-1. Task1 **K5-env** 真  
-2. Task1 中 T3 或 G-web **K5-script** 假  
+
+1. Task1 **K5-env** 真
+2. Task1 中 T3 或 G-web **K5-script** 假
 3. **新鲜** T3（或 G-web）timeline/UI：存在未消化的候选澄清 / 新一轮 ask_user（非探活失败）— 允许为取证再单跑一次 T3
 
 #### 3a（默认唯一代码路径）
@@ -213,10 +214,10 @@ R1#7 止损操作化：**勾 E ⇒ 禁止 Task2b 任何代码**；该档 Task4 F
 - [ ] `bash scripts-cdp/run-uat-personas.sh` → 出示 `/tmp/nf-uat-persona-results.txt` 四行 `G-*=0`。
 - [ ] **裁决：**
 
-| 条件 | 动作 |
-|------|------|
-| 8/8 且下方「收卷过审清单」全 ✅ | `handoff close t000057 --outcome '…'` |
-| 任一 FAIL | **禁止 close**；edit t000057 + 每残留档一条新 action（summary 含叶因） |
+| 条件                            | 动作                                                                   |
+| ------------------------------- | ---------------------------------------------------------------------- |
+| 8/8 且下方「收卷过审清单」全 ✅ | `handoff close t000057 --outcome '…'`                                  |
+| 任一 FAIL                       | **禁止 close**；edit t000057 + 每残留档一条新 action（summary 含叶因） |
 
 - [ ] `handoff check` OK。
 - [ ] （非门禁）RCA 可补 R3 结果表。
@@ -225,16 +226,16 @@ R1#7 止损操作化：**勾 E ⇒ 禁止 Task2b 任何代码**；该档 Task4 F
 
 ## 收卷过审清单（close 前 · 证据可出示）
 
-| # | 检查 | 证据形态 |
-|---|------|----------|
-| 1 | Task0 Gate A+B | 终端输出 / detail |
-| 2 | Task1 keenSource + webAccessUiOk | 日志 |
-| 3 | Task2 两叶因；非 E 有 timeline 原文 | detail |
-| 4 | 若 2b/3a/3b 改了产品或 nudge：G8 T1 PASS | 日志 |
-| 5 | tier-results 四 0 + persona-results 四 0 | 文件全文 |
-| 6 | G11 Key 非空（关单轮） | `test -n` 记录；**无密钥值** |
-| 7 | 未改 verifyCompletion / 未删 T3 调研 / 未 force propose_* | diff 或声明+抽查 |
-| 8 | `handoff check` OK | 输出 |
+| #   | 检查                                                      | 证据形态                     |
+| --- | --------------------------------------------------------- | ---------------------------- |
+| 1   | Task0 Gate A+B                                            | 终端输出 / detail            |
+| 2   | Task1 keenSource + webAccessUiOk                          | 日志                         |
+| 3   | Task2 两叶因；非 E 有 timeline 原文                       | detail                       |
+| 4   | 若 2b/3a/3b 改了产品或 nudge：G8 T1 PASS                  | 日志                         |
+| 5   | tier-results 四 0 + persona-results 四 0                  | 文件全文                     |
+| 6   | G11 Key 非空（关单轮）                                    | `test -n` 记录；**无密钥值** |
+| 7   | 未改 verifyCompletion / 未删 T3 调研 / 未 force propose_* | diff 或声明+抽查             |
+| 8   | `handoff check` OK                                        | 输出                         |
 
 缺任一项 → **方案执行未收**，t000057 保持 open。
 
@@ -244,41 +245,41 @@ R1#7 止损操作化：**勾 E ⇒ 禁止 Task2b 任何代码**；该档 Task4 F
 
 ### Audit R1 — 初版方案（已否决）
 
-| # | 意见 | 处置 |
-|---|------|------|
-| 1 | Task1 绿跳过 Task2 | G6；分叉表强制 Task2 |
-| 2 | 「并行取证」与单实例冲突 | Architecture 改串行；G5 |
-| 3 | 部署步骤空心 | Task0 |
-| 4 | Key vs 试用含糊 | G3；关单强制 Key（R2 再收紧） |
-| 5 | 3a dump 指纹抖动 / 动 typed 路径 | 稳定候选指纹；禁改 typed |
-| 6 | 3b 易削弱调研 | 默认关闭 + 额外门禁 |
-| 7 | 2b 止损不清 | **叶因表 E 判定句 + 禁 2b + FAIL 拆 action**（R4 修订） |
-| 8 | 部分断言冒充 PASS | G7 |
-| 9 | 补丁无 T1 回归 | G8 |
-| 10 | K8 噪音 | 附录 |
+| #   | 意见                             | 处置                                                    |
+| --- | -------------------------------- | ------------------------------------------------------- |
+| 1   | Task1 绿跳过 Task2               | G6；分叉表强制 Task2                                    |
+| 2   | 「并行取证」与单实例冲突         | Architecture 改串行；G5                                 |
+| 3   | 部署步骤空心                     | Task0                                                   |
+| 4   | Key vs 试用含糊                  | G3；关单强制 Key（R2 再收紧）                           |
+| 5   | 3a dump 指纹抖动 / 动 typed 路径 | 稳定候选指纹；禁改 typed                                |
+| 6   | 3b 易削弱调研                    | 默认关闭 + 额外门禁                                     |
+| 7   | 2b 止损不清                      | **叶因表 E 判定句 + 禁 2b + FAIL 拆 action**（R4 修订） |
+| 8   | 部分断言冒充 PASS                | G7                                                      |
+| 9   | 补丁无 T1 回归                   | G8                                                      |
+| 10  | K8 噪音                          | 附录                                                    |
 
 ### Audit R2 — 收紧版（本轮审查 · 曾未通过）
 
-| # | 意见 | 本版处置 |
-|---|------|----------|
-| 1 | Architecture 把 K4 写在 2b 前 | 改为 2→2b→3→4 |
-| 2 | asar 用函数名不稳 | G12；Gate A 字面量 + Gate B dist |
-| 3 | keenSource 与代码 log 不一致 | Task1.0 强制 `keenSource=` 行 |
-| 4 | 试用可混进关单 | G3/G11：关单禁止无 Key |
-| 5 | 叶因 D 进不了 2b 但表里有 D | Task2 门禁含 D（harness-only） |
-| 6 | personas 结果路径未写死 | `/tmp/nf-uat-persona-results.txt` |
-| 7 | K5-env 与 script PASS 混谈 | Task1.2 两层表 |
-| 8 | Task3 缺新鲜 T3 证据 | 门禁 3 允许再单跑 T3 |
-| 9 | 缺审计台账/再审出口 | 本节 + 下方 R3 |
+| #   | 意见                          | 本版处置                          |
+| --- | ----------------------------- | --------------------------------- |
+| 1   | Architecture 把 K4 写在 2b 前 | 改为 2→2b→3→4                     |
+| 2   | asar 用函数名不稳             | G12；Gate A 字面量 + Gate B dist  |
+| 3   | keenSource 与代码 log 不一致  | Task1.0 强制 `keenSource=` 行     |
+| 4   | 试用可混进关单                | G3/G11：关单禁止无 Key            |
+| 5   | 叶因 D 进不了 2b 但表里有 D   | Task2 门禁含 D（harness-only）    |
+| 6   | personas 结果路径未写死       | `/tmp/nf-uat-persona-results.txt` |
+| 7   | K5-env 与 script PASS 混谈    | Task1.2 两层表                    |
+| 8   | Task3 缺新鲜 T3 证据          | 门禁 3 允许再单跑 T3              |
+| 9   | 缺审计台账/再审出口           | 本节 + 下方 R3                    |
 
 ### Audit R3 — 复审结论（**独立审计推翻**）
 
 独立进程审计（`docs/audits/plan-audit-uat-open-fix-2026-09-29.md`）判定 **FAIL**：
 
-| 阻塞 | 内容 |
-|------|------|
-| E | 「叶因定义同前版」不可执行 |
-| F | 自报 R3 PASS 无效 |
+| 阻塞 | 内容                       |
+| ---- | -------------------------- |
+| E    | 「叶因定义同前版」不可执行 |
+| F    | 自报 R3 PASS 无效          |
 
 **本版修订（R3→R4 入口）：** 内联叶因表；撤回通过声明；文件地图 keenSource=待加；3b 排除 verifyCompletion；Gate A 写死 cwd；Architecture 与 Task3「T3 或 G-web」对齐；R1#7 止损句写入叶因表。
 
@@ -296,7 +297,7 @@ R1#7 止损操作化：**勾 E ⇒ 禁止 Task2b 任何代码**；该档 Task4 F
 
 **执行选项：**
 
-1. **Subagent-Driven（推荐）** — 每任务新代理；主代理按收卷过审清单复核后才允许 close  
+1. **Subagent-Driven（推荐）** — 每任务新代理；主代理按收卷过审清单复核后才允许 close
 2. **Inline** — 本会话执行（Mac + `NF_UAT_KEENABLE_KEY` 就绪）
 
 选哪个？

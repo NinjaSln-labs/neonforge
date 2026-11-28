@@ -5,19 +5,19 @@
 
 ## 基本信息
 
-| 字段 | 值 |
-|------|----|
-| 产品版本 / commit | NeonForge `9b64048`（main，第八批广度证据合并后） |
-| 模型 / Provider | 本机 Magpie `opendesign/deepseek-v4.1-flash-eco`（DSV4.1FE-OD，eco/慢速模式） |
-| 适配器 | NeonForge 无头适配器：原生 `node:http/https`、`prompt=none`、`tolerantArgs=1`、请求/headers 超时 900 秒、仅对 `ECONNRESET`/`EPIPE` 重试（PR #78） |
-| Agent | 自定义 `neonforge-terminal` 0.1.0：单个 `execute_bash` 工具；最多 40 轮；单命令超时 300 秒 |
-| Harness | Harbor `0.26.0` |
-| 数据集 | `terminal-bench@2.0`（git commit `69671fbaac6d67a7ef0dfec016cc38a64ef7a77c`；任务镜像 tag `alexgshaw/*:20251031`） |
-| 任务范围 | `mteb-retrieve` × 1 次尝试，共 1 trial；1 并发；`--environment-build-timeout-multiplier 4`、`--agent-timeout-multiplier 4` |
-| 评估日期（UTC） | 2026-11-20；job 20:46:39 → 21:05:58（19m18） |
-| 沙箱 | 专用 QEMU/KVM VM：Ubuntu 24.04.5、6 vCPU、8 GB、100 GB；Docker 29.1.3；任务容器不挂宿主 Docker socket |
-| 网络与凭据 | VM 内 `socat` 中继宿主适配器；Harbor 进程显式设置 `NO_PROXY/no_proxy` 豁免 `172.17.0.1`；任务/验证容器不持有 `MAGPIE_GATEWAY_KEY` |
-| 运行成本 | 本地 Magpie，无外部 API 账单；token **1,553,778 输入 / 15,531 输出**；无缓存计数 |
+| 字段              | 值                                                                                                                                                |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 产品版本 / commit | NeonForge `9b64048`（main，第八批广度证据合并后）                                                                                                 |
+| 模型 / Provider   | 本机 Magpie `opendesign/deepseek-v4.1-flash-eco`（DSV4.1FE-OD，eco/慢速模式）                                                                     |
+| 适配器            | NeonForge 无头适配器：原生 `node:http/https`、`prompt=none`、`tolerantArgs=1`、请求/headers 超时 900 秒、仅对 `ECONNRESET`/`EPIPE` 重试（PR #78） |
+| Agent             | 自定义 `neonforge-terminal` 0.1.0：单个 `execute_bash` 工具；最多 40 轮；单命令超时 300 秒                                                        |
+| Harness           | Harbor `0.26.0`                                                                                                                                   |
+| 数据集            | `terminal-bench@2.0`（git commit `69671fbaac6d67a7ef0dfec016cc38a64ef7a77c`；任务镜像 tag `alexgshaw/*:20251031`）                                |
+| 任务范围          | `mteb-retrieve` × 1 次尝试，共 1 trial；1 并发；`--environment-build-timeout-multiplier 4`、`--agent-timeout-multiplier 4`                        |
+| 评估日期（UTC）   | 2026-11-20；job 20:46:39 → 21:05:58（19m18）                                                                                                      |
+| 沙箱              | 专用 QEMU/KVM VM：Ubuntu 24.04.5、6 vCPU、8 GB、100 GB；Docker 29.1.3；任务容器不挂宿主 Docker socket                                             |
+| 网络与凭据        | VM 内 `socat` 中继宿主适配器；Harbor 进程显式设置 `NO_PROXY/no_proxy` 豁免 `172.17.0.1`；任务/验证容器不持有 `MAGPIE_GATEWAY_KEY`                 |
+| 运行成本          | 本地 Magpie，无外部 API 账单；token **1,553,778 输入 / 15,531 输出**；无缓存计数                                                                  |
 
 ## 镜像问题与解决
 
@@ -27,9 +27,9 @@
 
 ## 结果
 
-| 任务 | 结果 | Reward | 输入 / 输出 tokens | 命令数 | Agent 用时 | 备注 |
-|------|------|-------:|-------------------|-------:|----------|------|
-| `mteb-retrieve` | 通过 | 1.0 | 1,553,778 / 15,531 | 39 | 10m04s | 验证器 9m02s；无异常 |
+| 任务            | 结果 | Reward | 输入 / 输出 tokens | 命令数 | Agent 用时 | 备注                 |
+| --------------- | ---- | -----: | ------------------ | -----: | ---------- | -------------------- |
+| `mteb-retrieve` | 通过 |    1.0 | 1,553,778 / 15,531 |     39 | 10m04s     | 验证器 9m02s；无异常 |
 
 ### 汇总
 

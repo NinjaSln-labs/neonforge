@@ -182,7 +182,7 @@ ActionAttribute {
    - 2026-11-24 审计批次 9（S4 主体落地）：`pendingCardToShow`/`goalFallbackTrigger` 已删除——工具门控/续聊停止/卡渲染/文本征询均只读领域 `pending` 与 `decisionContent` 快照；文本标记只打 `protocol.text_fallback` 并引导改道，不构造提议。唯一保留的文本兜底 = `agentLoop` 的「结构化提议/证据 = 推进」探测（StallDetector 输入，不参与决策点判定）。
    - 2026-11-25 S4 复核裁定（ADR-009 r5）：上述保留探测**不改协议事件消费**——StallDetector 调用点有 `toolCalls.length===0` 门（协议轮不进入），推进保障调用点协议轮不计「本轮推进」（确认后须继续逼执行）；协议轮推进由领域 `pending`（确认前 auto）与确认态消费语义承载。删除条件 = S5 兜底率≈0（`isStructuredProposal`/`parseCompletionClaim` 连 `completionClaimParser` 一并退役）。
 2. **提议是值对象**（结构化内容：假设/证据/验证计划）——不是文本标记；解析层（parsePlanProposal/parseCompletionClaim）负责从模型输出结构化，判定层只消费结构
-2b. **假设来源可追溯（ADR-014）**：`Assumption = { text, source }`，`source ∈ model_inference | user_choice | clarification`——`clarification` 来自 `ask_user.assumptions` 核对卡的结构化回答，`user_choice` 来自候选点选，`model_inference` 为模型自行推断；**模型自报来源需有本会话真实交互证据，否则在进入决策内容前降级为 `model_inference`**；确认卡显示来源标签，旧字符串假设归一化为 `model_inference`，任务快照版本 2（v1 兼容）
+   2b. **假设来源可追溯（ADR-014）**：`Assumption = { text, source }`，`source ∈ model_inference | user_choice | clarification`——`clarification` 来自 `ask_user.assumptions` 核对卡的结构化回答，`user_choice` 来自候选点选，`model_inference` 为模型自行推断；**模型自报来源需有本会话真实交互证据，否则在进入决策内容前降级为 `model_inference`**；确认卡显示来源标签，旧字符串假设归一化为 `model_inference`，任务快照版本 2（v1 兼容）
 3. **决策内容快照**（decisionContent——呈现与审计的唯一来源）：卡弹出时携带完整提议内容，确认/拒绝事件记录快照（「用户确认了什么」可追溯——2026-08-15 run4 实证的追溯缺口）
 4. **用户主动确认通道保留**（goalFallback 语义重定义）：用户可在无提议时主动发起确认（对齐竞品 Plan 门——用户发起 vs 模型触发）——但卡出现的**默认路径**是确定性派生
 

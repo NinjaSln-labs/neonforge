@@ -5,19 +5,19 @@
 
 ## 基本信息
 
-| 字段 | 值 |
-|------|----|
-| 产品版本 / commit | NeonForge `2e31c5f`（main，pilot 证据卡合并后） |
-| 模型 / Provider | 本机 Magpie `opendesign/deepseek-v4.1-flash-eco`（DSV4.1FE-OD，eco/慢速模式） |
-| 适配器 | NeonForge 无头适配器 v0：`prompt=none`、`tolerantArgs=1`、请求超时 900 秒 |
-| Agent | 自定义 `neonforge-terminal` 0.1.0：单个 `execute_bash` 工具，无 tmux/asciinema 容器侧安装；单命令超时 300 秒，最多 40 轮 |
-| Harness | Harbor `0.26.0` |
-| 数据集 | `terminal-bench@2.0`（git commit `69671fbaac6d67a7ef0dfec016cc38a64ef7a77c`；任务镜像 tag `alexgshaw/*:20251031`） |
-| 任务范围 | 10 个新任务（见结果表），每个 `--n-attempts 3`，共 30 trials；`--n-concurrent 2` |
-| 评估日期（UTC） | 2026-11-19；job 10:08:47 → 11:27:32（1h18m45s） |
-| 沙箱 | 与 pilot 相同的专用 QEMU/KVM VM：Ubuntu 24.04.5、6 vCPU、8 GB、100 GB；Docker 29.1.3；任务容器不挂宿主 Docker socket |
-| 凭据 | 仅宿主适配器进程持有 Magpie Key；VM、任务容器与验证容器不持有 |
-| 运行成本 | 本地 Magpie，无外部 API 账单；总 token 3,919,110 输入 / 283,073 输出（自定义 agent 不报缓存） |
+| 字段              | 值                                                                                                                       |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| 产品版本 / commit | NeonForge `2e31c5f`（main，pilot 证据卡合并后）                                                                          |
+| 模型 / Provider   | 本机 Magpie `opendesign/deepseek-v4.1-flash-eco`（DSV4.1FE-OD，eco/慢速模式）                                            |
+| 适配器            | NeonForge 无头适配器 v0：`prompt=none`、`tolerantArgs=1`、请求超时 900 秒                                                |
+| Agent             | 自定义 `neonforge-terminal` 0.1.0：单个 `execute_bash` 工具，无 tmux/asciinema 容器侧安装；单命令超时 300 秒，最多 40 轮 |
+| Harness           | Harbor `0.26.0`                                                                                                          |
+| 数据集            | `terminal-bench@2.0`（git commit `69671fbaac6d67a7ef0dfec016cc38a64ef7a77c`；任务镜像 tag `alexgshaw/*:20251031`）       |
+| 任务范围          | 10 个新任务（见结果表），每个 `--n-attempts 3`，共 30 trials；`--n-concurrent 2`                                         |
+| 评估日期（UTC）   | 2026-11-19；job 10:08:47 → 11:27:32（1h18m45s）                                                                          |
+| 沙箱              | 与 pilot 相同的专用 QEMU/KVM VM：Ubuntu 24.04.5、6 vCPU、8 GB、100 GB；Docker 29.1.3；任务容器不挂宿主 Docker socket     |
+| 凭据              | 仅宿主适配器进程持有 Magpie Key；VM、任务容器与验证容器不持有                                                            |
+| 运行成本          | 本地 Magpie，无外部 API 账单；总 token 3,919,110 输入 / 283,073 输出（自定义 agent 不报缓存）                            |
 
 ## 设计
 
@@ -29,18 +29,18 @@
 
 Harbor 内置统计：**30 trials、1 exception、mean 0.833、Pass@2 0.967**。该 mean 将异常按 0 计入；Pass@2 是小样本 UI 指标，不建议单独引用。本卡同时报告有效运行与任务层结果。
 
-| 任务 | 尝试数 | 有效 | 通过 | Reward 序列 | 输入 / 输出 tokens |
-|------|-------:|-----:|-----:|-------------|-------------------|
-| `cancel-async-tasks` | 3 | 3 | 2 | 1.0 / 1.0 / 0.0 | 544,439 / 43,470 |
-| `configure-git-webserver` | 3 | 3 | 1 | 0.0 / 0.0 / 1.0 | 650,711 / 45,984 |
-| `db-wal-recovery` | 3 | 3 | 3 | 1.0 / 1.0 / 1.0 | 106,312 / 8,210 |
-| `fix-code-vulnerability` | 3 | 3 | 3 | 1.0 / 1.0 / 1.0 | 264,347 / 6,977 |
-| `git-leak-recovery` | 3 | 3 | 3 | 1.0 / 1.0 / 1.0 | 41,767 / 5,596 |
-| `large-scale-text-editing` | 3 | 3 | 3 | 1.0 / 1.0 / 1.0 | 668,404 / 54,288 |
-| `multi-source-data-merger` | 3 | 3 | 3 | 1.0 / 1.0 / 1.0 | 81,625 / 15,765 |
-| `nginx-request-logging` | 3 | 3 | 2 | 1.0 / 1.0 / 0.0 | 81,878 / 10,391 |
-| `password-recovery` | 3 | 2 | 2 | exception / 1.0 / 1.0 | 808,917 / 37,675 |
-| `polyglot-c-py` | 3 | 3 | 3 | 1.0 / 1.0 / 1.0 | 670,710 / 54,717 |
+| 任务                       | 尝试数 | 有效 | 通过 | Reward 序列           | 输入 / 输出 tokens |
+| -------------------------- | -----: | ---: | ---: | --------------------- | ------------------ |
+| `cancel-async-tasks`       |      3 |    3 |    2 | 1.0 / 1.0 / 0.0       | 544,439 / 43,470   |
+| `configure-git-webserver`  |      3 |    3 |    1 | 0.0 / 0.0 / 1.0       | 650,711 / 45,984   |
+| `db-wal-recovery`          |      3 |    3 |    3 | 1.0 / 1.0 / 1.0       | 106,312 / 8,210    |
+| `fix-code-vulnerability`   |      3 |    3 |    3 | 1.0 / 1.0 / 1.0       | 264,347 / 6,977    |
+| `git-leak-recovery`        |      3 |    3 |    3 | 1.0 / 1.0 / 1.0       | 41,767 / 5,596     |
+| `large-scale-text-editing` |      3 |    3 |    3 | 1.0 / 1.0 / 1.0       | 668,404 / 54,288   |
+| `multi-source-data-merger` |      3 |    3 |    3 | 1.0 / 1.0 / 1.0       | 81,625 / 15,765    |
+| `nginx-request-logging`    |      3 |    3 |    2 | 1.0 / 1.0 / 0.0       | 81,878 / 10,391    |
+| `password-recovery`        |      3 |    2 |    2 | exception / 1.0 / 1.0 | 808,917 / 37,675   |
+| `polyglot-c-py`            |      3 |    3 |    3 | 1.0 / 1.0 / 1.0       | 670,710 / 54,717   |
 
 ### 汇总
 
@@ -53,12 +53,12 @@ Harbor 内置统计：**30 trials、1 exception、mean 0.833、Pass@2 0.967**。
 
 ## 失败与异常
 
-| 用例 | 现象 | 归因 | 是否产品问题 |
-|------|------|------|--------------|
-| `configure-git-webserver`（2 次） | `/tests/verify.sh` 返回 `❌ TEST FAILED: Web server returned HTTP 404` | agent 的服务器/仓库配置未满足验证脚本；模型实现波动 | 否（模型/agent 行为，非 harness） |
-| `cancel-async-tasks`（1 次） | `test_tasks_cancel_above_max_concurrent` 断言失败：期望的 `Task started` 计数不符 | 并发取消边界实现不完整 | 否（模型实现） |
-| `nginx-request-logging`（1 次） | `test_index_page_content` 与 `test_custom_404_page` 断言失败 | 页面内容/404 配置未满足要求 | 否（模型实现） |
-| `password-recovery`（1 次） | `RuntimeError: Command timed out after 300 seconds` | 自定义 agent 的单命令 300 秒上限；任务所需命令耗时更长 | 否（agent 配置限制，不是模型分数） |
+| 用例                              | 现象                                                                              | 归因                                                   | 是否产品问题                       |
+| --------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------ | ---------------------------------- |
+| `configure-git-webserver`（2 次） | `/tests/verify.sh` 返回 `❌ TEST FAILED: Web server returned HTTP 404`            | agent 的服务器/仓库配置未满足验证脚本；模型实现波动    | 否（模型/agent 行为，非 harness）  |
+| `cancel-async-tasks`（1 次）      | `test_tasks_cancel_above_max_concurrent` 断言失败：期望的 `Task started` 计数不符 | 并发取消边界实现不完整                                 | 否（模型实现）                     |
+| `nginx-request-logging`（1 次）   | `test_index_page_content` 与 `test_custom_404_page` 断言失败                      | 页面内容/404 配置未满足要求                            | 否（模型实现）                     |
+| `password-recovery`（1 次）       | `RuntimeError: Command timed out after 300 seconds`                               | 自定义 agent 的单命令 300 秒上限；任务所需命令耗时更长 | 否（agent 配置限制，不是模型分数） |
 
 ## 安全与边界
 

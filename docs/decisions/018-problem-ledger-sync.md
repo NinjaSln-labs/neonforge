@@ -1,4 +1,5 @@
 # ADR-018：问题台账 Local-first 同步与多设备合并（GitHub #15）
+
 - 状态: accepted
 - 日期: 2026-11-17
 - 相关: GitHub #15（问题台账云端同步 / 多设备）；README Roadmap V2 #5；`docs/design/stage-specs/V2-problem-ledger-sync.md`
