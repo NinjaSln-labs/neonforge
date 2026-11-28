@@ -120,7 +120,7 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
     })
   }
 
-  const approveToolCall = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg): void => {
+  const approveToolCall = (idx: number, tc: ToolCallMsg): void => {
     tlog('tool.approved', { name: tc.name }, 'system')
     tlog('card.resolved', { card: 'approval', action: 'approve', name: tc.name }, 'system')
     onApprovalResolved?.('approved')
@@ -231,7 +231,7 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
       'system',
     )
     addTrust(tc.args)
-    approveToolCall(calls, idx, tc)
+    approveToolCall(idx, tc)
   }
 
   // 批量「全部允许并记住」——一条消息内多个待授权文件一次批准整批
@@ -240,14 +240,11 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
     const pending = calls.filter((c) => c.status === 'need-approval' && toolRisk(c.name) === 'low')
     if (pending.length === 0) return
     pending.forEach((c) => addTrust(c.args))
-    pending.forEach((c) => {
-      const idx = calls.indexOf(c)
-      approveToolCall(calls, idx, c)
-    })
+    pending.forEach((c) => approveToolCall(calls.indexOf(c), c))
   }
 
   // 批准计划文件清单（追加语义 + 幂等标记 + 通知 main）
-  const approvePlan = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg): void => {
+  const approvePlan = (idx: number, tc: ToolCallMsg): void => {
     tlog(
       'tool.approved',
       {
@@ -282,7 +279,7 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
   }
 
   // 快照回滚（write/edit 写前已快照——按 file 匹配更新）
-  const revertToolCall = (calls: ToolCallMsg[], idx: number, tc: ToolCallMsg): void => {
+  const revertToolCall = (tc: ToolCallMsg): void => {
     if (!tc.file) return
     void window.neonforge.tools?.revert?.(tc.file, sessionId).then((r) => {
       setMessages((prev) =>
@@ -305,7 +302,8 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
   }
 
   // 可撤销：停止当前操作 = 中止整条链（kill bash + sid++ 失效旧流 + 卡标记已停止）
-  const stopToolCall = (_calls: ToolCallMsg[], _idx: number): void => {
+  // 2026-11-28 审计：原签名 (_calls, _idx) 两参数均不读取（全局中止语义）——删除避免误读为按卡停止
+  const stopToolCall = (): void => {
     void (window.neonforge.tools?.cancel?.() ?? Promise.resolve({ ok: false }))
     sessionRef.current++
     streamingSidRef.current = 0
@@ -340,7 +338,7 @@ export function useToolApproval(deps: UseToolApprovalDeps) {
       pending.length === 1 ? pending : pending.filter((tc) => toolRisk(tc.name) === 'low')
     for (const tc of targets) {
       const idx = calls.indexOf(tc)
-      if (idx >= 0) approveToolCall(calls, idx, tc)
+      if (idx >= 0) approveToolCall(idx, tc)
     }
   }
 

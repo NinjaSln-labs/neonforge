@@ -10,9 +10,9 @@ import {
   resetPlanApproved,
   syncPlanConfirmed,
   syncPlanApprovedFromStore,
-  isValidOpenUrl,
   isReadOnlyBash,
   resolveDeliveryTarget,
+  resolveOpenUrl,
   delegationBoundaryViolation,
 } from '../../src/main/tools'
 import { isKillablePid, killProcessGroupBestEffort } from '../../src/main/processGuard'
@@ -27,6 +27,17 @@ vi.mock('electron', () => ({
 }))
 
 const TMP = '/tmp/nf-unit-tools'
+
+// 2026-11-28 审计：isValidOpenUrl 原为生产导出但仅测试使用（@deprecated）——移入测试，
+// 语义等价（resolveOpenUrl 抛错 = 非法）
+function isValidOpenUrl(url: string, rootPath?: string): boolean {
+  try {
+    resolveOpenUrl(url, rootPath)
+    return true
+  } catch {
+    return false
+  }
+}
 
 describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 回滚）', () => {
   beforeEach(() => {

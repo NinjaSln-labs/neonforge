@@ -916,15 +916,6 @@ export function resolveOpenUrl(raw: string, rootPath?: string): string {
   }
   return pathToFileURL(path.resolve(abs)).href
 }
-/** @deprecated 用 resolveOpenUrl；保留给旧测——无 rootPath 时仅 http/https */
-export function isValidOpenUrl(url: string, rootPath?: string): boolean {
-  try {
-    resolveOpenUrl(url, rootPath)
-    return true
-  } catch {
-    return false
-  }
-}
 async function openExecutor(
   args: Record<string, unknown>,
   ctx: { rootPath?: string },

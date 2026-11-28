@@ -7,9 +7,7 @@ import type { ConversationState } from '../domain/conversationState'
 import type { TimelineLog } from './useTimelineLog'
 
 export interface ConversationTelemetryDeps {
-  goalConfirmed?: boolean
   messages: Msg[]
-  planConfirmed?: boolean
   stateRef: RefObject<ConversationState>
   stateVersion: number
   tlog: TimelineLog
@@ -17,9 +15,7 @@ export interface ConversationTelemetryDeps {
 }
 
 export function useConversationTelemetry({
-  goalConfirmed,
   messages,
-  planConfirmed,
   stateRef,
   stateVersion,
   tlog,
@@ -75,8 +71,6 @@ export function useConversationTelemetry({
     }
   }, [
     messages,
-    goalConfirmed,
-    planConfirmed,
     stateVersion, // 审计修正 2026-08-31：stateRef 字段变化不触发 effect——决策点异步置位（verifyThenResolve）后靠 version 重渲染补打（原写 ref 字段进依赖形同虚设）
   ])
   // 2026-08-08 状态变化打点（working / approval-pending / ready——统一状态机；变化才记录）

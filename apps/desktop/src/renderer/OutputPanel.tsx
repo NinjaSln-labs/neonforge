@@ -27,7 +27,6 @@ export default function OutputPanel({
   deliveryPkg,
   sessionId,
   onOpenFile,
-  onCloseProblem,
   onAdjustProblem,
   onConfirmed,
   onRerun,
@@ -39,7 +38,6 @@ export default function OutputPanel({
   deliveryPkg: DeliveryPackage | null
   sessionId?: string
   onOpenFile: (path: string) => void
-  onCloseProblem: () => void
   onAdjustProblem: () => void
   onConfirmed?: () => void // 2026-08-03 A5：交付包确认关闭 → 上层同步台账
   onRerun: (prompt: string) => void
@@ -102,7 +100,6 @@ export default function OutputPanel({
             pkg={deliveryPkg}
             sessionId={sessionId}
             rootPath={rootPath}
-            onClose={onCloseProblem}
             onAdjust={onAdjustProblem}
             onRerun={onRerun}
             onConfirmed={onConfirmed}
@@ -121,7 +118,6 @@ export default function OutputPanel({
             pkg={null}
             sessionId={sessionId}
             rootPath={rootPath}
-            onClose={onCloseProblem}
             onAdjust={onAdjustProblem}
             onRerun={onRerun}
             onConfirmed={onConfirmed}

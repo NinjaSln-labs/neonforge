@@ -46,7 +46,6 @@ export interface ApplyChunkDeps {
   messagesRef: RefObject<Msg[]>
   nextMsgId: () => string
   onActionPromiseHint?: (hint: string | null) => void
-  onReasoning?: (text: string) => void
   onToolResult?: (r: { name: string; file?: string; ok: boolean }) => void
   onWorkingChange?: (working: boolean) => void
   planRejectNudgedRef: RefObject<boolean>
@@ -97,7 +96,6 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
     messagesRef,
     nextMsgId,
     onActionPromiseHint,
-    onReasoning,
     onToolResult,
     onWorkingChange,
     planRejectNudgedRef,
@@ -150,7 +148,6 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
     // 事件层累积（每事件一次——双调安全）
     if (chunk.type === 'reasoning') {
       streamingRef.current.reasoning += chunk.text ?? ''
-      onReasoning?.(streamingRef.current.reasoning)
       setWorkingStage('思考中…')
     }
     if (chunk.type === 'content') {

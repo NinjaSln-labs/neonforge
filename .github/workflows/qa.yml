@@ -49,10 +49,11 @@ jobs:
         working-directory: apps/desktop
         run: npx vitest run
 
-      # L2 契约（类型安全——CI 必跑）
-      - name: L2 契约（tsc --noEmit）
+      # L2 契约（类型安全——CI 必跑；双 tsconfig：默认 = renderer+domain，main = 主进程+preload，
+      # 2026-11-28 审计：原仅跑默认 tsc → src/main 从未被 CI 类型检查，主进程类型错误可合入而不被发现）
+      - name: L2 契约（tsc --noEmit，双 tsconfig）
         working-directory: apps/desktop
-        run: npx tsc --noEmit
+        run: npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit
 
       # L3 组件交互（纯 DOM 断言无截图——跨平台稳定，CI 必跑；ddd-qa-chain 缺层 2026-08-02 补）
       - name: L3 组件交互（Playwright interaction）

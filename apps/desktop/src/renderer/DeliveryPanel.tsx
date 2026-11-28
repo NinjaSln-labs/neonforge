@@ -9,7 +9,6 @@ export default function DeliveryPanel({
   pkg,
   sessionId,
   rootPath,
-  onClose: _onClose,
   onAdjust,
   onRerun,
   onConfirmed,
@@ -17,7 +16,6 @@ export default function DeliveryPanel({
   pkg: DeliveryPackage | null
   sessionId?: string
   rootPath?: string
-  onClose: () => void
   onAdjust: () => void
   onRerun: (prompt: string) => void
   onConfirmed?: () => void // 2026-08-03 A5 审计修复：确认问题关闭 → 通知上层同步台账状态（closed）

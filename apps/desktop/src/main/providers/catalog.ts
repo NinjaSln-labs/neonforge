@@ -53,11 +53,6 @@ export function isModelTier(id: unknown): id is ModelTier {
   return id === 'flash' || id === 'pro'
 }
 
-/** @deprecated 用 isModelTier */
-export const isAllowedModel = isModelTier
-/** @deprecated 用 MODEL_TIERS */
-export const ALLOWED_MODELS = MODEL_TIERS
-
 /** 已解析缓存优先，否则 fallback（同步路径——stream/preheat/summarize） */
 export function resolveUpstreamModel(
   providerId: ProviderId,
