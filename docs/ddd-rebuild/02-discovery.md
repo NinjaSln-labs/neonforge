@@ -96,8 +96,8 @@
 | `task.plan_proposed` / `task.plan_confirmed` / `task.plan_rejected` | plan/files / point | Domain（规范名；旧名 `task.execution_*` 保留读取窗口） | 否 |
 | `task.resolution_proposed` / `task.resolution_confirmed` / `task.resolution_rejected` | summary / point | Domain（规范名；旧名 `task.achievement_*` 保留读取窗口） | 否 |
 | `session.pending_set` / `session.pending_cleared` | kind | Domain | 否 |
-| `dialogue.loop_guard` / `dialogue.forced_clarify` / `dialogue.needs_human` | rounds / underlying / reason | Domain | 否 |
-| `plan.approved` / `plan.rejected` | files / file+approvedList | Domain | 否 |
+| `dialogue.loop_guard` / `dialogue.forced_clarify` | rounds / underlying | Domain | 否（`dialogue.needs_human` 2026-11-28 ADR-019 删除——转人工由 `stuck.needs_human` 承载） |
+| `plan.approved` | files | Domain | 否（`plan.rejected` 2026-11-28 ADR-019 删除——由 `tool.blocked` gate=out-of-plan 承载） |
 | `tool.requested` / `tool.blocked` / `tool.executing` / `tool.executed` / `tool.failed` | name/args/gate/reason | Domain | 否 |
 | `tool.approved` / `tool.rejected` / `tool.remembered` | name/file | Domain | 否 |
 | `capability.checked` / `capability.ledger_updated` | capabilities/missing; capabilityId/ok | Domain | 否 |
@@ -106,7 +106,7 @@
 | `execution.forced` / `execution.released` / `execution.force_input` | reason/mode; planned/produced | Domain | 否 |
 | `stuck.escalated` / `stuck.needs_human` | message | Domain | 否 |
 | `problem.created` / `problem.rerun` / `problem.snapshot_updated` / `problem.closed` | problemId/title | Domain | 否 |
-| `card.shown` / `card.resolved` / `card.rejected` / `card.dismissed` | card/action/cause | Domain（UI 生命周期） | 否 |
+| `card.shown` / `card.resolved` / `card.rejected` | card/action | Domain（UI 生命周期） | 否（`card.dismissed` 2026-11-28 ADR-019 删除） |
 | `decision.requested` / `decision.resolved` | kind/since; point/action/reason | Domain | 否 |
 | `proposal.goal` / `proposal.plan` / `proposal.completion` / `proposal.clarify` | statement/files/evidence | Domain | 否 |
 | `protocol.text_fallback` | marker/content_snip | Domain | 否 |

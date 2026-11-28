@@ -33,9 +33,9 @@
 | `session.pending_cleared` | — | Task | 用户决策 | kind | Domain | 时间线、UI 解冻 |
 | `dialogue.loop_guard` | — | Task | 重复/文本回复达阈值（一级） | rounds | Domain | 注入 loop-guard 文本 |
 | `dialogue.forced_clarify` | — | Task | 达强制阈值（二级） | underlying | Domain | 系统强制澄清卡 |
-| `dialogue.needs_human` | — | Task | 强制卡也被拒/升级耗尽（三级） | reason | Domain | 状态栏提示 |
+| ~~`dialogue.needs_human`~~ | — | Task | ~~强制卡也被拒（三级）~~ | — | — | **2026-11-28 ADR-019 删除**——转人工由 `stuck.needs_human` 承载（三级路径未实现） |
 | `plan.approved` | — | PlannedFiles | 计划清单追加（方案确认/approve-files） | files | Domain | 写门控、交付 |
-| `plan.rejected` | — | PlannedFiles | 写清单外被拒 | file, approvedList | Domain | 引导补充清单 |
+| ~~`plan.rejected`~~ | — | PlannedFiles | ~~写清单外被拒~~ | — | — | **2026-11-28 ADR-019 删除**——由 `tool.blocked` gate=out-of-plan 承载 |
 | `tool.requested` | — | ToolInvocation | 模型 tool_call | name, args | Domain | 时间线、工具卡 |
 | `tool.blocked` | — | ToolInvocation | pending/未确认/清单外/策略拒绝 | name, gate, reason | Domain | 引导模型、审计 |
 | `tool.executing` | — | ToolInvocation | 开始执行 | name, approved | Domain | 时间线 |
@@ -54,7 +54,7 @@
 | `problem.snapshot_updated` | — | ProblemInstance | 目标/授权快照回写 | problemId, field | Domain | 台账、断点续做 |
 | `problem.closed` | — | ProblemInstance | 用户确认关闭 | problemId | Domain | 台账终态 |
 | `card.shown` | — | UI 卡 | 卡弹出 | card, name, args | Domain（UI 生命周期） | 时间线、去重 |
-| `card.resolved` / `card.rejected` / `card.dismissed` | — | UI 卡 | 卡确认/拒绝/消失 | card, action, cause | Domain（UI 生命周期） | 时间线、审计 |
+| `card.resolved` / `card.rejected` | — | UI 卡 | 卡确认/拒绝 | card, action | Domain（UI 生命周期） | 时间线、审计（`card.dismissed` 2026-11-28 ADR-019 删除） |
 | `decision.requested` | — | Task | 决策点出现 | kind, since | Domain | UI 卡、审计 |
 | `decision.resolved` | — | Task | 决策确认/拒绝 | point, action, reason | Domain | 回填模型、审计 |
 | `proposal.goal` | — | Task | GoalProposal 结构化解析 | statement, assumptions[{text,source}] | Domain | 决策点、审计 |

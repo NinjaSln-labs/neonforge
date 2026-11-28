@@ -27,3 +27,4 @@
 | 016 | 机制拒绝事件 gate.denied（canExecute 结构化拒绝来源 + timeline 领域事件）          | accepted | 2026-11-17 |
 | 017 | 多模型网关与扩展能力治理（显式模型选择 + ModelProfile 扩展 + 能力指纹信任重审）   | accepted | 2026-11-17 |
 | 018 | 问题台账 local-first 同步（main 权威 + 加密快照 + 多设备确定性合并）             | accepted | 2026-11-17 |
+| 019 | 死事件登记清理（删 3 个被取代事件；保留 2 个预留登记）                          | accepted | 2026-11-28 |

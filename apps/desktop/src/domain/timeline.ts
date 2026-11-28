@@ -53,10 +53,11 @@ export type TimelineEventType =
   // —— Dialogue 聚合：无进展对话强制澄清（ADR-010——UAT-Sim A-024/A-025）——
   | 'dialogue.loop_guard' // 一级介入：loop guard 指令注入模型（载荷：rounds）
   | 'dialogue.forced_clarify' // 二级介入：系统强制澄清卡弹出（载荷：underlying）
-  | 'dialogue.needs_human' // 三级兜底：强制卡也被拒 → 人工接管（载荷：reason）
+  // 2026-11-28 审计：dialogue.needs_human 删除（ADR-010 三级路径从未实现；
+  // 「转人工」由 stuck.needs_human 承载——见 ADR-019）
   // —— PlannedFiles：宿主边界（06 §1.2）——
   | 'plan.approved' // approve-files 批准（载荷：files 新增清单——追加语义）
-  | 'plan.rejected' // 写清单外被拒（载荷：file/approvedList——拒绝带边界）
+  // 2026-11-28 审计：plan.rejected 删除（清单外拦截由 tool.blocked gate=out-of-plan 承载——见 ADR-019）
   // —— ToolRegistry：工具（06 §1.3）——
   | 'tool.requested' // 模型请求工具（载荷：name/args）
   | 'tool.blocked' // 工具被拦（载荷：gate——pending/confirm/out-of-plan/policy + reason）
@@ -87,7 +88,7 @@ export type TimelineEventType =
   // —— 用量与成本（BC-12）——
   | 'usage.recorded' // Provider 真实 usage 已入账（tokens/cost）
   | 'usage.budget_threshold_reached' // 周期预算达阈值（默认提醒一次；不硬中断）
-  | 'usage.period_closed' // 周期结算（预留）
+  | 'usage.period_closed' // 周期结算（V2 预留——ADR-019）
   // —— ChangeSet（BC-10）——
   | 'changeset.proposed' // 变更集产生（真实变更记录）
   | 'changeset.reviewed' // 用户审核变更项
@@ -120,7 +121,8 @@ export type TimelineEventType =
   | 'card.shown' // 卡弹出（载荷：card/name?/args?）
   | 'card.resolved' // 卡被确认/批准（载荷：card/action）
   | 'card.rejected' // 卡被拒绝（载荷：card/action）
-  | 'card.dismissed' // 卡消失/任务重置（载荷：card/cause）
+  // 2026-11-28 审计：card.dismissed 删除（卡终结由 card.resolved/card.rejected 承载，
+  // 任务重置由 conversation.created 承载——见 ADR-019）
   // —— Decision：领域决策点（意图确认重设计 §3.5——与 card.* 并存：card=UI 卡生命周期，decision=领域决策点）——
   | 'decision.requested' // 决策点出现（载荷：kind/since——决策点内容快照随 S3 增强）
   | 'decision.resolved' // 决策被确认/拒绝（载荷：point/action——reason 随 S3 回填）
@@ -208,9 +210,7 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
   'session.pending_cleared': { domain: 'session', role: 'system', detailKeys: ['kind'] },
   'dialogue.loop_guard': { domain: 'session', role: 'system', detailKeys: ['rounds'] },
   'dialogue.forced_clarify': { domain: 'session', role: 'system', detailKeys: ['underlying'] },
-  'dialogue.needs_human': { domain: 'session', role: 'system', detailKeys: ['reason'] },
   'plan.approved': { domain: 'plan', role: 'system', detailKeys: ['files'] },
-  'plan.rejected': { domain: 'plan', role: 'tool', detailKeys: ['file'] },
   'tool.requested': { domain: 'tool', role: 'tool', detailKeys: ['name', 'args'] },
   'tool.blocked': { domain: 'tool', role: 'tool', detailKeys: ['name', 'gate', 'reason'] },
   'tool.executing': {
@@ -259,8 +259,10 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
     role: 'system',
     detailKeys: ['limit', 'spent'],
   },
+  // 2026-11-28 审计：保留登记（V2 周期结算预留——见 ADR-019）
   'usage.period_closed': { domain: 'usage', role: 'system', detailKeys: ['period', 'total'] },
   'changeset.proposed': { domain: 'changeset', role: 'system', detailKeys: ['changeId', 'files'] },
+  // 2026-11-28 审计：保留登记（V1.5 变更审核接线时启用——见 ADR-019）
   'changeset.reviewed': {
     domain: 'changeset',
     role: 'system',
@@ -343,7 +345,6 @@ export const TIMELINE_EVENT_SPECS: Record<TimelineEventType, TimelineEventSpec> 
   'card.shown': { domain: 'card', role: 'system', detailKeys: ['card'], dedupe: true },
   'card.resolved': { domain: 'card', role: 'system', detailKeys: ['card', 'action'] },
   'card.rejected': { domain: 'card', role: 'system', detailKeys: ['card', 'action'] },
-  'card.dismissed': { domain: 'card', role: 'system', detailKeys: ['card', 'cause'] },
   'decision.requested': {
     domain: 'decision',
     role: 'system',
