@@ -15,6 +15,20 @@ npm run dev     # 开发模式（vite + electron）
 npm start       # 以已构建产物启动 electron
 ```
 
+> **`npm ci` 之后需要手动装 Electron 二进制**（仅当要跑 Electron 真机/L3/L4/探针时）。
+> electron 43 的 npm 包**没有 postinstall 脚本**（`package.json` 的 `scripts` 为空），
+> 二进制只在首次 `require('electron')` 时由 `node_modules/electron/index.js` 懒下载。
+> 干净安装后直接跑 `npm start` / 产品探针会报 `electron binary missing`。
+>
+> ```bash
+> # 走镜像（install.js 不读 .npmrc 的 electron_mirror，必须用环境变量）
+> ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ node node_modules/electron/install.js
+> ls node_modules/electron/dist/            # Linux: electron；macOS: Electron.app
+> ```
+>
+> 纯 L1/L2/L3(Playwright) 不需要该二进制——`vitest.config.ts` 用
+> `ELECTRON_OVERRIDE_DIST_PATH` 主动切断懒下载，单测不会触发 100MB 下载。
+
 ## 验证链
 
 | 层          | 命令（均在 `apps/desktop` 下）                                                |
@@ -31,7 +45,9 @@ npm start       # 以已构建产物启动 electron
 ## 构建与产物
 
 - `dist/`——main / preload / renderer 构建产物（e2e 直接加载，入口脚本会自动检测过期）
-- electron 镜像下载走 `.npmrc` 配置的镜像源
+- 打包只含 `dist/**` + `package.json`（+ `extraResources` 的 LSP server）。monaco/react 是
+  **devDependencies**：Vite 已把它们打进 `dist/renderer`，运行期不需要在 `node_modules` 里再放一份
+  （否则 asar 会从 11 MB 膨胀到 113 MB）
 
 ## 上下文与约定
 
