@@ -143,7 +143,9 @@ CI 的 L3 断言 `capability.checked` 期望 1 条、实际 2 条。取证：给
 
 原本 CI 的 Prettier 步骤只覆盖 `apps/desktop/src|tests|*.config.*` 与仓库根配置文件；`lint-staged` 的配置在 `apps/desktop` 下（lefthook `root: apps/desktop`），因此 `docs/` 与仓库根 `*.md` 既不在提交前格式化，也不在 CI 校验——实测 157 个文件、约 10,346 行需要重排。
 
-- 一次性 `prettier --write` 重排存量（157 个 md + `DEVELOPMENT.md`；纯换行/表格对齐，语义中性）
+- 一次性 `prettier --write` 重排存量（157 个 md + `DEVELOPMENT.md`）
+  - **并非纯排版**：Prettier 的 Markdown 打印器会把正文里的裸 `*` / `~~` 当强调/删除线标记重写，实测破坏了 4 处字面内容——`--nf-space-*` 等通配变成 `-_`、`task.*_proposed` 变 `task._\_proposed`、`plan_*` → `plan__`、`A-001~010` 变 `A-001~~010`（渲染成删除线）；另有一处引用块三空格续行被折叠进列表项
+  - 已逐一修复（字面通配与区间改用反引号包裹）+ 补丁提交 `fc138ec` / `a286936`；复核方式：用 marked 把改前改后各渲染一遍、比对剥离标签后的纯文本，剩余差异仅表格分隔线宽度与代码块内 CSS 十六进制大小写（渲染等价）
 - CI `Format check` 与 `npm run format` / `format:check` 扩到 `../../docs/**/*.md` 与 `../../*.md`
 - `lint-staged` 增加 `../../docs/**/*.md` / `../../*.md` 两条（已验证 lint-staged 能接受仓库根相对 glob 并回写暂存区）
 
