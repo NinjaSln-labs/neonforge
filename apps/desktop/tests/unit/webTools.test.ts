@@ -17,8 +17,10 @@ function cfg(p: Partial<WebAccessConfig> = {}): WebAccessConfig {
     searchUrl: null,
     hasSearchKey: false,
     searchKey: null,
+    searchKeySource: 'none',
     keenableApiKey: null,
     hasKeenableKey: false,
+    keenableApiKeySource: 'none',
     keenablePublicTrial: false,
     ...p,
   }

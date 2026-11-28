@@ -68,6 +68,12 @@ jobs:
         working-directory: apps/desktop
         run: npx tsc -p tsconfig.json --noEmit && npx tsc -p tsconfig.main.json --noEmit
 
+      # L2b 测试类型（tsconfig.tests.json：tests/unit 与其引用的 src 一起检查；
+      # 2026-11-28 审计 D-4：单测原先不在任何 tsconfig include 里——测试里的类型错误只能靠运气发现）
+      - name: L2b 测试类型（tsc -p tsconfig.tests.json）
+        working-directory: apps/desktop
+        run: npx tsc -p tsconfig.tests.json --noEmit
+
       # L3 组件交互（纯 DOM 断言无截图——跨平台稳定，CI 必跑；ddd-qa-chain 缺层 2026-08-02 补）
       - name: L3 组件交互（Playwright interaction）
         working-directory: apps/desktop

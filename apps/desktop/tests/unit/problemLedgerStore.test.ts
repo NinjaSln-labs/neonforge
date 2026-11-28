@@ -21,13 +21,13 @@ const PASS = { NEONFORGE_SYNC_PASSPHRASE: 'unit-test-passphrase' } as NodeJS.Pro
 
 function problem(over: Partial<LedgerProblem> & { id: string }): LedgerProblem {
   return {
-    id: over.id,
     title: over.title ?? '问题',
     status: 'executing',
     updatedAt: '10:00',
     updatedAtIso: '2026-11-17T10:00:00.000Z',
     revision: 1,
     ...over,
+    id: over.id,
   }
 }
 

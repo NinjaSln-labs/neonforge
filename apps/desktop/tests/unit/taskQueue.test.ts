@@ -59,9 +59,9 @@ describe('TaskQueue（BC-11）', () => {
   it('reorder：显式重排；不能重排运行/终态项', () => {
     let s = enqueueTask(q(), { id: 'e1', taskRef: 't1', title: '一' }, at)
     s = enqueueTask(s, { id: 'e2', taskRef: 't2', title: '二' }, at)
-    s = reorderTask(s, 'e2', 0)
+    s = reorderTask(s, 'e2', 0, at)
     expect(s.entries.map((e) => e.id)).toEqual(['e2', 'e1'])
     s = startTask(s, 'e2', at)
-    expect(() => reorderTask(s, 'e2', 1)).toThrow(/排队/)
+    expect(() => reorderTask(s, 'e2', 1, at)).toThrow(/排队/)
   })
 })

@@ -74,7 +74,11 @@ const approvalReq = (r: Partial<ApprovalRequest> = {}): ApprovalRequest => ({
   risk: 'high',
   ...r,
 })
-const reason = (kind: RejectReason['kind'], text?: string): RejectReason => ({ kind, text })
+const reason = (kind: RejectReason['kind'], text?: string, target?: string): RejectReason => ({
+  kind,
+  text,
+  ...(target ? { target } : {}),
+})
 
 // 目标+方案已确认的基准态（多数门控/派生测试前置）
 function confirmed(s: ConversationState = initialState()): ConversationState {
@@ -537,10 +541,11 @@ describe('Inv 5 推进保障——decideProgressGuarantee', () => {
   })
 
   it('已有推进（产出/提议/证据任一）→ auto', () => {
-    const base = { toolsAvailable: true }
-    expect(decideProgressGuarantee(confirmed(), { produced: true, ...base }).mode).toBe('auto')
-    expect(decideProgressGuarantee(confirmed(), { proposed: true, ...base }).mode).toBe('auto')
-    expect(decideProgressGuarantee(confirmed(), { providedEvidence: true, ...base }).mode).toBe(
+    // 2026-11-28 审计（D-4）：TurnProgress 四个字段齐全（原测试只传一个——类型检查开启后暴露）
+    const none = { produced: false, proposed: false, providedEvidence: false, toolsAvailable: true }
+    expect(decideProgressGuarantee(confirmed(), { ...none, produced: true }).mode).toBe('auto')
+    expect(decideProgressGuarantee(confirmed(), { ...none, proposed: true }).mode).toBe('auto')
+    expect(decideProgressGuarantee(confirmed(), { ...none, providedEvidence: true }).mode).toBe(
       'auto',
     )
   })

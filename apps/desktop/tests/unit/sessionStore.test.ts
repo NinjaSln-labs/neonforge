@@ -12,7 +12,7 @@ import {
   SESSION_MAX,
   SESSION_VERSION,
 } from '../../src/renderer/sessionStore'
-import { initialState } from '../../src/domain/conversationState'
+import { initialState, type DecisionContent } from '../../src/domain/conversationState'
 import { toTaskSnapshot } from '../../src/domain/taskSnapshot'
 
 function stubLocalStorage(): void {
@@ -157,7 +157,9 @@ describe('sessionStore（断点续做——会话持久化）', () => {
   })
 
   it('loadSession：损坏 JSON → null（不崩）', () => {
-    ;(globalThis as Record<string, unknown>).localStorage.setItem(SESSION_KEY, 'not-json')
+    ;(
+      globalThis as unknown as { localStorage: { setItem(k: string, v: string): void } }
+    ).localStorage.setItem(SESSION_KEY, 'not-json')
     expect(loadSession()).toBeNull()
   })
 
@@ -176,7 +178,7 @@ describe('sessionStore（断点续做——会话持久化）', () => {
 describe('sessionStore decisionContent 序列化（S3——§8.2 E）', () => {
   beforeEach(() => stubLocalStorage())
 
-  const PLAN_CONTENT: Record<string, unknown> = {
+  const PLAN_CONTENT: DecisionContent = {
     kind: 'plan',
     since: '2026-08-16T00:00:00.000Z',
     proposal: {
@@ -185,7 +187,7 @@ describe('sessionStore decisionContent 序列化（S3——§8.2 E）', () => {
         { path: 'src/main.ts', reason: '核心逻辑' },
         { path: 'src/utils.ts', reason: '工具函数' },
       ],
-      assumptions: ['使用 ESM'],
+      assumptions: [{ text: '使用 ESM', source: 'model_inference' }],
       verificationPlan: ['npx tsc --noEmit'],
     },
   }
@@ -201,14 +203,18 @@ describe('sessionStore decisionContent 序列化（S3——§8.2 E）', () => {
     ]
     const out = serializeMessages(msgs)
     expect(out[0].decisionContent).toEqual(PLAN_CONTENT)
-    expect(out[0].decisionContent?.proposal?.files).toHaveLength(2)
+    const proposal = out[0].decisionContent?.proposal
+    expect(proposal && 'files' in proposal ? proposal.files.length : 0).toBe(2)
   })
 
   it('saveSession → loadSession 往返：decisionContent 不丢（goal 决策点）', () => {
-    const goalContent: Record<string, unknown> = {
+    const goalContent: DecisionContent = {
       kind: 'goal',
       since: '2026-08-16T00:00:00.000Z',
-      proposal: { statement: '做一个待办清单应用', assumptions: ['用 React'] },
+      proposal: {
+        statement: '做一个待办清单应用',
+        assumptions: [{ text: '用 React', source: 'user_choice' }],
+      },
     }
     saveSession([
       {
