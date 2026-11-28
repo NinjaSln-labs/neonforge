@@ -852,6 +852,29 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
             'tool',
           )
         }
+        // 2026-08-08 O2：check-capability 检测结果——能力齐备 → 工具卡隐藏（hidden——不打扰用户，结果仍回填模型）；
+        // 缺失/异常（needsUser）→ 展示（用户需实质决策：安装/换方案）。
+        // 2026-11-28 审计修复：本打点原写在 setMessages updater 内——React StrictMode 开发构建双调 updater
+        // → capability.checked 双发（L3 实测 1 次 execute / 2 次事件）；updater 必须保持纯函数，
+        // 副作用（tlog / summarize）移到 updater 之前。
+        const capSummary =
+          r.ok && tc.name === 'check-capability'
+            ? summarizeCapability(
+                r.data as { capabilities?: Array<{ id: string; status: string; detail?: string }> },
+              )
+            : null
+        if (capSummary) {
+          tlog(
+            'capability.checked',
+            {
+              capabilities:
+                (r.data as { capabilities?: Array<{ id: string; status: string }> })
+                  ?.capabilities ?? [],
+              missing: capSummary.needsUser,
+            },
+            'tool',
+          )
+        }
         setMessages((prev) => {
           if (prev.length === 0) return prev
           // 2026-11-15 审查修复：工具结果可能晚于更新的 assistant 消息落地——按稳定 id 在全部消息中
@@ -873,24 +896,16 @@ export function createApplyChunk(deps: ApplyChunkDeps) {
             if (!isThisCall(c) || c.status !== 'pending') return c
             return r.ok
               ? (() => {
-                  // 2026-08-08 O2：check-capability 检测结果——能力齐备 → 工具卡隐藏（hidden——用户不被打扰，结果仍回填模型）；
-                  // 缺失/异常（needsUser）→ 展示（用户需实质决策：安装/换方案）
+                  // 2026-08-08 O2：check-capability 检测结果——能力齐备 → 工具卡隐藏；
+                  // 打点已移到 updater 之前（见上——StrictMode 双调致双发修复），此处只做纯渲染数据。
                   if (tc.name === 'check-capability') {
-                    const cap = summarizeCapability(
-                      r.data as {
-                        capabilities?: Array<{ id: string; status: string; detail?: string }>
-                      },
-                    )
-                    tlog(
-                      'capability.checked',
-                      {
-                        capabilities:
-                          (r.data as { capabilities?: Array<{ id: string; status: string }> })
-                            ?.capabilities ?? [],
-                        missing: cap.needsUser,
-                      },
-                      'tool',
-                    )
+                    const cap =
+                      capSummary ??
+                      summarizeCapability(
+                        r.data as {
+                          capabilities?: Array<{ id: string; status: string; detail?: string }>
+                        },
+                      )
                     return {
                       ...c,
                       status: 'done' as const,

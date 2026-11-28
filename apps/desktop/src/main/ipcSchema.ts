@@ -195,7 +195,6 @@ export const IPC_SCHEMAS = {
       probe: { type: 'boolean' },
     },
   },
-  apiKey: { type: 'string', minLength: 1, maxLength: 8192 },
   apiKeySet: {
     type: 'object',
     properties: {

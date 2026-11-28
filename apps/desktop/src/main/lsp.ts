@@ -190,10 +190,6 @@ export class LspService {
     this.diagnostics.clear()
   }
 
-  isConnected(): boolean {
-    return !!this.conn?.isRunning()
-  }
-
   private requireConn(): LspConnection {
     if (!this.conn || !this.conn.isRunning()) throw new Error('LSP 未连接——打开项目后自动连接')
     return this.conn

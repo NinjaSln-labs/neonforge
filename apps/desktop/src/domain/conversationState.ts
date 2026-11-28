@@ -32,12 +32,6 @@ export interface GoalProposal {
   assumptions: Assumption[] // 模型的关键假设（用户从未确认过的细节——必须显式呈现）
 }
 
-/** 方案文件条目 */
-export interface PlanFileEntry {
-  path: string
-  reason: string
-}
-
 /** 方案提议（模型产出——替代 parseExecutionPlan 的裸文件集合） */
 export interface PlanProposal {
   summary: string // 一句话方案
@@ -141,9 +135,6 @@ export interface ConversationState {
   unresolvedTextReplies: number // ADR-010 T2：pending 存在期间用户连续文本回复数（决策清零）
 }
 
-/** P2-02：聚合根语义名 Task 的别名（历史文件名为 conversationState——避免新人误读聚合是 Conversation） */
-export type TaskState = ConversationState
-
 export const initialState = (): ConversationState => ({
   goalConfirmed: false,
   planConfirmed: false,
@@ -225,9 +216,6 @@ export function userDecided(
       // A-025（UAT-Sim 2026-09-07）：resolution = 任务边界——planConfirmed 必须重置，否则同会话
       // 下一任务的执行确认卡渲染条件 `!planConfirmed` 恒假 → 卡不渲染（真机实证 seq 848/851）
       next.planConfirmed = false
-    }
-    if (point === 'approval') {
-      // 确认点不处理 approval（approval 走 approvalDecided）——防御：不推进任何确认位
     }
   } else {
     const reason = decision.reason

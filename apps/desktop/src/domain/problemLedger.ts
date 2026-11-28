@@ -1,6 +1,5 @@
 // BC-06 问题台账：同步协议与合并（ADR-018 / GitHub #15）。
 // 纯函数：无 IO；main 存储与加密传输分别位于 problemLedgerStore / problemSyncCrypto。
-export const PROBLEM_LEDGER_SCHEMA = 1
 export const PROBLEMS_MAX = 20
 export const PROBLEM_STATUSES = [
   'understanding',

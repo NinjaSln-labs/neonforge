@@ -1,6 +1,5 @@
 export type {
   ProviderId,
-  ModelID,
   ModelTier,
   ModelProfileId,
   ModelSelection,

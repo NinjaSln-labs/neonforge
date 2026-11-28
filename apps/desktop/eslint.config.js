@@ -69,7 +69,8 @@ export default tseslint.config(
   },
   // 构建/测试配置（Node 环境）
   {
-    files: ['apps/desktop/{vite,vitest,playwright,eslint}.config.*'],
+    // 2026-11-28 审计：路径相对 config 目录——原 'apps/desktop/…' 前缀会被拼成 apps/desktop/apps/desktop/…（死规则）
+    files: ['**/*.config.*'],
     languageOptions: {
       globals: globals.node,
     },

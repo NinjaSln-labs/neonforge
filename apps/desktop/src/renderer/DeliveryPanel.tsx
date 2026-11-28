@@ -274,7 +274,6 @@ export default function DeliveryPanel({
         applied: '已应用',
         reverted: '已回滚',
         conflicted: '有冲突',
-        superseded: '已替代',
       }[changeSet.status as 'proposed'] ?? changeSet.status)
     : null
 

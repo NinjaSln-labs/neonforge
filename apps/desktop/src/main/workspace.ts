@@ -31,9 +31,6 @@ export class WorkspaceService {
   getCurrentRoot(): string | null {
     return this.currentRoot
   }
-  setCurrentRoot(p: string | null): void {
-    this.currentRoot = p
-  }
 
   async openFolder(win: BrowserWindow | null): Promise<string | null> {
     // 测试钩子：跳过系统对话框，直接打开指定目录

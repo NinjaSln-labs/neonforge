@@ -52,6 +52,8 @@ Thumbs.db
 *.blockmap
 *.app/
 test-results/
+playwright-report/
+blob-report/
 aliment/
 
 # Orca ADE（本机配置，不入仓）
