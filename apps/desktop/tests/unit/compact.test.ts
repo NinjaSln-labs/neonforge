@@ -1,24 +1,20 @@
 import { describe, it, expect } from 'vitest'
+import { compaction, estimateTokens, COMPACT_KEEP_RECENT } from '../../src/main/compact'
 import {
-  decideCompact,
   compactHint,
-  compaction,
-  estimateTokens,
-  COMPACT_KEEP_RECENT,
-} from '../../src/main/compact'
+  COMPACT_HINT_THRESHOLD,
+  COMPACT_HINT_KEEP,
+} from '../../src/domain/compactionPolicy'
 
-describe('decideCompact（策略层——既有）', () => {
-  it('未超阈值 → 不压缩', () => {
-    expect(decideCompact(10)).toEqual({ shouldCompact: false, keep: 10, drop: 0 })
+describe('compactHint（UI 提示单源——renderer 与 main 共同导入）', () => {
+  it('未超阈值 → 不提示', () => {
+    expect(compactHint(COMPACT_HINT_THRESHOLD)).toBeNull()
   })
 
-  it('超阈值（24）→ 压缩保留 12', () => {
-    expect(decideCompact(30)).toEqual({ shouldCompact: true, keep: 12, drop: 18 })
-  })
-
-  it('compactHint：超阈值给提示文案', () => {
-    expect(compactHint(30)).toContain('压缩前 18 条')
-    expect(compactHint(10)).toBeNull()
+  it('超阈值 → 提示压缩条数与保留条数', () => {
+    expect(compactHint(30)).toBe(
+      `对话已超过 ${COMPACT_HINT_THRESHOLD} 条——将压缩前 ${30 - COMPACT_HINT_KEEP} 条为摘要（上下文不丢）`,
+    )
   })
 })
 

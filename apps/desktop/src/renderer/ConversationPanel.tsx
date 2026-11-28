@@ -71,6 +71,8 @@ import { getDemoBridge } from './demoBridge'
 // V1.5 S1 Task 1.3：协议工具接线（ADR-009 拦截点——模型主动产出决策内容的通道；
 // 判定器纯函数 domain 单源——renderer 只做信号翻译 + setPendingState 承载）
 import { PROTOCOL_TOOL_NAMES } from '../domain/protocolTools'
+// 2026-11-28 审计：压缩提示阈值/文案与 main 单源（原先 inline 24/12）
+import { compactHint } from '../domain/compactionPolicy'
 
 // ticket 04：对话最小闭环（D0 §2/§3.4）——输入发送 → Gateway 流式 → 消息/呼吸光条/推理展示
 // 消费 02：streamChat（四档 basic）+ ModelRouter（默认 Flash）；错误分支：Key 失效内嵌更新 / 服务故障提示
@@ -643,10 +645,7 @@ export default function ConversationPanel({
   const demoTrust = !!demo?.trustLadder
   const demoDod = !!demo?.dodAlign
   const compactCount = demo?.compactHistory ?? 0
-  const compactNote =
-    compactCount > 24
-      ? `对话已超过 24 条——将压缩前 ${compactCount - 12} 条为摘要（上下文不丢）`
-      : null
+  const compactNote = compactHint(compactCount)
   const onDeliver = (pkg: DeliveryPackage) => {
     getDemoBridge()?.onDeliver?.(pkg)
   }
