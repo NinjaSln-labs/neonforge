@@ -56,7 +56,7 @@ describe('problemStore（问题台账——创建/持久化）', () => {
   })
 
   it('loadProblems：损坏 JSON → fallback（不崩）', () => {
-    ;(globalThis as Record<string, unknown>).localStorage.setItem(PROBLEMS_KEY, '{broken')
+    globalThis.localStorage.setItem(PROBLEMS_KEY, '{broken')
     expect(loadProblems()).toEqual([])
   })
 
@@ -152,14 +152,19 @@ describe('问题会话快照（基线 §21 断点续做深度——2026-08-02 �
 
   it('updateProblemSnapshot：替换语义（patch 整字段覆盖；调用方读取+追加）', () => {
     let p = createProblem('整理发票')
-    p = updateProblemSnapshot(p, { authorized: ['[write] /tmp/a.txt'] })
-    expect(p.snapshot?.authorized).toEqual(['[write] /tmp/a.txt'])
+    // 2026-11-28 审计（D-4）：authorized 是结构化条目（{tool,file}），不是字符串——
+    // 生产写入方 MainWorkspace.tsx:539 即传对象；原测试用字符串从未被类型检查。
+    p = updateProblemSnapshot(p, { authorized: [{ tool: 'write', file: '/tmp/a.txt' }] })
+    expect(p.snapshot?.authorized).toEqual([{ tool: 'write', file: '/tmp/a.txt' }])
     // 调用方追加模式（MainWorkspace：读取 → 展开 → 传新数组）
     p = updateProblemSnapshot(p, {
-      authorized: [...(p.snapshot?.authorized ?? []), '[write] /tmp/b.txt'],
+      authorized: [...(p.snapshot?.authorized ?? []), { tool: 'write', file: '/tmp/b.txt' }],
       pending: ['确认分类'],
     })
-    expect(p.snapshot?.authorized).toEqual(['[write] /tmp/a.txt', '[write] /tmp/b.txt'])
+    expect(p.snapshot?.authorized).toEqual([
+      { tool: 'write', file: '/tmp/a.txt' },
+      { tool: 'write', file: '/tmp/b.txt' },
+    ])
     expect(p.snapshot?.pending).toEqual(['确认分类'])
     expect(p.snapshot?.goal).toBe('整理发票') // 未改字段保留
   })

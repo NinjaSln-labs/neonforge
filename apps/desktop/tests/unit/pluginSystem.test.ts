@@ -72,7 +72,7 @@ describe('PluginRegistry（ticket 08——内置插件注册与生命周期钩�
     r.register({
       name: 'ext',
       version: '1',
-      trust: 'trusted',
+      trust: 'user-authorized',
       capabilities: [{ id: 'read_file', name: '读取文件', description: '', risk: 'none' }],
     })
     r.setActive('ext', false)
@@ -81,7 +81,7 @@ describe('PluginRegistry（ticket 08——内置插件注册与生命周期钩�
     r.register({
       name: 'ext',
       version: '1',
-      trust: 'trusted',
+      trust: 'user-authorized',
       capabilities: [
         { id: 'read_file', name: '读取文件', description: '', risk: 'none' },
         { id: 'write_file', name: '写文件', description: '', risk: 'high' },

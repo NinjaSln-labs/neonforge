@@ -20,7 +20,9 @@ import { getPlannedFilesStore } from '../../src/main/plannedFilesStore.instance'
 import { getTrustPolicyStore } from '../../src/main/trustPolicyStore.instance'
 
 // 2026-08-06 open 工具（用户「帮我打开」）：mock electron shell——vitest node 环境无 electron
-const { openExternalMock } = vi.hoisted(() => ({ openExternalMock: vi.fn(async () => {}) }))
+const { openExternalMock } = vi.hoisted(() => ({
+  openExternalMock: vi.fn(async (_url: string) => {}),
+}))
 vi.mock('electron', () => ({
   app: { getPath: () => '/tmp/nf-unit-tools' },
   shell: { openExternal: openExternalMock },
@@ -263,7 +265,7 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     const file = path.join(TMP, 'e.txt')
     const r = revertToolFile(file)
     expect(r.ok).toBe(false)
-    expect(r.error).toContain('无快照')
+    if (!r.ok) expect(r.error).toContain('无快照')
   })
 
   it('read：相对路径必须解析到 rootPath 下（v37 修复——防止读到 main cwd 同名文件）', async () => {
@@ -375,7 +377,7 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     try {
       const denied = await resolveDeliveryTarget(outside, TMP)
       expect(denied.ok).toBe(false)
-      expect(denied.error).toMatch(/项目根内/)
+      if (!denied.ok) expect(denied.error).toMatch(/项目根内/)
     } finally {
       rmSync(outside, { force: true })
     }
@@ -388,7 +390,7 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     try {
       const escaped = await resolveDeliveryTarget(link, TMP)
       expect(escaped.ok).toBe(false)
-      expect(escaped.error).toMatch(/项目根内/)
+      if (!escaped.ok) expect(escaped.error).toMatch(/项目根内/)
     } finally {
       rmSync(link, { force: true })
       rmSync(secret, { force: true })
@@ -505,7 +507,7 @@ describe('ToolRegistry 真实执行安全闭环（L3 授权 + 先备份后写 + 
     const r = await toolRegistry.execute('open', { url: 'index.html' }, { rootPath: root })
     expect(r.ok).toBe(true)
     expect(openExternalMock).toHaveBeenCalled()
-    const opened = String(openExternalMock.mock.calls[0][0])
+    const opened = String(openExternalMock.mock.calls[0]?.[0] ?? '')
     expect(opened.startsWith('file://')).toBe(true)
     expect(opened.includes('index.html')).toBe(true)
     const r2 = await toolRegistry.execute(

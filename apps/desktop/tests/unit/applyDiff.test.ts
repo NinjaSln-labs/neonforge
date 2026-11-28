@@ -79,7 +79,7 @@ describe('applyDiff（L1 领域逻辑——纯函数不变量）', () => {
       { line: 1, type: 'add', content: 'x' },
     ])
     expect(r.ok).toBe(false)
-    expect(r.error).toContain('文件不存在')
+    if (!r.ok) expect(r.error).toContain('文件不存在')
   })
 
   it('快照/回滚：apply 后 revert 恢复原样', () => {
@@ -87,7 +87,7 @@ describe('applyDiff（L1 领域逻辑——纯函数不变量）', () => {
     writeFileSync(file, 'alpha\nbeta\n', 'utf-8')
     const bak = snapshot(file)
     expect(bak).toBe(file + '.nf-bak')
-    expect(existsSync(bak)).toBe(true)
+    if (bak) expect(existsSync(bak)).toBe(true)
     applyDiffToFile(file, [{ line: 3, type: 'add', content: 'gamma' }])
     expect(readFileSync(file, 'utf-8')).toBe('alpha\nbeta\ngamma\n')
     const rv = revert(file)
@@ -98,7 +98,7 @@ describe('applyDiff（L1 领域逻辑——纯函数不变量）', () => {
   it('回滚：无快照 → 错误提示', () => {
     const r = revert(path.join(TMP, 'no-snapshot.txt'))
     expect(r.ok).toBe(false)
-    expect(r.error).toContain('无快照')
+    if (!r.ok) expect(r.error).toContain('无快照')
   })
 
   // UAT #6（P3）：任务边界清理写前快照——nf-bak 不残留工作区

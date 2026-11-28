@@ -107,7 +107,7 @@ describe('CapabilityRegistry（能力模型——平台原生 + 外部扩展 Sta
     // node-runtime status 应来自传入 env（而非重新 detectEnvironment 的真实系统状态）
     const fakeEnv = {
       rootPath: '/proj/env-reuse',
-      runtime: 'node',
+      runtime: 'node' as const,
       runtimeVersion: 'v99.0.0',
       hasPackageJson: true,
       hasNodeModules: true,

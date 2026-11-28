@@ -19,7 +19,7 @@ describe('StateTransactionLog（跨存储事务性 Outbox）', () => {
   })
 
   it('状态写入 + 事件一次提交；事件使用确定性 outboxId；成功后 WAL 清空', () => {
-    const sink = vi.fn(() => true)
+    const sink = vi.fn((_evt: unknown, _outboxId: string) => true)
     const log = new StateTransactionLog(JOURNAL, sink)
     const result = log.commit(
       [{ filePath: STATE, content: '{"v":1}' }],
@@ -33,7 +33,7 @@ describe('StateTransactionLog（跨存储事务性 Outbox）', () => {
 
   it('事件投递失败保留 WAL；重试按同一 outboxId 幂等', () => {
     let ok = false
-    const sink = vi.fn(() => ok)
+    const sink = vi.fn((_evt: unknown, _outboxId: string) => ok)
     const log = new StateTransactionLog(JOURNAL, sink)
     const result = log.commit([{ filePath: STATE, content: '{"v":1}' }], [event('q')])
     expect(result.pending).toBe(true)

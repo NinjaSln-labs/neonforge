@@ -33,6 +33,7 @@ function entry(partial: Partial<UsageEntry> = {}): UsageEntry {
     cacheMissTokens: null,
     cost: 2,
     priceVersion: 'test-v1',
+    cache: 'unknown',
     ...partial,
   }
 }

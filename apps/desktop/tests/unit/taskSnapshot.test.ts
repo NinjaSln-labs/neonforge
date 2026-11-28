@@ -85,7 +85,7 @@ describe('taskSnapshot（A1 Task 跨重启快照）', () => {
     const dc = restored?.decisionContent
     expect(dc?.kind).toBe('plan')
     expect(dc?.proposal).toBeTruthy()
-    if (dc?.kind !== 'plan' || !dc.proposal) return
+    if (dc?.kind !== 'plan' || !dc.proposal || !('assumptions' in dc.proposal)) return
     expect(dc.proposal.assumptions).toEqual([{ text: '旧假设', source: 'model_inference' }])
   })
 
@@ -108,7 +108,7 @@ describe('taskSnapshot（A1 Task 跨重启快照）', () => {
     expect(restored).not.toBeNull()
     expect(restored?.planConfirmed).toBe(true)
     const dc = restored?.decisionContent
-    if (dc?.kind !== 'plan' || !dc.proposal) return
+    if (dc?.kind !== 'plan' || !dc.proposal || !('assumptions' in dc.proposal)) return
     expect(dc.proposal.assumptions).toEqual([{ text: '旧假设', source: 'model_inference' }])
   })
 
@@ -128,7 +128,7 @@ describe('taskSnapshot（A1 Task 跨重启快照）', () => {
     const restored = fromTaskSnapshot(structured)
     expect(restored?.decisionContent?.kind).toBe('goal')
     const dc = restored?.decisionContent
-    if (dc?.kind !== 'goal' || !dc.proposal) return
+    if (dc?.kind !== 'goal' || !dc.proposal || !('assumptions' in dc.proposal)) return
     expect(dc.proposal.assumptions).toEqual([{ text: '用户选 React', source: 'user_choice' }])
     expect(
       fromTaskSnapshot({

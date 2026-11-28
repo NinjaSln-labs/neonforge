@@ -20,6 +20,7 @@ function mockSystemState(
       [...produced].filter((p) => planned.has(p)).map((path) => ({ path })),
     plannedFiles: new Set(['src/a.ts', 'src/b.ts']),
     producedFiles: new Set(['src/a.ts', 'src/b.ts']),
+    existingFiles: new Set<string>(),
   }
 }
 
