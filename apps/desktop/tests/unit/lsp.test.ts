@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { mkdirSync, writeFileSync, rmSync } from 'node:fs'
-import { lsp, extractImports, locateSymbol } from '../../src/main/lsp'
+import { mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs'
+import { lsp, extractImports, locateSymbol, isLspServerAvailable } from '../../src/main/lsp'
 
 const TMP = '/tmp/nf-unit-lsp'
 
@@ -111,4 +111,30 @@ describe('LSP 真实连接（typescript-language-server）', () => {
     }
     expect(r.imports).toEqual([{ from: './a', names: ['greet'] }])
   }, 30000)
+})
+
+// 2026-11-28 审计（D-3）：打包态 LSP 服务器分发契约。
+// extraResources 布局：resources/lsp/server/lib/cli.mjs + resources/lsp/server/node_modules/typescript。
+// 本用例只验证「不可用时的可操作错误」，不依赖真实打包产物。
+describe('LSP 可用性探测（D-3 打包契约）', () => {
+  it('isLspServerAvailable：dev 下存在 → true（node_modules 已装）', () => {
+    expect(isLspServerAvailable()).toBe(true)
+  })
+
+  it('未连接且服务器可用 → 提示「打开项目后自动连接」（不误报缺失）', async () => {
+    await expect(
+      lsp.query('find_definition', { path: `${TMP}/src/b.ts`, symbol: 'greet' }),
+    ).rejects.toThrow(/打开项目后自动连接/)
+  })
+
+  it('build 配置声明了 LSP 分发（extraResources 两条：server + typescript）', () => {
+    // 静态断言 package.json：防止未来重排 build.files 时静默丢掉 LSP 分发
+    const pkg = JSON.parse(
+      readFileSync(new URL('../../package.json', import.meta.url), 'utf-8'),
+    ) as { build?: { extraResources?: Array<{ from?: string; to?: string }> } }
+    const extra = pkg.build?.extraResources ?? []
+    const targets = extra.map((e) => `${e.from ?? ''} -> ${e.to ?? ''}`)
+    expect(targets).toContain('node_modules/typescript-language-server -> lsp/server')
+    expect(targets).toContain('node_modules/typescript -> lsp/server/node_modules/typescript')
+  })
 })

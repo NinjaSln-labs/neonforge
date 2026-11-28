@@ -73,6 +73,16 @@
       "dist/**",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "node_modules/typescript-language-server",
+        "to": "lsp/server"
+      },
+      {
+        "from": "node_modules/typescript",
+        "to": "lsp/server/node_modules/typescript"
+      }
+    ],
     "directories": {
       "output": "release"
     },

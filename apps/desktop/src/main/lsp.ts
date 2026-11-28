@@ -14,6 +14,44 @@ const LSP_TOOLS = [
   'get_diagnostics',
 ] as const
 
+// 2026-11-28 审计（D-3）：语言服务器二进制路径解析。
+// 开发：node_modules/.bin/typescript-language-server（npm 符号链接，指向 lib/cli.mjs）。
+// 打包：electron-builder extraResources 分发到 resources/lsp/server（见 package.json build.extraResources），
+// 且 typescript 必须放在 server/node_modules/typescript —— cli.mjs 的 bundledVersion() 从自身位置
+// 向上 require.resolve('typescript')；放在同级 resources/lsp/typescript 解析不到（已实测验证）。
+// 注意 process.resourcesPath 在开发模式（`electron .`）也存在（指向 electron 自身 resources），
+// 不能只凭它判断打包态——用 defaultApp（开发态为 true）区分。
+// 不在此处静态 import electron（lsp.ts 被 L1 单测直接 import，不能要求 electron）。
+function isPackagedRuntime(): boolean {
+  const p = process as NodeJS.Process & { resourcesPath?: string; defaultApp?: boolean }
+  return !!p.resourcesPath && !p.defaultApp
+}
+
+function lspServerBin(): string {
+  if (isPackagedRuntime()) {
+    return path.join(
+      (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath!,
+      'lsp',
+      'server',
+      'lib',
+      'cli.mjs',
+    )
+  }
+  return path.join(process.cwd(), 'node_modules', '.bin', 'typescript-language-server')
+}
+
+// 能力探测（不启动服务器）：供 connect 报错与状态展示使用
+export function isLspServerAvailable(): boolean {
+  return existsSync(lspServerBin())
+}
+
+// 缺失时的可操作错误（区分开发/打包两种来源）
+function lspServerBinHint(bin: string): string {
+  return isPackagedRuntime()
+    ? `LSP 服务器未随包分发（期望 ${bin}）——请重新安装或在设置中禁用 LSP 工具`
+    : 'typescript-language-server 未安装——npm i -D typescript-language-server'
+}
+
 // JSON-RPC 帧：Content-Length 头 + 消息体（LSP stdio 传输）
 class LspConnection {
   private proc: ChildProcess | null = null
@@ -23,9 +61,10 @@ class LspConnection {
   onNotification: ((method: string, params: unknown) => void) | null = null
 
   async start(projectPath: string): Promise<void> {
-    const bin = path.join(process.cwd(), 'node_modules', '.bin', 'typescript-language-server')
-    if (!existsSync(bin))
-      throw new Error('typescript-language-server 未安装——npm i -D typescript-language-server')
+    const bin = lspServerBin()
+    if (!existsSync(bin)) {
+      throw new Error(lspServerBinHint(bin))
+    }
     this.proc = spawn(bin, ['--stdio'], { stdio: ['pipe', 'pipe', 'pipe'] })
     this.proc.stdout?.setEncoding('utf-8')
     this.proc.stdout?.on('data', (d: string) => this.onData(d))
@@ -168,6 +207,10 @@ export class LspService {
 
   async connect(projectPath: string): Promise<{ ok: true; projectPath: string }> {
     await this.disconnect()
+    // 2026-11-28 审计（D-3）：服务器缺失时提前给出可操作错误（不再等到 start 内部抛
+    // 通用「未安装」文案；打包态与开发态的错误来源不同）
+    const bin = lspServerBin()
+    if (!existsSync(bin)) throw new Error(lspServerBinHint(bin))
     const conn = new LspConnection()
     conn.onNotification = (method, params) => {
       if (method === 'textDocument/publishDiagnostics') {
@@ -191,7 +234,14 @@ export class LspService {
   }
 
   private requireConn(): LspConnection {
-    if (!this.conn || !this.conn.isRunning()) throw new Error('LSP 未连接——打开项目后自动连接')
+    if (!this.conn || !this.conn.isRunning()) {
+      // 2026-11-28 审计（D-3）：服务器缺失时给出真实原因（原文案「打开项目后自动连接」
+      // 在打包缺失/未装依赖的场景下会误导用户反复打开项目）
+      if (!isLspServerAvailable()) {
+        throw new Error(`LSP 不可用：${lspServerBinHint(lspServerBin())}——请改用 read/search 工具`)
+      }
+      throw new Error('LSP 未连接——打开项目后自动连接')
+    }
     return this.conn
   }
 
