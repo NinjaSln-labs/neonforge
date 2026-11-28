@@ -31,12 +31,7 @@
       "prettier --write"
     ]
   },
-  "dependencies": {
-    "@monaco-editor/react": "^4.7.0",
-    "monaco-editor": "^0.52.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.62.1",
@@ -59,7 +54,11 @@
     "vitest": "^4.1.10",
     "esbuild": "^0.25.12",
     "playwright": "^1.62.1",
-    "@types/node": "^24.13.3"
+    "@types/node": "^24.13.3",
+    "@monaco-editor/react": "^4.7.0",
+    "monaco-editor": "^0.52.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "allowScripts": {
     "esbuild@0.25.12": true,
