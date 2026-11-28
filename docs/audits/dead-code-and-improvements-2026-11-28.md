@@ -105,11 +105,13 @@ CI 的 L3 断言 `capability.checked` 期望 1 条、实际 2 条。取证：给
 
 **删 5 的验收**：`ipcContractParity.test.ts` 双向断言（main handler ⇄ preload invoke）保证 main/preload/`types.d.ts` 三处同步；`taskQueueStore` 的两个用例改为断言 `queue.entry_cancelled` 而非已删的 failed outcome；DDD 交互表对应行加删除标注与原因。
 
-**留 3 的待办**（都属「领域已实现、UI 未接」，删除通道等于砍掉半成品功能）：
+**留 3 的待办（2026-11-28 已全部接线）**（原本都属「领域已实现、UI 未接」，删除通道等于砍掉半成品功能）：
 
-1. `config:clear-key` —— 在 ConfigPage 加「清除已保存 Key」按钮，让 `rotateRecommended` 提示有可执行动作
-2. `usage:export` —— 在用量区域加「导出 CSV」按钮（`UsageStore.exportCsv` 已实现）
-3. `acceptance:waive` —— 验收面板加豁免入口（`AcceptanceStore.mark(..., 'waived')` 已实现）
+1. `config:clear-key` → 设置页「API Key 存储」区新增「清除」按钮（仅 `encrypted`/`plaintext` 来源可清除；env/file 由外部管理不显示），使 `rotateRecommended` 提示有可执行动作
+2. `usage:export` → 「任务」Tab 的「本轮用量」区新增「导出 CSV」按钮，成功显示产物路径
+3. `acceptance:waive` → `DeliveryPanel` 验收对照每条新增「豁免」入口，**原因必填**（空原因时确认按钮禁用），记录带 `reason`
+
+三条均有 L3 交互测试（`core.interaction.ts`：清除已保存密钥 / 导出 CSV / 豁免需原因）；mockBridge 相应新增 `keyStatus` / `usageExport` / `acceptanceRecord` / `captureAcceptanceWaive` 注入位与 `waiveCalls()` 捕获。
 
 ### D-2 三个演示面板（已处置：删除）
 

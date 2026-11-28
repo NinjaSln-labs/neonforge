@@ -113,6 +113,14 @@ function TaskPanel({
     void window.neonforge.usage?.summary(sessionId).then(setUsage)
     void window.neonforge.budget?.get?.().then(setBudget)
   }, [sessionId])
+  const [usageExportMsg, setUsageExportMsg] = useState<string | null>(null)
+  // 2026-11-28 审计（D-1 留 3）：usage:export 原无 UI——UsageStore.exportCsv 已实现（台账 → CSV 落盘）。
+  const exportUsage = () => {
+    setUsageExportMsg(null)
+    void window.neonforge.usage.export().then((r) => {
+      setUsageExportMsg(r.ok ? `已导出：${r.path ?? ''}` : (r.error ?? '导出失败'))
+    })
+  }
   useEffect(() => {
     if (!sessionId) {
       setQueue({ entries: [] })
@@ -374,6 +382,20 @@ function TaskPanel({
         <p className="nf-meta">
           {preheatInfo?.cache ? `前缀缓存 ${hitRate}% 命中（hash ${preheatInfo.cache.hash}）` : '—'}
         </p>
+        <div className="nf-settings__row">
+          <span>
+            导出用量台账 <em>全部请求的 token/成本明细写成 CSV（与本机台账同目录）</em>
+          </span>
+          <button
+            type="button"
+            className="nf-settings__export"
+            onClick={exportUsage}
+            aria-label="导出用量台账 CSV"
+          >
+            导出 CSV
+          </button>
+        </div>
+        {usageExportMsg && <p className="nf-settings__export-msg">{usageExportMsg}</p>}
       </details>
     </div>
   )
